@@ -1,0 +1,159 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { WorldPackage } from '../engine/schema';
+import { analyzeBundle, cardToWorld } from '../gm/worldgen/fromCard';
+import { type CharxBundle, parseToggles, readCharxBundle } from '../importers/bundle';
+import { portraitDataUrl } from '../importers/portrait';
+import type { EntryChoice } from '../importers/worldcard';
+import { createLlmClient } from '../llm';
+import type { LlmSettings } from '../llm/types';
+import { storeAssets } from '../storage/assets';
+import { savePackage } from '../storage/packages';
+
+const ENTRY_CHOICES: [EntryChoice, string][] = [['character', '인물'], ['world', '세계 설정'], ['skip', '제외']];
+const KIND_LABEL = { character: '인물', world: '설정', instruction: 'AI 지시문' } as const;
+const mb = (n: number) => `${(n / 1048576).toFixed(1)}MB`;
+
+/**
+ * 캐릭터 카드(CHARX) 전체로 세계 만들기.
+ * 카드·모듈(risum)·Lua 데이터·모든 이미지를 읽고 → AI가 세계 구조를 만들고 → 이미지를 저장한다.
+ * 결과는 개인용 세계(내보내기·공유 불가).
+ */
+export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersOnly }: {
+  file: File; settings: LlmSettings | null;
+  onDone: (world: WorldPackage, notes: string[]) => void; onCancel: () => void;
+  /** 기존 방식: 빈 세계에 인물로만 가져오기 */
+  onCharactersOnly: (file: File) => void;
+}) {
+  const [bundle, setBundle] = useState<CharxBundle | null>(null);
+  const [loading, setLoading] = useState('파일 읽는 중…');
+  const [error, setError] = useState('');
+  const [choices, setChoices] = useState<EntryChoice[]>([]);
+  const [rating, setRating] = useState<WorldPackage['manifest']['contentRating']>('teen');
+  const [classify, setClassify] = useState(true);
+  const [withScenario, setWithScenario] = useState(true);
+  const [agree, setAgree] = useState(false);
+  const [stage, setStage] = useState('');
+  const [progress, setProgress] = useState<[number, number] | null>(null);
+  const [thumbs, setThumbs] = useState<{ name: string; url: string }[]>([]);
+  const abort = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const urls: string[] = [];
+    (async () => {
+      try {
+        const b = await readCharxBundle(file, file.name, (m) => live && setLoading(m));
+        if (!live) return;
+        setBundle(b);
+        setChoices(analyzeBundle(b).analyzed.map((a) => a.choice));
+        if (/nsfw|성인|19금|adult/i.test(b.card.tags.join(' '))) setRating('mature');
+        const t: { name: string; url: string }[] = [];
+        for (const a of b.assets.slice(0, 12)) { const u = URL.createObjectURL(await a.read()); urls.push(u); t.push({ name: a.name, url: u }); }
+        if (live) setThumbs(t);
+      } catch (e) {
+        if (live) setError((e as Error).message);
+      } finally {
+        if (live) setLoading('');
+      }
+    })();
+    return () => { live = false; urls.forEach((u) => URL.revokeObjectURL(u)); abort.current?.abort(); };
+  }, [file]);
+
+  const analysis = useMemo(() => (bundle ? analyzeBundle(bundle) : null), [bundle]);
+
+  async function run() {
+    if (!bundle || !settings) return;
+    setError('');
+    abort.current = new AbortController();
+    const signal = abort.current.signal;
+    try {
+      const llm = createLlmClient(settings);
+      const r = await cardToWorld(llm, bundle, {
+        contentRating: rating, classifyImages: classify, withScenario, choices,
+        makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),
+      }, setStage, signal);
+      setStage('이미지 저장 중…');
+      const saved = await storeAssets(r.world.manifest.id, r.images, (d, t) => setProgress([d, t]), signal);
+      if (saved.failed.length) {
+        const bad = new Set(saved.failed);
+        r.world.assets = r.world.assets?.filter((a) => !bad.has(a.id));
+        r.notes.push(`이미지 ${saved.failed.length}장을 읽지 못해 뺐습니다.`);
+      }
+      setStage('세계 저장 중…');
+      await savePackage(r.world, 'created');
+      onDone(r.world, r.notes);
+    } catch (e) {
+      if (!signal.aborted) setError((e as Error).message);
+    } finally {
+      setStage(''); setProgress(null);
+    }
+  }
+
+  const busy = stage !== '';
+  const b = bundle;
+  const toggles = b ? parseToggles(b.toggles) : [];
+  const luaKeys = b ? Object.keys(b.lua.data) : [];
+  const nChar = choices.filter((c) => c === 'character').length, nWorld = choices.filter((c) => c === 'world').length;
+
+  return (
+    <section className="panel">
+      <h2>✦ 캐릭터 카드로 세계 전체 만들기</h2>
+      <p className="muted small">
+        CHARX 안의 카드·로어북·모듈(risum)·스크립트의 데이터 표·<b>모든 이미지</b>를 읽어, AI가 이 게임의 세계관(장소·인물 배치·연표·시작 방식·문체·임무)으로 옮깁니다.
+        인물 프로필과 설정 글은 원문을 그대로 재사용합니다. 카드의 스크립트는 실행하지 않습니다.
+      </p>
+      <p className="muted small">파일: {file.name} ({mb(file.size)})</p>
+      {loading && <p className="status">{loading}</p>}
+      {error && <p className="status">❌ {error}</p>}
+      {b && analysis && (
+        <>
+          <div className="row">
+            {thumbs.map((t) => <img key={t.url} className="portrait small-portrait" src={t.url} alt={t.name} title={t.name} />)}
+          </div>
+          <ul className="small">
+            <li><b>{b.card.name}</b>{b.card.creator && ` · 제작 ${b.card.creator}`}</li>
+            <li>로어북 {analysis.card.lore.length}항목 (모듈에만 있는 항목 {b.extraLore.length}) → 인물 {nChar} · 세계 설정 {nWorld} · 제외 {choices.length - nChar - nWorld}</li>
+            <li>이미지 {b.assets.length.toLocaleString()}장 ({mb(b.assets.reduce((s, a) => s + a.size, 0))}){b.cover ? ' + 표지' : ''}</li>
+            <li>스크립트 데이터 표 {luaKeys.length}개{luaKeys.length > 0 && <span className="muted"> ({luaKeys.slice(0, 8).join(', ')}{luaKeys.length > 8 ? ' …' : ''})</span>}</li>
+            {toggles.length > 0 && <li>카드 선택 설정 {toggles.length}개 (시작 방식 참고)</li>}
+            {b.warnings.map((w, i) => <li key={i} className="warn">{w}</li>)}
+          </ul>
+          <details className="small">
+            <summary>로어북 분류 바꾸기</summary>
+            <div className="lore-list">
+              {analysis.analyzed.map((a, i) => (
+                <div key={i} className="lore-item small">
+                  <select value={choices[i]} disabled={busy} onChange={(ev) => setChoices((c) => c.map((x, j) => (j === i ? ev.target.value as EntryChoice : x)))}>
+                    {ENTRY_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <span><b>{analysis.card.lore[a.index]!.name || `(이름 없음 ${i + 1})`}</b> <span className="muted">[{KIND_LABEL[a.kind]}] {a.note}</span></span>
+                </div>
+              ))}
+            </div>
+          </details>
+          <div className="row">
+            <label>콘텐츠 등급
+              <select value={rating} disabled={busy} onChange={(e) => setRating(e.target.value as typeof rating)}>
+                <option value="all">전체</option><option value="teen">청소년</option><option value="mature">성인</option>
+              </select>
+            </label>
+            <label className="check"><input type="checkbox" checked={classify} disabled={busy} onChange={(e) => setClassify(e.target.checked)} /> 이름 규칙으로 못 찾은 이미지를 AI로 분류 (파일 이름만 보냄)</label>
+            <label className="check"><input type="checkbox" checked={withScenario} disabled={busy} onChange={(e) => setWithScenario(e.target.checked)} /> 임무·결말까지 만들기</label>
+          </div>
+          <div className="private-banner">
+            🔒 이 카드는 다른 사람의 작품입니다. 만든 세계는 <b>개인용</b>으로 표시되어 <b>이 브라우저에서 혼자 플레이할 수만 있고</b>, 패키지·세이브 내보내기와 공유가 막힙니다.
+            <label className="check"><input type="checkbox" checked={agree} disabled={busy} onChange={(e) => setAgree(e.target.checked)} /> 이해했습니다. 개인적으로만 사용합니다.</label>
+          </div>
+          {!settings && <p className="status">❌ 먼저 AI 설정을 해 주세요.</p>}
+          <p className="muted small">AI 호출: 세계 구조 1회{withScenario ? ' + 임무 1회' : ''}{classify ? ' + 이미지 분류(필요할 때만)' : ''}. 카드 글이 길면 시간이 걸립니다.</p>
+          {progress && <div className="progress-bar"><span style={{ width: `${(progress[0] / Math.max(1, progress[1])) * 100}%` }} /></div>}
+        </>
+      )}
+      <div className="row">
+        <button onClick={() => (busy ? abort.current?.abort() : onCancel())}>{busy ? '중단' : '취소'}</button>
+        <button className="primary" disabled={!b || !settings || busy || !agree} onClick={run}>{busy ? `${stage}${progress ? ` ${progress[0].toLocaleString()}/${progress[1].toLocaleString()}` : ''}` : '세계 만들기'}</button>
+        {!busy && b && b.card.lore.length > 0 && file.size < 30 * 1024 * 1024 && <button onClick={() => onCharactersOnly(file)}>인물로만 가져오기 (기존 방식)</button>}
+      </div>
+    </section>
+  );
+}

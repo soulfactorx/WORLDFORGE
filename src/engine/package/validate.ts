@@ -234,6 +234,40 @@ export function validateWorld(input: unknown): Issue[] {
     locations.forEach((l, i) => { if (!seen.has(l.id)) warn(`locations[${i}]`, `시작 장소에서 "${l.id}"로 갈 길이 없습니다.`); });
   }
   if (!locations.length) err('locations', '장소가 하나 이상 필요합니다.');
+
+  // ---- 시작 방식 · 문체 · 이미지 (v0.13)
+  const starts = arr<NonNullable<WorldPackage['starts']>[number]>('starts', false);
+  const startIds = new Set<string>();
+  starts.forEach((st, i) => {
+    const p = `starts[${i}]`;
+    if (!isObj(st)) { err(p, '시작 방식이 객체가 아닙니다.'); return; }
+    if (!isStr(st.id) || !st.id) err(`${p}.id`, 'ID가 필요합니다.');
+    else if (startIds.has(st.id)) err(`${p}.id`, `시작 방식 ID "${st.id}"가 중복됩니다.`);
+    else startIds.add(st.id);
+    if (!isStr(st.name) || !st.name.trim()) err(`${p}.name`, '이름이 필요합니다.');
+    if (!locIds.has(st.locationId)) err(`${p}.locationId`, `없는 장소 "${st.locationId}"`);
+    text(st.openingScene, `${p}.openingScene`);
+    (st.knows ?? []).forEach((c, j) => { if (!claims.some((x) => x.id === c)) err(`${p}.knows[${j}]`, `없는 명제 "${c}"`); });
+  });
+  if (w.style !== undefined) {
+    if (!isStr(w.style)) err('style', '문체는 글이어야 합니다.');
+    else { text(w.style, 'style'); if (w.style.length > 1500) warn('style', '문체 지침이 깁니다 (1500자까지만 씁니다).'); }
+  }
+  const assets = arr<NonNullable<WorldPackage['assets']>[number]>('assets', false);
+  if (assets.length > 50_000) err('assets', '이미지가 너무 많습니다 (최대 50,000장).');
+  const assetIds = new Set<string>();
+  const charIdSet = new Set(characters.map((c) => c?.id));
+  for (let i = 0; i < assets.length; i++) {
+    const a = assets[i]!, p = `assets[${i}]`;
+    if (!isObj(a) || !isStr(a.id) || !/^[\w.-]{1,64}$/.test(a.id)) { err(p, '이미지 ID가 올바르지 않습니다.'); continue; }
+    if (assetIds.has(a.id)) err(p, `이미지 ID "${a.id}"가 중복됩니다.`);
+    assetIds.add(a.id);
+    if (!['character', 'scene', 'map', 'cover', 'other'].includes(a.kind)) err(`${p}.kind`, '알 수 없는 이미지 종류');
+    if (!/^image\/(png|jpeg|webp|gif|avif)$/.test(a.mime)) err(`${p}.mime`, '지원하지 않는 이미지 형식');
+    if (a.characterId && !charIdSet.has(a.characterId)) warn(`${p}.characterId`, `없는 인물 "${a.characterId}" — 이 이미지는 쓰이지 않습니다.`);
+    if (a.locationId && !locIds.has(a.locationId)) warn(`${p}.locationId`, `없는 장소 "${a.locationId}"`);
+    if (!Array.isArray(a.tags)) err(`${p}.tags`, '태그는 목록이어야 합니다.');
+  }
   return issues;
 }
 

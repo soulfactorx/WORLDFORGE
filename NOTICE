@@ -1,0 +1,21 @@
+WORLDFORGE
+Copyright (C) 2026 WORLDFORGE contributors
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version. See LICENSE.
+
+Source code: https://github.com/soulfactorx/WORLDFORGE
+
+Third-party components
+----------------------
+* src/vendor/rpack — rpack decoder and mapping table from RisuAI's Rpack.js
+  (https://github.com/kwaroran/RisuAI, Copyright (c) 2026 Kwaroran).
+  Dual-licensed MIT / AGPL-3.0; used outside RisuAI, so it is distributed here under
+  the GNU Affero General Public License v3.0 (src/vendor/rpack/LICENSE_AGPL).
+  Combined with this GPLv3 program as permitted by section 13 of the GPLv3.
+* The RisuAI module (.risum) and character card (CHARX) formats are read following
+  RisuAI's GPL-3.0 implementation (src/ts/process/modules.ts) for interoperability.
+* Rules content from the System Reference Document 5.2.1 by Wizards of the Coast LLC,
+  licensed under CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/).
+* Third-party npm dependencies keep their own licenses (see package-lock.json).

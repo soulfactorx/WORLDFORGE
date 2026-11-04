@@ -11,6 +11,7 @@ export interface LogEntry {
   turn: number;
   kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest';
   text: string;
+  images?: { id: string; caption: string }[];
 }
 
 export interface GameState {
@@ -84,7 +85,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, rngState: e.rngState, log: [...s.log, { turn, kind: 'check', text }] };
     }
     case 'narration':
-      return { ...s, log: [...s.log, { turn, kind: 'narration', text: e.text }] };
+      return { ...s, log: [...s.log, { turn, kind: 'narration', text: e.text, ...(e.images?.length ? { images: e.images } : {}) }] };
     case 'moved':
       return { ...s, player: { ...s.player, locationId: e.to } };
     case 'knowledge_revealed': {

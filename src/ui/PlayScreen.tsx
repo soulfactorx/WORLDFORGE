@@ -13,6 +13,8 @@ import type { LlmSettings } from '../llm/types';
 import { appendEvents, loadEvents, undoLastTurn } from '../storage/db';
 import { CharacterPanel } from './CharacterPanel';
 import { JournalPanel } from './JournalPanel';
+import { AssetImage } from './AssetImage';
+import { pickSceneImage } from '../engine/assets';
 
 /**
  * 같은 세이브를 두 탭에서 동시에 열면 이벤트 로그가 꼬이므로 Web Locks로 한 탭만 허용한다.
@@ -133,10 +135,12 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   if (lock === 'busy') return <section className="panel"><p>이 세이브는 다른 탭에서 열려 있습니다.</p><button onClick={onExit}>돌아가기</button></section>;
   if (!state || lock === 'pending') return <p className="muted">불러오는 중…</p>;
   const loc = world.locations.find((l) => l.id === state.player.locationId);
+  const locImage = loc ? pickSceneImage(world, loc.id, '', 'bar') : undefined;
 
   return (
     <section className="play">
       <div className="scene-bar">
+        {locImage && <AssetImage pkg={world.manifest.id} id={locImage.id} alt={loc?.name ?? ''} className="loc-thumb" />}
         <b>{loc?.name}</b>
         {Object.keys(state.party).length > 0 && <span className="small muted">동행: {Object.values(state.party).map((c) => c.name).join(', ')}</span>}
         <span className="muted small">턴 {state.turn}</span>
@@ -159,7 +163,16 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} />}
       {panel === 'journal' && <JournalPanel world={world} state={state} />}
       <div className="log">
-        {state.log.map((e, i) => <p key={i} className={`entry ${e.kind}`}>{e.text}</p>)}
+        {state.log.map((e, i) => (
+          <div key={i} className={`entry-wrap ${e.kind}`}>
+            {e.images && e.images.length > 0 && (
+              <div className="scene-images">
+                {e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} /><figcaption>{im.caption}</figcaption></figure>)}
+              </div>
+            )}
+            <p className={`entry ${e.kind}`}>{e.text}</p>
+          </div>
+        ))}
         {streaming !== null && <p className="entry narration">{streaming || '…'}</p>}
         <div ref={bottom} />
       </div>

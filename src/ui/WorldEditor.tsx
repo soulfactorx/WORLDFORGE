@@ -3,7 +3,8 @@ import { MONSTERS } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { Belief, Character, Claim, Fact, Location, WorldPackage } from '../engine/schema';
-import { blankWorld, exportWpk, savePackage } from '../storage/packages';
+import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
+import { AssetGallery } from './AssetGallery';
 import { IssueList } from './IssueList';
 import { CardImportDialog } from './CardImportDialog';
 import { josa } from '../engine/text/josa';
@@ -16,16 +17,17 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'locations' | 'characters' | 'knowledge' | 'encounters' | 'quests' | 'json';
+type Tab = 'basic' | 'locations' | 'characters' | 'knowledge' | 'encounters' | 'quests' | 'images' | 'json';
 const TABS: [Tab, string][] = [
   ['basic', '기본'], ['locations', '장소'], ['characters', '인물'], ['knowledge', '지식'],
-  ['encounters', '조우'], ['quests', '임무·플래그·결말'], ['json', 'JSON 전체'],
+  ['encounters', '조우'], ['quests', '임무·플래그·결말'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
 const STATES = [['rumor', '소문'], ['partial', '들은 이야기'], ['confirmed', '확인됨'], ['mistaken', '잘못 앎'], ['secret', '비밀']] as const;
 
 function tabForPath(path: string): Tab {
-  if (path.startsWith('manifest') || path.startsWith('start')) return 'basic';
+  if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style')) return 'basic';
+  if (path.startsWith('assets')) return 'images';
   if (path.startsWith('locations')) return 'locations';
   if (path.startsWith('characters')) return 'characters';
   if (path.startsWith('facts') || path.startsWith('claims') || path.startsWith('beliefs')) return 'knowledge';
@@ -103,8 +105,10 @@ function ItemList<T extends { id: string }>({ items, onChange, make, render, tit
 
 // ---------------------------------------------------------------- 편집기
 
-export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard }: {
+export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard, alreadySaved }: {
   initial: WorldPackage | null; onDone: () => void; settings?: LlmSettings | null; draftNotes?: string[];
+  /** 이미 라이브러리에 저장된 AI 결과 (카드로 만든 세계) */
+  alreadySaved?: boolean;
   /** 이 카드 파일로 새 세계를 만든다 (인물 탭에서 가져오기 창을 바로 연다) */
   initialCard?: File;
 }) {
@@ -112,7 +116,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
-  const [approved, setApproved] = useState(!draftNotes);
+  const [approved, setApproved] = useState(!draftNotes || !!alreadySaved);
   const [genStage, setGenStage] = useState('');
   const [genRequest, setGenRequest] = useState('');
   const [importing, setImporting] = useState(!!initialCard);
@@ -158,7 +162,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         <h2>세계관 제작 — {w.manifest.name}</h2>
         <span className="spacer" />
         <button onClick={onDone}>닫기</button>
-        <button onClick={exportFile}>.wpk 내보내기</button>
+        {w.manifest.private ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용 (내보내기 불가)</span> : <button onClick={exportFile}>.wpk 내보내기</button>}
         <button className="primary" onClick={save}>저장</button>
       </div>
       {status && <p className="status small">{status}</p>}
@@ -173,14 +177,23 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           )}
         </div>
       )}
+      {approved && alreadySaved && notes && notes.length > 0 && (
+        <div className="ai-draft small">
+          <b>✦ AI가 카드로 만든 세계입니다.</b> 라이브러리에 저장되었습니다. 내용을 검토하고 고친 뒤 다시 <b>저장</b>하세요.
+          <details><summary>정리하면서 알게 된 것 {notes.length}건</summary><ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></details>
+        </div>
+      )}
+      {w.manifest.private && <div className="private-banner">🔒 {w.manifest.private.note}<br /><span className="muted">원작: {w.manifest.private.source}</span></div>}
       <IssueList issues={issues} onPick={(p) => setTab(tabForPath(p))} limit={8} />
       <div className="tabs">
-        {TABS.map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
+        {TABS.filter(([id]) => !(id === 'json' && w.manifest.private) && !(id === 'images' && !w.assets?.length)).map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
       </div>
 
       {tab === 'basic' && (
         <div className="form-grid">
-          <Text label="패키지 ID (작가.세계 형식, 소문자)" value={w.manifest.id} onChange={(id) => set({ manifest: { ...w.manifest, id } })} />
+          {w.assets?.length || w.manifest.private
+            ? <p className="small muted">패키지 ID: <code>{w.manifest.id}</code> (이미지가 연결되어 있어 바꿀 수 없습니다)</p>
+            : <Text label="패키지 ID (작가.세계 형식, 소문자)" value={w.manifest.id} onChange={(id) => set({ manifest: { ...w.manifest, id } })} />}
           <Text label="이름" value={w.manifest.name} onChange={(name) => set({ manifest: { ...w.manifest, name } })} />
           <Text label="버전" value={w.manifest.version} onChange={(version) => set({ manifest: { ...w.manifest, version } })} placeholder="0.1.0" />
           <Text label="제작자" value={w.manifest.author} onChange={(author) => set({ manifest: { ...w.manifest, author } })} />
@@ -188,6 +201,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <Select label="콘텐츠 등급" value={w.manifest.contentRating} options={[['all', '전체'], ['teen', '청소년'], ['mature', '성인']] as const} onChange={(contentRating) => set({ manifest: { ...w.manifest, contentRating } })} />
           <Select label="시작 장소" value={w.start.locationId} options={locOptions} onChange={(locationId) => set({ start: { ...w.start, locationId } })} />
           <Area label="첫 장면 (플레이어가 깨어났을 때)" value={w.start.openingScene} onChange={(openingScene) => set({ start: { ...w.start, openingScene } })} />
+          <Area label="서술 문체 참고 (선택, 1500자까지)" value={w.style} rows={4} onChange={(style) => set({ style: style || undefined })} />
+          <JsonField label="시작 방식 선택지 (선택: [{ id, name, description, locationId, openingScene, knows }])" value={w.starts ?? []} rows={8} onChange={(starts) => set({ starts: starts.length ? starts : undefined })} />
         </div>
       )}
 
@@ -222,7 +237,9 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       {tab === 'characters' && importing && (
         <CardImportDialog world={w} settings={settings} initialFile={initialCard} onClose={() => setImporting(false)} onAdd={(r) => {
           // 카드로 새로 만드는 세계라면 이름도 카드에서 가져온다
-          const manifest = initialCard && w.manifest.name === '새 세계' && r.cardName ? { ...w.manifest, name: r.cardName } : w.manifest;
+          const named = initialCard && w.manifest.name === '새 세계' && r.cardName ? { ...w.manifest, name: r.cardName } : w.manifest;
+          // 다른 사람의 카드로 만든 인물이 들어간 세계는 개인용이 된다 (내보내기 불가)
+          const manifest = { ...named, private: named.private ?? { source: r.cardName ?? '캐릭터 카드', note: PRIVATE_NOTE } };
           set({ manifest, characters: [...w.characters, ...r.characters], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs] });
           setImporting(false);
           setStatus(r.characters.length === 1
@@ -240,6 +257,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <Area label="외형" value={c.appearance} onChange={(appearance) => up({ appearance })} rows={2} />
               <Area label="성격" value={c.personality} onChange={(personality) => up({ personality })} rows={2} />
               <Area label="말투" value={c.speech} onChange={(speech) => up({ speech })} rows={2} />
+              <Select label="성별 (이미지 고르기용)" value={c.gender ?? ''} options={[['', '정하지 않음'], ['F', '여성'], ['M', '남성']] as const} onChange={(g) => up({ gender: g || undefined })} />
               <Area label="배경 (이 인물만 아는 과거)" value={c.background} onChange={(background) => up({ background: background || undefined })} rows={3} />
               <Area label="첫 만남의 말 (참고)" value={c.greeting} onChange={(greeting) => up({ greeting: greeting || undefined })} rows={2} />
               {c.portrait && <div className="row"><img className="portrait" src={c.portrait} alt="" /><button type="button" onClick={() => up({ portrait: undefined })}>초상화 지우기</button></div>}
@@ -353,7 +371,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         </>
       )}
 
-      {tab === 'json' && <JsonField label="패키지 전체 (world.json)" value={w} onChange={(v) => setW(v)} rows={30} />}
+      {tab === 'images' && <AssetGallery world={w} onChange={(assets) => set({ assets })} />}
+      {tab === 'json' && !w.manifest.private && <JsonField label="패키지 전체 (world.json)" value={w} onChange={(v) => setW(v)} rows={30} />}
     </section>
   );
 }

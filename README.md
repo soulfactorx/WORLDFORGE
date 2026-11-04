@@ -65,6 +65,18 @@ GitHub Actions가 `vX.Y.Z` 태그와 GitHub Release를 만들고 오프라인 HT
 - API 키는 사용자 브라우저에만 저장되며, 이 저장소나 서버로 전송되지 않는다. 키를 코드나 커밋에 넣지 말 것.
 - GitHub Pages에서는 같은 `*.github.io` 출처의 다른 페이지와 브라우저 저장소를 공유한다. "키 기억하기"를 끄면 탭을 닫을 때 삭제된다.
 
-## 라이선스 메모
+## 라이선스
+
+WORLDFORGE는 **GPL-3.0-or-later**로 배포한다 (`LICENSE`, `NOTICE`).
+
+- RisuAI 모듈(.risum)·CHARX 형식은 RisuAI(GPL-3.0)의 `src/ts/process/modules.ts`를 따라 읽는다.
+- `src/vendor/rpack/`의 rpack 해독 표는 RisuAI의 Rpack(© Kwaroran)에서 옮겼다. 원본은 RisuAI 안에서만 MIT이고 그 밖에서는 AGPL-3.0이므로, 이 부분은 **AGPL-3.0**으로 배포한다 (GPLv3 13조에 따라 결합 가능). 원본 라이선스 파일을 함께 둔다.
+- 웹 버전(GitHub Pages)과 오프라인 HTML 모두 상단의 **소스 (GPL)** 링크로 소스 코드를 받을 수 있다.
+
+### 캐릭터 카드로 만든 세계 (개인용)
+
+다른 사람의 캐릭터 카드(CHARX 등)로 만든 세계는 **개인용**으로 표시된다. 이 브라우저에서 혼자 플레이할 수만 있고 `.wpk`·세이브 내보내기, JSON 전체 편집이 막힌다. 같은 ID로 다시 저장해도 표시는 지워지지 않는다. 카드와 이미지의 저작권은 원작자에게 있다. (브라우저 안에서 동작하는 프로그램이므로 기술적으로 완벽한 복제 방지는 아니다 — 원작자의 권리를 존중해 주세요.)
+
+### 규칙
 
 규칙 엔진은 SRD 5.2.1(CC-BY-4.0) 범위에서 구현한다. "D&D"는 Wizards of the Coast의 상표이므로 제품명·UI에 사용하지 않는다.

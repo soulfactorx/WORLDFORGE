@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { sampleWorld } from '../data/sample-world';
@@ -44,5 +45,21 @@ describe('패키지 가져오기에 넣은 캐릭터 카드', () => {
     const r = parsePackageFile('x.bin', strToU8('not json'));
     expect(r.isCard).toBeFalsy();
     expect(r.issues[0]!.message).toContain('캐릭터 카드');
+  });
+});
+
+describe('개인용 세계', () => {
+  it('내보내기를 막고, 같은 ID로 다시 저장해도 개인용 표시가 남는다', async () => {
+    const { savePackage: save } = await import('./packages');
+    const { db } = await import('./db');
+    const { storeAssets, assetBlob } = await import('./assets');
+    const w = { ...blankWorld(), manifest: { ...blankWorld().manifest, id: 'card.test', private: { source: '카드', note: 'x' } } };
+    expect(() => exportWpk(w)).toThrow('개인용');
+    await save(w, 'created');
+    const stripped = { ...w, manifest: { ...w.manifest, private: undefined, version: '0.2.0' } };
+    await save(stripped, 'created');
+    expect((await db.packages.get('card.test@0.2.0'))!.world.manifest.private?.source).toBe('카드');
+    await storeAssets('card.test', [{ id: 'a0', read: async () => new Blob([new Uint8Array([1, 2])], { type: 'image/png' }) }, { id: 'a1', read: async () => { throw new Error('x'); } }]);
+    expect((await assetBlob('card.test', 'a0'))?.size).toBe(2);
   });
 });

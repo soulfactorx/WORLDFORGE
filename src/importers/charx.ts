@@ -94,7 +94,7 @@ const b64decode = (s: string) => {
 
 // ---------------------------------------------------------------- 정규화
 
-function normalize(raw: unknown, format: CardFormat): NormalizedCard {
+export function normalize(raw: unknown, format: CardFormat): NormalizedCard {
   if (!isObj(raw)) throw new Error('카드 데이터가 객체가 아닙니다.');
   const isWrapped = isObj(raw.data) && (raw.spec === 'chara_card_v3' || raw.spec === 'chara_card_v2');
   const d = (isWrapped ? raw.data : raw) as Record<string, unknown>;

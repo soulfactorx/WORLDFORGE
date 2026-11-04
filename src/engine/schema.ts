@@ -18,6 +18,11 @@ export interface PackageManifest {
   locales: string[];
   /** AI 생성 보조를 써서 만든 패키지인지 (투명성, v0.10) */
   aiAssisted?: boolean;
+  /**
+   * 개인용 세계 (v0.13): 다른 사람의 작품(캐릭터 카드 등)으로 만든 세계.
+   * 이 브라우저에서 혼자 플레이할 수만 있고 패키지·세이브 내보내기가 막힌다.
+   */
+  private?: { source: string; note: string };
 }
 
 export interface Location {
@@ -73,6 +78,8 @@ export interface Character {
   greeting?: string;
   /** 초상화 data URL (png/jpeg/webp, 최대 300KB, v0.12) */
   portrait?: string;
+  /** 성별 (이미지 고르기용, v0.13) */
+  gender?: 'M' | 'F';
   /** 외부에서 가져온 인물의 출처 (v0.12) */
   source?: { format: 'charx' | 'ccv3' | 'ccv2' | 'ccv1'; name: string; creator?: string; version?: string; importedAt: string };
 }
@@ -186,6 +193,38 @@ export interface Ending {
   epilogue: string;
 }
 
+// ------------------------------------------------------------ 이미지 에셋 (v0.13)
+
+/**
+ * 이미지 에셋 정보. 이미지 자체는 패키지 JSON이 아니라 브라우저 저장소(IndexedDB)에 따로 둔다.
+ * - character: 인물 이미지. tags = 표정·상황 (예: smile, angry, night). 'default'는 기본 모습
+ * - scene: 장소·상황 이미지 (locationId가 있으면 그 장소)
+ * - map: 지도 / cover: 표지 / other: 분류되지 않음
+ */
+export interface AssetMeta {
+  id: string;
+  name: string;
+  kind: 'character' | 'scene' | 'map' | 'cover' | 'other';
+  characterId?: EntityId;
+  locationId?: EntityId;
+  gender?: 'M' | 'F';
+  tags: string[];
+  mime: string;
+  size: number;
+}
+
+/** 시작 방식 (v0.13): 새 게임을 시작할 때 고른다. 없으면 start를 쓴다 */
+export interface StartOption {
+  id: string;
+  name: string;
+  /** 플레이어에게 보이는 설명 */
+  description: string;
+  locationId: EntityId;
+  openingScene: string;
+  /** 이 방식으로 시작하면 플레이어가 처음부터 아는 명제 */
+  knows?: EntityId[];
+}
+
 export interface WorldPackage {
   manifest: PackageManifest;
   locations: Location[];
@@ -202,4 +241,10 @@ export interface WorldPackage {
     /** 플레이어가 깨어났을 때의 첫 장면 */
     openingScene: string;
   };
+  /** 시작 방식 선택지 (v0.13) */
+  starts?: StartOption[];
+  /** 서술 문체 지침 (v0.13). 서술 AI에게 참고로 준다 */
+  style?: string;
+  /** 이미지 에셋 목록 (v0.13) */
+  assets?: AssetMeta[];
 }

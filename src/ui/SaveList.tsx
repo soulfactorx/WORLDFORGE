@@ -5,7 +5,8 @@ import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { WorldPackage } from '../engine/schema';
 import { startEvents } from '../gm/turn';
 import { appendEvents, db, deleteSave, exportSave, importSave } from '../storage/db';
-import { deletePackage, exportWpk, listPackages, packageKey, parsePackageFile, savePackage } from '../storage/packages';
+import { deletePackage, exportWpk, listPackages, MAX_FILE_BYTES, packageKey, parsePackageFile, PRIVATE_NOTE, savePackage } from '../storage/packages';
+import { BlobZip } from '../importers/blobzip';
 import { CharacterCreator } from './CharacterCreator';
 import { IssueList } from './IssueList';
 
@@ -24,8 +25,10 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
   const packages = useLiveQuery(() => listPackages(), []);
   const [selectedKey, setSelectedKey] = useState<string>('');
   const [creating, setCreating] = useState(false);
+  const [startId, setStartId] = useState('');
   const [message, setMessage] = useState<{ text: string; issues?: ReturnType<typeof validateWorld> } | null>(null);
 
+  const privateIds = new Set((packages ?? []).filter((p) => p.world.manifest.private).map((p) => p.world.manifest.id));
   const selected = packages?.find((p) => packageKey(p.world) === selectedKey) ?? packages?.[0];
   const world = selected?.world;
   const worldIssues = world ? validateWorld(world) : [];
@@ -36,11 +39,18 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
     const id = crypto.randomUUID();
     const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
     await db.saves.add({ id, name: `${character.name} · ${world.manifest.name} — ${new Date().toLocaleString()}`, packageId: world.manifest.id, packageVersion: world.manifest.version, createdAt: Date.now(), updatedAt: Date.now() });
-    await appendEvents(id, startEvents(world, character, seed).map((event, seq) => ({ saveId: id, seq, turn: 0, event })));
+    const start = world.starts?.find((x) => x.id === startId) ? startId : world.starts?.[0]?.id;
+    await appendEvents(id, startEvents(world, character, seed, start).map((event, seq) => ({ saveId: id, seq, turn: 0, event })));
     onOpen(id);
   }
 
   async function importPackage(file: File) {
+    // 큰 파일·CHARX는 통째로 읽지 않고 카드인지 먼저 본다
+    if (/\.charx$/i.test(file.name) || file.size > MAX_FILE_BYTES) {
+      const zip = await BlobZip.open(file).catch(() => null);
+      if (zip?.get('card.json')) { onCard(file); return; }
+      if (file.size > MAX_FILE_BYTES) { setMessage({ text: '파일이 너무 큽니다 (패키지는 최대 20MB).' }); return; }
+    }
     const parsed = parsePackageFile(file.name, new Uint8Array(await file.arrayBuffer()));
     // 캐릭터 카드를 패키지 가져오기에 넣었다면: 카드로 새 세계관을 만든다
     if (parsed.isCard) { onCard(file); return; }
@@ -78,6 +88,15 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
           {' '}— 당신은 이 세계에 대해 아무것도 모른 채 깨어납니다.
         </p>
       )}
+      {world?.manifest.private && <p className="small muted">🔒 개인용 세계 — 원작: {world.manifest.private.source}</p>}
+      {world?.starts && world.starts.length > 0 && (
+        <label>시작 방식
+          <select value={world.starts.some((x) => x.id === startId) ? startId : world.starts[0]!.id} onChange={(e) => setStartId(e.target.value)}>
+            {world.starts.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+          </select>
+          <span className="small muted">{(world.starts.find((x) => x.id === startId) ?? world.starts[0]!).description}</span>
+        </label>
+      )}
       {!playable && world && <p className="status">❌ 이 패키지에는 오류가 있어 플레이할 수 없습니다. 편집에서 고쳐 주세요.</p>}
       <div className="row">
         <button className="primary" disabled={!playable} onClick={() => setCreating(true)}>주인공 만들고 시작</button>
@@ -88,7 +107,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
       <div className="row">
         <button onClick={() => onEdit(null)}>＋ 새 세계관 만들기</button>
         <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
-        <label className="file">⇩ 캐릭터 카드로 새 세계관 만들기 (.charx · .png · .json)
+        <label className="file">✦ 캐릭터 카드로 새 세계관 만들기 (.charx · .png · .json, 100MB 이상도 가능)
           <input type="file" accept=".charx,.png,.json,application/json,image/png,application/zip" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCard(f); e.target.value = ''; }} />
         </label>
  <label className="file">패키지 가져오기 (.wpk / .json)
@@ -106,7 +125,9 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
           <li key={packageKey(p.world)}>
             <span>{p.world.manifest.name} <span className="muted small">v{p.world.manifest.version} · {p.world.manifest.id}{p.builtin ? ' · 내장' : ''}</span></span>
             <span className="row">
-              <button onClick={() => download(exportWpk(p.world), `${safeName(p.world.manifest.id)}-${p.world.manifest.version}.wpk`)}>내보내기</button>
+              {p.world.manifest.private
+                ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용</span>
+                : <button onClick={() => download(exportWpk(p.world), `${safeName(p.world.manifest.id)}-${p.world.manifest.version}.wpk`)}>내보내기</button>}
               <button onClick={() => {
                 if (!p.builtin) { onEdit(p.world); return; }
                 // 내장 패키지는 복제해서 편집한다
@@ -131,7 +152,9 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
             <span>{s.name}<br /><span className="muted small">{new Date(s.updatedAt).toLocaleString()}</span></span>
             <span className="row">
               <button className="primary" onClick={() => onOpen(s.id)}>이어하기</button>
-              <button onClick={async () => download(await exportSave(s.id), `${safeName(s.name)}.wfsave.json`)}>내보내기</button>
+              {privateIds.has(s.packageId)
+                ? <span className="small muted" title="개인용 세계의 세이브는 내보낼 수 없습니다">🔒</span>
+                : <button onClick={async () => { try { download(await exportSave(s.id), `${safeName(s.name)}.wfsave.json`); } catch (e) { setMessage({ text: (e as Error).message }); } }}>내보내기</button>}
               <button onClick={() => confirm('이 세이브를 삭제할까요?') && deleteSave(s.id)}>삭제</button>
             </span>
           </li>

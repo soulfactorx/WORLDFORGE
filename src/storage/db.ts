@@ -21,6 +21,8 @@ class WorldforgeDB extends Dexie {
   packages!: EntityTable<StoredPackage, 'key'>;
   /** 가져온 외부 파일 원본 보존 (설계서 6.4: 원본 CHARX 파일 보존) */
   imports!: EntityTable<{ id: string; fileName: string; format: string; bytes: Uint8Array; importedAt: number }, 'id'>;
+  /** 세계관 이미지 (v0.13). key = `${패키지 ID}/${에셋 ID}` */
+  assets!: EntityTable<{ key: string; pkg: string; blob: Blob }, 'key'>;
   constructor() {
     super('worldforge');
     this.version(1).stores({
@@ -39,6 +41,14 @@ class WorldforgeDB extends Dexie {
       events: '[saveId+seq], saveId',
       packages: 'key, id, updatedAt',
       imports: 'id, importedAt',
+    });
+    // v0.13: 세계관 이미지 에셋
+    this.version(4).stores({
+      saves: 'id, updatedAt',
+      events: '[saveId+seq], saveId',
+      packages: 'key, id, updatedAt',
+      imports: 'id, importedAt',
+      assets: 'key, pkg',
     });
   }
 }
@@ -83,6 +93,8 @@ interface SaveFile {
 export async function exportSave(saveId: string): Promise<Blob> {
   const meta = await db.saves.get(saveId);
   if (!meta) throw new Error('save not found');
+  const pkg = await db.packages.where('id').equals(meta.packageId).first();
+  if (pkg?.world.manifest.private) throw new Error('개인용 세계의 세이브는 내보낼 수 없습니다.');
   const file: SaveFile = { format: 'worldforge-save', formatVersion: 1, meta, events: await loadEvents(saveId) };
   return new Blob([JSON.stringify(file)], { type: 'application/json' });
 }

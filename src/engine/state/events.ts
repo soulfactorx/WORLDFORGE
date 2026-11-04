@@ -10,11 +10,13 @@ import type { CombatEffect, CombatState, Outcome, PartyOrder, Target } from '../
  */
 export type GameEvent =
   /** character는 v0.2부터. v0.1 세이브에는 없으므로 리플레이 시 기본 시트로 대체한다. */
-  | { type: 'game_started'; packageId: string; packageVersion: string; seed: number; locationId: EntityId; playerName: string; character?: CharacterSheet }
+  /** startId: 고른 시작 방식 (v0.13) */
+  | { type: 'game_started'; packageId: string; packageVersion: string; seed: number; locationId: EntityId; playerName: string; character?: CharacterSheet; startId?: string }
   | { type: 'player_input'; text: string }
   /** breakdown은 v0.2부터 (수정치 구성: 능력치 + 숙련 등) */
   | { type: 'check_rolled'; skill: string; reason: string; result: D20Test; rngState: number; breakdown?: ModifierBreakdown; mode?: RollMode }
-  | { type: 'narration'; text: string }
+  /** images: 이 장면에 보여줄 이미지 (v0.13). 엔진이 고른 에셋 ID와 설명 */
+  | { type: 'narration'; text: string; images?: { id: string; caption: string }[] }
   | { type: 'moved'; to: EntityId }
   /** statement는 화면 표시용 (v0.3부터) */
   | { type: 'knowledge_revealed'; belief: Belief; statement?: string }

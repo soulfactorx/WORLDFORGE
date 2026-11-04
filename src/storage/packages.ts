@@ -39,12 +39,25 @@ export async function findWorld(id: string, version: string): Promise<WorldPacka
 
 export async function savePackage(world: WorldPackage, source: StoredPackage['source']): Promise<void> {
   if (BUILTIN.some((b) => packageKey(b) === packageKey(world))) throw new Error('내장 패키지와 같은 ID·버전으로는 저장할 수 없습니다. ID나 버전을 바꿔 주세요.');
+  // 개인용 세계의 표시는 지울 수 없다: 같은 ID의 패키지가 개인용이면 계속 개인용
+  if (!world.manifest.private) {
+    const prev = await db.packages.where('id').equals(world.manifest.id).toArray();
+    const priv = prev.find((p) => p.world.manifest.private)?.world.manifest.private;
+    if (priv) world = { ...world, manifest: { ...world.manifest, private: priv } };
+  }
   await db.packages.put({ key: packageKey(world), id: world.manifest.id, version: world.manifest.version, name: world.manifest.name, world, source, updatedAt: Date.now() });
 }
 
 export async function deletePackage(key: string): Promise<void> {
+  const p = await db.packages.get(key);
   await db.packages.delete(key);
+  // 같은 ID의 다른 버전이 없으면 이미지도 지운다
+  if (p && (await db.packages.where('id').equals(p.id).count()) === 0) await db.assets.where('pkg').equals(p.id).delete();
 }
+
+/** 개인용 세계(다른 사람의 작품으로 만든 세계)는 내보낼 수 없다 */
+export const isPrivate = (w: Pick<WorldPackage, 'manifest'>) => !!w.manifest.private;
+export const PRIVATE_NOTE = '다른 사람의 작품으로 만든 개인용 세계입니다. 이 브라우저에서 혼자 플레이할 수만 있고 패키지·세이브 내보내기와 공유는 막혀 있습니다.';
 
 // ---------------------------------------------------------------- 파일
 
@@ -53,6 +66,7 @@ const MAX_ENTRIES = 200;
 const MAX_UNZIPPED_BYTES = 50 * 1024 * 1024;
 
 export function exportWpk(world: WorldPackage): Blob {
+  if (isPrivate(world)) throw new Error(PRIVATE_NOTE);
   const files = {
     'manifest.json': strToU8(JSON.stringify(world.manifest, null, 2)),
     'world.json': strToU8(JSON.stringify(world, null, 2)),
