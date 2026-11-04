@@ -24,6 +24,8 @@ import type { LlmClient } from '../../llm/types';
 import { PRIVATE_NOTE } from '../../storage/packages';
 import { worldFromDraft, type WorldDraft } from './draft';
 import { generateScenario } from './generate';
+import { assignStockImages } from './stock';
+import { translateToKorean } from './translate';
 
 // ---------------------------------------------------------------- AI 초안
 
@@ -105,6 +107,10 @@ export interface CardWorldOptions {
   withScenario: boolean;
   /** 인물 대표 이미지 → 작은 초상화 data URL (브라우저에서만) */
   makePortrait?: (blob: Blob) => Promise<string | undefined>;
+  /** 외국어 인물·설정 글을 한국어로 번역 (기본 켬) */
+  translate?: boolean;
+  /** 이미지 없는 인물·장소에 내장 기본 이미지 (기본 켬) */
+  stockImages?: boolean;
   /** 분석 결과를 바꾸고 싶을 때 (기본: 자동 분류) */
   choices?: EntryChoice[];
 }
@@ -144,7 +150,9 @@ export function cardDataPrompt(b: CharxBundle, card: CharxBundle['card'], analyz
 }
 
 export async function cardToWorld(
-  llm: LlmClient, b: CharxBundle, opts: CardWorldOptions, onStage: (stage: string) => void, signal?: AbortSignal,
+  llm: LlmClient, b: CharxBundle, opts: CardWorldOptions,
+  /** 진행 단계 · 진행률(0~100) · 이 단계가 끝날 때의 진행률 */
+  onStage: (stage: string, pct?: number, nextPct?: number) => void, signal?: AbortSignal,
 ): Promise<CardWorldResult> {
   const notes: string[] = [];
   const mature = opts.contentRating === 'mature';
@@ -153,7 +161,7 @@ export async function cardToWorld(
   analyzed.forEach((a, i) => { a.choice = choices[i] ?? a.choice; });
 
   // 1) 인물·세계 지식 (결정적 변환, 원문 재사용)
-  onStage('인물·설정 정리 중…');
+  onStage('인물·설정 정리 중…', 3, 6);
   const tmp: WorldPackage = { manifest: { id: 'tmp', type: 'world', name: '', version: '0.1.0', schemaVersion: '0', author: '', license: '', contentRating: opts.contentRating, locales: ['ko'] },
     locations: [{ id: 'loc/start', name: '', description: '', connections: [] }], characters: [], facts: [], claims: [], beliefs: [], start: { locationId: 'loc/start', openingScene: '' } };
   const ents = worldCardToEntities(card, tmp, analyzed, { choices, locationId: 'loc/start', mature });
@@ -163,12 +171,32 @@ export async function cardToWorld(
   if (!ents.characters.length) notes.push('인물로 보이는 로어북 항목이 없습니다. 편집기에서 인물을 추가해 주세요.');
 
   // 2) AI: 장소·배치·연표·시작 방식·문체
-  onStage('AI가 세계 구조를 만드는 중 (장소·연표·시작 방식·문체)…');
-  const d = await llm.json<CardWorldDraft>({
-    system: SYSTEM,
-    user: `<card_data>\n${cardDataPrompt(b, card, analyzed, charInfo, mature)}\n</card_data>`,
-    maxTokens: 24000, effort: 'medium',
-  }, CARD_WORLD_SCHEMA, signal);
+  // 세계 구조(AI)와 한국어 번역(AI)을 동시에 진행한다
+  onStage(opts.translate !== false ? 'AI가 세계 구조를 만들고 외국어 설정을 한국어로 옮기는 중…' : 'AI가 세계 구조를 만드는 중 (장소·연표·시작 방식·문체)…', 6, 55);
+  const textItems = [
+    ...ents.characters.flatMap((c) => (['appearance', 'personality', 'speech', 'background', 'greeting'] as const).filter((f) => c[f]).map((f) => ({ id: `${c.id}|${f}`, text: c[f]! }))),
+    ...ents.claims.map((c) => ({ id: `${c.id}|statement`, text: c.statement })),
+  ];
+  let translated = 0;
+  const [d, tr] = await Promise.all([
+    llm.json<CardWorldDraft>({
+      system: SYSTEM,
+      user: `<card_data>\n${cardDataPrompt(b, card, analyzed, charInfo, mature)}\n</card_data>`,
+      maxTokens: 24000, effort: 'medium',
+    }, CARD_WORLD_SCHEMA, signal),
+    opts.translate !== false
+      ? translateToKorean(llm, textItems, charInfo.map((c) => ({ latin: c.latin, korean: c.name })), (done, total) => total && onStage(`AI가 세계 구조를 만들고 한국어로 옮기는 중… (번역 ${done}/${total})`, 6 + Math.round((done / total) * 40), 55), signal)
+      : Promise.resolve(new Map<string, string>()),
+  ]);
+  for (const [key, text] of tr) {
+    const [id, field] = key.split('|') as [string, string];
+    const c = ents.characters.find((x) => x.id === id);
+    if (c) { (c as unknown as Record<string, string>)[field] = text; translated++; continue; }
+    const cl = ents.claims.find((x) => x.id === id);
+    if (cl) { cl.statement = text.length > 400 ? `${text.slice(0, 399)}…` : text; translated++; }
+  }
+  if (translated) notes.push(`외국어로 된 인물·설정 글 ${translated}개를 한국어로 옮겼습니다.`);
+  onStage('세계 구조 정리 중…', 56, 58);
 
   // 장소는 기존 정리기를 재사용 (키 정규화·양방향 연결·고립 장소 연결)
   const timeline = d.timeline ?? [];
@@ -248,7 +276,7 @@ export async function cardToWorld(
   };
 
   // 3) 이미지: 모든 이미지를 인물·장소에 연결
-  onStage(`이미지 ${b.assets.length.toLocaleString()}장 연결 중…`);
+  onStage(`이미지 ${b.assets.length.toLocaleString()}장 연결 중…`, 58, 60);
   const inputs: (AssetInput & { src: BundleAsset | 'cover' })[] = b.assets.map((a) => ({ name: a.name, mime: a.mime, size: a.size, cardType: a.cardType, src: a }));
   if (b.cover) inputs.push({ name: 'cover', mime: 'image/jpeg', size: b.cover.size, cardType: 'icon', src: 'cover' });
   const targets = ents.characters.map((c, i) => ({ id: c.id, aliases: [c.name, charInfo[i]!.latin, c.id.replace(/^npc\//, '')].filter(Boolean), ...(c.gender ? { gender: c.gender } : {}) }));
@@ -257,7 +285,7 @@ export async function cardToWorld(
   if (opts.classifyImages && assets.some((a) => a.kind === 'other')) {
     try {
       assets = await classifyAssetsAI(llm, assets, ents.characters.map((c, i) => ({ id: c.id, name: c.name, aliases: targets[i]!.aliases })), world.locations.map((l) => ({ id: l.id, name: l.name })),
-        (done, total) => onStage(`AI가 이미지 이름 분류 중… ${done}/${total}`), signal);
+        (done, total) => onStage(`AI가 이미지 이름 분류 중… ${done}/${total}`, 60 + Math.round((done / Math.max(1, total)) * 10), 70), signal);
     } catch (e) {
       if (signal?.aborted) throw e;
       notes.push(`이미지 AI 분류에 실패해 이름 규칙으로만 연결했습니다: ${(e as Error).message}`);
@@ -277,6 +305,7 @@ export async function cardToWorld(
 
   // 초상화 (편집기·목록용 작은 이미지)
   if (opts.makePortrait) {
+    onStage('초상화 만드는 중…', 75, 78);
     for (const c of world.characters.slice(0, 60)) {
       const a = assets.find((x) => x.characterId === c.id && x.tags.includes('default') && (!c.gender || !x.gender || x.gender === c.gender)) ?? assets.find((x) => x.characterId === c.id);
       if (!a) continue;
@@ -284,11 +313,19 @@ export async function cardToWorld(
     }
   }
 
+  // 이미지가 없는 인물·장소에는 앱 내장 기본 이미지
+  if (opts.stockImages !== false) {
+    onStage('이미지 없는 인물·장소에 기본 이미지 고르는 중…', 70, 75);
+    const st = await assignStockImages(world, llm, signal);
+    world.assets = st.assets;
+    if (st.added) notes.push(`이미지가 없는 인물·장소 ${st.added}곳에 기본 이미지를 붙였습니다${st.byAi ? ' (AI가 고름)' : ''}. 편집기 이미지 탭에서 바꿀 수 있습니다.`);
+  }
+
   // 4) 임무·결말 (기존 시나리오 생성기 재사용)
   if (opts.withScenario) {
     try {
       const request = `원작 카드를 바탕으로 한 세계다. 원작의 줄거리와 연표를 따라가는 메인 임무와 결말을 만든다.\n${cut(d.plot_request ?? '', 3000)}\n\n## 연표\n${timeline.slice(0, 40).map((t) => `- [${t.when}] ${t.title} (${claimByKey(t.key)?.replace(/^claim\//, '') ?? ''})`).join('\n')}`;
-      const r = await generateScenario(llm, world, onStage, signal, request);
+      const r = await generateScenario(llm, world, (st) => onStage(st, 78, 90), signal, request);
       world = r.world;
       notes.push(...r.notes);
     } catch (e) {
@@ -296,18 +333,12 @@ export async function cardToWorld(
       notes.push(`임무·결말 생성에 실패했습니다 (편집기에서 다시 만들 수 있습니다): ${(e as Error).message}`);
     }
   }
-  onStage('검사 중…');
+  onStage('검사 중…', 90, 91);
   return { world, notes, issues: validateWorld(world), images };
 }
 
-/** 글에 이름(한글 이름 또는 영문 ID)이 나오는 인물 */
-export function mentionedCharacters(chars: Pick<WorldPackage['characters'][number], 'id' | 'name'>[], text: string): string[] {
-  const t = text.toLowerCase();
-  return chars.filter((c) => {
-    const latin = c.id.replace(/^npc\//, '').replace(/-\d+$/, '');
-    return (c.name.length >= 2 && t.includes(c.name.toLowerCase())) || (latin.length >= 3 && new RegExp(`\\b${latin.replace(/-/g, '[ -]')}\\b`, 'i').test(text));
-  }).map((c) => c.id);
-}
+export { mentionedCharacters } from '../../engine/assets';
+import { mentionedCharacters } from '../../engine/assets';
 
 /**
  * 이미 만든 세계 보완: 아무도 모르는 명제를 그 글에 이름이 나오는 인물에게,

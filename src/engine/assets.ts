@@ -61,6 +61,28 @@ export function pickSceneImage(world: WorldPackage, locationId: EntityId, tag: s
   return pickOne(list.filter((a) => a.locationId === locationId), `${locationId}|${salt}`);
 }
 
+/** 글에 이름(한글 이름 또는 영문 ID)이 나오는 인물 — 처음 나온 순서대로 */
+export function mentionedCharacters(chars: Pick<Character, 'id' | 'name'>[], text: string): string[] {
+  const t = text.toLowerCase();
+  return chars.map((c) => {
+    const latin = c.id.replace(/^npc\//, '').replace(/-\d+$/, '');
+    let at = c.name.length >= 2 ? t.indexOf(c.name.toLowerCase()) : -1;
+    if (at < 0 && latin.length >= 3) { const m = new RegExp(`\\b${latin.replace(/[^a-z0-9-]/gi, '').replace(/-/g, '[ -]')}\\b`, 'i').exec(text); if (m) at = m.index; }
+    return { id: c.id, at };
+  }).filter((x) => x.at >= 0).sort((a, b) => a.at - b.at).map((x) => x.id);
+}
+
+/** 글에 나온 인물들의 이미지 (이미지가 있는 인물만, 최대 n장) */
+export function mentionedImages(world: WorldPackage, text: string, salt: string, n = 3, skip: string[] = []): { id: string; caption: string }[] {
+  const out: { id: string; caption: string }[] = [];
+  for (const id of mentionedCharacters(world.characters, text)) {
+    if (out.length >= n) break;
+    const img = pickCharacterImage(world, id, '', salt);
+    if (img && !skip.includes(img.id) && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: world.characters.find((c) => c.id === id)!.name });
+  }
+  return out;
+}
+
 /** 인물의 대표 이미지 (목록·편집기용) */
 export function portraitAsset(world: WorldPackage, npcId: EntityId): AssetMeta | undefined {
   return pickCharacterImage(world, npcId, 'default', 'portrait');

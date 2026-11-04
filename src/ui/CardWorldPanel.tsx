@@ -31,12 +31,20 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
   const [rating, setRating] = useState<WorldPackage['manifest']['contentRating']>('teen');
   const [classify, setClassify] = useState(true);
   const [withScenario, setWithScenario] = useState(true);
+
   const [agree, setAgree] = useState(false);
   const [stage, setStage] = useState('');
   const [progress, setProgress] = useState<[number, number] | null>(null);
   const [thumbs, setThumbs] = useState<{ name: string; url: string }[]>([]);
   const abort = useRef<AbortController | null>(null);
-
+  const [translate, setTranslate] = useState(true);
+  const [pct, setPct] = useState<{ at: number; next: number; since: number; start: number }>({ at: 0, next: 0, since: 0, start: 0 });
+  const [, tick] = useState(0);
+  useEffect(() => { if (!stage) return; const t = setInterval(() => tick((n) => n + 1), 500); return () => clearInterval(t); }, [stage !== '']);
+  const onStage = (st: string, at?: number, next?: number) => {
+    setStage(st);
+    if (at !== undefined) setPct((p) => ({ at: Math.max(p.at, at), next: Math.max(next ?? at, at), since: Date.now(), start: p.start || Date.now() }));
+  };
   useEffect(() => {
     let live = true;
     const urls: string[] = [];
@@ -66,26 +74,28 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
     setError('');
     abort.current = new AbortController();
     const signal = abort.current.signal;
+    setPct({ at: 0, next: 3, since: Date.now(), start: Date.now() });
     try {
       const llm = createLlmClient(settings);
       const r = await cardToWorld(llm, bundle, {
-        contentRating: rating, classifyImages: classify, withScenario, choices,
+        contentRating: rating, classifyImages: classify, withScenario, choices, translate,
         makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),
-      }, setStage, signal);
-      setStage('이미지 저장 중…');
-      const saved = await storeAssets(r.world.manifest.id, r.images, (d, t) => setProgress([d, t]), signal);
+      }, onStage, signal);
+      onStage('이미지 저장 중…', 91, 91);
+      const saved = await storeAssets(r.world.manifest.id, r.images, (d, t) => { setProgress([d, t]); onStage('이미지 저장 중…', 91 + Math.round((d / Math.max(1, t)) * 8), 99); }, signal);
       if (saved.failed.length) {
         const bad = new Set(saved.failed);
         r.world.assets = r.world.assets?.filter((a) => !bad.has(a.id));
         r.notes.push(`이미지 ${saved.failed.length}장을 읽지 못해 뺐습니다.`);
       }
-      setStage('세계 저장 중…');
+      onStage('세계 저장 중…', 99, 100);
       await savePackage(r.world, 'created');
+      onStage('완료', 100, 100);
       onDone(r.world, r.notes);
     } catch (e) {
       if (!signal.aborted) setError((e as Error).message);
     } finally {
-      setStage(''); setProgress(null);
+      setStage(''); setProgress(null); setPct({ at: 0, next: 0, since: 0, start: 0 });
     }
   }
 
@@ -139,19 +149,32 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
             </label>
             <label className="check"><input type="checkbox" checked={classify} disabled={busy} onChange={(e) => setClassify(e.target.checked)} /> 이름 규칙으로 못 찾은 이미지를 AI로 분류 (파일 이름만 보냄)</label>
             <label className="check"><input type="checkbox" checked={withScenario} disabled={busy} onChange={(e) => setWithScenario(e.target.checked)} /> 임무·결말까지 만들기</label>
+            <label className="check"><input type="checkbox" checked={translate} disabled={busy} onChange={(e) => setTranslate(e.target.checked)} /> 외국어(영어 등) 인물·설정 글을 한국어로 번역</label>
           </div>
           <div className="private-banner">
             🔒 이 카드는 다른 사람의 작품입니다. 만든 세계는 <b>개인용</b>으로 표시되어 <b>이 브라우저에서 혼자 플레이할 수만 있고</b>, 패키지·세이브 내보내기와 공유가 막힙니다.
             <label className="check"><input type="checkbox" checked={agree} disabled={busy} onChange={(e) => setAgree(e.target.checked)} /> 이해했습니다. 개인적으로만 사용합니다.</label>
           </div>
           {!settings && <p className="status">❌ 먼저 AI 설정을 해 주세요.</p>}
-          <p className="muted small">AI 호출: 세계 구조 1회{withScenario ? ' + 임무 1회' : ''}{classify ? ' + 이미지 분류(필요할 때만)' : ''}. 카드 글이 길면 시간이 걸립니다.</p>
-          {progress && <div className="progress-bar"><span style={{ width: `${(progress[0] / Math.max(1, progress[1])) * 100}%` }} /></div>}
+          <p className="muted small">AI 호출: 세계 구조 1회{translate ? ' + 번역(필요할 때, 동시에)' : ''} + 기본 이미지 고르기 1회{withScenario ? ' + 임무 1회' : ''}{classify ? ' + 이미지 분류(필요할 때만)' : ''}. 카드 글이 길면 시간이 걸립니다.</p>
+          {busy && (() => {
+            // 긴 AI 호출 중에는 다음 단계 쪽으로 천천히 차오르게 한다 (실제 진행률은 단계가 끝날 때 맞춘다)
+            const creep = pct.at + (pct.next - pct.at) * (1 - Math.exp(-(Date.now() - pct.since) / 45000)) * 0.9;
+            const shown = Math.min(100, Math.round(creep));
+            const sec = Math.floor((Date.now() - pct.start) / 1000);
+            return (
+              <div className="gen-progress" role="status" aria-live="polite">
+                <div className="row"><span className="spinner" /> <b>{shown}%</b> <span className="small">{stage}</span><span className="spacer" /><span className="small muted">{Math.floor(sec / 60)}분 {sec % 60}초</span></div>
+                <div className="progress-bar"><span style={{ width: `${shown}%` }} /></div>
+                {progress && <span className="small muted">이미지 {progress[0].toLocaleString()} / {progress[1].toLocaleString()}장</span>}
+              </div>
+            );
+          })()}
         </>
       )}
       <div className="row">
         <button onClick={() => (busy ? abort.current?.abort() : onCancel())}>{busy ? '중단' : '취소'}</button>
-        <button className="primary" disabled={!b || !settings || busy || !agree} onClick={run}>{busy ? `${stage}${progress ? ` ${progress[0].toLocaleString()}/${progress[1].toLocaleString()}` : ''}` : '세계 만들기'}</button>
+        <button className="primary" disabled={!b || !settings || busy || !agree} onClick={run}>{busy ? '만드는 중…' : '세계 만들기'}</button>
         {!busy && b && b.card.lore.length > 0 && file.size < 30 * 1024 * 1024 && <button onClick={() => onCharactersOnly(file)}>인물로만 가져오기 (기존 방식)</button>}
       </div>
     </section>

@@ -1,5 +1,5 @@
 import { DC_TIERS, type DcTier, type RollMode, d20Test } from '../engine/dice/dice';
-import { ABILITIES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
+import { ABILITIES, ABILITY_NAMES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/character/sheet';
 import { createRng } from '../engine/dice/rng';
 import type { WorldPackage } from '../engine/schema';
@@ -16,7 +16,7 @@ import { applyDelta, canShareSecret, joinBlocker, LEAVE_AFFINITY, relationshipOf
 import type { LlmClient } from '../llm/types';
 import { playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
 import { availableEncounters, beginEncounter } from './combat';
-import { expressionTags, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
+import { expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
 import { basicGuide, gmGuide } from './guide';
 import { buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects } from './context';
 
@@ -178,6 +178,8 @@ export async function runTurn(
   signal?: AbortSignal,
   /** 진행 단계 표시 (UI용) */
   onStage: (stage: string) => void = () => {},
+  /** 플레이어가 쓰겠다고 고른 기술·능력치 ('skill:<id>' | 'ability:<id>') */
+  use?: string,
 ): Promise<TurnResult> {
   if (state.combat) throw new Error('전투 중에는 카드로 행동한다');
   if (state.playerDead) throw new Error('당신은 죽었다. 턴 되돌리기로 이전으로 돌아갈 수 있다.');
@@ -186,18 +188,21 @@ export async function runTurn(
   let s = state;
   const push = (e: GameEvent) => { events.push(e); s = applyEvent(s, e, turn); };
 
-  push({ type: 'player_input', text: input });
+  const declared = parseUse(use);
+  push({ type: 'player_input', text: input, ...(declared ? { use } : {}) });
 
   // 1) Director
   onStage('GM이 행동을 판단하는 중');
   const d = await llm.json<DirectorOutput>(
-    { system: DIRECTOR_SYSTEM, user: `${buildDirectorContext(world, s)}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
+    { system: DIRECTOR_SYSTEM, user: `${buildDirectorContext(world, s)}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}${declared ? `\n\n## 플레이어가 쓰겠다고 한 것\n${declared.kind === 'skill' ? `${SKILLS[declared.skill].name} 기술 (${declared.skill})` : `${ABILITY_NAMES[declared.ability]} 능력 (${declared.ability})`} — 결과가 불확실하면 이것으로 판정한다` : ''}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
     DIRECTOR_SCHEMA, signal,
   );
 
   // 2) Validator + Rules Engine
   const outcomes: string[] = [];
-  const spec = toCheckSpec(d);
+  let spec = toCheckSpec(d);
+  // 플레이어가 고른 기술·능력치가 있으면, 판정이 필요한 행동일 때 그것으로 굴린다 (내성은 상황이 정한다)
+  if (declared && spec && spec.kind !== 'save') spec = declared;
   if (spec && d.check_dc_tier in DC_TIERS) {
     const rng = createRng(s.rngState);
     const breakdown = checkModifier(s.player.sheet, spec);
@@ -318,7 +323,7 @@ export async function runTurn(
     },
     onNarration, signal,
   );
-  const images = turnImages(world, s, d.scene_image ?? '', actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '' })), moving, turn);
+  const images = turnImages(world, s, d.scene_image ?? '', actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '' })), moving, turn, narration);
   push({ type: 'narration', text: narration, ...(images.length ? { images } : {}) });
   // 처음 알게 된 사실마다 탐험·대화 경험치
   const discoveries = reveals.filter((r) => r.type === 'knowledge_revealed' && !s.beliefs.some((b) => b.holder === 'player' && b.claim === r.belief.claim)).length;
@@ -378,6 +383,13 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
   ].join('\n');
 }
 
+function parseUse(use?: string): CheckSpec | null {
+  const [kind, id] = (use ?? '').split(':');
+  if (kind === 'skill' && id && id in SKILLS) return { kind: 'skill', skill: id as SkillId };
+  if (kind === 'ability' && (ABILITIES as readonly string[]).includes(id ?? '')) return { kind: 'ability', ability: id as Ability };
+  return null;
+}
+
 /** Director 출력 검증: 잘못된 기술/능력치 조합은 판정 없음으로 처리한다. */
 function toCheckSpec(d: DirectorOutput): CheckSpec | null {
   if (d.check_kind === 'skill' && d.check_skill && d.check_skill in SKILLS) return { kind: 'skill', skill: d.check_skill };
@@ -427,7 +439,7 @@ function expressionBlock(world: WorldPackage, npcId: string): string {
 }
 
 /** 이번 턴에 보여줄 이미지: 장면(태그 또는 이동한 장소) + 말한 인물의 표정 */
-function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speakers: { id: string; name: string; expression: string }[], moved: boolean, turn: number) {
+function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speakers: { id: string; name: string; expression: string }[], moved: boolean, turn: number, narration = '') {
   if (!world.assets?.length) return [];
   const out: { id: string; caption: string }[] = [];
   const loc = world.locations.find((l) => l.id === s.player.locationId);
@@ -437,6 +449,9 @@ function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speaker
     const img = pickCharacterImage(world, sp.id, sp.expression, String(turn));
     if (img && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: sp.name });
   }
+  // 서술에 나온 인물 (말하지 않았어도 묘사되면)
+  const shown = new Set(out.map((o) => o.caption));
+  for (const m of mentionedImages(world, narration, String(turn), 4, out.map((o) => o.id))) if (!shown.has(m.caption)) out.push(m);
   // 매 턴 한 장은 보여준다: 이 장소의 인물·동료 → 장소 이미지 → 지도 → 표지
   if (!out.length) { const f = fallbackImage(world, s, String(turn)); if (f) out.push(f); }
   return out.slice(0, 4);

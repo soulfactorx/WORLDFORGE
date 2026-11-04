@@ -192,3 +192,19 @@ label.file input[type='file'] { font-size: .8rem; }
 .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--check); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .install-hint { font-size: .8rem; }
+.stock-box { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+.gallery.stock { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); max-height: 360px; overflow-y: auto; }
+.gallery.stock figure { cursor: pointer; }
+.gallery.stock img { height: 90px; }
+.gallery.stock figure:hover img { outline: 2px solid var(--accent); }
+/* v0.16 기술 선택 · GM 얼굴 */
+.skill-badge { display: inline-block; margin-left: 8px; font-size: .78rem; color: var(--check); border: 1px solid var(--check); border-radius: 10px; padding: 0 6px; white-space: nowrap; }
+.input-row { flex-wrap: wrap; }
+.use-select { width: auto; max-width: 100%; flex: 0 0 100%; font-size: .85rem; padding: 4px 8px; }
+.input-row textarea { flex: 1; }
+.guide-faces { display: flex; gap: 8px; margin-bottom: 6px; }
+.guide-faces .face { display: flex; flex-direction: column; align-items: center; font-size: .7rem; color: var(--muted); }
+.guide-faces img, .guide-faces .asset-ph { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; object-position: top; border: 1px solid var(--border); }
+.gen-progress { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 8px 0; }
+.progress-bar { height: 10px; }
+.progress-bar > span { transition: width .5s ease; }

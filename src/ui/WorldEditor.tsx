@@ -197,12 +197,12 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         </p>
       )}
       <div className="tabs">
-        {TABS.filter(([id]) => !(id === 'json' && w.manifest.private) && !(id === 'images' && !w.assets?.length)).map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
+        {TABS.filter(([id]) => !(id === 'json' && w.manifest.private)).map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
       </div>
 
       {tab === 'basic' && (
         <div className="form-grid">
-          {w.assets?.length || w.manifest.private
+          {w.assets?.some((a) => !a.id.startsWith('stock.')) || w.manifest.private
             ? <p className="small muted">패키지 ID: <code>{w.manifest.id}</code> (이미지가 연결되어 있어 바꿀 수 없습니다)</p>
             : <Text label="패키지 ID (작가.세계 형식, 소문자)" value={w.manifest.id} onChange={(id) => set({ manifest: { ...w.manifest, id } })} />}
           <Text label="이름" value={w.manifest.name} onChange={(name) => set({ manifest: { ...w.manifest, name } })} />
@@ -400,7 +400,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         </>
       )}
 
-      {tab === 'images' && <AssetGallery world={w} onChange={(assets) => set({ assets })} />}
+      {tab === 'images' && <AssetGallery world={w} settings={settings} onChange={(assets) => set({ assets })} />}
       {tab === 'json' && !w.manifest.private && <JsonField label="패키지 전체 (world.json)" value={w} onChange={(v) => setW(v)} rows={30} />}
     </section>
   );

@@ -6,6 +6,7 @@ import { josa } from '../text/josa';
 import { applyDelta, describeDelta, type Relationship } from '../relationship';
 import { applyEffects, type CombatState, endTurn, type PartyOrder, ZONE_NAMES } from '../combat/combat';
 import { classResources, resourcesOf } from '../character/sheet';
+import { ABILITY_NAMES, type Ability, SKILLS, type SkillId } from '../character/rules';
 
 export interface LogEntry {
   turn: number;
@@ -15,6 +16,8 @@ export interface LogEntry {
   /** guide: 진행 제안과 선택지 */
   suggestion?: string;
   choices?: string[];
+  /** 선택지별 기술 ID ('' = 판정 없음) (v0.16) */
+  choiceSkills?: string[];
 }
 
 export interface GameState {
@@ -56,6 +59,14 @@ export interface GameState {
 
 export const MAX_PARTY = 2;
 
+/** 'skill:persuasion' → '설득', 'ability:str' → '근력' */
+export function useLabel(use: string): string {
+  const [kind, id] = use.split(':');
+  if (kind === 'skill' && id && id in SKILLS) return SKILLS[id as SkillId].name;
+  if (kind === 'ability' && id && id in ABILITY_NAMES) return ABILITY_NAMES[id as Ability];
+  return use;
+}
+
 export const NPC_MEMORY_LIMIT = 12;
 
 const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
@@ -75,7 +86,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...initialState(), packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
         player: { name: e.playerName, locationId: e.locationId, sheet: e.character ?? legacyCharacter(e.playerName) } };
     case 'player_input':
-      return { ...s, turn, log: [...s.log, { turn, kind: 'player', text: e.text }] };
+      return { ...s, turn, log: [...s.log, { turn, kind: 'player', text: e.use ? `${e.text}  [${useLabel(e.use)}]` : e.text }] };
     case 'check_rolled': {
       const r = e.result;
       const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
@@ -215,7 +226,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'time_advanced':
       return { ...s, worldMinutes: s.worldMinutes + e.minutes };
     case 'gm_guide':
-      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices }] };
+      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices, ...(e.images?.length ? { images: e.images } : {}), ...(e.choiceSkills ? { choiceSkills: e.choiceSkills } : {}) }] };
   }
 }
 

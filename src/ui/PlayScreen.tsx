@@ -17,6 +17,10 @@ import { AssetImage } from './AssetImage';
 import { RichText } from './RichText';
 import { basicGuide } from '../gm/guide';
 import { calendarDate } from '../engine/calendar';
+import { ABILITIES, ABILITY_NAMES, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
+import { checkModifier } from '../engine/character/sheet';
+
+const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 import { pickSceneImage } from '../engine/assets';
 
 /**
@@ -71,6 +75,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const [streaming, setStreaming] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [stage, setStage] = useState('');
+  const [use, setUse] = useState('');
   const [startedAt, setStartedAt] = useState(0);
   const [, tick] = useState(0);
   useEffect(() => { if (streaming === null) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [streaming !== null]);
@@ -86,14 +91,16 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   useEffect(() => { reload(); return () => abort.current?.abort(); }, [saveId]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }); }, [state?.log.length, streaming]);
 
-  async function submit(choice?: string) {
+  async function submit(choice?: string, choiceUse?: string) {
     const text = (choice ?? input).trim();
     if (!state || !text || streaming !== null) return;
+    const turnUse = choice !== undefined ? choiceUse : use || undefined;
+    if (choice === undefined) setUse('');
     if (choice === undefined) setInput(''); setError(''); setStreaming(''); setStage('AI에게 보내는 중'); setStartedAt(Date.now());
     abort.current = new AbortController();
     try {
       const { events } = await runTurn(createLlmClient(settings), world, state, text,
-        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage);
+        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage, turnUse);
       const turn = state.turn + 1;
       await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));
       await reload();
@@ -185,18 +192,28 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       <div className="log">
         {state.log.map((e, i) => (
           <div key={i} className={`entry-wrap k-${e.kind}`}>
-            {e.images && e.images.length > 0 && (
+            {e.kind !== 'guide' && e.images && e.images.length > 0 && (
               <div className="scene-images">
                 {e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} /><figcaption>{im.caption}</figcaption></figure>)}
               </div>
             )}
             {e.kind === 'guide' ? (
               <div className={`guide ${i === lastGuide ? 'current' : 'past'}`}>
+                {e.images && e.images.length > 0 && i === lastGuide && (
+                  <div className="guide-faces">{e.images.map((im) => <span key={im.id} className="face"><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} /><small>{im.caption}</small></span>)}</div>
+                )}
                 <p><b>🎲 GM</b> {e.text}</p>
                 {e.suggestion && i === lastGuide && <p className="suggestion">💡 {e.suggestion}</p>}
                 {i === lastGuide && canAct && e.choices && e.choices.length > 0 && (
                   <div className="choices">
-                    {e.choices.map((c, k) => <button key={k} type="button" onClick={() => submit(c)}>{k + 1}. {c}</button>)}
+                    {e.choices.map((c, k) => {
+                      const sk = e.choiceSkills?.[k];
+                      return (
+                        <button key={k} type="button" onClick={() => submit(c, sk ? `skill:${sk}` : undefined)}>
+                          {k + 1}. {c}{sk && sk in SKILLS && <span className="skill-badge">🎲 {SKILLS[sk as SkillId].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -221,6 +238,17 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
       ) : (
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <select className="use-select" value={use} onChange={(e) => setUse(e.target.value)} title="이 행동에 쓸 기술·능력치 (판정이 필요할 때 이것으로 굴린다)">
+          <option value="">🎲 기술·능력 (자동)</option>
+          <optgroup label="기술">
+            {[...SKILL_IDS].sort((a, b) => Number(state.player.sheet.skillProficiencies.includes(b)) - Number(state.player.sheet.skillProficiencies.includes(a))).map((k) => (
+              <option key={k} value={`skill:${k}`}>{SKILLS[k].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: k }).total)}{state.player.sheet.skillProficiencies.includes(k) ? ' ★' : ''}</option>
+            ))}
+          </optgroup>
+          <optgroup label="능력치">
+            {ABILITIES.map((a) => <option key={a} value={`ability:${a}`}>{ABILITY_NAMES[a]} {fmt(checkModifier(state.player.sheet, { kind: 'ability', ability: a }).total)}</option>)}
+          </optgroup>
+        </select>
         <textarea
           value={input} rows={2} placeholder="선택지를 누르거나 직접 행동을 적으세요 (예: 주변을 자세히 살펴본다)"
           onChange={(e) => setInput(e.target.value)}

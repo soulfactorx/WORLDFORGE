@@ -12,7 +12,8 @@ export type GameEvent =
   /** character는 v0.2부터. v0.1 세이브에는 없으므로 리플레이 시 기본 시트로 대체한다. */
   /** startId: 고른 시작 방식 (v0.13) */
   | { type: 'game_started'; packageId: string; packageVersion: string; seed: number; locationId: EntityId; playerName: string; character?: CharacterSheet; startId?: string }
-  | { type: 'player_input'; text: string }
+  /** use: 플레이어가 쓰겠다고 고른 기술·능력치 (v0.16) 예: 'skill:persuasion', 'ability:str' */
+  | { type: 'player_input'; text: string; use?: string }
   /** breakdown은 v0.2부터 (수정치 구성: 능력치 + 숙련 등) */
   | { type: 'check_rolled'; skill: string; reason: string; result: D20Test; rngState: number; breakdown?: ModifierBreakdown; mode?: RollMode }
   /** images: 이 장면에 보여줄 이미지 (v0.13). 엔진이 고른 에셋 ID와 설명 */
@@ -57,7 +58,7 @@ export type GameEvent =
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number }
   /** GM 안내 (v0.14): 이번 턴 상황 요약 + 진행 제안 + 선택지 */
-  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[] };
+  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[]; images?: { id: string; caption: string }[]; choiceSkills?: string[] };
 
 export interface StoredEvent {
   saveId: string;

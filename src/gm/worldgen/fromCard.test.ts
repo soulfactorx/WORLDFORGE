@@ -84,7 +84,10 @@ describe('cardToWorld', () => {
     expect(kinds['garden_rain']).toBe('scene:loc/garden:rain');
     expect(kinds['palace_map']).toMatch(/^map/);
     expect(kinds['cover']).toMatch(/^cover/);
-    expect(r.images.length).toBe(w.assets!.length);
+    expect(r.images.length).toBe(w.assets!.filter((a) => !a.id.startsWith('stock.')).length);
+    // 이미지가 없는 장소에는 내장 기본 이미지 (침실 → bedchamber 그림)
+    expect(w.assets!.find((a) => a.id.startsWith('stock.') && a.locationId === 'loc/bedchamber')!.id).toMatch(/^stock\.bedchamber--/);
+    expect(w.assets!.some((a) => a.id.startsWith('stock.') && a.locationId === 'loc/garden')).toBe(false);
     expect((await r.images.find((x) => x.id === w.assets!.find((a) => a.name === 'cover')!.id)!.read()).size).toBe(100);
     // 임무
     expect(w.quests![0]!.stages[0]!.complete).toEqual({ knows: 'claim/ruin' });

@@ -270,7 +270,7 @@ export function validateWorld(input: unknown): Issue[] {
     if (assetIds.has(a.id)) err(p, `이미지 ID "${a.id}"가 중복됩니다.`);
     assetIds.add(a.id);
     if (!['character', 'scene', 'map', 'cover', 'other'].includes(a.kind)) err(`${p}.kind`, '알 수 없는 이미지 종류');
-    if (!/^image\/(png|jpeg|webp|gif|avif)$/.test(a.mime)) err(`${p}.mime`, '지원하지 않는 이미지 형식');
+    if (!/^image\/(png|jpeg|webp|gif|avif|svg\+xml)$/.test(a.mime)) err(`${p}.mime`, '지원하지 않는 이미지 형식');
     if (a.characterId && !charIdSet.has(a.characterId)) warn(`${p}.characterId`, `없는 인물 "${a.characterId}" — 이 이미지는 쓰이지 않습니다.`);
     if (a.locationId && !locIds.has(a.locationId)) warn(`${p}.locationId`, `없는 장소 "${a.locationId}"`);
     if (!Array.isArray(a.tags)) err(`${p}.tags`, '태그는 목록이어야 합니다.');
