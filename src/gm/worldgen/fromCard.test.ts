@@ -36,6 +36,7 @@ const draft: CardWorldDraft = {
     { key: 'native', name: '이 세계 사람', description: '시녀로 시작한다.', location: 'garden', opening_scene: '정원을 쓸고 있다.', knows: [] },
   ],
   plot_request: '멸망을 막는다.',
+  calendar: { era: '제국력', start_year: 429, start_month: 6, start_day: 13, countdown_label: '파멸', countdown_year: 429, countdown_month: 9, countdown_day: 21 },
 };
 
 function mockLlm(seen: string[]): LlmClient {
@@ -76,6 +77,7 @@ describe('cardToWorld', () => {
     expect(w.starts!.map((s) => s.id)).toEqual(['start/karenya', 'start/native']);
     expect(w.starts![0]!.knows).toEqual(['claim/ruin', 'claim/ball']);
     expect(w.style).toContain('궁정');
+    expect(w.calendar).toEqual({ era: '제국력', year: 429, month: 6, day: 13, countdown: { label: '파멸', year: 429, month: 9, day: 21 } });
     // 이미지: 이름 규칙 + AI 분류 + 표지
     const kinds = Object.fromEntries(w.assets!.map((a) => [a.name, `${a.kind}:${a.characterId ?? a.locationId ?? ''}:${a.tags.join(',')}`]));
     expect(kinds['Hedwig_smile']).toBe('character:npc/hedwig:smile');

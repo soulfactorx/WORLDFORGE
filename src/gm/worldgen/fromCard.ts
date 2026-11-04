@@ -38,6 +38,7 @@ export interface CardWorldDraft {
   timeline: { key: string; when: string; title: string; statement: string; status: 'past' | 'ongoing' | 'future'; secrecy: number; protected_topic: string; known_by: string[]; rumor_by: string[] }[];
   starts: { key: string; name: string; description: string; location: string; opening_scene: string; knows: string[] }[];
   plot_request: string;
+  calendar: { era: string; start_year: number; start_month: number; start_day: number; countdown_label: string; countdown_year: number; countdown_month: number; countdown_day: number };
 }
 
 const str = { type: 'string' } as const;
@@ -73,6 +74,12 @@ export const CARD_WORLD_SCHEMA = obj({
     knows: { type: 'array', items: str, description: '이 방식으로 시작하면 플레이어가 처음부터 아는 timeline key (예: 원작을 읽은 빙의자라면 앞으로의 사건)' },
   })),
   plot_request: { type: 'string', description: '임무·결말 설계자에게 줄 원작 줄거리·갈등·결말 방향 요약 (10줄 이내)' },
+  calendar: obj({
+    era: { type: 'string', description: '연호 (예: 제국력). 없으면 ""' },
+    start_year: { type: 'integer', description: '이야기가 시작되는 날의 연도. 날짜 정보가 없으면 0' }, start_month: int, start_day: int,
+    countdown_label: { type: 'string', description: '원작의 결정적인 날(파멸·결말 등)의 이름. 없으면 ""' },
+    countdown_year: { type: 'integer', description: '그날의 연도. 없으면 0' }, countdown_month: int, countdown_day: int,
+  }),
 });
 
 const SYSTEM = `너는 1인칭 AI TRPG의 세계관 설계자다. 다른 플랫폼용 캐릭터 카드의 데이터를 읽고, 이 게임의 세계관 구조(장소·인물 배치·연표·시작 방식·문체)로 옮긴다.
@@ -84,6 +91,7 @@ const SYSTEM = `너는 1인칭 AI TRPG의 세계관 설계자다. 다른 플랫�
 - 이미 일어난 사건(past)은 그 일을 겪었거나 들었을 인물을 known_by에 반드시 넣는다. 세상이 다 아는 일이면 비워도 된다(모두가 안다). 앞으로 일어날 일(future)은 그 일을 꾸미는 인물만 안다.
 - 시작 방식(starts)은 카드에 있는 시작 선택지(빙의 대상·도입 상황 등)를 옮긴다. 없으면 1개. {{user}}는 플레이어다.
 - 문체(style)는 원작 첫 메시지와 묘사의 문체만 요약한다. 출력 형식·상태창·이미지 태그 규칙은 넣지 않는다.
+- 달력(calendar): 이야기가 시작되는 날짜와, 원작에 결정적인 날(D-day)이 있으면 그 날짜를 데이터 표·로어북에서 찾아 넣는다. 연표의 when도 같은 달력으로 쓴다.
 - 한국어로 쓴다. key는 영문 소문자 슬러그.`;
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -233,6 +241,10 @@ export async function cardToWorld(
     beliefs,
     ...(starts.length ? { starts } : {}),
     ...(d.style?.trim() ? { style: cut(d.style.trim(), 1500) } : {}),
+    ...(d.calendar?.start_year > 0 ? { calendar: {
+      era: d.calendar.era ?? '', year: d.calendar.start_year, month: clamp(d.calendar.start_month, 1, 12), day: clamp(d.calendar.start_day, 1, 31),
+      ...(d.calendar.countdown_year > 0 && d.calendar.countdown_label ? { countdown: { label: cut(d.calendar.countdown_label, 20), year: d.calendar.countdown_year, month: clamp(d.calendar.countdown_month, 1, 12), day: clamp(d.calendar.countdown_day, 1, 31) } } : {}),
+    } } : {}),
   };
 
   // 3) 이미지: 모든 이미지를 인물·장소에 연결

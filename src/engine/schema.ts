@@ -213,6 +213,16 @@ export interface AssetMeta {
   size: number;
 }
 
+export interface Calendar {
+  /** 연호 (예: 제국력) */
+  era: string;
+  year: number;
+  month: number;
+  day: number;
+  /** 카운트다운 (예: 파멸의 날) */
+  countdown?: { label: string; year: number; month: number; day: number };
+}
+
 /** 시작 방식 (v0.13): 새 게임을 시작할 때 고른다. 없으면 start를 쓴다 */
 export interface StartOption {
   id: string;
@@ -243,6 +253,8 @@ export interface WorldPackage {
   };
   /** 시작 방식 선택지 (v0.13) */
   starts?: StartOption[];
+  /** 달력 (v0.15): 게임 시작일과 카운트다운. 하루가 지나면 날짜가 넘어간다 (월 길이는 양력 기준) */
+  calendar?: Calendar;
   /** 서술 문체 지침 (v0.13). 서술 AI에게 참고로 준다 */
   style?: string;
   /** 이미지 에셋 목록 (v0.13) */

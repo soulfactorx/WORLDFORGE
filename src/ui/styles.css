@@ -181,3 +181,14 @@ label.file input[type='file'] { font-size: .8rem; }
 .guide .suggestion { color: var(--check); }
 .choices { display: flex; flex-direction: column; gap: 6px; }
 .choices button { text-align: left; white-space: normal; }
+
+/* v0.15 날짜 · 사전 지식 · AI 진행 표시 */
+.scene-bar .date { white-space: nowrap; }
+.dday { color: var(--accent); }
+.dday.urgent { color: #c0392b; }
+.prior summary { cursor: pointer; }
+.tag.prior-tag { border-color: var(--check); color: var(--check); }
+.ai-status { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--check); padding: 6px 2px; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--check); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.install-hint { font-size: .8rem; }

@@ -14,6 +14,6 @@ describe('knowledgeOf', () => {
   });
   it('세이브에서 획득한 지식이 반영된다', () => {
     const k = knowledgeOf(sampleWorld, [{ holder: 'player', claim: 'claim/village-name', state: 'confirmed', source: 'npc/bran' }], 'player');
-    expect(k).toEqual([{ statement: '이 마을의 이름은 미스트베일이다.', state: 'confirmed' }]);
+    expect(k).toEqual([{ statement: '이 마을의 이름은 미스트베일이다.', state: 'confirmed', source: 'npc/bran' }]);
   });
 });

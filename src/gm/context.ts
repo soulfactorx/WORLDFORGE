@@ -3,6 +3,9 @@ import { knowledgeOf } from '../engine/knowledge/knowledge';
 import { AXES, AXIS_NAMES, canShareSecret, joinBlocker, relationshipOf, secretTrustOf, stageOf } from '../engine/relationship';
 import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
+import { calendarDate } from '../engine/calendar';
+
+const dateLabel = (world: WorldPackage, minutes: number) => { const d = calendarDate(world, minutes); return d ? `${d.label}${d.countdown ? ` (${d.countdown})` : ''} ` : ''; };
 
 /**
  * Context Builder — 역할별로 서로 다른 정보만 준다 (설계 리뷰 2.2절).
@@ -56,7 +59,7 @@ function sceneHeader(world: WorldPackage, state: GameState): string[] {
   return [
     `## 현재 장소: ${loc.name} [${loc.id}]`,
     loc.description,
-    `시각: ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`,
+    `시각: ${dateLabel(world, state.worldMinutes)}${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`,
   ];
 }
 
@@ -70,7 +73,9 @@ function recentLog(state: GameState, n = 8): string[] {
 }
 
 function playerKnowledge(world: WorldPackage, state: GameState): string[] {
-  const k = knowledgeOf(world, state.beliefs, 'player').map((x) => `- (${x.state}) ${x.statement}`);
+  const k = knowledgeOf(world, state.beliefs, 'player').map((x) => x.source === 'start'
+    ? `- (처음부터 알던 것: 원작·사전 지식 — 아직 일어나지 않았거나 바뀔 수 있는 일일 수 있다) ${x.statement}`
+    : `- (${x.state}) ${x.statement}`);
   return k.length ? k : ['(아무것도 모른다 — 이 세계에 막 소환되었다)'];
 }
 

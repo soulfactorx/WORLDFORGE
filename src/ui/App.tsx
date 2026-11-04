@@ -7,6 +7,7 @@ import { SettingsPanel } from './SettingsPanel';
 import { WorldEditor } from './WorldEditor';
 import { WorldGenPanel } from './WorldGenPanel';
 import { CardWorldPanel } from './CardWorldPanel';
+import { InstallButton } from './InstallButton';
 import type { WorldPackage } from '../engine/schema';
 import { blankWorld } from '../storage/packages';
 
@@ -22,6 +23,7 @@ export function App() {
         <button className="brand" onClick={() => setView({ name: 'saves' })}>WORLDFORGE</button>
         <span className="muted small">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · v{__APP_VERSION__}</span>
         {__BUILD_TARGET__ === 'web' && <a className="small" href="./worldforge-offline.html" download>오프라인 HTML 받기</a>}
+        <InstallButton />
         <a className="small" href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">소스 (GPL)</a>
         <button onClick={() => setView({ name: 'settings' })}>AI 설정</button>
       </header>

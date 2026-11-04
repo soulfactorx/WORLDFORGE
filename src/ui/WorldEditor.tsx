@@ -212,6 +212,24 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <Select label="콘텐츠 등급" value={w.manifest.contentRating} options={[['all', '전체'], ['teen', '청소년'], ['mature', '성인']] as const} onChange={(contentRating) => set({ manifest: { ...w.manifest, contentRating } })} />
           <Select label="시작 장소" value={w.start.locationId} options={locOptions} onChange={(locationId) => set({ start: { ...w.start, locationId } })} />
           <Area label="첫 장면 (플레이어가 깨어났을 때)" value={w.start.openingScene} onChange={(openingScene) => set({ start: { ...w.start, openingScene } })} />
+          <fieldset><legend>달력 (선택) — 게임 속 날짜와 카운트다운</legend>
+            <div className="row">
+              <Text label="연호" value={w.calendar?.era} placeholder="제국력" onChange={(era) => set({ calendar: { year: 1, month: 1, day: 1, ...w.calendar, era } })} />
+              <Num label="시작 연도" value={w.calendar?.year} onChange={(year) => set({ calendar: year ? { era: '', month: 1, day: 1, ...w.calendar, year } : undefined })} />
+              <Num label="월" value={w.calendar?.month} onChange={(month) => w.calendar && set({ calendar: { ...w.calendar, month: month ?? 1 } })} />
+              <Num label="일" value={w.calendar?.day} onChange={(day) => w.calendar && set({ calendar: { ...w.calendar, day: day ?? 1 } })} />
+            </div>
+            {w.calendar && (
+              <div className="row">
+                <Text label="카운트다운 이름" value={w.calendar.countdown?.label} placeholder="파멸의 날" onChange={(label) => set({ calendar: { ...w.calendar!, countdown: label ? { year: w.calendar!.year, month: 12, day: 31, ...w.calendar!.countdown, label } : undefined } })} />
+                {w.calendar.countdown && <>
+                  <Num label="연도" value={w.calendar.countdown.year} onChange={(year) => set({ calendar: { ...w.calendar!, countdown: { ...w.calendar!.countdown!, year: year ?? 1 } } })} />
+                  <Num label="월" value={w.calendar.countdown.month} onChange={(month) => set({ calendar: { ...w.calendar!, countdown: { ...w.calendar!.countdown!, month: month ?? 1 } } })} />
+                  <Num label="일" value={w.calendar.countdown.day} onChange={(day) => set({ calendar: { ...w.calendar!, countdown: { ...w.calendar!.countdown!, day: day ?? 1 } } })} />
+                </>}
+              </div>
+            )}
+          </fieldset>
           <Area label="서술 문체 참고 (선택, 1500자까지)" value={w.style} rows={4} onChange={(style) => set({ style: style || undefined })} />
           <JsonField label="시작 방식 선택지 (선택: [{ id, name, description, locationId, openingScene, knows }])" value={w.starts ?? []} rows={8} onChange={(starts) => set({ starts: starts.length ? starts : undefined })} />
         </div>

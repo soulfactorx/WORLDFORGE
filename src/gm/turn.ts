@@ -176,6 +176,8 @@ export async function runTurn(
   input: string,
   onNarration: (delta: string) => void,
   signal?: AbortSignal,
+  /** 진행 단계 표시 (UI용) */
+  onStage: (stage: string) => void = () => {},
 ): Promise<TurnResult> {
   if (state.combat) throw new Error('전투 중에는 카드로 행동한다');
   if (state.playerDead) throw new Error('당신은 죽었다. 턴 되돌리기로 이전으로 돌아갈 수 있다.');
@@ -187,6 +189,7 @@ export async function runTurn(
   push({ type: 'player_input', text: input });
 
   // 1) Director
+  onStage('GM이 행동을 판단하는 중');
   const d = await llm.json<DirectorOutput>(
     { system: DIRECTOR_SYSTEM, user: `${buildDirectorContext(world, s)}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
     DIRECTOR_SCHEMA, signal,
@@ -232,6 +235,7 @@ export async function runTurn(
     .filter((sp) => present.some((c) => c.id === sp.npc_id)).slice(0, 3);
   const outcomeText = outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음';
   const actorState = s;
+  if (speakers.length) onStage(`${speakers.map((sp) => present.find((c) => c.id === sp.npc_id)!.name).join(', ')} 반응하는 중`);
   const actorResults = await Promise.all(speakers.map(async (sp) => {
     const npc = present.find((c) => c.id === sp.npc_id)!;
     const out = await llm.json<ActorOutput>({
@@ -305,6 +309,7 @@ export async function runTurn(
   }
 
   // 4) Narrator (확정 결과 + 확정 대사만 전달)
+  onStage('장면을 서술하는 중');
   const narration = await llm.stream(
     {
       system: narratorSystem(world),
@@ -334,6 +339,7 @@ export async function runTurn(
   }
 
   // 6) GM 안내 — 기록관과 동시에. 실패하면 기본 안내
+  onStage('GM 안내와 기록을 정리하는 중');
   const guideState = s;
   const guideP = gmGuide(llm, world, guideState, narration, signal).catch((e) => { if (signal?.aborted) throw e; return basicGuide(world, guideState); });
 

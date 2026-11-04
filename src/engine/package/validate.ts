@@ -250,6 +250,12 @@ export function validateWorld(input: unknown): Issue[] {
     text(st.openingScene, `${p}.openingScene`);
     (st.knows ?? []).forEach((c, j) => { if (!claims.some((x) => x.id === c)) err(`${p}.knows[${j}]`, `없는 명제 "${c}"`); });
   });
+  if (w.calendar !== undefined) {
+    const c = w.calendar as unknown;
+    const okDate = (x: unknown) => isObj(x) && Number.isInteger(x.year) && Number.isInteger(x.month) && (x.month as number) >= 1 && (x.month as number) <= 12 && Number.isInteger(x.day) && (x.day as number) >= 1 && (x.day as number) <= 31;
+    if (!okDate(c)) err('calendar', '달력의 연·월·일이 올바르지 않습니다 (월 1~12, 일 1~31).');
+    else if ((c as { countdown?: unknown }).countdown !== undefined && !okDate((c as { countdown?: unknown }).countdown)) err('calendar.countdown', '카운트다운 날짜가 올바르지 않습니다.');
+  }
   if (w.style !== undefined) {
     if (!isStr(w.style)) err('style', '문체는 글이어야 합니다.');
     else { text(w.style, 'style'); if (w.style.length > 1500) warn('style', '문체 지침이 깁니다 (1500자까지만 씁니다).'); }

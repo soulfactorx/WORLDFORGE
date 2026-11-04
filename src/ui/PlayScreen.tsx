@@ -16,6 +16,7 @@ import { JournalPanel } from './JournalPanel';
 import { AssetImage } from './AssetImage';
 import { RichText } from './RichText';
 import { basicGuide } from '../gm/guide';
+import { calendarDate } from '../engine/calendar';
 import { pickSceneImage } from '../engine/assets';
 
 /**
@@ -69,6 +70,10 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [stage, setStage] = useState('');
+  const [startedAt, setStartedAt] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => { if (streaming === null) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [streaming !== null]);
   const [panel, setPanel] = useState<'none' | 'sheet' | 'journal'>('none');
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -84,16 +89,16 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   async function submit(choice?: string) {
     const text = (choice ?? input).trim();
     if (!state || !text || streaming !== null) return;
-    if (choice === undefined) setInput(''); setError(''); setStreaming('');
+    if (choice === undefined) setInput(''); setError(''); setStreaming(''); setStage('AI에게 보내는 중'); setStartedAt(Date.now());
     abort.current = new AbortController();
     try {
       const { events } = await runTurn(createLlmClient(settings), world, state, text,
-        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
+        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage);
       const turn = state.turn + 1;
       await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));
       await reload();
     } catch (e) {
-      setError((e as Error).message);
+      setError(abort.current?.signal.aborted ? '중단했습니다. 이 턴은 저장되지 않았습니다.' : (e as Error).message);
       if (choice === undefined) setInput(text); // 실패한 턴은 저장하지 않는다
     } finally {
       setStreaming(null);
@@ -114,7 +119,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (!after.combat) {
       const startIdx = after.log.findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 시작'));
       const combatLog = after.log.slice(startIdx).filter((l) => l.kind === 'combat').map((l) => l.text);
-      setStreaming('');
+      setStreaming(''); setStage('전투를 서술하는 중'); setStartedAt(Date.now());
       abort.current = new AbortController();
       let text: string;
       try {
@@ -141,6 +146,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   if (!state || lock === 'pending') return <p className="muted">불러오는 중…</p>;
   const loc = world.locations.find((l) => l.id === state.player.locationId);
   const locImage = loc ? pickSceneImage(world, loc.id, '', 'bar') : undefined;
+  const date = calendarDate(world, state.worldMinutes);
   const lastGuide = state.log.findLastIndex((l) => l.kind === 'guide');
   const canAct = streaming === null && !state.combat && !state.playerDead;
 
@@ -151,7 +157,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         {locImage && <AssetImage pkg={world.manifest.id} id={locImage.id} alt={loc?.name ?? ''} className="loc-thumb" />}
         <b>{loc?.name}</b>
         {Object.keys(state.party).length > 0 && <span className="small muted">동행: {Object.values(state.party).map((c) => c.name).join(', ')}</span>}
-        <span className="muted small">턴 {state.turn}</span>
+        {date && <span className="small date">{date.label}{date.countdown && <b className={date.daysLeft !== undefined && date.daysLeft <= 7 ? 'dday urgent' : 'dday'}> · {date.countdown}</b>}</span>}
+        <span className="muted small">{String(Math.floor(state.worldMinutes / 60) % 24).padStart(2, '0')}:{String(state.worldMinutes % 60).padStart(2, '0')} · 턴 {state.turn}</span>
         <span className="spacer" />
         <button onClick={() => setPanel((p) => (p === 'sheet' ? 'none' : 'sheet'))}>캐릭터 {panel === 'sheet' ? '▲' : '▼'}</button>
         <button onClick={() => setPanel((p) => (p === 'journal' ? 'none' : 'journal'))}>수첩 {panel === 'journal' ? '▲' : '▼'}</button>
@@ -199,6 +206,13 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         {streaming !== null && <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>}
         <div ref={bottom} />
       </div>
+      {streaming !== null && (
+        <div className="ai-status" role="status" aria-live="polite">
+          <span className="spinner" /> <span>{stage || 'AI 처리 중'}… {Math.max(0, Math.floor((Date.now() - startedAt) / 1000))}초</span>
+          <span className="spacer" />
+          <button type="button" className="small" onClick={() => abort.current?.abort()}>중단</button>
+        </div>
+      )}
       {error && <p className="status">❌ {error}</p>}
       {state.playerDead ? null : state.combat ? (
         <CombatPanel cs={state.combat} busy={streaming !== null} orders={state.partyOrders}
