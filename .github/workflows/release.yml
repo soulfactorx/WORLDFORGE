@@ -1,0 +1,36 @@
+name: Release
+
+# vX.Y.Z 태그를 푸시하면 테스트·빌드 후 GitHub Release를 만들고 오프라인 HTML을 첨부한다.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:single
+      - run: cp dist-single/index.html "worldforge-${GITHUB_REF_NAME}-offline.html"
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v v="$ver" '$0 ~ "^## \\[?"v"\\]?" {f=1; next} /^## / && f {exit} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "WORLDFORGE ${GITHUB_REF_NAME}" > notes.md
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "WORLDFORGE $GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            "worldforge-${GITHUB_REF_NAME}-offline.html"
