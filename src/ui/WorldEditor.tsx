@@ -202,7 +202,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
 
       {tab === 'basic' && (
         <div className="form-grid">
-          {w.assets?.some((a) => !a.id.startsWith('stock.')) || w.manifest.private
+          {w.assets?.some((a) => !a.id.startsWith('stock.') && !a.id.startsWith('user.')) || w.manifest.private
             ? <p className="small muted">패키지 ID: <code>{w.manifest.id}</code> (이미지가 연결되어 있어 바꿀 수 없습니다)</p>
             : <Text label="패키지 ID (작가.세계 형식, 소문자)" value={w.manifest.id} onChange={(id) => set({ manifest: { ...w.manifest, id } })} />}
           <Text label="이름" value={w.manifest.name} onChange={(name) => set({ manifest: { ...w.manifest, name } })} />

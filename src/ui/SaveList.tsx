@@ -18,8 +18,8 @@ function download(blob: Blob, fileName: string) {
 }
 const safeName = (s: string) => s.replace(/[^\w가-힣.-]+/g, '_');
 
-export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
-  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void; onGenerate: () => void; onCard: (file: File) => void;
+export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
+  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void; onGenerate: () => void; onCard: (file: File) => void; onUserArt: () => void;
 }) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
   const packages = useLiveQuery(() => listPackages(), []);
@@ -107,6 +107,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
       <div className="row">
         <button onClick={() => onEdit(null)}>＋ 새 세계관 만들기</button>
         <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
+        <button onClick={onUserArt}>🖼 내 기본 이미지 관리</button>
         <label className="file">✦ 캐릭터 카드로 새 세계관 만들기 (.charx · .png · .json, 100MB 이상도 가능)
           <input type="file" accept=".charx,.png,.json,application/json,image/png,application/zip" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCard(f); e.target.value = ''; }} />
         </label>

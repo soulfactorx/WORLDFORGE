@@ -2,6 +2,16 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { StoredEvent } from '../engine/state/events';
 import type { StoredPackage } from './packages';
 
+export interface UserArt {
+  id: string;
+  kind: 'character' | 'scene';
+  label: string;
+  tags: string[];
+  gender?: 'M' | 'F';
+  blob: Blob;
+  createdAt: number;
+}
+
 export interface SaveMeta {
   id: string;
   name: string;
@@ -23,6 +33,8 @@ class WorldforgeDB extends Dexie {
   imports!: EntityTable<{ id: string; fileName: string; format: string; bytes: Uint8Array; importedAt: number }, 'id'>;
   /** 세계관 이미지 (v0.13). key = `${패키지 ID}/${에셋 ID}` */
   assets!: EntityTable<{ key: string; pkg: string; blob: Blob }, 'key'>;
+  /** 사용자가 만든 기본 이미지 세트 (v0.17) — 모든 세계에서 쓴다 */
+  userArt!: EntityTable<UserArt, 'id'>;
   constructor() {
     super('worldforge');
     this.version(1).stores({
@@ -49,6 +61,15 @@ class WorldforgeDB extends Dexie {
       packages: 'key, id, updatedAt',
       imports: 'id, importedAt',
       assets: 'key, pkg',
+    });
+    // v0.17: 내 기본 이미지 세트
+    this.version(5).stores({
+      saves: 'id, updatedAt',
+      events: '[saveId+seq], saveId',
+      packages: 'key, id, updatedAt',
+      imports: 'id, importedAt',
+      assets: 'key, pkg',
+      userArt: 'id, kind, createdAt',
     });
   }
 }

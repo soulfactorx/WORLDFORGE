@@ -8,10 +8,11 @@ import { WorldEditor } from './WorldEditor';
 import { WorldGenPanel } from './WorldGenPanel';
 import { CardWorldPanel } from './CardWorldPanel';
 import { InstallButton } from './InstallButton';
+import { UserArtManager } from './UserArtManager';
 import type { WorldPackage } from '../engine/schema';
 import { blankWorld } from '../storage/packages';
 
-type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean } | { name: 'worldgen' } | { name: 'cardworld'; file: File };
+type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean } | { name: 'worldgen' } | { name: 'cardworld'; file: File } | { name: 'userart' };
 
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
@@ -31,8 +32,9 @@ export function App() {
         {view.name === 'settings' && (
           <SettingsPanel initial={settings} onSaved={(s) => { setSettings(s); setView({ name: 'saves' }); }} />
         )}
-        {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world) => setView({ name: 'editor', world })} onGenerate={() => setView({ name: 'worldgen' })}
+        {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world) => setView({ name: 'editor', world })} onGenerate={() => setView({ name: 'worldgen' })} onUserArt={() => setView({ name: 'userart' })}
           onCard={(file) => setView({ name: 'cardworld', file })} />}
+        {view.name === 'userart' && <UserArtManager onClose={() => setView({ name: 'saves' })} />}
         {view.name === 'cardworld' && <CardWorldPanel file={view.file} settings={settings} onCancel={() => setView({ name: 'saves' })}
           onDone={(world, notes) => setView({ name: 'editor', world, notes, saved: true })}
           onCharactersOnly={(card) => setView({ name: 'editor', world: { ...blankWorld(), manifest: { ...blankWorld().manifest, id: `card.${Date.now().toString(36)}` } }, card })} />}

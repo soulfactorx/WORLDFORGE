@@ -262,6 +262,7 @@ export function validateWorld(input: unknown): Issue[] {
   }
   const assets = arr<NonNullable<WorldPackage['assets']>[number]>('assets', false);
   if (assets.length > 50_000) err('assets', '이미지가 너무 많습니다 (최대 50,000장).');
+  if (assets.some((a) => isObj(a) && isStr(a.id) && a.id.startsWith('user.'))) warn('assets', '"내 기본 이미지"는 이 브라우저에만 있어, 패키지를 내보내면 다른 사람에게는 빈 칸으로 보입니다.');
   const assetIds = new Set<string>();
   const charIdSet = new Set(characters.map((c) => c?.id));
   for (let i = 0; i < assets.length; i++) {

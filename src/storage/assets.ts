@@ -1,5 +1,6 @@
 import { db } from './db';
 import { stockDataUrl } from '../data/stockart';
+import { userArtId, userArtUrl } from './userart';
 
 /**
  * 세계관 이미지 저장소. 이미지는 패키지 JSON이 아니라 IndexedDB에 한 장씩 Blob으로 저장한다.
@@ -40,6 +41,8 @@ const MAX_URLS = 300;
 export async function assetUrl(pkg: string, id: string): Promise<string | undefined> {
   const stock = stockDataUrl(id); // 앱에 내장된 기본 이미지
   if (stock) return stock;
+  const mine = userArtId(id); // 내 기본 이미지
+  if (mine) return userArtUrl(mine);
   const key = assetKey(pkg, id);
   const hit = urls.get(key);
   if (hit) { urls.delete(key); urls.set(key, hit); return hit; }

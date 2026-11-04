@@ -208,3 +208,8 @@ label.file input[type='file'] { font-size: .8rem; }
 .gen-progress { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 8px 0; }
 .progress-bar { height: 10px; }
 .progress-bar > span { transition: width .5s ease; }
+.gallery.user-art { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.gallery.user-art img, .gallery.user-art .asset-ph { height: 150px; object-fit: cover; }
+.gallery.user-art figcaption { display: flex; flex-direction: column; gap: 3px; }
+.gallery.user-art figcaption input, .gallery.user-art figcaption select { font-size: .75rem; padding: 3px 5px; }
+.gallery.stock .asset-ph, .gallery.stock img { width: 100%; }

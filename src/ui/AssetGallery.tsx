@@ -5,6 +5,8 @@ import { STOCK_ART, stockDataUrl } from '../data/stockart';
 import { assignStockImages, missingImages, nextStockIndex, stockAsset } from '../gm/worldgen/stock';
 import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../storage/db';
 
 const KIND = [['character', '인물'], ['scene', '장면'], ['map', '지도'], ['cover', '표지'], ['other', '분류 안 됨 (쓰이지 않음)']] as const;
 const PAGE = 60;
@@ -15,6 +17,7 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
   const [target, setTarget] = useState(() => world.characters[0] ? `c:${world.characters[0].id}` : world.locations[0] ? `l:${world.locations[0].id}` : '');
   const [busy, setBusy] = useState('');
   const missing = missingImages(world);
+  const mine = useLiveQuery(() => db.userArt.orderBy('createdAt').toArray().catch(() => []), []) ?? [];
   const targetKind = target.startsWith('c:') ? 'character' : 'scene';
   const targetChar = world.characters.find((c) => `c:${c.id}` === target);
   async function auto() {
@@ -26,7 +29,8 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
     } catch (e) { setBusy(`❌ ${(e as Error).message}`); }
   }
   function addStock(artId: string) {
-    const art = STOCK_ART.find((a) => a.id === artId)!;
+    const u = mine.find((a) => `u:${a.id}` === artId);
+    const art = u ? { id: artId, kind: u.kind, label: `내 이미지: ${u.label}`, tags: u.tags, ...(u.gender ? { gender: u.gender } : {}) } : STOCK_ART.find((a) => a.id === artId)!;
     const t = target.slice(2);
     onChange([...assets, stockAsset(art, nextStockIndex(assets), target.startsWith('c:') ? { characterId: t } : { locationId: t })]);
   }
@@ -55,6 +59,16 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
             </select>
           </label>
         </div>
+        {mine.some((a) => a.kind === targetKind) && <p className="small"><b>내 이미지</b></p>}
+        <div className="gallery stock">
+          {mine.filter((a) => a.kind === targetKind && (!targetChar?.gender || !a.gender || a.gender === targetChar.gender)).map((a) => (
+            <figure key={a.id} onClick={() => addStock(`u:${a.id}`)} title="눌러서 붙이기">
+              <AssetImage pkg={world.manifest.id} id={`user.${a.id}`} alt={a.label} />
+              <figcaption>{a.label}</figcaption>
+            </figure>
+          ))}
+        </div>
+        <p className="small"><b>앱 내장</b></p>
         <div className="gallery stock">
           {STOCK_ART.filter((a) => a.kind === targetKind && (!targetChar?.gender || !a.gender || a.gender === targetChar.gender)).map((a) => (
             <figure key={a.id} onClick={() => addStock(a.id)} title="눌러서 붙이기">
@@ -99,7 +113,7 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
                 </select>
               )}
               <input value={a.tags.join(', ')} title="태그 (쉼표로 구분)" onChange={(e) => up(a.id, { tags: e.target.value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) })} />
-              {a.id.startsWith('stock.') && <button type="button" className="small" onClick={() => onChange(assets.filter((x) => x.id !== a.id))}>빼기</button>}
+              {(a.id.startsWith('stock.') || a.id.startsWith('user.')) && <button type="button" className="small" onClick={() => onChange(assets.filter((x) => x.id !== a.id))}>빼기</button>}
             </figcaption>
           </figure>
         ))}

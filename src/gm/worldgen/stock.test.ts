@@ -34,3 +34,19 @@ describe('기본 이미지', () => {
     expect(validateWorld({ ...w, assets: r.assets }).filter((i) => i.path.startsWith('assets'))).toEqual([]);
   });
 });
+
+describe('내 기본 이미지', () => {
+  it('어울리는 내 이미지가 있으면 내장 그림보다 먼저 쓰고, user. 에셋으로 붙인다', async () => {
+    const w = structuredClone(sampleWorld);
+    const mine = [{ id: 'u:abc', kind: 'character' as const, label: '내 이미지: 기사', tags: ['기사', 'knight'], gender: 'M' as const }, { id: 'u:inn', kind: 'scene' as const, label: '내 이미지: 여관', tags: ['여관', 'inn'] }];
+    const knight = { ...base, name: '라우젠트', background: '황궁 기사단장. 그는 냉정하다.' };
+    expect(ruleArtForCharacter(knight, mine).id).toBe('u:abc');
+    expect(ruleArtForCharacter({ ...base, name: '헤드비히', background: '직함: 시녀장', gender: 'F' }, mine).id).toBe('servant-f');
+    const r = await assignStockImages(w, undefined, undefined, mine);
+    const inn = w.locations.find((l) => /여관|inn/i.test(`${l.name} ${l.id}`));
+    if (inn) expect(r.assets.find((a) => a.locationId === inn.id)!.id).toMatch(/^user\.inn--\d+$/);
+    const iss = validateWorld({ ...w, assets: r.assets }).filter((i) => i.path.startsWith('assets'));
+    expect(iss.filter((i) => i.level === 'error')).toEqual([]);
+    expect(iss.some((i) => i.message.includes('이 브라우저에만'))).toBe(true);
+  });
+});
