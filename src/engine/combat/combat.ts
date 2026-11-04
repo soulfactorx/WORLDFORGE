@@ -16,7 +16,7 @@ import { type Abilities, type CharacterSheet, resourcesOf } from '../character/s
 import { abilityModifier, d20Test, type RollMode } from '../dice/dice';
 import { type Rng, rollDie } from '../dice/rng';
 import { proficiencyBonus, SKILLS } from '../character/rules';
-import { BASIC_CARDS, type CardDef, CLASS_CARDS, CLASS_KITS, type Cost, WEAPON_CARDS } from './cards';
+import { BASIC_CARDS, type CardDef, CLASS_CARDS, CLASS_KITS, type Cost, kitCards, WEAPON_CARDS } from './cards';
 import { MONSTERS } from './monsters';
 
 export const ZONE_NAMES = ['아군 후열', '아군 전열', '적 전열', '적 후열'] as const;
@@ -44,6 +44,12 @@ export interface Combatant {
   resources: Record<string, { cur: number; max: number }>;
   dodging: boolean;
   hidden: boolean;
+  /** 정밀 조준: 다음 공격 이점 */
+  aimed?: boolean;
+  /** 인도의 화살 표식: 이 대상에 대한 다음 공격 이점 */
+  marked?: boolean;
+  /** 이 값 이상의 d20이면 치명타 (기본 20, 투사 3레벨 19) */
+  critRange?: number;
   sneakAttack?: string;
   packTactics?: boolean;
   preferRanged?: boolean;
@@ -77,7 +83,8 @@ export type Target = string | number | null;
 export type CombatEffect =
   | { kind: 'hp'; target: string; delta: number }
   | { kind: 'zone'; target: string; zone: number }
-  | { kind: 'flag'; target: string; dodging?: boolean; hidden?: boolean }
+  | { kind: 'flag'; target: string; dodging?: boolean; hidden?: boolean; aimed?: boolean; marked?: boolean }
+  | { kind: 'gain_action' }
   | { kind: 'spend'; cost: Cost }
   | { kind: 'resource'; target: string; key: string; delta: number }
   | { kind: 'sneak_used' }
@@ -123,9 +130,17 @@ export function sheetCombatant(sheet: CharacterSheet, id: string, name: string, 
     hp: sheet.hp, maxHp: sheet.maxHp, ac: kit.ac(dex), level: sheet.level, abilities: { ...sheet.abilities },
     profBonus: pb, saveProfs: [...sheet.saveProficiencies],
     stealthBonus: abilityModifier(sheet.abilities[SKILLS.stealth.ability]) + (sheet.skillProficiencies.includes('stealth') ? pb : 0),
-    spellAbility: kit.spellAbility, cards: [...kit.cards], resources: structuredClone(resourcesOf(sheet)),
-    dodging: false, hidden: false, sneakAttack: kit.sneakAttack, initiative: 0,
+    spellAbility: kit.spellAbility, cards: kitCards(kit, sheet.level), resources: structuredClone(resourcesOf(sheet)),
+    dodging: false, hidden: false, initiative: 0,
+    sneakAttack: kit.sneakAttack ? `${Math.ceil(sheet.level / 2)}d6` : undefined, // 암습 1d6(1~2레벨), 2d6(3~4레벨)
+    critRange: sheet.classId === 'fighter' && sheet.level >= 3 ? 19 : 20, // 투사: 향상된 치명타
   };
+}
+
+/** 이 레벨 이상의 사용 가능한 가장 낮은 주문 슬롯 레벨 */
+export function slotFor(c: Combatant, minLevel: number): number | null {
+  for (let lv = minLevel; lv <= 9; lv++) if ((c.resources[`slot${lv}`]?.cur ?? 0) > 0) return lv;
+  return null;
 }
 
 export function monsterCombatant(monsterId: string, index: number, zone: number): Combatant {
@@ -196,13 +211,21 @@ function inRange(card: CardDef, actor: Combatant, target: Combatant): boolean {
   return false;
 }
 
+const healRange = (card: CardDef) => (card.effect.type === 'heal' ? card.effect.range ?? 0 : 0);
+
 /** 카드의 유효 대상 목록 */
 export function validTargets(cs: CombatState, actorId: string, card: CardDef): Target[] {
   const a = cs.combatants[actorId]!;
   if (card.target === 'self') return [actorId];
   if (card.target === 'zone') return [a.zone - 1, a.zone + 1].filter((z) => z >= 0 && z < ZONE_COUNT);
   if (card.target === 'ally') {
-    return Object.values(cs.combatants).filter((o) => o.side === a.side && alive(o) && o.zone === a.zone && o.hp < o.maxHp).map((o) => o.id);
+    const range = healRange(card);
+    return Object.values(cs.combatants).filter((o) => o.side === a.side && alive(o) && Math.abs(o.zone - a.zone) <= range && o.hp < o.maxHp).map((o) => o.id);
+  }
+  if (card.target === 'area' && card.effect.type === 'area_save') {
+    const range = card.effect.range;
+    const zones = [...new Set(opponents(cs, a).map((o) => o.zone))].filter((z) => Math.abs(z - a.zone) <= range);
+    return zones.sort((x, y) => x - y);
   }
   return opponents(cs, a).filter((o) => inRange(card, a, o)).map((o) => o.id);
 }
@@ -214,15 +237,18 @@ export function unusableReason(cs: CombatState, actorId: string, card: CardDef):
   if (cs.outcome) return '전투가 끝났다';
   if (currentActorId(cs) !== actorId) return '내 차례가 아니다';
   if (!alive(a)) return '쓰러진 상태';
-  if (!cs.economy[card.cost]) return { action: '행동을 이미 사용했다', bonus: '보너스 행동을 이미 사용했다', move: '이동을 이미 사용했다' }[card.cost];
+  if (card.cost !== 'free' && !cs.economy[card.cost]) return { action: '행동을 이미 사용했다', bonus: '보너스 행동을 이미 사용했다', move: '이동을 이미 사용했다' }[card.cost];
   if (card.resource && (a.resources[card.resource]?.cur ?? 0) <= 0) return '남은 사용 횟수가 없다';
+  if (card.spellLevel && slotFor(a, card.spellLevel) === null) return `${card.spellLevel}레벨 이상 주문 슬롯이 없다`;
+  if (card.effect.type === 'aim' && !cs.economy.move) return '이번 차례에 이미 움직였다';
+  if (card.effect.type === 'extra_action' && cs.economy.action) return '아직 행동이 남아 있다';
   if (card.effect.type === 'hide' && hostileInZone(cs, a)) return '같은 존에 적이 있어 숨을 수 없다';
   if (card.effect.type === 'flee') {
     if (a.zone !== 0) return '아군 후열에서만 도주할 수 있다';
     if (hostileInZone(cs, a)) return '같은 존에 적이 있어 도주할 수 없다';
   }
   if (card.effect.type === 'heal' && card.target === 'self' && a.hp >= a.maxHp) return 'HP가 가득 차 있다';
-  if (card.effect.type === 'heal' && card.target === 'ally' && validTargets(cs, actorId, card).length === 0) return '같은 존에 다친 아군이 없다';
+  if (card.effect.type === 'heal' && card.target === 'ally' && validTargets(cs, actorId, card).length === 0) return '사거리 안에 다친 아군이 없다';
   if (validTargets(cs, actorId, card).length === 0) return '사거리 안에 대상이 없다';
   return null;
 }
@@ -242,6 +268,75 @@ function combineMode(adv: boolean, dis: boolean): RollMode {
   return adv && !dis ? 'advantage' : dis && !adv ? 'disadvantage' : 'normal';
 }
 
+/** "2d6" + "1d6" × n → "(2+n)d6" (같은 주사위만 합친다. 다르면 뒤에 붙인다) */
+export function scaleDice(base: string, add: string | undefined, times: number): string {
+  if (!add || times <= 0) return base;
+  const b = /^(\d*)d(\d+)([+-]\d+)?$/.exec(base.replace(/\s/g, ''));
+  const x = /^(\d*)d(\d+)$/.exec(add.replace(/\s/g, ''));
+  if (b && x && b[2] === x[2]) return `${(b[1] ? Number(b[1]) : 1) + (x[1] ? Number(x[1]) : 1) * times}d${b[2]}${b[3] ?? ''}`;
+  return base;
+}
+
+interface AttackResult {
+  effects: CombatEffect[];
+  line: string;
+  damage: number;
+}
+
+/** 한 번의 공격 굴림 (여러 줄 공격은 이 함수를 반복 호출) */
+function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: string, at: CardDef['effect'] & { type: 'attack' }, damage: string, rng: Rng, sneakAvailable: boolean, hpBefore: number): AttackResult {
+  const spec = at.attack;
+  const effects: CombatEffect[] = [];
+  const abil = attackAbilityMod(a, spec.ability);
+  const toHit = spec.toHit ?? abil + a.profBonus;
+  const pack = !!a.packTactics && Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
+  const adv = a.hidden || a.aimed || t.marked || pack;
+  const engaged = spec.kind === 'ranged' && hostileInZone(cs, a);
+  const dis = t.dodging || engaged;
+  const mode = combineMode(adv, dis);
+  const r = d20Test(rng, toHit, t.ac, mode);
+  const crit = !r.natural1 && r.kept >= (a.critRange ?? 20);
+  const hit = !r.natural1 && (crit || r.success);
+  const why = [a.hidden && '숨음', a.aimed && '조준', t.marked && '표식', pack && '무리 전술', t.dodging && '대상 회피', engaged && '근접한 적'].filter(Boolean).join(', ');
+  const modeText = mode === 'normal' ? '' : ` ${mode === 'advantage' ? '이점' : '불리점'}${why ? `(${why})` : ''}`;
+  const head = `${a.name}의 ${cardName} → ${t.name}: d20(${r.rolls.join(', ')})${modeText} ${toHit >= 0 ? '+' : ''}${toHit} = ${r.total} vs AC ${t.ac}`;
+  if (t.marked) effects.push({ kind: 'flag', target: t.id, marked: false });
+  if (!hit) return { effects, line: `${head} → ${r.natural1 ? '대실패' : '빗나감'}`, damage: 0 };
+  const dmgBonus = spec.damageBonus ?? (spec.ability === 'spell' ? 0 : abil);
+  const dmg = rollDamage(rng, damage, crit);
+  let total = Math.max(0, dmg.total + dmgBonus);
+  let extra = '';
+  // 암습: 이점이 있거나, 불리점 없이 대상과 같은 존에 다른 아군이 있을 때 (SRD 5.2.1)
+  const allyNearTarget = Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
+  if (sneakAvailable && a.sneakAttack && (mode === 'advantage' || (mode === 'normal' && allyNearTarget)) && (spec.kind === 'ranged' || spec.ability === 'finesse')) {
+    const s = rollDamage(rng, a.sneakAttack, crit);
+    total += s.total;
+    extra = ` + 암습 ${s.total}`;
+    effects.push({ kind: 'sneak_used' });
+  }
+  effects.push({ kind: 'hp', target: t.id, delta: -total });
+  if (at.mark) effects.push({ kind: 'flag', target: t.id, marked: true });
+  return {
+    effects, damage: total,
+    line: `${head} → ${crit ? '치명타!' : '명중'} ${spec.damageType} 피해 ${total} (${dmg.rolls.join('+')}${dmgBonus ? `${dmgBonus > 0 ? '+' : ''}${dmgBonus}` : ''}${extra})${at.mark ? ', 표식' : ''}${hpBefore - total <= 0 ? ` — ${t.name} 쓰러짐` : ''}`,
+  };
+}
+
+/** 내성 피해 한 명분 */
+function rollSave(a: Combatant, t: Combatant, cardName: string, save: Ability, damage: string, damageType: string, half: boolean, bonus: number, rng: Rng): { effects: CombatEffect[]; line: string } {
+  const dc = spellSaveDc(a);
+  const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0);
+  const r = d20Test(rng, sb, dc);
+  const head = `${a.name}의 ${cardName} → ${t.name}: 내성 d20(${r.kept}) ${sb >= 0 ? '+' : ''}${sb} = ${r.total} vs DC ${dc}`;
+  if (r.success && !half) return { effects: [], line: `${head} → 성공, 피해 없음` };
+  const full = rollDamage(rng, damage).total + bonus;
+  const dealt = r.success ? Math.floor(full / 2) : full;
+  return {
+    effects: dealt > 0 ? [{ kind: 'hp', target: t.id, delta: -dealt }] : [],
+    line: `${head} → ${r.success ? '성공, 절반' : '실패,'} ${damageType} 피해 ${dealt}${t.hp - dealt <= 0 ? ` — ${t.name} 쓰러짐` : ''}`,
+  };
+}
+
 /** 카드 사용을 해결한다. 규칙 위반이면 예외. 상태는 바꾸지 않고 effects만 반환한다. */
 export function resolveCard(cs: CombatState, actorId: string, cardId: string, target: Target, rng: Rng): Resolution {
   const card = cardById(cardId);
@@ -254,76 +349,78 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
   const effects: CombatEffect[] = [{ kind: 'spend', cost: card.cost }];
   const log: string[] = [];
   if (card.resource) effects.push({ kind: 'resource', target: a.id, key: card.resource, delta: -1 });
+  // 주문 슬롯: 가능한 가장 낮은 슬롯. 높은 슬롯이면 올려 시전
+  let up = 0;
+  let slotNote = '';
+  if (card.spellLevel) {
+    const slot = slotFor(a, card.spellLevel)!;
+    up = slot - card.spellLevel;
+    effects.push({ kind: 'resource', target: a.id, key: `slot${slot}`, delta: -1 });
+    slotNote = ` [${slot}레벨 슬롯${up ? `, ${up}단계 상승` : ''}]`;
+  }
+  const name = card.name + slotNote;
   const e = card.effect;
+  // 이점 부여 상태(숨음·조준)는 공격 한 번에 소모된다
+  const consumeSelf = () => {
+    if (a.hidden || a.aimed) effects.push({ kind: 'flag', target: a.id, hidden: false, aimed: false });
+  };
 
   switch (e.type) {
     case 'attack': {
       const t = cs.combatants[target as string]!;
-      const at = e.attack;
-      const abil = attackAbilityMod(a, at.ability);
-      const toHit = at.toHit ?? abil + a.profBonus;
-      const adv = a.hidden || (!!a.packTactics && Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone));
-      const dis = t.dodging || (at.kind === 'ranged' && hostileInZone(cs, a));
-      const mode = combineMode(adv, dis);
-      const r = d20Test(rng, toHit, t.ac, mode);
-      const hit = !r.natural1 && (r.natural20 || r.success);
-      const why = [a.hidden && '숨음', adv && a.packTactics && '무리 전술', t.dodging && '대상 회피', at.kind === 'ranged' && hostileInZone(cs, a) && '근접한 적'].filter(Boolean).join(', ');
-      const modeText = mode === 'normal' ? '' : ` ${mode === 'advantage' ? '이점' : '불리점'}${why ? `(${why})` : ''}`;
-      if (a.hidden) effects.push({ kind: 'flag', target: a.id, hidden: false });
-      if (!hit) {
-        log.push(`${a.name}의 ${card.name} → ${t.name}: d20(${r.rolls.join(', ')})${modeText} ${toHit >= 0 ? '+' : ''}${toHit} = ${r.total} vs AC ${t.ac} → ${r.natural1 ? '대실패' : '빗나감'}`);
-        break;
+      const count = (e.count ?? 1) + (card.upcast?.count ?? 0) * up;
+      const damage = scaleDice(e.attack.damage, card.upcast?.dice, up);
+      let hp = t.hp;
+      let sneak = !cs.sneakUsed;
+      for (let i = 0; i < count; i++) {
+        if (hp <= 0) break;
+        const r = rollAttack(i === 0 ? cs : { ...cs, combatants: { ...cs.combatants, [a.id]: { ...a, hidden: false, aimed: false }, [t.id]: { ...t, hp, marked: false } } }, a, { ...t, hp }, name, e, damage, rng, sneak, hp);
+        effects.push(...r.effects);
+        if (r.effects.some((x) => x.kind === 'sneak_used')) sneak = false;
+        hp -= r.damage;
+        log.push(r.line);
       }
-      const dmgBonus = at.damageBonus ?? (at.ability === 'spell' ? 0 : abil);
-      const dmg = rollDamage(rng, at.damage, r.natural20);
-      let total = Math.max(0, dmg.total + dmgBonus);
-      let extra = '';
-      // 암습: 이점이 있거나, 불리점 없이 대상과 같은 존에 다른 아군이 있을 때 (SRD 5.2.1)
-      const allyNearTarget = Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
-      const sneakOk = a.sneakAttack && !cs.sneakUsed && (mode === 'advantage' || (mode === 'normal' && allyNearTarget)) && (at.kind === 'ranged' || at.ability === 'finesse');
-      if (sneakOk) {
-        const s = rollDamage(rng, a.sneakAttack!, r.natural20);
-        total += s.total;
-        extra = ` + 암습 ${s.total}`;
-        effects.push({ kind: 'sneak_used' });
-      }
-      effects.push({ kind: 'hp', target: t.id, delta: -total });
-      log.push(`${a.name}의 ${card.name} → ${t.name}: d20(${r.rolls.join(', ')})${modeText} ${toHit >= 0 ? '+' : ''}${toHit} = ${r.total} vs AC ${t.ac} → ${r.natural20 ? '치명타!' : '명중'} ${at.damageType} 피해 ${total} (${dmg.rolls.join('+')}${dmgBonus ? `${dmgBonus > 0 ? '+' : ''}${dmgBonus}` : ''}${extra})${t.hp - total <= 0 ? ` — ${t.name} 쓰러짐` : ''}`);
+      consumeSelf();
       break;
     }
     case 'save_damage': {
       const t = cs.combatants[target as string]!;
-      const dc = spellSaveDc(a);
-      const bonus = mod(t, e.save) + (t.saveProfs.includes(e.save) ? t.profBonus : 0);
-      const r = d20Test(rng, bonus, dc);
-      if (r.success) {
-        log.push(`${a.name}의 ${card.name} → ${t.name}: 내성 d20(${r.kept}) ${bonus >= 0 ? '+' : ''}${bonus} = ${r.total} vs DC ${dc} → 성공, 피해 없음`);
-      } else {
-        const dmg = rollDamage(rng, e.damage);
-        effects.push({ kind: 'hp', target: t.id, delta: -dmg.total });
-        log.push(`${a.name}의 ${card.name} → ${t.name}: 내성 d20(${r.kept}) ${bonus >= 0 ? '+' : ''}${bonus} = ${r.total} vs DC ${dc} → 실패, ${e.damageType} 피해 ${dmg.total}${t.hp - dmg.total <= 0 ? ` — ${t.name} 쓰러짐` : ''}`);
+      const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, !!e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng);
+      effects.push(...r.effects);
+      log.push(r.line);
+      break;
+    }
+    case 'area_save': {
+      const zone = target as number;
+      const foes = opponents(cs, a).filter((o) => o.zone === zone);
+      log.push(`${a.name}의 ${name}: ${ZONE_NAMES[zone]}의 적 ${foes.length}명`);
+      for (const t of foes) {
+        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, 0, rng);
+        effects.push(...r.effects);
+        log.push(`  ${r.line}`);
       }
       break;
     }
     case 'auto_damage': {
       const t = cs.combatants[target as string]!;
-      const parts = Array.from({ length: e.count }, () => rollDamage(rng, e.damage).total);
+      const count = e.count + (card.upcast?.count ?? 0) * up;
+      const parts = Array.from({ length: count }, () => rollDamage(rng, e.damage).total);
       const total = parts.reduce((s, x) => s + x, 0);
       effects.push({ kind: 'hp', target: t.id, delta: -total });
-      log.push(`${a.name}의 ${card.name} → ${t.name}: ${e.damageType} 피해 ${total} (${parts.join('+')})${t.hp - total <= 0 ? ` — ${t.name} 쓰러짐` : ''}`);
+      log.push(`${a.name}의 ${name} → ${t.name}: ${e.damageType} 피해 ${total} (${parts.join('+')})${t.hp - total <= 0 ? ` — ${t.name} 쓰러짐` : ''}`);
       break;
     }
     case 'heal': {
       const t = cs.combatants[(target as string) ?? a.id]!;
-      const h = rollDamage(rng, e.dice).total + (e.add === 'spell' ? spellMod(a) : a.level);
+      const h = rollDamage(rng, scaleDice(e.dice, card.upcast?.dice, up)).total + (e.add === 'spell' ? spellMod(a) : a.level);
       const healed = Math.min(t.maxHp - t.hp, Math.max(0, h));
       effects.push({ kind: 'hp', target: t.id, delta: healed });
-      log.push(`${a.name}의 ${card.name}${t.id === a.id ? '' : ` → ${t.name}`}: HP ${healed} 회복 (${t.hp} → ${t.hp + healed})`);
+      log.push(`${a.name}의 ${name}${t.id === a.id ? '' : ` → ${t.name}`}: HP ${healed} 회복 (${t.hp} → ${t.hp + healed})`);
       break;
     }
     case 'move': {
       effects.push({ kind: 'zone', target: a.id, zone: target as number });
-      log.push(`${a.name}: ${ZONE_NAMES[a.zone]} → ${ZONE_NAMES[target as number]} (${card.name})`);
+      log.push(`${a.name}: ${ZONE_NAMES[a.zone]} → ${ZONE_NAMES[target as number]} (${name})`);
       break;
     }
     case 'dodge': {
@@ -334,7 +431,17 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
     case 'hide': {
       const r = d20Test(rng, a.stealthBonus, 15);
       if (r.success) effects.push({ kind: 'flag', target: a.id, hidden: true });
-      log.push(`${a.name}: 숨기 — 은신 d20(${r.kept}) ${a.stealthBonus >= 0 ? '+' : ''}${a.stealthBonus} = ${r.total} vs DC 15 → ${r.success ? '성공' : '실패'}`);
+      log.push(`${a.name}: ${name} — 은신 d20(${r.kept}) ${a.stealthBonus >= 0 ? '+' : ''}${a.stealthBonus} = ${r.total} vs DC 15 → ${r.success ? '성공' : '실패'}`);
+      break;
+    }
+    case 'aim': {
+      effects.push({ kind: 'spend', cost: 'move' }, { kind: 'flag', target: a.id, aimed: true });
+      log.push(`${a.name}: ${name} — 다음 공격에 이점`);
+      break;
+    }
+    case 'extra_action': {
+      effects.push({ kind: 'gain_action' });
+      log.push(`${a.name}: ${name} — 행동을 한 번 더 얻었다`);
       break;
     }
     case 'flee': {
@@ -361,9 +468,12 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
         const c = next.combatants[e.target]!;
         if (e.dodging !== undefined) c.dodging = e.dodging;
         if (e.hidden !== undefined) c.hidden = e.hidden;
+        if (e.aimed !== undefined) c.aimed = e.aimed;
+        if (e.marked !== undefined) c.marked = e.marked;
         break;
       }
-      case 'spend': next.economy[e.cost] = false; break;
+      case 'spend': if (e.cost !== 'free') next.economy[e.cost] = false; break;
+      case 'gain_action': next.economy.action = true; break;
       case 'resource': {
         const r = next.combatants[e.target]!.resources[e.key];
         if (r) r.cur = Math.max(0, Math.min(r.max, r.cur + e.delta));
@@ -464,6 +574,7 @@ export interface PartyOrder {
 export const DEFAULT_ORDER: PartyOrder = { mode: 'free', conserve: false };
 
 const isAttackCard = (c: CardDef) => c.effect.type === 'attack' || c.effect.type === 'save_damage' || c.effect.type === 'auto_damage';
+const usesResource = (c: CardDef) => !!c.resource || !!c.spellLevel;
 const isRangedCard = (c: CardDef) =>
   (c.effect.type === 'attack' && c.effect.attack.kind === 'ranged') || c.effect.type === 'save_damage' || c.effect.type === 'auto_damage';
 
@@ -487,13 +598,14 @@ export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT
   // 2) 공격
   const player = cs.combatants.player!;
   let attacks = usable.filter(isAttackCard);
-  if (order.conserve) attacks = attacks.filter((c) => !c.resource);
+  if (order.conserve) attacks = attacks.filter((c) => !usesResource(c));
   if (order.mode === 'hold_back') attacks = attacks.filter(isRangedCard);
   const choose = (cards: CardDef[], filter: (t: Combatant) => boolean) => {
     let best: PlannedAction | null = null;
     let bestHp = Infinity;
     for (const c of cards) for (const t of validTargets(cs, id, c)) {
-      const tc = cs.combatants[t as string]!;
+      if (typeof t !== 'string') continue; // 범위 주문은 동료 AI가 쓰지 않는다
+      const tc = cs.combatants[t]!;
       if (filter(tc) && tc.hp < bestHp) { bestHp = tc.hp; best = { cardId: c.id, target: t }; }
     }
     return best;
@@ -512,6 +624,10 @@ export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT
     const any = choose(ordered, () => true);
     if (any && (order.mode !== 'guard' || !opponents(cs, a).some((o) => o.zone === player.zone))) return any;
   }
+
+  // 행동 연쇄: 행동을 다 썼고 근접한 적이 있으면
+  const surge = usable.find((c) => c.effect.type === 'extra_action');
+  if (surge && !cs.economy.action && hostileInZone(cs, a) && !order.conserve) return { cardId: surge.id, target: a.id };
 
   // 3) 이동
   if (cs.economy.move || cs.economy.action) {

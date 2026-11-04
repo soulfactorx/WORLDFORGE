@@ -8,6 +8,8 @@ import { applyEvent, type GameState, MAX_PARTY } from '../engine/state/state';
 import { companionSheet } from '../engine/character/sheet';
 import { josa } from '../engine/text/josa';
 import { relationshipEvent } from './relationship';
+import { progressEvents } from './progression';
+import { DISCOVERY_XP } from '../engine/character/progression';
 import { applyDelta, canShareSecret, joinBlocker, LEAVE_AFFINITY, relationshipOf } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
 import { playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
@@ -273,7 +275,10 @@ export async function runTurn(
     onNarration, signal,
   );
   push({ type: 'narration', text: narration });
+  // 처음 알게 된 사실마다 탐험·대화 경험치
+  const discoveries = reveals.filter((r) => r.type === 'knowledge_revealed' && !s.beliefs.some((b) => b.holder === 'player' && b.claim === r.belief.claim)).length;
   reveals.forEach(push);
+  if (discoveries) progressEvents(s, [{ who: 'player', amount: DISCOVERY_XP * discoveries }], `새로운 사실 ${discoveries}개`).forEach(push);
 
   // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략)
   try {

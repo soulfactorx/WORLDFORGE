@@ -9,7 +9,7 @@ import { classResources, resourcesOf } from '../character/sheet';
 
 export interface LogEntry {
   turn: number;
-  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation';
+  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress';
   text: string;
 }
 
@@ -126,6 +126,21 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, party, partyOrders, npcLocations: { ...s.npcLocations, [e.npcId]: e.locationId },
         log: [...s.log, { turn, kind: 'knowledge', text: `${josa(left?.name ?? e.npcId, '이/가')} 일행을 떠났다.` }] };
     }
+    case 'xp_gained': {
+      const upd = (sh: CharacterSheet) => ({ ...sh, xp: (sh.xp ?? 0) + e.amount });
+      const next = e.who === 'player' ? { ...s, player: { ...s.player, sheet: upd(s.player.sheet) } }
+        : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: upd(s.party[e.who]!) } } : s;
+      return e.who === 'player'
+        ? { ...next, log: [...next.log, { turn, kind: 'progress', text: `경험치 +${e.amount} (${e.reason})` }] }
+        : next;
+    }
+    case 'level_up': {
+      const name = e.who === 'player' ? '당신' : e.sheet.name;
+      const text = `★ ${josa(name, '은/는')} ${e.sheet.level}레벨이 되었다 — 최대 HP +${e.hpGain}${e.features.length ? `, 새 능력: ${e.features.join(', ')}` : ''}`;
+      const next = e.who === 'player' ? { ...s, player: { ...s.player, sheet: e.sheet } }
+        : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: e.sheet } } : s;
+      return { ...next, log: [...next.log, { turn, kind: 'progress', text }] };
+    }
     case 'relationship_changed': {
       const base = s.relationships[e.npcId] ?? e.base ?? { affinity: 0, trust: 0, respect: 0, fear: 0 };
       return { ...s, relationships: { ...s.relationships, [e.npcId]: applyDelta(base, e.delta) },
@@ -141,15 +156,28 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
           player: { ...s.player, sheet: { ...sheet, hp: sheet.maxHp, resources: classResources(sheet.classId, sheet.level) } },
           log: [...s.log, { turn, kind: 'check', text: '긴 휴식 (8시간) — HP와 자원 모두 회복' }] };
       }
+      // 짧은 휴식 (SRD 5.2.1): 재기의 바람 1회, 행동 연쇄 전부, 신성 변환 1회, 위저드 비전 회복(긴 휴식당 1번)
       const shortRest = (sh: CharacterSheet): CharacterSheet => {
         const res = structuredClone(resourcesOf(sh));
-        if (res.second_wind) res.second_wind.cur = Math.min(res.second_wind.max, res.second_wind.cur + 1);
+        const regain = (k: string, n: number) => { const r = res[k]; if (r) r.cur = Math.min(r.max, r.cur + n); };
+        regain('second_wind', 1);
+        regain('action_surge', 99);
+        regain('channel_divinity', 1);
+        if (res.arcane_recovery && res.arcane_recovery.cur > 0) {
+          let budget = Math.ceil(sh.level / 2);
+          let recovered = false;
+          for (const lv of [2, 1]) {
+            const slot = res[`slot${lv}`];
+            while (slot && slot.cur < slot.max && budget >= lv) { slot.cur++; budget -= lv; recovered = true; }
+          }
+          if (recovered) res.arcane_recovery.cur--;
+        }
         return { ...sh, resources: res };
       };
       const res = shortRest(sheet).resources!;
       const party = Object.fromEntries(Object.entries(s.party).map(([id, sh]) => [id, shortRest(sh)]));
       return { ...s, worldMinutes: s.worldMinutes + 60, party, player: { ...s.player, sheet: { ...sheet, resources: res } },
-        log: [...s.log, { turn, kind: 'check', text: '짧은 휴식 (1시간)' + (res.second_wind ? ' — 재기의 바람 1회 회복' : '') }] };
+        log: [...s.log, { turn, kind: 'check', text: '짧은 휴식 (1시간) — 짧은 휴식 능력 회복' }] };
     }
     case 'time_advanced':
       return { ...s, worldMinutes: s.worldMinutes + e.minutes };

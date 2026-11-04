@@ -7,6 +7,8 @@ import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
 import type { LlmClient } from '../llm/types';
 import { relationshipEvent } from './relationship';
+import { progressEvents } from './progression';
+import { MONSTERS } from '../engine/combat/monsters';
 
 /**
  * 전투 진행 — 엔진 결과를 이벤트로 만든다. 전투 중에는 LLM을 호출하지 않는다 (비용·속도·결정성).
@@ -36,6 +38,15 @@ function finishIfOver(b: Builder) {
     if (c) party[id] = { hp: after(c.hp), resources: c.resources };
   }
   b.push({ type: 'combat_ended', outcome: cs.outcome, hp: after(p.hp), resources: p.resources, party });
+  // 경험치: 승리하면 쓰러뜨린 적의 경험치를 아군 참가자에게 똑같이 나눈다 (SRD 5.2.1)
+  if (cs.outcome === 'victory') {
+    const total = Object.values(cs.combatants)
+      .filter((c) => c.side === 'enemy' && c.hp <= 0)
+      .reduce((sum, c) => sum + (MONSTERS[c.id.split('#')[0]!]?.xp ?? 0), 0);
+    const members = Object.values(cs.combatants).filter((c) => c.side === 'party').map((c) => c.id);
+    const share = Math.floor(total / Math.max(1, members.length));
+    progressEvents(b.state, members.map((who) => ({ who, amount: share })), `전투 승리 · 총 ${total} XP를 ${members.length}명이 나눔`).forEach((e) => b.push(e));
+  }
   // 함께 싸워 이긴 동료는 신뢰와 존경이 오르고, 버려두고 도망치면 실망한다
   for (const id of Object.keys(party)) {
     const npc = b.world.characters.find((c) => c.id === id);

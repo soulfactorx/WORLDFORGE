@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../dice/rng';
-import { createCharacter, suggestedStandardArray } from '../character/sheet';
+import { classResources, createCharacter, suggestedStandardArray, type CharacterSheet } from '../character/sheet';
 import {
-  applyEffects, cardById, type CombatState, currentActorId, endTurn, planEnemyAction, resolveCard, rollDamage,
+  applyEffects, cardById, scaleDice, slotFor, type CombatState, currentActorId, endTurn, planEnemyAction, resolveCard, rollDamage,
   runEnemyTurns, runAutoTurns, planCompanionAction, startCombat, unusableReason, validTargets,
 } from './combat';
 
@@ -11,6 +11,7 @@ const sheet = (classId: string, skills: string[]) =>
 const fighter = () => sheet('fighter', ['athletics', 'perception']);
 const rogue = () => sheet('rogue', ['stealth', 'perception', 'investigation', 'acrobatics']);
 const wizard = () => sheet('wizard', ['arcana', 'history']);
+const cleric = () => sheet('cleric', ['insight', 'medicine']);
 
 /** 플레이어 차례로 맞춘 전투 상태 */
 function playerFirst(cs: CombatState): CombatState {
@@ -90,7 +91,7 @@ describe('주문과 특수 규칙', () => {
       const r = resolveCard(cs, 'player', 'weapon/shortbow', 'wolf#1', createRng(seed));
       expect(r.log[0]).toContain('이점');
       if (r.log[0]!.includes('암습')) sneaks++;
-      expect(r.effects).toContainEqual({ kind: 'flag', target: 'player', hidden: false });
+      expect(r.effects.some((e) => e.kind === 'flag' && e.target === 'player' && e.hidden === false)).toBe(true);
     }
     expect(sneaks).toBeGreaterThan(0);
   });
@@ -158,8 +159,7 @@ describe('적 AI와 승패', () => {
 });
 
 describe('동료 파티', () => {
-  const cleric = () => sheet('cleric', ['insight', 'medicine']);
-  const withParty = (seed = 1) => startCombat(
+    const withParty = (seed = 1) => startCombat(
     { id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }, { monsterId: 'goblin_warrior', zone: 3 }] },
     fighter(), createRng(seed),
     [{ id: 'npc/ilse', name: '일제', sheet: { ...cleric(), name: '일제' } }],
@@ -221,5 +221,86 @@ describe('동료 파티', () => {
     let sneaks = 0;
     for (let seed = 0; seed < 30; seed++) if (resolveCard(cs, 'player', 'weapon/shortbow', 'wolf#1', createRng(seed)).log[0]!.includes('암습')) sneaks++;
     expect(sneaks).toBeGreaterThan(0);
+  });
+});
+
+describe('2~3레벨 능력', () => {
+  const at = (sh: CharacterSheet, level: number): CharacterSheet => ({ ...sh, level, resources: classResources(sh.classId, level) });
+  const fight = (sh: CharacterSheet, enemies = [{ monsterId: 'wolf', zone: 2 }, { monsterId: 'wolf', zone: 2 }]) =>
+    playerFirst(startCombat({ id: 'e', enemies }, sh, createRng(1)));
+
+  it('주문 슬롯 표와 올려 시전', () => {
+    expect(classResources('wizard', 3)).toMatchObject({ slot1: { max: 4 }, slot2: { max: 2 } });
+    expect(classResources('cleric', 2)).toMatchObject({ slot1: { max: 3 }, channel_divinity: { max: 2 } });
+    expect(scaleDice('2d8', '2d8', 1)).toBe('4d8');
+    expect(scaleDice('3d6+1', '1d6', 2)).toBe('5d6+1');
+    let cs = fight(at(wizard(), 3), [{ monsterId: 'wolf', zone: 3 }]);
+    cs.combatants.player!.resources.slot1!.cur = 0;
+    expect(slotFor(cs.combatants.player!, 1)).toBe(2);
+    const r = resolveCard(cs, 'player', 'spell/magic_missile', 'wolf#1', createRng(2));
+    expect(r.log[0]).toContain('2레벨 슬롯, 1단계 상승');
+    expect(r.log[0]!.match(/\(([\d+]+)\)/)![1]!.split('+')).toHaveLength(4); // 화살 4발
+    cs = applyEffects(cs, r.effects);
+    expect(cs.combatants.player!.resources.slot2!.cur).toBe(1);
+  });
+  it('행동 연쇄: 행동을 쓴 뒤 한 번 더', () => {
+    let cs = fight(at(fighter(), 2));
+    cs.combatants['wolf#1']!.zone = 1;
+    expect(unusableReason(cs, 'player', cardById('fighter/action_surge'))).toBe('아직 행동이 남아 있다');
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'weapon/longsword', 'wolf#1', createRng(3)).effects);
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'fighter/action_surge', 'player', createRng(3)).effects);
+    expect(cs.economy.action).toBe(true);
+    expect(cs.combatants.player!.resources.action_surge!.cur).toBe(0);
+  });
+  it('투사 3레벨: 19에도 치명타', () => {
+    const cs = fight(at(fighter(), 3));
+    cs.combatants['wolf#1']!.zone = 1;
+    expect(cs.combatants.player!.critRange).toBe(19);
+    let found = false;
+    for (let seed = 0; seed < 300 && !found; seed++) {
+      const line = resolveCard(cs, 'player', 'weapon/longsword', 'wolf#1', createRng(seed)).log[0]!;
+      if (line.includes('d20(19)')) { expect(line).toContain('치명타'); found = true; }
+    }
+    expect(found).toBe(true);
+  });
+  it('로그: 교활한 행동(보너스 이동)과 정밀 조준, 3레벨 암습 2d6', () => {
+    let cs = fight(at(rogue(), 3));
+    expect(cs.combatants.player!.sneakAttack).toBe('2d6');
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'rogue/steady_aim', 'player', createRng(1)).effects);
+    expect(cs.economy.move).toBe(false);
+    expect(cs.combatants.player!.aimed).toBe(true);
+    const r = resolveCard(cs, 'player', 'weapon/shortbow', 'wolf#1', createRng(4));
+    expect(r.log[0]).toContain('이점(조준)');
+    const cs2 = fight(at(rogue(), 2));
+    expect(validTargets(cs2, 'player', cardById('rogue/cunning_dash'))).toEqual([0, 2]);
+  });
+  it('클레릭: 치유의 말(2존, 보너스), 인도의 화살 표식', () => {
+    let cs = fight(at(cleric(), 3), [{ monsterId: 'wolf', zone: 3 }]);
+    cs.combatants.player!.hp = 3;
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'spell/healing_word', 'player', createRng(1)).effects);
+    expect(cs.economy.bonus).toBe(false);
+    expect(cs.combatants.player!.hp).toBeGreaterThan(3);
+    for (let seed = 0; seed < 50; seed++) {
+      const r = resolveCard(cs, 'player', 'spell/guiding_bolt', 'wolf#1', createRng(seed));
+      if (r.log[0]!.includes('명중')) {
+        const next = applyEffects(cs, r.effects);
+        if (next.combatants['wolf#1']!.hp > 0) { expect(next.combatants['wolf#1']!.marked).toBe(true); return; }
+      }
+    }
+    throw new Error('명중 사례 없음');
+  });
+  it('위저드: 타오르는 손길은 내 존의 모든 적에게', () => {
+    const cs = fight(at(wizard(), 2));
+    cs.combatants['wolf#1']!.zone = 1;
+    cs.combatants['wolf#2']!.zone = 1;
+    expect(validTargets(cs, 'player', cardById('spell/burning_hands'))).toEqual([1]);
+    const r = resolveCard(cs, 'player', 'spell/burning_hands', 1, createRng(5));
+    expect(r.log).toHaveLength(3);
+    expect(r.effects.filter((e) => e.kind === 'hp')).toHaveLength(2);
+  });
+  it('작열 광선: 광선 3줄', () => {
+    const cs = fight(at(wizard(), 3), [{ monsterId: 'goblin_warrior', zone: 3 }]);
+    cs.combatants['goblin_warrior#1']!.hp = 999; cs.combatants['goblin_warrior#1']!.maxHp = 999;
+    expect(resolveCard(cs, 'player', 'spell/scorching_ray', 'goblin_warrior#1', createRng(1)).log).toHaveLength(3);
   });
 });

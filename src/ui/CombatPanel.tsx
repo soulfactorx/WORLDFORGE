@@ -6,7 +6,9 @@ import {
 
 const ORDER_LABEL: Record<PartyOrder['mode'], string> = { free: '자율', focus: '집중 공격', guard: '나를 지켜라', hold_back: '후방 유지' };
 
-const COST_LABEL = { action: '행동', bonus: '보너스', move: '이동' } as const;
+const COST_LABEL = { action: '행동', bonus: '보너스', move: '이동', free: '자유' } as const;
+const SLOT_LABEL = (r: Record<string, { cur: number; max: number }>) =>
+  Object.entries(r).filter(([k]) => k.startsWith('slot')).map(([k, v]) => `${k.slice(4)}레벨 ${v.cur}/${v.max}`).join(' · ');
 
 export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
   cs: CombatState;
@@ -49,7 +51,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
 
       <div className="zones">
         {ZONE_NAMES.map((name, z) => {
-          const zoneTarget = selected?.target === 'zone' && targets.includes(z);
+          const zoneTarget = (selected?.target === 'zone' || selected?.target === 'area') && targets.includes(z);
           return (
             <div key={z} className={`zone ${z < 2 ? 'party' : 'enemy'} ${zoneTarget ? 'targetable' : ''}`} onClick={() => zoneTarget && pick(z)}>
               <div className="zone-name small">{name}</div>
@@ -72,7 +74,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
 
       {selected && (
         <p className="small status">
-          <b>{selected.name}</b>: {selected.target === 'zone' ? '이동할 존을 고르세요.' : '대상을 고르세요.'}{' '}
+          <b>{selected.name}</b>: {selected.target === 'zone' ? '이동할 존을 고르세요.' : selected.target === 'area' ? '주문을 펼칠 존을 고르세요.' : '대상을 고르세요.'}{' '}
           <button type="button" onClick={() => setSelected(null)}>취소</button>
         </p>
       )}
@@ -113,6 +115,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
               <span className="card-head"><b>{card.name}</b><span className={`cost ${card.cost}`}>{COST_LABEL[card.cost]}</span></span>
               <span className="small muted card-desc">{card.desc}</span>
               {res && <span className="small">남은 횟수 {res.cur}/{res.max}</span>}
+              {card.spellLevel && <span className="small">슬롯 {SLOT_LABEL(me.resources)}</span>}
               {reason && myTurn && <span className="small reason">{reason}</span>}
             </button>
           );

@@ -1,8 +1,26 @@
 import { ABILITIES, ABILITY_NAMES, CLASSES, SKILL_IDS, SKILLS, proficiencyBonus } from '../engine/character/rules';
 import { type CharacterSheet, checkModifier } from '../engine/character/sheet';
 import { abilityModifier } from '../engine/dice/dice';
+import { MAX_LEVEL, XP_FOR_LEVEL } from '../engine/character/progression';
+import { CLASS_KITS } from '../engine/combat/cards';
+import { resourcesOf } from '../engine/character/sheet';
 
-const RESOURCE_LABEL: Record<string, string> = { slot1: '1레벨 슬롯', second_wind: '재기의 바람' };
+const RESOURCE_LABEL: Record<string, string> = {
+  slot1: '1레벨 슬롯', slot2: '2레벨 슬롯', second_wind: '재기의 바람', action_surge: '행동 연쇄',
+  channel_divinity: '신성 변환', arcane_recovery: '비전 회복',
+};
+
+function XpBar({ sheet }: { sheet: CharacterSheet }) {
+  const xp = sheet.xp ?? 0;
+  if (sheet.level >= MAX_LEVEL) return <span className="small muted">경험치 {xp} (최고 레벨)</span>;
+  const from = XP_FOR_LEVEL[sheet.level]!, to = XP_FOR_LEVEL[sheet.level + 1]!;
+  return (
+    <span className="xp small">
+      <span className="muted">경험치 {xp} / {to}</span>
+      <span className="hpbar"><span style={{ width: `${Math.min(100, (100 * (xp - from)) / (to - from))}%`, background: 'var(--accent)' }} /></span>
+    </span>
+  );
+}
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
 export function CharacterPanel({ sheet, party = {} }: { sheet: CharacterSheet; party?: Record<string, CharacterSheet> }) {
@@ -14,6 +32,14 @@ export function CharacterPanel({ sheet, party = {} }: { sheet: CharacterSheet; p
         <span className="spacer" />
         <span>HP {sheet.hp}/{sheet.maxHp}</span>
       </div>
+      <div className="row small">
+        <XpBar sheet={sheet} />
+        <span className="spacer" />
+        {Object.entries(resourcesOf(sheet)).map(([k, r]) => <span key={k} className="muted">{RESOURCE_LABEL[k] ?? k} {r.cur}/{r.max}</span>)}
+      </div>
+      {Object.entries(CLASS_KITS[sheet.classId]?.features ?? {}).some(([lv]) => Number(lv) <= sheet.level) && (
+        <p className="small muted">능력: {Object.entries(CLASS_KITS[sheet.classId]!.features!).filter(([lv]) => Number(lv) <= sheet.level).flatMap(([, f]) => f).join(' · ')}</p>
+      )}
       <div className="ability-grid">
         {ABILITIES.map((a) => (
           <div key={a} className="stat">

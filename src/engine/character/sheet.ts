@@ -17,6 +17,8 @@ export interface CharacterSheet {
   hp: number;
   /** 사용 횟수 자원 (주문 슬롯, 재기의 바람 등). v0.4부터. 없으면 직업 기본값으로 채운다. */
   resources?: Record<string, { cur: number; max: number }>;
+  /** 경험치 (v0.7) */
+  xp?: number;
 }
 
 export type CheckSpec =
@@ -96,14 +98,26 @@ export function createCharacter(input: CreationInput): CharacterSheet {
   };
 }
 
-/** 1레벨 직업 자원 (SRD 5.2.1). 긴 휴식에 모두 회복된다. */
-export function classResources(classId: string, _level: number): Record<string, { cur: number; max: number }> {
-  switch (classId) {
-    case 'fighter': return { second_wind: { cur: 2, max: 2 } };
-    case 'cleric':
-    case 'wizard': return { slot1: { cur: 2, max: 2 } };
-    default: return {};
+/** 전업 시전자 주문 슬롯 (SRD 5.2.1): [1레벨 슬롯, 2레벨 슬롯] */
+const FULL_CASTER_SLOTS: Record<number, [number, number]> = { 1: [2, 0], 2: [3, 0], 3: [4, 2] };
+
+/** 레벨별 직업 자원 (SRD 5.2.1). 긴 휴식에 모두 회복된다. */
+export function classResources(classId: string, level: number): Record<string, { cur: number; max: number }> {
+  const lv = Math.max(1, Math.min(3, level));
+  const r = (n: number) => ({ cur: n, max: n });
+  const out: Record<string, { cur: number; max: number }> = {};
+  if (classId === 'fighter') {
+    out.second_wind = r(2);
+    if (lv >= 2) out.action_surge = r(1);
   }
+  if (classId === 'cleric' || classId === 'wizard') {
+    const [s1, s2] = FULL_CASTER_SLOTS[lv]!;
+    out.slot1 = r(s1);
+    if (s2) out.slot2 = r(s2);
+  }
+  if (classId === 'cleric' && lv >= 2) out.channel_divinity = r(2);
+  if (classId === 'wizard') out.arcane_recovery = r(1);
+  return out;
 }
 
 export function resourcesOf(sheet: CharacterSheet): Record<string, { cur: number; max: number }> {

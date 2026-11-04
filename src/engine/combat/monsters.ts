@@ -7,6 +7,8 @@ export interface MonsterDef {
   name: string;
   ac: number;
   hp: number;
+  /** 처치 경험치 (SRD 5.2.1: 도전 지수 1/4 = 50 XP) */
+  xp: number;
   abilities: Abilities;
   cards: CardDef[];
   /** 원거리 공격을 선호 (후열에 머문다) */
@@ -17,7 +19,7 @@ export interface MonsterDef {
 
 export const MONSTERS: Record<string, MonsterDef> = {
   goblin_warrior: {
-    id: 'goblin_warrior', name: '고블린 전사', ac: 15, hp: 10,
+    id: 'goblin_warrior', name: '고블린 전사', ac: 15, hp: 10, xp: 50,
     abilities: { str: 8, dex: 15, con: 10, int: 10, wis: 8, cha: 8 },
     preferRanged: true,
     cards: [
@@ -26,7 +28,7 @@ export const MONSTERS: Record<string, MonsterDef> = {
     ],
   },
   wolf: {
-    id: 'wolf', name: '늑대', ac: 12, hp: 11,
+    id: 'wolf', name: '늑대', ac: 12, hp: 11, xp: 50,
     abilities: { str: 14, dex: 15, con: 12, int: 3, wis: 12, cha: 6 },
     packTactics: true,
     cards: [

@@ -29,3 +29,22 @@ describe('v0.1 세이브 호환', () => {
     expect(s.player.sheet.name).toBe('옛 세이브');
   });
 });
+
+describe('레벨업·휴식 이벤트', () => {
+  it('경험치와 레벨업, 짧은 휴식의 비전 회복', () => {
+    const wizard = { name: '나', classId: 'wizard', level: 3, abilities: { str: 8, dex: 14, con: 13, int: 15, wis: 12, cha: 10 },
+      skillProficiencies: [], saveProficiencies: ['int', 'wis'], maxHp: 15, hp: 15, xp: 900,
+      resources: { slot1: { cur: 0, max: 4 }, slot2: { cur: 0, max: 2 }, arcane_recovery: { cur: 1, max: 1 } } } as const;
+    const s = replay([
+      ev(0, 0, { type: 'game_started', packageId: 'p', packageVersion: '0', seed: 1, locationId: 'x', playerName: '나', character: structuredClone(wizard) as never }),
+      ev(1, 1, { type: 'xp_gained', who: 'player', amount: 50, reason: '테스트' }),
+      ev(2, 1, { type: 'rested', kind: 'short' }),
+    ]);
+    expect(s.player.sheet.xp).toBe(950);
+    // 3레벨 → 회복 예산 2: 2레벨 슬롯 1개
+    expect(s.player.sheet.resources?.slot2?.cur).toBe(1);
+    expect(s.player.sheet.resources?.slot1?.cur).toBe(0);
+    expect(s.player.sheet.resources?.arcane_recovery?.cur).toBe(0);
+    expect(s.log.some((l) => l.kind === 'progress' && l.text.includes('+50'))).toBe(true);
+  });
+});
