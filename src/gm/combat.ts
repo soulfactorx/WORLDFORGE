@@ -8,6 +8,7 @@ import { applyEvent, type GameState } from '../engine/state/state';
 import type { LlmClient } from '../llm/types';
 import { relationshipEvent } from './relationship';
 import { progressEvents } from './progression';
+import { scenarioEvents } from './scenario';
 import { MONSTERS } from '../engine/combat/monsters';
 
 /**
@@ -56,6 +57,8 @@ function finishIfOver(b: Builder) {
       : null;
     if (ev) b.push(ev);
   }
+  // 조우 결과로 퀘스트가 진행될 수 있다
+  scenarioEvents(b.world, b.state).events.forEach((e) => b.push(e));
   if (cs.outcome === 'defeat') b.push({ type: 'time_advanced', minutes: 60 });
 }
 

@@ -119,6 +119,11 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null}>↶ 턴 되돌리기</button>
         <button onClick={onExit}>나가기</button>
       </div>
+      {state.ending && (
+        <div className="ending small">
+          ◆ 결말: <b>{sampleWorld.endings?.find((e) => e.id === state.ending)?.name}</b> — 이야기는 여기서 매듭지어졌다. 원하면 계속 이 세계를 돌아다닐 수 있다.
+        </div>
+      )}
       {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} />}
       {panel === 'journal' && <JournalPanel world={sampleWorld} state={state} />}
       <div className="log">

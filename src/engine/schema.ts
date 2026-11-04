@@ -26,6 +26,19 @@ export interface Location {
   connections: EntityId[];
   /** AI가 이 장소의 세부사항을 지어낼 수 있는 범위 (기본 'minor') */
   improvisation?: Improvisation;
+  /** 이 장소를 조사해 알아낼 수 있는 것 (v0.8) */
+  discoveries?: Discovery[];
+}
+
+/** 탐험으로 얻는 지식. check가 있으면 같은 턴에 그 판정에 성공해야 한다. */
+export interface Discovery {
+  claim: EntityId;
+  /** 기술 ID (예: investigation, perception) */
+  check?: string;
+  /** Director에게만 주는 힌트: 어떻게 하면 발견하는가 */
+  hint: string;
+  /** 발견했을 때 플레이어의 지식 상태 (기본 confirmed: 직접 봤으므로) */
+  state?: 'confirmed' | 'partial';
 }
 
 /**
@@ -50,6 +63,8 @@ export interface Character {
   relationship?: Partial<{ affinity: number; trust: number; respect: number; fear: number }>;
   /** 비밀 상태의 지식을 털어놓는 데 필요한 신뢰 (v0.6, 기본 40) */
   secretTrust?: number;
+  /** 두려움이 이 값 이상이면 신뢰가 부족해도 비밀을 털어놓는다 (v0.8, 기본 없음) */
+  secretFear?: number;
 }
 
 export interface CompanionSpec {
@@ -106,6 +121,61 @@ export interface Encounter {
   trigger: string;
 }
 
+// ------------------------------------------------------------ 시나리오 (v0.8)
+
+/**
+ * 선언형 조건식 (설계 리뷰 4.3절). 스크립트를 실행하지 않고 엔진이 평가한다.
+ * 빈 all은 항상 참.
+ */
+export type Condition =
+  | { all: Condition[] }
+  | { any: Condition[] }
+  | { not: Condition }
+  | { knows: EntityId; min?: KnowledgeState }
+  | { at: EntityId }
+  | { cleared: EntityId }
+  | { inParty: EntityId }
+  | { relationship: EntityId; axis: 'affinity' | 'trust' | 'respect' | 'fear'; gte?: number; lte?: number }
+  | { flag: string }
+  | { questDone: EntityId }
+  | { level: number };
+
+export interface QuestStage {
+  /** 플레이어 수첩에 보이는 현재 목표 */
+  objective: string;
+  /** Director에게만 주는 진행 힌트 */
+  hint: string;
+  complete: Condition;
+}
+
+export interface Quest {
+  id: EntityId;
+  name: string;
+  kind: 'main' | 'side';
+  /** 시작 조건 */
+  start: Condition;
+  stages: QuestStage[];
+  rewards?: { xp?: number; relationship?: { npcId: EntityId; trust?: number; affinity?: number; respect?: number }[] };
+}
+
+/** Director가 이야기 속 사건을 기록하는 플래그. 선언된 것만, 지정 장소에서만 세울 수 있다. */
+export interface StoryFlag {
+  id: string;
+  /** Director에게: 언제 이 플래그를 세우는가 */
+  when: string;
+  locationId?: EntityId;
+  /** 이 조건이 참일 때만 세울 수 있다 */
+  requires?: Condition;
+}
+
+export interface Ending {
+  id: EntityId;
+  name: string;
+  condition: Condition;
+  /** 서술 AI에게 주는 에필로그 방향 */
+  epilogue: string;
+}
+
 export interface WorldPackage {
   manifest: PackageManifest;
   locations: Location[];
@@ -114,6 +184,9 @@ export interface WorldPackage {
   claims: Claim[];
   beliefs: Belief[];
   encounters?: Encounter[];
+  quests?: Quest[];
+  flags?: StoryFlag[];
+  endings?: Ending[];
   start: {
     locationId: EntityId;
     /** 플레이어가 깨어났을 때의 첫 장면 */

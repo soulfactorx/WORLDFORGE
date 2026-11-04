@@ -23,12 +23,24 @@ export const sampleWorld: WorldPackage = {
       description: '이끼 낀 돌 원형 제단이 있는 작은 공터. 짙은 안개가 나무 사이로 흐르고, 멀리 개 짖는 소리가 들린다.',
       connections: ['loc/village-gate'],
       improvisation: 'none',
+      discoveries: [
+        { claim: 'claim/altar-fresh-ash', check: 'investigation', hint: '제단을 자세히 조사하면 최근에 피운 불의 재와, 돌에 새로 그려진 낯선 문양을 찾을 수 있다.' },
+      ],
     },
     {
       id: 'loc/village-gate',
       name: '마을 입구',
       description: '나무 말뚝 울타리와 낡은 문. 문 위에 등불이 흔들린다. 경비 초소가 하나 있다.',
-      connections: ['loc/forest-clearing', 'loc/inn', 'loc/old-road'],
+      connections: ['loc/forest-clearing', 'loc/inn', 'loc/old-road', 'loc/elder-house'],
+    },
+    {
+      id: 'loc/elder-house',
+      name: '장로의 집',
+      description: '마을 가장 안쪽의 이층 목조 집. 창틀에 말린 약초가 걸려 있고, 문 앞에 진흙 묻은 장화가 놓여 있다.',
+      connections: ['loc/village-gate'],
+      discoveries: [
+        { claim: 'claim/elder-book', check: 'perception', hint: '장로와 이야기하는 동안 주위를 살피면, 서가에 펼쳐진 낡은 책에 제단의 문양과 같은 그림이 보인다.' },
+      ],
     },
     {
       id: 'loc/old-road',
@@ -77,6 +89,18 @@ export const sampleWorld: WorldPackage = {
       relationship: { affinity: 10, trust: 0, respect: 0, fear: 0 },
       secretTrust: 50,
     },
+    {
+      id: 'npc/orvin',
+      name: '오르빈',
+      appearance: '등이 굽은 백발의 노인. 손가락 끝에 검댕이 배어 있고, 눈 밑이 검게 꺼져 있다.',
+      personality: '온화하고 말이 느리지만 무언가에 쫓기듯 초조하다. 마을을 지키는 일에 지나치게 집착한다.',
+      speech: '느린 존댓말. 곤란한 질문에는 "허허" 하고 말을 돌린다.',
+      locationId: 'loc/elder-house',
+      improvisation: 'minor',
+      relationship: { affinity: 5, trust: 0, respect: 0, fear: 0 },
+      secretTrust: 40,
+      secretFear: 30,
+    },
   ],
   facts: [
     {
@@ -95,6 +119,11 @@ export const sampleWorld: WorldPackage = {
     { id: 'claim/altar-summoning', statement: '숲속 제단은 장로가 다시 작동시킨 소환진이다.', truth: 'true', relatesTo: 'fact/altar-summoning' },
     { id: 'claim/ilse-burn', statement: '일제의 왼손 화상은 10년 전 제단 의식을 엿보다가 생긴 것이다.', truth: 'true', relatesTo: 'fact/ilse-burn' },
     { id: 'claim/elder-strange', statement: '요즘 장로가 밤마다 숲으로 나간다.', truth: 'true' },
+    { id: 'claim/goblins-road', statement: '낡은 숲길에 고블린이 나타나 지나가는 사람을 습격한다.', truth: 'true' },
+    { id: 'claim/altar-fresh-ash', statement: '숲속 제단에 최근 불을 피운 재와 새로 그린 낯선 문양이 있다.', truth: 'true', relatesTo: 'fact/altar-summoning' },
+    { id: 'claim/elder-book', statement: '장로의 서가에 제단 문양과 같은 그림이 그려진 낡은 책이 있다.', truth: 'true', relatesTo: 'fact/altar-summoning' },
+    { id: 'claim/elder-reason', statement: '장로는 마을을 지킬 수호자를 얻으려고 소환진을 작동시켰고, 당신이 그 결과다.', truth: 'true', relatesTo: 'fact/altar-summoning' },
+    { id: 'claim/way-home', statement: '소환진을 거꾸로 그리면 불려온 자를 원래 세계로 돌려보낼 수 있다.', truth: 'true', relatesTo: 'fact/altar-summoning' },
   ],
   beliefs: [
     { holder: 'npc/bran', claim: 'claim/village-name', state: 'confirmed' },
@@ -103,7 +132,12 @@ export const sampleWorld: WorldPackage = {
     { holder: 'npc/ilse', claim: 'claim/altar-cursed', state: 'rumor' },
     { holder: 'npc/ilse', claim: 'claim/ilse-burn', state: 'secret' },
     { holder: 'npc/bran', claim: 'claim/elder-strange', state: 'confirmed' },
-    // claim/altar-summoning 은 아직 아무 NPC도 플레이어도 모른다 (장로 NPC는 이후 추가).
+    { holder: 'npc/bran', claim: 'claim/goblins-road', state: 'confirmed' },
+    { holder: 'npc/ilse', claim: 'claim/goblins-road', state: 'rumor' },
+    { holder: 'npc/orvin', claim: 'claim/village-name', state: 'confirmed' },
+    { holder: 'npc/orvin', claim: 'claim/altar-summoning', state: 'secret' },
+    { holder: 'npc/orvin', claim: 'claim/elder-reason', state: 'secret' },
+    { holder: 'npc/orvin', claim: 'claim/way-home', state: 'secret' },
   ],
   encounters: [
     {
@@ -115,6 +149,52 @@ export const sampleWorld: WorldPackage = {
       id: 'enc/road-goblins', name: '고블린 매복', locationId: 'loc/old-road',
       enemies: [{ monsterId: 'goblin_warrior', zone: 2 }, { monsterId: 'goblin_warrior', zone: 3 }],
       trigger: '고블린 둘이 덤불 뒤에 숨어 있다. 플레이어가 길을 따라 더 들어가거나 부러진 화살을 조사하면 습격한다. 플레이어가 은신에 성공하면 먼저 발견할 수도 있다.',
+    },
+  ],
+  quests: [
+    {
+      id: 'quest/why-am-i-here', name: '낯선 하늘 아래', kind: 'main',
+      start: { all: [] },
+      stages: [
+        { objective: '사람이 사는 곳을 찾는다.', hint: '숲 공터에서 개 짖는 소리 쪽으로 가면 마을 입구가 있다.', complete: { at: 'loc/village-gate' } },
+        { objective: '이 마을과 숲속 제단에 대해 알아본다.', hint: '마을 사람들은 제단이 저주받았다는 소문과 장로의 밤 외출을 알고 있다.', complete: { any: [{ knows: 'claim/altar-cursed' }, { knows: 'claim/elder-strange' }] } },
+        { objective: '제단과 장로 사이의 연결고리를 찾는다.', hint: '제단을 조사하거나(조사 판정), 장로의 집에서 서가를 살피면(지각 판정) 단서를 얻는다.', complete: { any: [{ knows: 'claim/altar-fresh-ash' }, { knows: 'claim/elder-book' }] } },
+        { objective: '장로 오르빈에게 진실을 묻는다.', hint: '장로는 신뢰가 40 이상이거나 충분히 겁을 먹으면 털어놓는다. 단서를 들이밀면 흔들린다.', complete: { knows: 'claim/altar-summoning', min: 'partial' } },
+        { objective: '돌아갈지, 이곳에 남을지 정한다.', hint: '장로는 소환진을 거꾸로 그리면 돌려보낼 수 있다는 것을 안다. 플레이어가 결정을 내리면 해당 플래그를 세운다.', complete: { any: [{ flag: 'chose_return' }, { flag: 'chose_stay' }] } },
+      ],
+      rewards: { xp: 150 },
+    },
+    {
+      id: 'quest/road-goblins', name: '낡은 숲길의 고블린', kind: 'side',
+      start: { any: [{ knows: 'claim/goblins-road' }, { at: 'loc/old-road' }] },
+      stages: [
+        { objective: '낡은 숲길의 고블린을 처치한다.', hint: '고블린 둘이 낡은 숲길 덤불에 숨어 있다. 브란은 이 일이라면 함께 간다.', complete: { cleared: 'enc/road-goblins' } },
+      ],
+      rewards: { xp: 100, relationship: [{ npcId: 'npc/bran', trust: 8, respect: 5 }] },
+    },
+    {
+      id: 'quest/ilse-scar', name: '일제의 화상', kind: 'side',
+      start: { relationship: 'npc/ilse', axis: 'trust', gte: 20 },
+      stages: [
+        { objective: '일제가 감추는 상처의 사연을 듣는다.', hint: '일제는 신뢰가 50 이상이 되면 화상의 사연을 털어놓는다. 그 사연은 제단과 이어져 있다.', complete: { knows: 'claim/ilse-burn', min: 'partial' } },
+      ],
+      rewards: { xp: 75, relationship: [{ npcId: 'npc/ilse', affinity: 10 }] },
+    },
+  ],
+  flags: [
+    { id: 'chose_return', when: '진실을 안 플레이어가 소환진으로 원래 세계에 돌아가겠다고 결심하고 제단에서 의식을 치를 때', locationId: 'loc/forest-clearing', requires: { knows: 'claim/way-home', min: 'partial' } },
+    { id: 'chose_stay', when: '진실을 안 플레이어가 이 세계에 남아 마을을 지키겠다고 장로나 마을 사람에게 분명히 선언할 때', requires: { knows: 'claim/altar-summoning', min: 'partial' } },
+  ],
+  endings: [
+    {
+      id: 'ending/return', name: '돌아가는 길',
+      condition: { all: [{ flag: 'chose_return' }, { questDone: 'quest/why-am-i-here' }] },
+      epilogue: '제단의 문양이 거꾸로 빛나고, 안개 속에서 당신의 몸이 가벼워진다. 함께한 사람들과의 작별, 그리고 원래 세계에서 눈을 뜨는 순간까지. 남은 사람들이 어떻게 지낼지는 여운으로 남긴다.',
+    },
+    {
+      id: 'ending/stay', name: '안개골짜기의 수호자',
+      condition: { all: [{ flag: 'chose_stay' }, { questDone: 'quest/why-am-i-here' }] },
+      epilogue: '당신은 이 마을에 남기로 한다. 장로의 죄와 마을의 두려움을 함께 짊어지고, 안개 너머에서 다가오는 것들을 지키는 사람이 된다. 동료들과의 관계를 반영해 따뜻하게 마무리한다.',
     },
   ],
   start: {

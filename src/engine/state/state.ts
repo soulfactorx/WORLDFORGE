@@ -9,7 +9,7 @@ import { classResources, resourcesOf } from '../character/sheet';
 
 export interface LogEntry {
   turn: number;
-  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress';
+  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest';
   text: string;
 }
 
@@ -37,6 +37,12 @@ export interface GameState {
   npcLocations: Record<EntityId, EntityId>;
   /** NPC → 플레이어 관계 (바뀐 NPC만 저장. 없으면 패키지 초기값) */
   relationships: Record<EntityId, Relationship>;
+  /** 퀘스트 진행 (v0.8) */
+  quests: Record<EntityId, { stage: number; done: boolean }>;
+  /** 이야기 플래그 (v0.8) */
+  flags: string[];
+  /** 도달한 결말 ID */
+  ending?: string;
   log: LogEntry[];
 }
 
@@ -51,7 +57,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, quests: {}, flags: [], log: [],
   };
 }
 
@@ -126,6 +132,19 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, party, partyOrders, npcLocations: { ...s.npcLocations, [e.npcId]: e.locationId },
         log: [...s.log, { turn, kind: 'knowledge', text: `${josa(left?.name ?? e.npcId, '이/가')} 일행을 떠났다.` }] };
     }
+    case 'quest_started':
+      return { ...s, quests: { ...s.quests, [e.questId]: { stage: 0, done: false } },
+        log: [...s.log, { turn, kind: 'quest', text: `새 임무 — ${e.name}: ${e.objective}` }] };
+    case 'quest_advanced':
+      return { ...s, quests: { ...s.quests, [e.questId]: { stage: e.stage, done: false } },
+        log: [...s.log, { turn, kind: 'quest', text: `임무 갱신 — ${e.name}: ${e.objective}` }] };
+    case 'quest_completed':
+      return { ...s, quests: { ...s.quests, [e.questId]: { stage: e.stages, done: true } },
+        log: [...s.log, { turn, kind: 'quest', text: `임무 완료 — ${e.name}` }] };
+    case 'flag_set':
+      return s.flags.includes(e.flag) ? s : { ...s, flags: [...s.flags, e.flag] };
+    case 'ending_reached':
+      return { ...s, ending: e.endingId, log: [...s.log, { turn, kind: 'quest', text: `◆ 결말 — ${e.name}` }] };
     case 'xp_gained': {
       const upd = (sh: CharacterSheet) => ({ ...sh, xp: (sh.xp ?? 0) + e.amount });
       const next = e.who === 'player' ? { ...s, player: { ...s.player, sheet: upd(s.player.sheet) } }

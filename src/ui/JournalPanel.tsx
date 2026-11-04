@@ -10,9 +10,29 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
   const known = knowledgeOf(world, state.beliefs, 'player');
   const metIds = [...new Set([...Object.keys(state.npcMemory), ...Object.keys(state.party), ...Object.keys(state.relationships)])];
   const met = metIds.map((id) => world.characters.find((c) => c.id === id)).filter((c) => !!c);
+  const quests = (world.quests ?? []).filter((q) => state.quests[q.id]);
   return (
     <aside className="sheet">
-      <b>수첩</b>
+      <b>임무</b>
+      {quests.length === 0 ? (
+        <p className="muted small">아직 맡은 일이 없다.</p>
+      ) : (
+        <ul className="quests">
+          {quests.map((q) => {
+            const p = state.quests[q.id]!;
+            return (
+              <li key={q.id} className={p.done ? 'done' : ''}>
+                <span className={`tag ${q.kind === 'main' ? 'confirmed' : ''}`}>{q.kind === 'main' ? '메인' : '사이드'}</span>{' '}
+                <b>{q.name}</b>
+                {p.done ? <span className="small muted"> — 완료</span> : <div className="small">▸ {q.stages[p.stage]?.objective}</div>}
+                {/* 지난 단계 */}
+                {q.stages.slice(0, p.stage).map((st) => <div key={st.objective} className="small muted past">✓ {st.objective}</div>)}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <b>알게 된 것</b>
       {known.length === 0 ? (
         <p className="muted small">아직 이 세계에 대해 아는 것이 없다.</p>
       ) : (

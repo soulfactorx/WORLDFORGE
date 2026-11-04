@@ -28,6 +28,12 @@ export type GameEvent =
   | { type: 'combat_turn_ended' }
   /** party: 동료별 전투 후 HP·자원 (v0.5) */
   | { type: 'combat_ended'; outcome: Outcome; hp: number; resources: Record<string, { cur: number; max: number }>; party?: Record<string, { hp: number; resources: Record<string, { cur: number; max: number }> }> }
+  /** 시나리오 (v0.8) */
+  | { type: 'quest_started'; questId: EntityId; name: string; objective: string }
+  | { type: 'quest_advanced'; questId: EntityId; name: string; stage: number; objective: string }
+  | { type: 'quest_completed'; questId: EntityId; name: string; stages: number }
+  | { type: 'flag_set'; flag: string }
+  | { type: 'ending_reached'; endingId: EntityId; name: string }
   /** 경험치·레벨업 (v0.7). who = 'player' 또는 동료 NPC ID */
   | { type: 'xp_gained'; who: string; amount: number; reason: string }
   | { type: 'level_up'; who: string; sheet: CharacterSheet; hpGain: number; features: string[] }

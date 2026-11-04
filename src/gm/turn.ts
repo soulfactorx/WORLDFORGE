@@ -4,11 +4,13 @@ import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/ch
 import { createRng } from '../engine/dice/rng';
 import type { WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
-import { applyEvent, type GameState, MAX_PARTY } from '../engine/state/state';
+import { applyEvent, type GameState, initialState, MAX_PARTY } from '../engine/state/state';
 import { companionSheet } from '../engine/character/sheet';
 import { josa } from '../engine/text/josa';
 import { relationshipEvent } from './relationship';
 import { progressEvents } from './progression';
+import { scenarioEvents } from './scenario';
+import { activeQuests, flagAllowed, pendingDiscoveries } from '../engine/scenario';
 import { DISCOVERY_XP } from '../engine/character/progression';
 import { applyDelta, canShareSecret, joinBlocker, LEAVE_AFFINITY, relationshipOf } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
@@ -39,12 +41,14 @@ interface DirectorOutput {
   speakers: { npc_id: string; reacting_to: string }[];
   start_encounter: string; // 시작하지 않으면 ""
   rest: 'none' | 'short' | 'long';
+  discover: string[];
+  set_flags: string[];
 }
 
 const DIRECTOR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to', 'speakers', 'start_encounter', 'rest'],
+  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to', 'speakers', 'start_encounter', 'rest', 'discover', 'set_flags'],
   properties: {
     action_summary: { type: 'string', description: '플레이어가 하려는 행동 요약' },
     check_kind: { type: 'string', enum: ['none', 'skill', 'ability', 'save'], description: '결과가 불확실하고 실패에 의미가 있을 때만 판정. skill=기술 판정, ability=기술 없는 능력 판정, save=내성 굴림' },
@@ -55,6 +59,8 @@ const DIRECTOR_SCHEMA = {
     check_reason: { type: 'string' },
     move_to: { type: 'string', description: '"이동 가능한 곳" 목록의 ID 중 하나, 이동하지 않으면 ""' },
     start_encounter: { type: 'string', description: '"일어날 수 있는 조우" 목록의 ID. 발동 조건이 충족될 때만. 아니면 ""' },
+    discover: { type: 'array', items: { type: 'string' }, description: '"발견할 수 있는 것" 중 이번 행동으로 찾아낸 것의 ID. 필요 판정이 있으면 같은 턴에 그 기술 판정을 요청해야 한다' },
+    set_flags: { type: 'array', items: { type: 'string' }, description: '"세울 수 있는 플래그" 중 이번 턴에 조건이 충족된 것의 ID' },
     rest: { type: 'string', enum: ['none', 'short', 'long'], description: '플레이어가 쉬려고 할 때만. 짧은 휴식=1시간, 긴 휴식=8시간 잠' },
     speakers: {
       type: 'array',
@@ -132,7 +138,10 @@ const DIRECTOR_SYSTEM = `너는 1인칭 TRPG의 게임 마스터 판단 모듈�
 - 이동은 반드시 "이동 가능한 곳" 목록의 ID만 사용한다.
 - 플레이어가 인물에게 말을 걸거나 인물이 반응할 만한 행동을 하면 speakers에 그 인물을 넣는다.
 - 조우는 발동 조건이 충족될 때만 시작한다. 플레이어가 먼저 공격하려 해도 조우 목록에 있는 적에게만 해당한다.
-- 위험한 곳(조우가 남아 있는 곳)에서는 쉬지 못할 수 있다. 그 경우 rest 대신 조우를 시작해도 된다.`;
+- 위험한 곳(조우가 남아 있는 곳)에서는 쉬지 못할 수 있다. 그 경우 rest 대신 조우를 시작해도 된다.
+- "진행 중인 이야기"의 힌트는 연출 방향일 뿐이다. 플레이어를 억지로 끌고 가지 않는다.
+- 발견은 플레이어가 실제로 그곳을 살피거나 조사할 때만 넣는다. 판정이 필요한 발견은 check_kind=skill로 그 기술을 요청한다.
+- 플래그는 플레이어가 그 결정을 분명히 했을 때만 세운다.`;
 
 const NARRATOR_SYSTEM = `너는 1인칭 TRPG의 서술자이자 NPC 연기자다. 한국어 2인칭("당신은 …")으로 장면을 서술한다.
 규칙:
@@ -168,7 +177,7 @@ export async function runTurn(
 
   // 1) Director
   const d = await llm.json<DirectorOutput>(
-    { system: DIRECTOR_SYSTEM, user: `${buildDirectorContext(world, s)}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.trigger}`).join('\n') || '(없음)'}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
+    { system: DIRECTOR_SYSTEM, user: `${buildDirectorContext(world, s)}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
     DIRECTOR_SCHEMA, signal,
   );
 
@@ -183,6 +192,25 @@ export async function runTurn(
     push({ type: 'check_rolled', skill: breakdown.label, reason: d.check_reason, result, rngState: rng.state(), breakdown, mode });
     outcomes.push(`${breakdown.label} ${result.success ? '성공' : '실패'}${result.natural20 ? ' (자연 20)' : result.natural1 ? ' (자연 1)' : ''}${mode !== 'normal' ? ` [${mode === 'advantage' ? '이점' : '불리점'}]` : ''}`);
   }
+  // 발견: 이 장소에서 아직 찾지 않은 것만. 판정이 필요하면 이번 턴의 같은 기술 판정에 성공해야 한다
+  const lastCheck = events.find((e) => e.type === 'check_rolled');
+  const discoveredNow: GameEvent[] = [];
+  for (const claimId of new Set(d.discover ?? [])) {
+    const disc = pendingDiscoveries(world, s).find((x) => x.claim === claimId);
+    const claim = world.claims.find((c) => c.id === claimId);
+    if (!disc || !claim) continue;
+    if (disc.check) {
+      const ok = spec?.kind === 'skill' && spec.skill === disc.check && lastCheck?.type === 'check_rolled' && lastCheck.result.success;
+      if (!ok) continue;
+    }
+    discoveredNow.push({ type: 'knowledge_revealed', belief: { holder: 'player', claim: claimId, state: disc.state ?? 'confirmed', source: s.player.locationId }, statement: claim.statement });
+    outcomes.push(`발견: ${claim.statement}`);
+  }
+  // 이야기 플래그: 선언된 것만, 조건을 만족할 때만
+  for (const flag of new Set(d.set_flags ?? [])) {
+    if (flagAllowed(world, s, flag)) push({ type: 'flag_set', flag });
+  }
+
   const here = world.locations.find((l) => l.id === s.player.locationId);
   const moving = !!d.move_to && !!here?.connections.includes(d.move_to);
   if (d.move_to && !moving) outcomes.push('요청된 이동은 불가능함 (연결되지 않은 장소)');
@@ -203,7 +231,7 @@ export async function runTurn(
     return { npc, out };
   }));
   const reactions: string[] = [];
-  const reveals: GameEvent[] = []; // 서술 뒤에 기록해 화면에서 "알게 된 것"이 서술 다음에 보이게 한다
+  const reveals: GameEvent[] = [...discoveredNow]; // 서술 뒤에 기록해 화면에서 "알게 된 것"이 서술 다음에 보이게 한다
   for (const { npc, out } of actorResults) {
     push({ type: 'npc_spoke', npcId: npc.id, dialogue: out.dialogue, action: out.action });
     reactions.push(`- ${npc.name} [${npc.id}]: ${out.action ? `(${out.action}) ` : ''}${out.dialogue ? `"${out.dialogue}"` : '(말없음)'}`);
@@ -280,6 +308,19 @@ export async function runTurn(
   reveals.forEach(push);
   if (discoveries) progressEvents(s, [{ who: 'player', amount: DISCOVERY_XP * discoveries }], `새로운 사실 ${discoveries}개`).forEach(push);
 
+  // 시나리오: 퀘스트 진행·보상·결말 (엔진 판정)
+  const sc = scenarioEvents(world, s);
+  sc.events.forEach(push);
+  if (sc.ending) {
+    onNarration('\n\n');
+    const epilogue = await llm.stream({
+      system: `${NARRATOR_SYSTEM}\n- 지금은 이야기의 결말이다. 에필로그를 4~6문단으로 쓴다. 지금까지의 기록과 동료·관계를 반영한다.`,
+      user: `${buildNarratorContext(world, s)}\n\n## 결말 방향\n${sc.ending}`,
+      maxTokens: 4000,
+    }, onNarration, signal);
+    push({ type: 'narration', text: epilogue });
+  }
+
   // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략)
   try {
     const subjects = sceneSubjects(world, s);
@@ -302,6 +343,18 @@ export async function runTurn(
   return { events, state: s };
 }
 
+/** Director에게만 주는 시나리오 정보: 진행 중인 임무 힌트, 세울 수 있는 플래그, 발견할 수 있는 것 */
+function scenarioBlock(world: WorldPackage, s: GameState): string {
+  const quests = activeQuests(world, s).map((q) => `- [${q.quest.kind === 'main' ? '메인' : '사이드'}] ${q.quest.name} — 목표: ${q.stage.objective} / 힌트: ${q.stage.hint}`);
+  const flags = (world.flags ?? []).filter((f) => flagAllowed(world, s, f.id)).map((f) => `- ${f.id}: ${f.when}`);
+  const disc = pendingDiscoveries(world, s).map((x) => `- ${x.claim}: ${x.hint}${x.check ? ` (필요 판정: ${x.check} 기술)` : ''}`);
+  return [
+    '## 진행 중인 이야기 (플레이어는 모름)', ...(quests.length ? quests : ['(없음)']), '',
+    '## 세울 수 있는 플래그', ...(flags.length ? flags : ['(없음)']), '',
+    '## 이 장소에서 발견할 수 있는 것', ...(disc.length ? disc : ['(없음)']),
+  ].join('\n');
+}
+
 /** Director 출력 검증: 잘못된 기술/능력치 조합은 판정 없음으로 처리한다. */
 function toCheckSpec(d: DirectorOutput): CheckSpec | null {
   if (d.check_kind === 'skill' && d.check_skill && d.check_skill in SKILLS) return { kind: 'skill', skill: d.check_skill };
@@ -312,8 +365,10 @@ function toCheckSpec(d: DirectorOutput): CheckSpec | null {
 }
 
 export function startEvents(world: WorldPackage, character: CharacterSheet, seed: number): GameEvent[] {
-  return [
+  const events: GameEvent[] = [
     { type: 'game_started', packageId: world.manifest.id, packageVersion: world.manifest.version, seed, locationId: world.start.locationId, playerName: character.name, character },
     { type: 'narration', text: `${world.start.openingScene}\n\n${world.locations.find((l) => l.id === world.start.locationId)?.description ?? ''}` },
   ];
+  const state = events.reduce((st, e) => applyEvent(st, e, 0), initialState());
+  return [...events, ...scenarioEvents(world, state).events];
 }

@@ -67,7 +67,8 @@ export function secretTrustOf(world: WorldPackage, npcId: EntityId): number {
 
 /** 비밀 상태의 지식을 지금 털어놓을 수 있는가 (엔진이 강제한다) */
 export function canShareSecret(world: WorldPackage, npcId: EntityId, r: Relationship): boolean {
-  return r.trust >= secretTrustOf(world, npcId);
+  const fear = world.characters.find((x) => x.id === npcId)?.secretFear;
+  return r.trust >= secretTrustOf(world, npcId) || (fear !== undefined && r.fear >= fear);
 }
 
 /** 동행 기준 충족 여부. 미충족이면 이유를 돌려준다. */
