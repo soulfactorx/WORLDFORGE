@@ -28,7 +28,13 @@ export const sampleWorld: WorldPackage = {
       id: 'loc/village-gate',
       name: '마을 입구',
       description: '나무 말뚝 울타리와 낡은 문. 문 위에 등불이 흔들린다. 경비 초소가 하나 있다.',
-      connections: ['loc/forest-clearing', 'loc/inn'],
+      connections: ['loc/forest-clearing', 'loc/inn', 'loc/old-road'],
+    },
+    {
+      id: 'loc/old-road',
+      name: '낡은 숲길',
+      description: '마을 동쪽으로 뻗은 수레바퀴 자국투성이 길. 쓰러진 나무와 덤불이 시야를 가린다. 부러진 화살 하나가 땅에 꽂혀 있다.',
+      connections: ['loc/village-gate'],
     },
     {
       id: 'loc/inn',
@@ -83,6 +89,18 @@ export const sampleWorld: WorldPackage = {
     { holder: 'npc/ilse', claim: 'claim/ilse-burn', state: 'secret' },
     { holder: 'npc/bran', claim: 'claim/elder-strange', state: 'confirmed' },
     // claim/altar-summoning 은 아직 아무 NPC도 플레이어도 모른다 (장로 NPC는 이후 추가).
+  ],
+  encounters: [
+    {
+      id: 'enc/clearing-wolves', name: '굶주린 늑대들', locationId: 'loc/forest-clearing',
+      enemies: [{ monsterId: 'wolf', zone: 2 }, { monsterId: 'wolf', zone: 3 }],
+      trigger: '굶주린 늑대 두 마리가 숲 가장자리를 맴돈다. 플레이어가 공터에서 두 턴 이상 머물거나, 큰 소리를 내거나, 숲 깊숙이 들어가려 하면 덤빈다.',
+    },
+    {
+      id: 'enc/road-goblins', name: '고블린 매복', locationId: 'loc/old-road',
+      enemies: [{ monsterId: 'goblin_warrior', zone: 2 }, { monsterId: 'goblin_warrior', zone: 3 }],
+      trigger: '고블린 둘이 덤불 뒤에 숨어 있다. 플레이어가 길을 따라 더 들어가거나 부러진 화살을 조사하면 습격한다. 플레이어가 은신에 성공하면 먼저 발견할 수도 있다.',
+    },
   ],
   start: {
     locationId: 'loc/forest-clearing',

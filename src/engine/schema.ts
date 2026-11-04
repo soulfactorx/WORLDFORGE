@@ -79,6 +79,17 @@ export interface Belief {
   source?: string;
 }
 
+/** 전투 조우. Director가 조건(hint)에 맞을 때 시작을 요청하고 엔진이 검증한다. */
+export interface Encounter {
+  id: EntityId;
+  name: string;
+  locationId: EntityId;
+  /** zone: 2 = 적 전열, 3 = 적 후열 */
+  enemies: { monsterId: string; zone: 2 | 3 }[];
+  /** Director에게만 주는 발동 조건 힌트 (플레이어에게 직접 보이지 않음) */
+  trigger: string;
+}
+
 export interface WorldPackage {
   manifest: PackageManifest;
   locations: Location[];
@@ -86,6 +97,7 @@ export interface WorldPackage {
   facts: Fact[];
   claims: Claim[];
   beliefs: Belief[];
+  encounters?: Encounter[];
   start: {
     locationId: EntityId;
     /** 플레이어가 깨어났을 때의 첫 장면 */

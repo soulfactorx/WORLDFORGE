@@ -1,0 +1,158 @@
+import { describe, expect, it } from 'vitest';
+import { createRng } from '../dice/rng';
+import { createCharacter, suggestedStandardArray } from '../character/sheet';
+import {
+  applyEffects, cardById, type CombatState, currentActorId, endTurn, planEnemyAction, resolveCard, rollDamage,
+  runEnemyTurns, startCombat, unusableReason, validTargets,
+} from './combat';
+
+const sheet = (classId: string, skills: string[]) =>
+  createCharacter({ name: '나', classId, method: 'standard', abilities: suggestedStandardArray(classId), skills: skills as never });
+const fighter = () => sheet('fighter', ['athletics', 'perception']);
+const rogue = () => sheet('rogue', ['stealth', 'perception', 'investigation', 'acrobatics']);
+const wizard = () => sheet('wizard', ['arcana', 'history']);
+
+/** 플레이어 차례로 맞춘 전투 상태 */
+function playerFirst(cs: CombatState): CombatState {
+  return { ...cs, order: ['player', ...cs.order.filter((id) => id !== 'player')], turnIndex: 0 };
+}
+
+describe('전투 시작', () => {
+  it('우선권 순서는 시드로 결정적이다', () => {
+    const enc = { id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }, { monsterId: 'wolf', zone: 2 }] };
+    const a = startCombat(enc, fighter(), createRng(9));
+    const b = startCombat(enc, fighter(), createRng(9));
+    expect(a.order).toEqual(b.order);
+    expect(a.order).toHaveLength(3);
+    expect(a.combatants['wolf#2']!.name).toBe('늑대 2');
+    expect(a.combatants.player!.ac).toBe(16);
+  });
+});
+
+describe('사거리와 행동 경제', () => {
+  const base = () => playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'goblin_warrior', zone: 2 }] }, fighter(), createRng(1)));
+  it('근접은 같은 존만', () => {
+    const cs = base();
+    expect(unusableReason(cs, 'player', cardById('weapon/longsword'))).toBe('사거리 안에 대상이 없다');
+    expect(validTargets(cs, 'player', cardById('weapon/javelin'))).toEqual(['goblin_warrior#1']);
+  });
+  it('이동 후 근접 공격 가능, 행동은 한 번만', () => {
+    let cs = base();
+    const rng = createRng(5);
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'basic/move', 2, rng).effects);
+    expect(unusableReason(cs, 'player', cardById('basic/move'))).toBe('이동을 이미 사용했다');
+    expect(unusableReason(cs, 'player', cardById('weapon/longsword'))).toBeNull();
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'weapon/longsword', 'goblin_warrior#1', rng).effects);
+    expect(unusableReason(cs, 'player', cardById('weapon/javelin'))).toBe('행동을 이미 사용했다');
+    expect(() => resolveCard(cs, 'player', 'weapon/javelin', 'goblin_warrior#1', rng)).toThrow();
+  });
+  it('보너스 행동은 행동과 별개, 자원을 소모한다', () => {
+    let cs = base();
+    cs.combatants.player!.hp = 3;
+    const rng = createRng(2);
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'fighter/second_wind', 'player', rng).effects);
+    expect(cs.combatants.player!.hp).toBeGreaterThan(3);
+    expect(cs.combatants.player!.resources.second_wind!.cur).toBe(1);
+    expect(cs.economy.action).toBe(true);
+  });
+  it('원거리 공격은 같은 존에 적이 있으면 불리점', () => {
+    let cs = base();
+    cs.combatants['goblin_warrior#1']!.zone = 1;
+    for (let seed = 0; seed < 20; seed++) {
+      const r = resolveCard(cs, 'player', 'weapon/javelin', 'goblin_warrior#1', createRng(seed));
+      expect(r.log[0]).toContain('불리점');
+    }
+  });
+});
+
+describe('주문과 특수 규칙', () => {
+  it('마법 화살은 반드시 명중하고 주문 슬롯을 소모한다', () => {
+    let cs = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 3 }] }, wizard(), createRng(1)));
+    const r = resolveCard(cs, 'player', 'spell/magic_missile', 'wolf#1', createRng(3));
+    const dmg = -(r.effects.find((e) => e.kind === 'hp') as { delta: number }).delta;
+    expect(dmg).toBeGreaterThanOrEqual(6);
+    expect(dmg).toBeLessThanOrEqual(15);
+    cs = applyEffects(cs, r.effects);
+    cs = endTurn(endTurn(cs));
+    cs = playerFirst(cs);
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'spell/magic_missile', 'wolf#1', createRng(4)).effects);
+    expect(cs.combatants.player!.resources.slot1!.cur).toBe(0);
+  });
+  it('치명타는 피해 주사위를 두 배로 굴린다', () => {
+    expect(rollDamage(createRng(1), '1d8', true).rolls).toHaveLength(2);
+    expect(rollDamage(createRng(1), '2d6+3').rolls).toHaveLength(2);
+  });
+  it('숨은 로그는 이점 → 암습 피해', () => {
+    let cs = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }] }, rogue(), createRng(1)));
+    cs.combatants.player!.hidden = true;
+    let sneaks = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const r = resolveCard(cs, 'player', 'weapon/shortbow', 'wolf#1', createRng(seed));
+      expect(r.log[0]).toContain('이점');
+      if (r.log[0]!.includes('암습')) sneaks++;
+      expect(r.effects).toContainEqual({ kind: 'flag', target: 'player', hidden: false });
+    }
+    expect(sneaks).toBeGreaterThan(0);
+  });
+  it('회피 중인 대상 공격은 불리점, 자기 차례가 오면 풀린다', () => {
+    let cs = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }] }, fighter(), createRng(1)));
+    cs.combatants['wolf#1']!.zone = 1;
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'basic/dodge', 'player', createRng(1)).effects);
+    cs = endTurn(cs);
+    expect(currentActorId(cs)).toBe('wolf#1');
+    expect(resolveCard(cs, 'wolf#1', 'monster/wolf/bite', 'player', createRng(2)).log[0]).toContain('불리점');
+    cs = endTurn(cs);
+    expect(cs.combatants.player!.dodging).toBe(false);
+  });
+  it('도주는 후열에서, 적이 없을 때만', () => {
+    let cs = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 3 }] }, fighter(), createRng(1)));
+    expect(unusableReason(cs, 'player', cardById('basic/flee'))).toBe('아군 후열에서만 도주할 수 있다');
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'basic/move', 0, createRng(1)).effects);
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'basic/flee', 'player', createRng(1)).effects);
+    expect(cs.outcome).toBe('fled');
+  });
+});
+
+describe('적 AI와 승패', () => {
+  it('늑대는 다가와서 문다', () => {
+    let cs = startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }] }, fighter(), createRng(1));
+    cs = { ...cs, order: ['wolf#1', 'player'], turnIndex: 0 };
+    expect(planEnemyAction(cs)).toEqual({ cardId: 'basic/move', target: 1 });
+    const { state, steps } = runEnemyTurns(cs, createRng(3));
+    expect(steps.filter((s) => s.kind === 'action').map((s) => s.kind === 'action' && s.cardId)).toEqual(['basic/move', 'monster/wolf/bite']);
+    expect(currentActorId(state)).toBe('player');
+  });
+  it('고블린은 후열에서 활을 쏜다', () => {
+    let cs = startCombat({ id: 'e', enemies: [{ monsterId: 'goblin_warrior', zone: 3 }] }, fighter(), createRng(1));
+    cs = { ...cs, order: ['goblin_warrior#1', 'player'], turnIndex: 0 };
+    expect(planEnemyAction(cs)).toEqual({ cardId: 'monster/goblin/shortbow', target: 'player' });
+  });
+  it('적을 모두 쓰러뜨리면 승리, 플레이어가 쓰러지면 패배', () => {
+    const cs = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 1 }] }, fighter(), createRng(1)));
+    expect(applyEffects(cs, [{ kind: 'hp', target: 'wolf#1', delta: -99 }]).outcome).toBe('victory');
+    expect(applyEffects(cs, [{ kind: 'hp', target: 'player', delta: -99 }]).outcome).toBe('defeat');
+  });
+  it('긴 전투도 결정적으로 끝난다 (시뮬레이션)', () => {
+    for (let seed = 0; seed < 30; seed++) {
+      const rng = createRng(seed);
+      let cs = startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }, { monsterId: 'goblin_warrior', zone: 3 }] }, fighter(), rng);
+      for (let i = 0; i < 100 && !cs.outcome; i++) {
+        const r = runEnemyTurns(cs, rng);
+        cs = r.state;
+        if (cs.outcome) break;
+        // 플레이어: 가까운 적에게 근접, 없으면 이동, 그다음 재블린
+        for (const [card, pickTarget] of [['weapon/longsword', 0], ['basic/move', 'fwd'], ['weapon/longsword', 0], ['weapon/javelin', 0]] as const) {
+          const c = cardById(card);
+          if (unusableReason(cs, 'player', c)) continue;
+          const ts = validTargets(cs, 'player', c);
+          const t = pickTarget === 'fwd' ? ts.find((z) => typeof z === 'number' && z > cs.combatants.player!.zone) : ts[0];
+          if (t === undefined) continue;
+          cs = applyEffects(cs, resolveCard(cs, 'player', card, t, rng).effects);
+          if (cs.outcome) break;
+        }
+        if (!cs.outcome) cs = endTurn(cs);
+      }
+      expect(cs.outcome).toBeDefined();
+    }
+  });
+});

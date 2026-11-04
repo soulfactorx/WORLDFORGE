@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { sampleWorld } from '../data/sample-world';
 import { replay, type GameState } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
+import { narrateCombat, playerCombatAction, playerEndTurn } from '../gm/combat';
+import type { Target } from '../engine/combat/combat';
+import type { GameEvent } from '../engine/state/events';
+import { CombatPanel } from './CombatPanel';
 import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import { appendEvents, loadEvents, undoLastTurn } from '../storage/db';
@@ -65,6 +69,35 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
     }
   }
 
+  /** 전투 이벤트를 현재 턴에 이어 저장하고, 전투가 끝났으면 한 번 서술한다. */
+  async function commitCombat(make: (s: GameState) => GameEvent[]) {
+    if (!state?.combat || streaming !== null) return;
+    setError('');
+    const before = state.combat;
+    let events: GameEvent[];
+    try { events = make(state); } catch (e) { setError((e as Error).message); return; }
+    await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn: state.turn, event })));
+    const all = await loadEvents(saveId);
+    let after = replay(all);
+    let seq = (all.at(-1)?.seq ?? -1) + 1;
+    if (!after.combat) {
+      const startIdx = after.log.findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 시작'));
+      const combatLog = after.log.slice(startIdx).filter((l) => l.kind === 'combat').map((l) => l.text);
+      setStreaming('');
+      abort.current = new AbortController();
+      let text: string;
+      try {
+        text = await narrateCombat(createLlmClient(settings), sampleWorld, before, after, combatLog, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
+      } catch (e) {
+        setError(`전투 서술 실패: ${(e as Error).message}`);
+        text = '전투가 끝났다.';
+      }
+      await appendEvents(saveId, [{ saveId, seq: seq++, turn: after.turn, event: { type: 'narration', text } }]);
+      setStreaming(null);
+    }
+    await reload();
+  }
+
   async function undo() {
     await undoLastTurn(saveId);
     await reload();
@@ -93,6 +126,11 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
         <div ref={bottom} />
       </div>
       {error && <p className="status">❌ {error}</p>}
+      {state.combat ? (
+        <CombatPanel cs={state.combat} busy={streaming !== null}
+          onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(s, cardId, target))}
+          onEndTurn={() => commitCombat((s) => playerEndTurn(s))} />
+      ) : (
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <textarea
           value={input} rows={2} placeholder="무엇을 하시겠습니까? (예: 주변을 자세히 살펴본다)"
@@ -101,6 +139,7 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
         />
         <button className="primary" disabled={streaming !== null}>행동</button>
       </form>
+      )}
     </section>
   );
 }

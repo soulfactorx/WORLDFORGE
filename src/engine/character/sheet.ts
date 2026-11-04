@@ -15,6 +15,8 @@ export interface CharacterSheet {
   saveProficiencies: Ability[];
   maxHp: number;
   hp: number;
+  /** 사용 횟수 자원 (주문 슬롯, 재기의 바람 등). v0.4부터. 없으면 직업 기본값으로 채운다. */
+  resources?: Record<string, { cur: number; max: number }>;
 }
 
 export type CheckSpec =
@@ -90,7 +92,22 @@ export function createCharacter(input: CreationInput): CharacterSheet {
   return {
     name: input.name, classId: cls.id, level: 1, abilities: { ...input.abilities },
     skillProficiencies: [...input.skills], saveProficiencies: [...cls.saves], maxHp, hp: maxHp,
+    resources: classResources(cls.id, 1),
   };
+}
+
+/** 1레벨 직업 자원 (SRD 5.2.1). 긴 휴식에 모두 회복된다. */
+export function classResources(classId: string, _level: number): Record<string, { cur: number; max: number }> {
+  switch (classId) {
+    case 'fighter': return { second_wind: { cur: 2, max: 2 } };
+    case 'cleric':
+    case 'wizard': return { slot1: { cur: 2, max: 2 } };
+    default: return {};
+  }
+}
+
+export function resourcesOf(sheet: CharacterSheet): Record<string, { cur: number; max: number }> {
+  return sheet.resources ?? classResources(sheet.classId, sheet.level);
 }
 
 /** 표준 배열을 직업 우선순위대로 자동 배치 */

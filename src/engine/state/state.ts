@@ -2,10 +2,12 @@ import type { Belief, EntityId } from '../schema';
 import type { GameEvent, StoredEvent } from './events';
 import { type CharacterSheet, legacyCharacter } from '../character/sheet';
 import type { ImprovisedFact } from '../canon';
+import { applyEffects, type CombatState, endTurn, ZONE_NAMES } from '../combat/combat';
+import { classResources, resourcesOf } from '../character/sheet';
 
 export interface LogEntry {
   turn: number;
-  kind: 'player' | 'narration' | 'check' | 'knowledge';
+  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat';
   text: string;
 }
 
@@ -22,6 +24,10 @@ export interface GameState {
   improvisedFacts: ImprovisedFact[];
   /** NPC별 플레이어와의 최근 대화 (Actor 기억). 오래된 것은 잘라낸다. */
   npcMemory: Record<EntityId, string[]>;
+  /** 진행 중인 전투 */
+  combat?: CombatState;
+  /** 끝난 조우 (승리한 조우는 다시 일어나지 않는다) */
+  clearedEncounters: string[];
   log: LogEntry[];
 }
 
@@ -34,7 +40,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], log: [],
   };
 }
 
@@ -75,6 +81,40 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, improvisedFacts: [...s.improvisedFacts, { subject: e.subject, statement: e.statement, turn }] };
     case 'fact_rejected':
       return s;
+    case 'combat_started': {
+      const names = Object.values(e.combat.combatants).filter((c) => c.side === 'enemy').map((c) => `${c.name}(${ZONE_NAMES[c.zone]})`).join(', ');
+      const order = e.combat.order.map((id) => `${e.combat.combatants[id]!.name} ${e.combat.combatants[id]!.initiative}`).join(' → ');
+      return { ...s, combat: e.combat, rngState: e.rngState,
+        log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 시작 — ${names}\n우선권: ${order}` }] };
+    }
+    case 'combat_action': {
+      if (!s.combat) return s;
+      return { ...s, combat: applyEffects(s.combat, e.effects), rngState: e.rngState,
+        log: [...s.log, ...e.log.map((text) => ({ turn, kind: 'combat' as const, text }))] };
+    }
+    case 'combat_turn_ended':
+      return s.combat ? { ...s, combat: endTurn(s.combat) } : s;
+    case 'combat_ended': {
+      const label = { victory: '승리', defeat: '쓰러짐', fled: '도주' }[e.outcome];
+      return {
+        ...s, combat: undefined,
+        clearedEncounters: e.outcome === 'victory' && s.combat ? [...s.clearedEncounters, s.combat.encounterId] : s.clearedEncounters,
+        player: { ...s.player, sheet: { ...s.player.sheet, hp: e.hp, resources: e.resources } },
+        log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 종료 — ${label}` }],
+      };
+    }
+    case 'rested': {
+      const sheet = s.player.sheet;
+      if (e.kind === 'long') {
+        return { ...s, worldMinutes: s.worldMinutes + 8 * 60,
+          player: { ...s.player, sheet: { ...sheet, hp: sheet.maxHp, resources: classResources(sheet.classId, sheet.level) } },
+          log: [...s.log, { turn, kind: 'check', text: '긴 휴식 (8시간) — HP와 자원 모두 회복' }] };
+      }
+      const res = structuredClone(resourcesOf(sheet));
+      if (res.second_wind) res.second_wind.cur = Math.min(res.second_wind.max, res.second_wind.cur + 1);
+      return { ...s, worldMinutes: s.worldMinutes + 60, player: { ...s.player, sheet: { ...sheet, resources: res } },
+        log: [...s.log, { turn, kind: 'check', text: '짧은 휴식 (1시간)' + (res.second_wind ? ' — 재기의 바람 1회 회복' : '') }] };
+    }
     case 'time_advanced':
       return { ...s, worldMinutes: s.worldMinutes + e.minutes };
   }

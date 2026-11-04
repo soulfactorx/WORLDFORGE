@@ -99,7 +99,7 @@ export function buildNarratorContext(world: WorldPackage, state: GameState): str
     ...canonBlock(world, state, state.player.locationId, ''), '',
     '## 이동 가능한 곳', ...exits(world, state), '',
     '## 이 장소에 있는 인물', ...(npcs.length ? npcs : ['(없음)']), '',
-    '## 플레이어의 몸 상태', `HP ${state.player.sheet.hp}/${state.player.sheet.maxHp}`, '',
+    '## 플레이어의 몸 상태', `HP ${state.player.sheet.hp}/${state.player.sheet.maxHp}${state.player.sheet.hp <= state.player.sheet.maxHp / 3 ? ' (심하게 다침)' : ''}`, '',
     '## 플레이어가 알고 있는 것', ...playerKnowledge(world, state), '',
     '## 최근 진행', ...recentLog(state),
   ].join('\n');

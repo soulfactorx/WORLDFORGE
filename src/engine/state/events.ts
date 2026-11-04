@@ -1,6 +1,7 @@
 import type { Belief, EntityId } from '../schema';
 import type { D20Test, RollMode } from '../dice/dice';
 import type { CharacterSheet, ModifierBreakdown } from '../character/sheet';
+import type { CombatEffect, CombatState, Outcome, Target } from '../combat/combat';
 
 /**
  * 세이브의 진실의 원본은 이 이벤트 로그다.
@@ -20,6 +21,13 @@ export type GameEvent =
   | { type: 'npc_spoke'; npcId: EntityId; dialogue: string; action: string }
   /** AI가 지어내 기록된 사실 (Canon L2) */
   | { type: 'fact_asserted'; subject: EntityId; statement: string }
+  /** 전투 (v0.4). 모든 주사위 결과는 effects로 확정되어 저장된다. */
+  | { type: 'combat_started'; combat: CombatState; rngState: number }
+  | { type: 'combat_action'; actorId: string; cardId: string; target: Target; effects: CombatEffect[]; log: string[]; rngState: number }
+  | { type: 'combat_turn_ended' }
+  | { type: 'combat_ended'; outcome: Outcome; hp: number; resources: Record<string, { cur: number; max: number }> }
+  /** 휴식 (v0.4). 짧은 휴식 1시간, 긴 휴식 8시간 */
+  | { type: 'rested'; kind: 'short' | 'long' }
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number };
