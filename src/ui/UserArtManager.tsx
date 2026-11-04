@@ -2,7 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { STOCK_ART, stockDataUrl } from '../data/stockart';
 import { db, type UserArt } from '../storage/db';
-import { addUserArt, deleteUserArt, exportUserArt, importUserArt, updateUserArt } from '../storage/userart';
+import { addUserArt, applyUserArtToLibrary, deleteUserArt, exportUserArt, importUserArt, updateUserArt } from '../storage/userart';
+import { imageNeeds, needsText } from '../gm/worldgen/imageNeeds';
 
 const KIND = [['character', '인물'], ['scene', '장소·장면']] as const;
 const GENDER = [['', '성별 없음'], ['F', '여'], ['M', '남']] as const;
@@ -32,7 +33,7 @@ export function UserArtManager({ onClose }: { onClose: () => void }) {
     setStatus('저장 중…');
     try {
       const n = await addUserArt([...files], { kind, ...(gender ? { gender } : {}), tags: splitTags(tags) }, (d, t) => setStatus(`저장 중… ${d}/${t}`));
-      setStatus(`${n}장을 추가했습니다. 그림마다 이름·태그를 다듬으면 AI가 더 잘 고릅니다.`);
+      setStatus(`${n}장을 추가했습니다.${await applyReport()}`);
     } catch (e) { setStatus(`❌ ${(e as Error).message}`); }
   }
 
@@ -45,8 +46,17 @@ export function UserArtManager({ onClose }: { onClose: () => void }) {
 
   async function restore(file: File | undefined) {
     if (!file) return;
-    try { setStatus(`${await importUserArt(file)}장을 가져왔습니다.`); } catch (e) { setStatus(`❌ ${(e as Error).message}`); }
+    try { const n = await importUserArt(file); setStatus(`${n}장을 가져왔습니다.${await applyReport()}`); } catch (e) { setStatus(`❌ ${(e as Error).message}`); }
   }
+
+  /** 모든 세계에 자동 적용하고 결과를 글로 */
+  async function applyReport(): Promise<string> {
+    const r = await applyUserArtToLibrary();
+    if (!r.applied.length) return ' 아직 맞는 세계의 인물·장소가 없습니다 (파일 이름이나 태그로 맞춥니다).';
+    return ` 세계 ${r.worlds}곳에 자동으로 붙였습니다: ${r.applied.slice(0, 8).map((a) => `${a.world}의 ${a.target}`).join(', ')}${r.applied.length > 8 ? ` 외 ${r.applied.length - 8}곳` : ''}.`;
+  }
+  const worlds = useLiveQuery(() => db.packages.toArray(), []) ?? [];
+  const needy = worlds.map((p) => ({ p, needs: imageNeeds(p.world) })).filter((x) => x.needs.length);
 
   const shown = list.filter((a) => filter === 'all' || a.kind === filter);
   return (
@@ -98,6 +108,18 @@ export function UserArtManager({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       )}
+
+      <details className="needs-box" open={needy.length > 0}>
+        <summary><b>🖼 이미지가 부족한 세계 {needy.length}곳</b> <span className="small muted">— 추천 파일 이름으로 위에 올리면 자동으로 붙습니다</span></summary>
+        <div className="row"><button onClick={async () => setStatus(`다시 적용했습니다.${await applyReport()}`)} disabled={!list.length}>내 이미지를 모든 세계에 다시 적용</button></div>
+        {needy.map(({ p, needs }) => (
+          <details key={p.key} className="small">
+            <summary>{p.world.manifest.name} — 인물 {needs.filter((n) => n.kind === 'character').length} · 장소 {needs.filter((n) => n.kind === 'location').length}</summary>
+            <button className="small" onClick={async () => { try { await navigator.clipboard.writeText(needsText(p.world, needs)); setStatus('필요한 그림 목록을 복사했습니다.'); } catch { setStatus(needsText(p.world, needs)); } }}>📋 목록 복사</button>
+            <ul>{needs.map((n) => <li key={n.id}>{n.kind === 'character' ? '인물' : '장소'} · <b>{n.name}</b> → <code>{n.fileName}</code> <span className="muted">{n.describe.slice(0, 80)}</span></li>)}</ul>
+          </details>
+        ))}
+      </details>
 
       <details open={showBuiltin} onToggle={(e) => setShowBuiltin((e.target as HTMLDetailsElement).open)}>
         <summary className="small">앱 내장 기본 이미지 {STOCK_ART.length}종 보기 (고칠 수 없음)</summary>

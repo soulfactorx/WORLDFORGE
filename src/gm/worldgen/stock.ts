@@ -5,6 +5,7 @@
 import { STOCK_ART, type StockArt } from '../../data/stockart';
 import type { AssetMeta, Character, Location, WorldPackage } from '../../engine/schema';
 import type { LlmClient } from '../../llm/types';
+import { applyUserArt } from './imageNeeds';
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const CHAR_ART = STOCK_ART.filter((a) => a.kind === 'character');
@@ -71,8 +72,8 @@ export function stockAsset(art: StockArt, n: number, target: { characterId?: str
 export const nextStockIndex = (assets: AssetMeta[]) => assets.reduce((m, a) => Math.max(m, Number(/--(\d+)$/.exec(a.id)?.[1] ?? -1)), -1) + 1;
 
 /** 내 기본 이미지 세트 (브라우저 저장소). 테스트·저장소가 없는 환경에서는 빈 목록 */
-async function loadUserArt(): Promise<StockArt[]> {
-  try { return await (await import('../../storage/userart')).userStockArt(); } catch { return []; }
+async function loadUserArt(): Promise<{ id: string; kind: 'character' | 'scene'; label: string; tags: string[]; gender?: 'M' | 'F' }[]> {
+  try { return (await (await import('../../storage/userart')).listUserArt()).map(({ blob: _b, createdAt: _c, ...a }) => a); } catch { return []; }
 }
 
 /**
@@ -80,10 +81,16 @@ async function loadUserArt(): Promise<StockArt[]> {
  * extra를 주지 않으면 이 브라우저의 "내 기본 이미지"도 후보로 쓴다 (어울리면 우선).
  */
 export async function assignStockImages(world: WorldPackage, llm?: LlmClient, signal?: AbortSignal, extra?: StockArt[]): Promise<{ assets: AssetMeta[]; added: number; byAi: boolean }> {
+  let mineRaw: Awaited<ReturnType<typeof loadUserArt>> = [];
+  if (!extra) {
+    // 내 기본 이미지: 파일 이름·대상 지정으로 맞는 것은 먼저 붙인다
+    mineRaw = await loadUserArt();
+    if (mineRaw.length) world = { ...world, assets: applyUserArt(world, mineRaw).assets };
+  }
   const { characters, locations } = missingImages(world);
   const assets = [...(world.assets ?? [])];
   if (!characters.length && !locations.length) return { assets, added: 0, byAi: false };
-  const mine = extra ?? await loadUserArt();
+  const mine = extra ?? mineRaw.map((a) => ({ id: `u:${a.id}`, kind: a.kind, label: `내 이미지: ${a.label}`, tags: a.tags.filter((t) => !t.startsWith('for:')), ...(a.gender ? { gender: a.gender } : {}) }));
   const chars = [...mine.filter((a) => a.kind === 'character'), ...CHAR_ART];
   const scenes = [...mine.filter((a) => a.kind === 'scene'), ...SCENE_ART];
   const line = (a: StockArt) => `- ${a.id}: ${a.label}${a.gender ? ` (${a.gender === 'F' ? '여' : '남'})` : ''}${a.id.startsWith('u:') && a.tags.length ? ` [${a.tags.join(', ')}]` : ''}`;

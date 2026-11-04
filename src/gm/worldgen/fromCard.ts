@@ -25,6 +25,7 @@ import { PRIVATE_NOTE } from '../../storage/packages';
 import { worldFromDraft, type WorldDraft } from './draft';
 import { generateScenario } from './generate';
 import { assignStockImages } from './stock';
+import { imageNeeds } from './imageNeeds';
 import { translateToKorean } from './translate';
 import { type FoundCharacter, findCharactersAI } from './findChars';
 
@@ -366,6 +367,8 @@ export async function cardToWorld(
     const st = await assignStockImages(world, llm, signal);
     world.assets = st.assets;
     if (st.added) notes.push(`이미지가 없는 인물·장소 ${st.added}곳에 기본 이미지를 붙였습니다${st.byAi ? ' (AI가 고름)' : ''}. 편집기 이미지 탭에서 바꿀 수 있습니다.`);
+    const nd = imageNeeds(world);
+    if (nd.length) notes.push(`진짜 이미지가 없는 인물 ${nd.filter((x) => x.kind === 'character').length}명 · 장소 ${nd.filter((x) => x.kind === 'location').length}곳은 앱 내장 그림으로 대신합니다. 편집기 이미지 탭의 "부족한 이미지"에서 그림을 올리거나, 추천 파일 이름(예: ${nd[0]!.fileName})으로 내 기본 이미지에 올리면 자동으로 붙습니다.`);
   }
 
   // 4) 임무·결말 (기존 시나리오 생성기 재사용)

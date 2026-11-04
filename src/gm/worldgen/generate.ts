@@ -4,6 +4,7 @@ import { validateWorld, type Issue } from '../../engine/package/validate';
 import type { WorldPackage } from '../../engine/schema';
 import type { LlmClient } from '../../llm/types';
 import { assignStockImages } from './stock';
+import { imageNeeds } from './imageNeeds';
 import { addScenario, SCENARIO_DRAFT_SCHEMA, type ScenarioDraft, WORLD_DRAFT_SCHEMA, type WorldDraft, worldFromDraft } from './draft';
 
 /**
@@ -90,6 +91,7 @@ export async function generateWorld(
   const st = await assignStockImages(world, llm, signal);
   world = { ...world, assets: st.assets };
   if (st.added) notes = [...notes, `인물·장소 ${st.added}곳에 앱 내장 기본 이미지를 붙였습니다. 편집기 이미지 탭에서 바꿀 수 있습니다.`];
+  { const nd = imageNeeds(world); if (nd.length) notes = [...notes, `진짜 이미지가 없는 인물·장소 ${nd.length}곳은 편집기 이미지 탭의 "부족한 이미지"에서 그림을 올리거나, 추천 파일 이름(예: ${nd[0]!.fileName})으로 내 기본 이미지에 올리면 자동으로 붙습니다.`]; }
   onStage('검사 중…');
   return { world, notes, issues: validateWorld(world) };
 }

@@ -6,6 +6,7 @@ import type { Belief, Character, Claim, Fact, Location, WorldPackage } from '../
 import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
 import { AssetGallery } from './AssetGallery';
 import { fillOrphanKnowledge } from '../gm/worldgen/fromCard';
+import { imageNeeds } from '../gm/worldgen/imageNeeds';
 import { IssueList } from './IssueList';
 import { CardImportDialog } from './CardImportDialog';
 import { josa } from '../engine/text/josa';
@@ -186,6 +187,10 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
       {w.manifest.private && <div className="private-banner">🔒 {w.manifest.private.note}<br /><span className="muted">원작: {w.manifest.private.source}</span></div>}
       <IssueList issues={issues} onPick={(p) => setTab(tabForPath(p))} limit={8} />
+      {(() => { const nd = imageNeeds(w); return nd.length > 0 && tab !== 'images' && (
+        <p className="small">🖼 진짜 이미지가 없는 인물 {nd.filter((x) => x.kind === 'character').length}명 · 장소 {nd.filter((x) => x.kind === 'location').length}곳 (앱 내장 그림으로 대신하는 중)
+          {' '}<button className="small" onClick={() => setTab('images')}>이미지 탭에서 보기·올리기</button></p>
+      ); })()}
       {issues.some((i) => /아무도 모르고|보호 주제는 subjects/.test(i.message)) && (
         <p className="small">
           <button onClick={() => {

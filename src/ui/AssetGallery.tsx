@@ -7,6 +7,8 @@ import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../storage/db';
+import { applyUserArt, imageNeeds, needsText, targetTag } from '../gm/worldgen/imageNeeds';
+import { addUserArt, listUserArt } from '../storage/userart';
 
 const KIND = [['character', '인물'], ['scene', '장면'], ['map', '지도'], ['cover', '표지'], ['other', '분류 안 됨 (쓰이지 않음)']] as const;
 const PAGE = 60;
@@ -28,6 +30,33 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
       setBusy(r.added ? `${r.added}곳에 기본 이미지를 붙였습니다${r.byAi ? ' (AI가 고름)' : ' (낱말 규칙)'}. 저장하세요.` : '이미지가 없는 인물·장소가 없습니다.');
     } catch (e) { setBusy(`❌ ${(e as Error).message}`); }
   }
+  const needs = imageNeeds(world);
+  async function uploadFor(need: ReturnType<typeof imageNeeds>[number], files: FileList | null) {
+    if (!files?.length) return;
+    setBusy('내 기본 이미지에 저장하는 중…');
+    try {
+      await addUserArt([...files], { kind: need.kind === 'character' ? 'character' : 'scene', ...(need.gender ? { gender: need.gender } : {}), tags: [targetTag(world.manifest.id, need.id), need.name.toLowerCase()] });
+      const arts = (await listUserArt()).map(({ blob: _b, createdAt: _c, ...a }) => a);
+      const r = applyUserArt(world, arts);
+      onChange(r.assets);
+      setBusy(`${need.name}에 붙였습니다 (내 기본 이미지에도 저장). 저장하세요.`);
+    } catch (e) { setBusy(`❌ ${(e as Error).message}`); }
+  }
+  async function copyList() {
+    const text = needsText(world, needs);
+    try { await navigator.clipboard.writeText(text); setBusy('필요한 그림 목록을 복사했습니다.'); }
+    catch {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+      Object.assign(document.createElement('a'), { href: url, download: `${world.manifest.name}-필요한-그림.txt` }).click();
+      URL.revokeObjectURL(url);
+    }
+  }
+  async function applyMine() {
+    const arts = (await listUserArt()).map(({ blob: _b, createdAt: _c, ...a }) => a);
+    const r = applyUserArt(world, arts);
+    onChange(r.assets);
+    setBusy(r.applied.length ? `내 이미지 ${r.applied.length}개를 붙였습니다: ${r.applied.slice(0, 6).map((a) => a.target).join(', ')}${r.applied.length > 6 ? ' …' : ''}. 저장하세요.` : '새로 맞는 내 이미지가 없습니다 (파일 이름·태그를 확인하세요).');
+  }
   function addStock(artId: string) {
     const u = mine.find((a) => `u:${a.id}` === artId);
     const art = u ? { id: artId, kind: u.kind, label: `내 이미지: ${u.label}`, tags: u.tags, ...(u.gender ? { gender: u.gender } : {}) } : STOCK_ART.find((a) => a.id === artId)!;
@@ -45,6 +74,32 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
       <p className="muted small">
         이미지 {assets.length.toLocaleString()}장. 플레이 중에는 AI가 고른 표정·장면 태그에 맞는 이미지를 엔진이 골라 보여줍니다. 같은 태그가 여러 장이면 돌려 가며 보여줍니다.
       </p>
+      <details className="needs-box" open={needs.length > 0}>
+        <summary><b>🖼 부족한 이미지 {needs.length}곳</b> <span className="small muted">— 진짜 이미지 없이 앱 내장 그림이나 빈 칸으로 보이는 인물·장소</span></summary>
+        <p className="small muted">
+          그림을 <b>여기서 바로 올리면</b> 그 대상에 붙고 내 기본 이미지에도 저장됩니다. 또는 추천 파일 이름(예: <code>{needs[0]?.fileName ?? 'yun.png'}</code>, 표정은 <code>yun_smile.png</code>)으로
+          <b> 내 기본 이미지 관리</b>에 올리면 모든 세계에 자동으로 붙습니다.
+        </p>
+        <div className="row">
+          <button onClick={copyList} disabled={!needs.length}>📋 필요한 그림 목록 복사</button>
+          <button onClick={applyMine}>내 기본 이미지에서 맞는 것 다시 붙이기</button>
+        </div>
+        <ul className="needs">
+          {needs.map((nd) => {
+            const fb = assets.find((a) => (nd.kind === 'character' ? a.characterId : a.locationId) === nd.id);
+            return (
+              <li key={nd.id}>
+                {fb ? <AssetImage pkg={world.manifest.id} id={fb.id} alt={nd.name} className="need-thumb" /> : <span className="asset-ph need-thumb" />}
+                <span className="need-body">
+                  <b>{nd.kind === 'character' ? '인물' : '장소'} · {nd.name}</b> <span className="small muted">{nd.status === 'stock' ? '앱 내장 그림으로 대신하는 중' : '이미지 없음'} · 추천 파일 이름 <code>{nd.fileName}</code></span>
+                  {nd.describe && <span className="small muted need-desc">{nd.describe}</span>}
+                </span>
+                <label className="file small">⇧ 그림 올리기<input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml" multiple onChange={(e) => { uploadFor(nd, e.target.files); e.target.value = ''; }} /></label>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
       <details className="stock-box" open={assets.length === 0 || missing.characters.length + missing.locations.length > 0}>
         <summary><b>기본 이미지</b> <span className="small muted">— 앱에 내장된 그림 {STOCK_ART.length}종. 이미지 없는 인물 {missing.characters.length}명 · 장소 {missing.locations.length}곳</span></summary>
         <div className="row">

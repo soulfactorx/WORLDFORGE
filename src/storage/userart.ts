@@ -102,3 +102,23 @@ export async function importUserArt(file: Blob): Promise<number> {
   }
   return n;
 }
+
+/**
+ * 내 기본 이미지를 이 브라우저의 모든 세계(사용자 세계)에 적용한다.
+ * 파일 이름·대상 지정·태그가 맞는 인물·장소 중 진짜 이미지가 없는 곳(또는 이름이 정확히 맞는 곳)에 붙는다.
+ */
+export async function applyUserArtToLibrary(): Promise<{ worlds: number; applied: { world: string; target: string; art: string }[] }> {
+  const { applyUserArt } = await import('../gm/worldgen/imageNeeds');
+  const arts = (await listUserArt()).map(({ blob: _b, createdAt: _c, ...a }) => a);
+  const out: { world: string; target: string; art: string }[] = [];
+  let worlds = 0;
+  if (!arts.length) return { worlds, applied: out };
+  for (const p of await db.packages.toArray()) {
+    const r = applyUserArt(p.world, arts);
+    if (!r.applied.length) continue;
+    worlds++;
+    await db.packages.put({ ...p, world: { ...p.world, assets: r.assets }, updatedAt: Date.now() });
+    out.push(...r.applied.map((a) => ({ world: p.world.manifest.name, ...a })));
+  }
+  return { worlds, applied: out };
+}

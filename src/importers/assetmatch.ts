@@ -29,9 +29,10 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 function findTarget(tokens: string[], compact: string, targets: MatchTarget[]): { t: MatchTarget; used: Set<string> } | undefined {
   let best: { t: MatchTarget; len: number; used: Set<string> } | undefined;
   for (const t of targets) {
-    for (const alias of t.aliases.map(norm).filter((a) => a.length >= 2)) {
+    for (const alias of t.aliases.map(norm).filter(Boolean)) {
       let used: Set<string> | undefined;
-      if (tokens.includes(alias)) used = new Set([alias]);
+      if (tokens.includes(alias)) used = new Set([alias]); // 한 글자 이름(윤)은 낱말이 정확히 같을 때만
+      else if (alias.length < 2) continue;
       else if (alias.length >= 3 && compact.startsWith(alias)) {
         // 접두사로 붙은 이름 (hedwigsmile) — 이름에 해당하는 토큰을 앞에서부터 덜어낸다
         used = new Set(); let acc = '';

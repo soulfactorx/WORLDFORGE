@@ -7,6 +7,7 @@ import { startEvents } from '../gm/turn';
 import { appendEvents, db, deleteSave, exportSave, importSave } from '../storage/db';
 import { deletePackage, exportWpk, listPackages, MAX_FILE_BYTES, packageKey, parsePackageFile, PRIVATE_NOTE, savePackage } from '../storage/packages';
 import { BlobZip } from '../importers/blobzip';
+import { imageNeeds } from '../gm/worldgen/imageNeeds';
 import { CharacterCreator } from './CharacterCreator';
 import { IssueList } from './IssueList';
 
@@ -124,7 +125,8 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
       <ul className="saves">
         {packages?.map((p) => (
           <li key={packageKey(p.world)}>
-            <span>{p.world.manifest.name} <span className="muted small">v{p.world.manifest.version} · {p.world.manifest.id}{p.builtin ? ' · 내장' : ''}</span></span>
+            <span>{p.world.manifest.name} <span className="muted small">v{p.world.manifest.version} · {p.world.manifest.id}{p.builtin ? ' · 내장' : ''}</span>
+              {!p.builtin && (() => { const n = imageNeeds(p.world).length; return n > 0 && <span className="need-badge" title="진짜 이미지가 없는 인물·장소 — 편집 → 이미지 탭, 또는 내 기본 이미지에 추천 파일 이름으로 올리면 자동으로 붙습니다">🖼 이미지 부족 {n}</span>; })()}</span>
             <span className="row">
               {p.world.manifest.private
                 ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용</span>
