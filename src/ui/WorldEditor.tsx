@@ -219,9 +219,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes }: {
       )}
       {tab === 'characters' && importing && (
         <CardImportDialog world={w} settings={settings} onClose={() => setImporting(false)} onAdd={(r) => {
-          set({ characters: [...w.characters, r.character], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs] });
+          set({ characters: [...w.characters, ...r.characters], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs] });
           setImporting(false);
-          setStatus(`${josa(r.character.name, '을/를')} 추가했습니다 — 지식 ${r.claims.length}개. 인물 목록 맨 아래에서 확인하세요.`);
+          setStatus(r.characters.length === 1
+            ? `${josa(r.characters[0]!.name, '을/를')} 추가했습니다 — 지식 ${r.claims.length}개. 인물 목록 맨 아래에서 확인하세요.`
+            : `인물 ${r.characters.length}명과 지식 ${r.claims.length}개를 추가했습니다. 인물 목록 맨 아래에서 확인하세요.`);
         }} />
       )}
       {tab === 'characters' && (

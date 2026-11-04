@@ -4,16 +4,29 @@ import { parseCardFile, type NormalizedCard } from '../importers/charx';
 import { portraitDataUrl } from '../importers/portrait';
 import { refineCard } from '../importers/refine';
 import { cardFields, cardToEntities, defaultLoreChoices, LORE_CHOICES, type LoreChoice } from '../importers/toWorld';
+import { type AnalyzedEntry, analyzeEntries, type EntryChoice, findImage, isWorldCard, worldCardToEntities } from '../importers/worldcard';
 import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import { db } from '../storage/db';
 
-type Entities = ReturnType<typeof cardToEntities>;
+export interface ImportedEntities {
+  characters: import('../engine/schema').Character[];
+  facts: import('../engine/schema').Fact[];
+  claims: import('../engine/schema').Claim[];
+  beliefs: import('../engine/schema').Belief[];
+}
+
+const ENTRY_CHOICES: [EntryChoice, string][] = [['character', '인물로'], ['world', '세계 지식으로'], ['skip', '가져오지 않음']];
+const KIND_LABEL = { character: '인물', world: '설정', instruction: 'AI 지시문' } as const;
 
 /** CHARX · 캐릭터 카드 가져오기: 읽기 → 미리보기·분류 → 인물로 추가 */
 export function CardImportDialog({ world, settings, onAdd, onClose }: {
-  world: WorldPackage; settings?: LlmSettings | null; onAdd: (e: Entities) => void; onClose: () => void;
+  world: WorldPackage; settings?: LlmSettings | null; onAdd: (e: ImportedEntities) => void; onClose: () => void;
 }) {
+  const [analyzed, setAnalyzed] = useState<AnalyzedEntry[]>([]);
+  const [choices, setChoices] = useState<EntryChoice[]>([]);
+  const [multi, setMulti] = useState(false);
+  const [thumbs, setThumbs] = useState<Record<number, string>>({});
   const [card, setCard] = useState<NormalizedCard | null>(null);
   const [fields, setFields] = useState<ReturnType<typeof cardFields> | null>(null);
   const [lore, setLore] = useState<LoreChoice[]>([]);
@@ -30,6 +43,14 @@ export function CardImportDialog({ world, settings, onAdd, onClose }: {
     setCard(r.card);
     setFields(cardFields(r.card));
     setLore(defaultLoreChoices(r.card));
+    const an = analyzeEntries(r.card);
+    setAnalyzed(an);
+    setChoices(an.map((a) => a.choice));
+    setMulti(isWorldCard(r.card, an));
+    // 미리보기 썸네일은 가벼운 object URL로
+    const t: Record<number, string> = {};
+    an.forEach((a, i) => { const img = a.kind === 'character' ? findImage(r.card!, a) : undefined; if (img) t[i] = URL.createObjectURL(new Blob([new Uint8Array(img.bytes)], { type: img.mime })); });
+    setThumbs(t);
     setPortrait(r.card.portrait ? await portraitDataUrl(r.card.portrait.bytes, r.card.portrait.mime) : undefined);
     // 원본 파일은 이 브라우저에 그대로 보존한다
     try { await db.imports.put({ id: crypto.randomUUID(), fileName: file.name, format: r.card.format, bytes, importedAt: Date.now() }); } catch { /* 저장소가 없으면 생략 */ }
@@ -48,6 +69,22 @@ export function CardImportDialog({ world, settings, onAdd, onClose }: {
       setBusy('');
     }
   }
+
+  async function addMulti() {
+    if (!card) return;
+    setBusy('초상화 변환 중…');
+    const portraits: Record<number, string> = {};
+    for (const [i, a] of analyzed.entries()) {
+      if (choices[i] !== 'character') continue;
+      const img = findImage(card, a);
+      const url = img && (await portraitDataUrl(img.bytes, img.mime));
+      if (url) portraits[i] = url;
+    }
+    setBusy('');
+    onAdd(worldCardToEntities(card, world, analyzed, { choices, locationId, mature: world.manifest.contentRating === 'mature', portraits }));
+  }
+  const nChars = choices.filter((c) => c === 'character').length;
+  const nWorld = choices.filter((c) => c === 'world').length;
 
   const set = (k: keyof NonNullable<typeof fields>) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setFields((f) => (f ? { ...f, [k]: e.target.value } : f));
 
@@ -82,6 +119,45 @@ export function CardImportDialog({ world, settings, onAdd, onClose }: {
               {card.ignoredPrompts.map((p) => <p key={p.field}><code>{p.field}</code>: {p.text.slice(0, 300)}</p>)}
             </details>
           )}
+          {analyzed.some((a) => a.kind === 'character') && (
+            <label className="check">
+              <input type="checkbox" checked={multi} onChange={(e) => setMulti(e.target.checked)} />
+              세계관 카드로 가져오기 — 로어북의 인물 항목을 각각 인물로, 설정 항목을 세계 지식으로 ({analyzed.filter((a) => a.kind === 'character').length}명 발견)
+            </label>
+          )}
+          {multi ? (
+            <>
+              <p className="muted small">
+                {world.manifest.contentRating !== 'mature' && '이 세계의 등급이 성인이 아니므로, 노골적인 성적 묘사로 표시된 줄은 빼고 가져옵니다. '}
+                가져온 인물은 모두 아래 장소에 놓입니다. 편집기에서 위치·관계·동료 설정을 고치세요.
+              </p>
+              <label>인물을 둘 장소
+                <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                  {world.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </label>
+              <div className="lore-list">
+                {analyzed.map((a, i) => (
+                  <div key={i} className="lore-item small">
+                    <select value={choices[i]} onChange={(ev) => setChoices((c) => c.map((x, j) => (j === i ? ev.target.value as EntryChoice : x)))}>
+                      {ENTRY_CHOICES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                    </select>
+                    <span className="row">
+                      {thumbs[i] && <img className="portrait small-portrait" src={thumbs[i]} alt="" />}
+                      <span className={`tag ${a.kind === 'instruction' ? '' : 'confirmed'}`}>{KIND_LABEL[a.kind]}</span>
+                      <b>{a.kind === 'character' ? `${a.title ? `${a.title} ` : ''}${a.displayName}${a.gender ? (a.gender === 'M' ? ' ♂' : ' ♀') : ''}` : card.lore[a.index]!.name}</b>
+                      {a.note && <span className="muted">— {a.note}</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="row">
+                <span className="spacer" />
+                <button type="button" className="primary" disabled={!!busy || (!nChars && !nWorld)} onClick={addMulti}>{busy || `인물 ${nChars}명 · 세계 지식 ${nWorld}항목 추가`}</button>
+              </div>
+            </>
+          ) : (
+          <>
           {settings && <div className="row"><button type="button" disabled={!!busy} onClick={refine}>{busy || '✦ AI로 정리 (외형·성격·말투 분리, 로어 분류)'}</button></div>}
           <div className="form-grid">
             <label>이름<input value={fields.name} onChange={set('name')} /></label>
@@ -113,10 +189,12 @@ export function CardImportDialog({ world, settings, onAdd, onClose }: {
           )}
           <div className="row">
             <span className="spacer" />
-            <button type="button" className="primary" onClick={() => onAdd(cardToEntities(card, world, { locationId, loreChoices: lore, improvisation: 'minor', portrait, overrides: fields }))}>
+            <button type="button" className="primary" onClick={() => { const r = cardToEntities(card, world, { locationId, loreChoices: lore, improvisation: 'minor', portrait, overrides: fields }); onAdd({ characters: [r.character], facts: r.facts, claims: r.claims, beliefs: r.beliefs }); }}>
               인물로 추가
             </button>
           </div>
+          </>
+          )}
         </>
       )}
     </div>

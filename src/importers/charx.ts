@@ -37,6 +37,8 @@ export interface NormalizedCard {
   /** 지원하지 않아 무시한 기능 */
   unsupported: string[];
   portrait?: { mime: string; bytes: Uint8Array };
+  /** 이름 붙은 에셋 이미지 (세계관 카드의 인물별 초상화 등) */
+  images: { name: string; mime: string; bytes: Uint8Array }[];
 }
 
 export interface ParseResult {
@@ -107,7 +109,7 @@ function normalize(raw: unknown, format: CardFormat): NormalizedCard {
       keys: Array.isArray(e.keys) ? (e.keys as unknown[]).map(String).filter(Boolean) : [],
       content: str(e.content).trim(),
       enabled: e.enabled !== false,
-    })).filter((e) => e.content)
+    })).filter((e) => e.content) // 내용 없는 폴더·구분선 항목은 버린다
     : [];
 
   const ignoredPrompts = (['system_prompt', 'post_history_instructions', 'jailbreak'] as const)
@@ -124,6 +126,10 @@ function normalize(raw: unknown, format: CardFormat): NormalizedCard {
     ['로컬 정규식', ext.regex_scripts],
   ];
   for (const [label, v] of scriptish) if (count(v)) unsupported.push(`${label} ${count(v)}개 (실행하지 않음)`);
+  if (str(risu.backgroundHTML)) unsupported.push('배경 HTML/CSS (표시하지 않음)');
+  if (str(risu.toggles)) unsupported.push('RisuAI 토글 설정');
+  if (count(risu.sdData) || count(risu.newGenData)) unsupported.push('이미지 생성 설정');
+  if (isObj(ext.depth_prompt) && str(ext.depth_prompt.prompt)) unsupported.push('깊이 프롬프트 (AI에게 넘기지 않음)');
   if (Array.isArray(d.group_only_greetings) && d.group_only_greetings.length) unsupported.push(`그룹 전용 인사말 ${d.group_only_greetings.length}개`);
   if (Array.isArray(d.alternate_greetings) && d.alternate_greetings.length) unsupported.push(`대체 인사말 ${d.alternate_greetings.length}개 (첫 인사말만 사용)`);
   if (Array.isArray(d.assets) && d.assets.length > 1) unsupported.push(`추가 에셋 ${d.assets.length - 1}개 (초상화 1장만 사용)`);
@@ -133,8 +139,31 @@ function normalize(raw: unknown, format: CardFormat): NormalizedCard {
     format: fmt, name, nickname: str(d.nickname), description: str(d.description).trim(), personality: str(d.personality).trim(),
     scenario: str(d.scenario).trim(), firstMes: str(d.first_mes).trim(), mesExample: str(d.mes_example).trim(),
     creator: str(d.creator), version: str(d.character_version), tags: Array.isArray(d.tags) ? (d.tags as unknown[]).map(String) : [],
-    lore, ignoredPrompts, unsupported,
+    lore, ignoredPrompts, unsupported, images: [],
   };
+}
+
+/** zip 안의 파일 이름 목록 (내용은 풀지 않는다) */
+function unzipNames(buf: Uint8Array): string[] {
+  const names: string[] = [];
+  try { unzipSync(buf, { filter: (f) => { names.push(f.name); return false; } }); } catch { /* 목록만 실패 */ }
+  return names;
+}
+
+/** zip이면 첫 로컬 헤더 위치(앞에 다른 데이터가 붙어 있을 수 있음), 아니면 -1 */
+function findZipStart(bytes: Uint8Array): number {
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) return 0;
+  // 끝 64KB 안에 중앙 디렉터리 끝(EOCD) 서명이 있어야 zip이다
+  const from = Math.max(0, bytes.length - 65_557);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= from; i--) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) { eocd = i; break; }
+  }
+  if (eocd < 0) return -1;
+  for (let i = 0; i < eocd; i++) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x03 && bytes[i + 3] === 0x04) return i;
+  }
+  return -1;
 }
 
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
@@ -153,26 +182,49 @@ export function parseCardFile(fileName: string, bytes: Uint8Array): ParseResult 
       return { card };
     }
     // CHARX: zip { card.json, assets/... }
-    if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    // RisuAI는 표지 JPEG 뒤에 zip을 덧붙인 형태(.charx)로도 내보낸다 → 끝부분의 zip 디렉터리로 판별한다
+    const zipStart = findZipStart(bytes);
+    if (zipStart >= 0) {
       let total = 0, n = 0;
-      const files = unzipSync(bytes, {
-        filter: (f) => {
-          n++; total += f.originalSize;
-          if (n > MAX_ENTRIES || total > MAX_UNZIPPED) throw new Error('압축을 풀면 너무 큽니다.');
-          return f.name === 'card.json' || /^assets\/[^/]+\/(image\/)?[^/]+\.(png|jpe?g|webp)$/i.test(f.name);
-        },
-      });
+      const filter = (f: { name: string; originalSize: number }) => {
+        n++; total += f.originalSize;
+        if (n > MAX_ENTRIES || total > MAX_UNZIPPED) throw new Error('압축을 풀면 너무 큽니다.');
+        return f.name === 'card.json' || /^assets\/[^/]+\/(image\/)?[^/]+\.(png|jpe?g|webp)$/i.test(f.name);
+      };
+      // 앞에 데이터가 붙은 경우: 보통 zip 내부 오프셋은 zip 시작 기준이다 → 잘라서 먼저 시도하고, 안 되면 파일 전체 기준으로
+      const candidates = zipStart > 0 ? [bytes.subarray(zipStart), bytes] : [bytes];
+      let files: Record<string, Uint8Array> | null = null;
+      let lastError: unknown = null;
+      for (const buf of candidates) {
+        n = 0; total = 0;
+        try {
+          const f = unzipSync(buf, { filter });
+          if (f['card.json']) { files = f; break; }
+        } catch (e) { lastError = e; }
+      }
+      if (!files) {
+        if (lastError) throw lastError;
+        return { card: null, error: 'CHARX 안에 card.json이 없습니다.' };
+      }
       if (!files['card.json']) return { card: null, error: 'CHARX 안에 card.json이 없습니다.' };
       const raw = JSON.parse(strFromU8(files['card.json']));
       const card = normalize(raw, 'charx');
+      const names = unzipNames(zipStart > 0 ? bytes.subarray(zipStart) : bytes);
+      if (names.includes('module.risum')) card.unsupported.push('RisuAI 모듈(module.risum) — 로어북·정규식 묶음, 읽지 않음');
       // 초상화: 카드의 assets 중 icon(또는 첫 이미지)의 embeded:// 경로
       const assets = isObj(raw) && isObj(raw.data) && Array.isArray(raw.data.assets) ? (raw.data.assets as unknown[]).filter(isObj) : [];
       const icon = assets.find((a) => a.type === 'icon') ?? assets[0];
       const uri = icon ? str(icon.uri).replace(/^embed(d)?ed:\/\//, '') : '';
-      const path = files[uri] ? uri : Object.keys(files).find((k) => k !== 'card.json');
+      for (const a of assets) {
+        const p = str(a.uri).replace(/^embed(d)?ed:\/\//, '');
+        if (files[p] && card.images.length < 60) card.images.push({ name: str(a.name), mime: MIME[(p.split('.').pop() ?? '').toLowerCase()] ?? 'image/png', bytes: files[p] });
+      }
+      const path = files[uri] ? uri : Object.keys(files).find((k) => /^assets\/icon\//.test(k)) ?? Object.keys(files).find((k) => k !== 'card.json');
       if (path && files[path]) {
         const ext = (path.split('.').pop() ?? '').toLowerCase();
         card.portrait = { mime: MIME[ext] ?? 'image/png', bytes: files[path] };
+      } else if (zipStart > 0 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+        card.portrait = { mime: 'image/jpeg', bytes: bytes.subarray(0, zipStart) }; // 표지 JPEG
       }
       return { card };
     }
@@ -185,10 +237,17 @@ export function parseCardFile(fileName: string, bytes: Uint8Array): ParseResult 
 
 /** {{char}} · {{user}} 매크로를 이름으로 바꾸고, 지원하지 않는 매크로는 지운다 */
 export function replaceMacros(text: string, charName: string): string {
-  const out = text
+  let out = text
     .replace(/\{\{\s*char\s*\}\}|<BOT>/gi, '\u0001')
-    .replace(/\{\{\s*user\s*\}\}|<USER>/gi, '\u0002')
-    .replace(/\{\{[^}]{1,40}\}\}/g, '')
+    .replace(/\{\{\s*user\s*\}\}|<USER>/gi, '\u0002');
+  // RisuAI CBS 문법({{#when::…}}, {{getvar::…}} 등)은 안쪽부터 반복해서 지운다 (조건부 내용 자체는 남긴다)
+  for (let i = 0; i < 30 && /\{\{[^{}]*\}\}/.test(out); i++) out = out.replace(/\{\{[^{}]*\}\}/g, '');
+  out = out
+    .replace(/\{\{|\}\}/g, '')
+    .replace(/<\/?[A-Za-z][^<>]{0,300}>/g, '') // HTML·의사 태그 (<img …>, <Hedwig> 등)
+    .replace(/^\s*::[\w:]+.*$/gm, '') // CBS 잔여 줄 (::is::xxx)
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   // 매크로 뒤의 조사를 실제 이름의 받침에 맞게 고친다 (세렌는 → 세렌은)

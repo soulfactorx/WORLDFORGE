@@ -1,5 +1,6 @@
 import type { Belief, Character, Claim, Fact, WorldPackage } from '../engine/schema';
 import { type NormalizedCard, replaceMacros } from './charx';
+import { looksLikeInstruction } from './worldcard';
 
 /** 로어북 항목을 세계관 지식으로 어떻게 바꿀지 */
 export type LoreChoice = 'known' | 'secret' | 'rumor' | 'skip';
@@ -30,7 +31,7 @@ export interface CardImportOptions {
 }
 
 export function defaultLoreChoices(card: NormalizedCard): LoreChoice[] {
-  return card.lore.map((e, i) => (e.enabled && i < MAX_DEFAULT_LORE ? 'known' : 'skip'));
+  return card.lore.map((e, i) => (e.enabled && i < MAX_DEFAULT_LORE && !looksLikeInstruction(e) ? 'known' : 'skip'));
 }
 
 /** 카드에서 추정한 인물 필드 (편집 전 기본값) */
