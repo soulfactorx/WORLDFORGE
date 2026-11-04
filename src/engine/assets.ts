@@ -28,12 +28,63 @@ export function expressionTags(world: WorldPackage, npcId: EntityId): string[] {
   return c ? count(characterAssets(world, c)).filter((t) => t !== 'default') : [];
 }
 
-/** 인물 이미지 하나: 태그가 맞는 것 → 기본 모습 → 아무거나 */
+// ---------------------------------------------------------------- 표정 (같은 뜻의 다른 이름 · 문맥 단서)
+
+/**
+ * 표정·상황 무리. 카드마다 태그 이름이 다르다 (smile / smiling / happy / 웃음 …).
+ * words: 같은 뜻의 태그 이름, cues: 서술 속에서 그 표정을 짐작하게 하는 말
+ */
+export const EXPRESSIONS: { key: string; words: string[]; cues: RegExp }[] = [
+  { key: 'smile', words: ['smile', 'smiling', 'smiles', 'happy', 'joy', 'laugh', 'laughing', 'grin', 'cheerful', '웃음', '미소', '기쁨', '행복', '웃는'], cues: /웃|미소|기뻐|기쁜|즐거|히죽|싱긋|빙긋|활짝|반갑/ },
+  { key: 'angry', words: ['angry', 'anger', 'mad', 'rage', 'annoyed', 'furious', 'irritated', '분노', '화남', '화', '짜증'], cues: /화를|화가|화난|분노|노려|짜증|언성|버럭|이를 악|성난|격분|으르렁|쏘아/ },
+  { key: 'sad', words: ['sad', 'cry', 'crying', 'tears', 'tearful', 'depressed', 'gloomy', 'sorrow', '슬픔', '울음', '우는', '눈물'], cues: /울었|울먹|울음|눈물|슬퍼|슬픈|흐느|침울|훌쩍|애처|서글|낙담/ },
+  { key: 'surprised', words: ['surprised', 'surprise', 'shock', 'shocked', 'astonished', '놀람', '놀란'], cues: /놀라|깜짝|휘둥그레|흠칫|움찔|소스라/ },
+  { key: 'worried', words: ['worried', 'worry', 'anxious', 'nervous', 'scared', 'afraid', 'fear', 'embarrassed', 'flustered', 'confused', '걱정', '불안', '당황', '두려움'], cues: /걱정|불안|머뭇|망설|초조|당황|두려|겁에|떨리|어쩔 줄/ },
+  { key: 'serious', words: ['serious', 'determined', 'focus', 'focused', 'stern', 'cold', 'thinking', '진지', '결의', '냉정'], cues: /진지|굳은|단호|결연|날카롭|차갑게|싸늘|엄숙|정색|심각/ },
+  { key: 'blush', words: ['blush', 'blushing', 'shy', 'love', 'flirt', '부끄', '수줍', '홍조'], cues: /붉어|부끄|수줍|얼굴이 달아|홍조|설레/ },
+  { key: 'tired', words: ['tired', 'sleepy', 'exhausted', 'bored', '피곤', '졸림', '지침'], cues: /하품|졸린|졸음|지친|피곤|나른/ },
+  { key: 'hurt', words: ['hurt', 'injured', 'wounded', 'pain', '부상', '고통'], cues: /다친|피를 흘|상처|신음|고통|비틀/ },
+];
+
+/** 원하는 태그를 그 인물이 가진 태그 중 같은 뜻의 것으로 바꾼다 (없으면 '') */
+export function resolveTag(available: string[], wanted: string): string {
+  const t = wanted.trim().toLowerCase();
+  if (!t) return '';
+  if (available.includes(t)) return t;
+  const group = EXPRESSIONS.find((g) => g.key === t || g.words.includes(t));
+  return group ? available.find((a) => a === group.key || group.words.includes(a)) ?? '' : '';
+}
+
+/** 서술에서 그 인물이 나온 문장(과 다음 문장)을 보고 표정을 짐작한다 */
+export function contextExpression(text: string, names: string[], available: string[]): string {
+  if (!available.length || !text) return '';
+  const near: string[] = [];
+  // 그 인물이 나온 문장 + 같은 문단에서 바로 이어지는 대사("…")나 그/그녀 문장
+  for (const para of text.split(/\n\s*\n/)) {
+    const sentences = para.split(/(?<=[.!?。…"”])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+    sentences.forEach((s, i) => {
+      if (!names.some((n) => n && s.includes(n))) return;
+      near.push(s);
+      const next = sentences[i + 1] ?? '';
+      if (/^["“「『]|^(그는|그녀는|그가|그녀가)/.test(next)) near.push(next);
+    });
+  }
+  const scope = near.join(' ');
+  if (!scope) return '';
+  for (const g of EXPRESSIONS) {
+    if (!g.cues.test(scope)) continue;
+    const tag = resolveTag(available, g.key);
+    if (tag) return tag;
+  }
+  return '';
+}
+
+/** 인물 이미지 하나: 태그가 맞는 것(같은 뜻 포함) → 기본 모습 → 아무거나 */
 export function pickCharacterImage(world: WorldPackage, npcId: EntityId, tag: string, salt: string): AssetMeta | undefined {
   const c = world.characters.find((x) => x.id === npcId);
   if (!c) return undefined;
   const list = characterAssets(world, c);
-  const t = tag.trim().toLowerCase();
+  const t = resolveTag([...new Set(list.flatMap((a) => a.tags))], tag);
   const tagged = t ? list.filter((a) => a.tags.includes(t)) : [];
   if (tagged.length) return pickOne(tagged, `${npcId}|${t}|${salt}`);
   const def = list.filter((a) => a.tags.includes('default') || a.tags.length === 0);
@@ -97,8 +148,10 @@ export function mentionedImages(world: WorldPackage, text: string, salt: string,
   const out: { id: string; caption: string }[] = [];
   for (const id of mentionedCharacters(world.characters, text)) {
     if (out.length >= n) break;
-    const img = pickCharacterImage(world, id, '', salt);
-    if (img && !skip.includes(img.id) && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: world.characters.find((c) => c.id === id)!.name });
+    const c = world.characters.find((x) => x.id === id)!;
+    // 그 인물이 나온 문장의 분위기로 표정을 고른다 (서술에 "윤이 웃었다" → 윤의 웃는 얼굴)
+    const img = pickCharacterImage(world, id, contextExpression(text, [c.name, titleOf(c)], expressionTags(world, id)), salt);
+    if (img && !skip.includes(img.id) && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: c.name });
   }
   return out;
 }

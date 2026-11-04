@@ -49,3 +49,24 @@ describe('이미지 고르기', () => {
     expect(pickSceneImage(w, 'loc/none', '', '1')).toBeUndefined();
   });
 });
+
+describe('표정: 같은 뜻 · 문맥', () => {
+  it('태그 이름이 달라도 같은 뜻이면 맞추고, 서술 속 문장으로 표정을 고른다', async () => {
+    const { resolveTag, contextExpression, mentionedImages } = await import('../engine/assets');
+    expect(resolveTag(['smiling', 'angry', 'standing', 'default'], 'smile')).toBe('smiling');
+    expect(resolveTag(['웃음', '울음'], 'happy')).toBe('웃음');
+    expect(resolveTag(['angry'], 'sleepy')).toBe('');
+    const tags = ['angry', 'sad', 'smiling', 'worried', 'standing'];
+    expect(contextExpression('윤은 서류를 넘긴다. 에리가 버럭 화를 냈다.', ['에리'], tags)).toBe('angry');
+    expect(contextExpression('윤은 서류를 넘긴다. 에리가 버럭 화를 냈다.', ['윤'], tags)).toBe(''); // 다른 사람의 감정은 아니다
+    expect(contextExpression('윤이 고개를 든다. 그는 불안한 눈빛으로 문을 본다.', ['윤'], tags)).toBe('worried');
+    expect(contextExpression('윤은 창밖을 본다.\n\n먼 곳에서 누군가 웃는다.', ['윤'], tags)).toBe('');
+    expect(contextExpression('핀이 눈물을 훔치며 고개를 숙인다.', ['핀'], tags)).toBe('sad');
+    const w = structuredClone(sampleWorld);
+    const npc = w.characters[0]!;
+    w.assets = ['standing', 'smiling', 'angry'].map((t, i) => ({ id: `a${i}`, name: `x_${t}`, kind: 'character' as const, characterId: npc.id, tags: t === 'standing' ? ['standing', 'default'] : [t], mime: 'image/png', size: 1 }));
+    expect(mentionedImages(w, `${npc.name}이(가) 활짝 웃었다.`, '1')[0]!.id).toBe('a1');
+    expect(mentionedImages(w, `${npc.name}이(가) 노려본다.`, '1')[0]!.id).toBe('a2');
+    expect(mentionedImages(w, `${npc.name}이(가) 서 있다.`, '1')[0]!.id).toBe('a0');
+  });
+});

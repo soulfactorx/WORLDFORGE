@@ -16,7 +16,7 @@ import { applyDelta, canShareSecret, joinBlocker, LEAVE_AFFINITY, relationshipOf
 import type { LlmClient } from '../llm/types';
 import { playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
 import { availableEncounters, beginEncounter } from './combat';
-import { expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
+import { contextExpression, expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
 import { basicGuide, gmGuide } from './guide';
 import { buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects } from './context';
 
@@ -435,7 +435,7 @@ function sceneTagBlock(world: WorldPackage, locationId: string): string {
 
 function expressionBlock(world: WorldPackage, npcId: string): string {
   const tags = expressionTags(world, npcId);
-  return tags.length ? `\n\n## 네 표정 이미지 (expression에서 하나를 고른다)\n${tags.join(', ')}` : '';
+  return tags.length ? `\n\n## 네 표정 이미지 (expression에서 하나를 고른다. 지금 행동·대사의 감정에 맞는 것으로, 평소 모습이면 "")\n${tags.join(', ')}` : '';
 }
 
 /** 이번 턴에 보여줄 이미지: 장면(태그 또는 이동한 장소) + 말한 인물의 표정 */
@@ -446,7 +446,8 @@ function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speaker
   const scene = sceneTag || moved ? pickSceneImage(world, s.player.locationId, sceneTag, String(turn)) : undefined;
   if (scene) out.push({ id: scene.id, caption: loc?.name ?? '' });
   for (const sp of speakers) {
-    const img = pickCharacterImage(world, sp.id, sp.expression, String(turn));
+    // 말한 인물: Actor가 고른 표정 → 없으면 서술에서 그 인물이 나온 문장의 분위기
+    const img = pickCharacterImage(world, sp.id, sp.expression || contextExpression(narration, [sp.name], expressionTags(world, sp.id)), String(turn));
     if (img && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: sp.name });
   }
   // 서술에 나온 인물 (말하지 않았어도 이름·직함이 나오면)
@@ -457,7 +458,7 @@ function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speaker
   for (const c of people) {
     if (out.filter((o) => o.caption !== loc?.name).length >= 3) break;
     if (shown.has(c.name)) continue;
-    const img = pickCharacterImage(world, c.id, '', String(turn));
+    const img = pickCharacterImage(world, c.id, contextExpression(narration, [c.name], expressionTags(world, c.id)), String(turn));
     if (img && !out.some((o) => o.id === img.id)) { out.push({ id: img.id, caption: c.name }); shown.add(c.name); }
   }
   // 매 턴 한 장은 보여준다: 이 장소의 인물·동료 → 장소 이미지 → 지도 → 표지
