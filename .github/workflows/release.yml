@@ -1,36 +1,61 @@
 name: Release
 
-# vX.Y.Z 태그를 푸시하면 테스트·빌드 후 GitHub Release를 만들고 오프라인 HTML을 첨부한다.
+# main에 푸시될 때 package.json의 version에 해당하는 릴리스(vX.Y.Z)가 아직 없으면
+# 테스트·빌드 후 태그와 GitHub Release를 만들고 오프라인 HTML을 첨부한다.
+# → 릴리스하려면 package.json version을 올리고 CHANGELOG.md에 해당 섹션을 추가해 main에 병합하면 된다.
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run build:single
-      - run: cp dist-single/index.html "worldforge-${GITHUB_REF_NAME}-offline.html"
-      - name: Extract release notes from CHANGELOG.md
-        run: |
-          ver="${GITHUB_REF_NAME#v}"
-          awk -v v="$ver" '$0 ~ "^## \\[?"v"\\]?" {f=1; next} /^## / && f {exit} f' CHANGELOG.md > notes.md
-          [ -s notes.md ] || echo "WORLDFORGE ${GITHUB_REF_NAME}" > notes.md
-      - name: Create GitHub Release
+      - name: Determine version
+        id: ver
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "WORLDFORGE $GITHUB_REF_NAME" \
+          ver="v$(node -p "require('./package.json').version")"
+          echo "tag=$ver" >> "$GITHUB_OUTPUT"
+          if gh release view "$ver" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $ver already exists — skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.ver.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.ver.outputs.exists == 'false'
+        run: npm ci && npm test && npm run build:single
+      - if: steps.ver.outputs.exists == 'false'
+        name: Prepare assets and notes
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          cp dist-single/index.html "worldforge-${TAG}-offline.html"
+          awk -v v="${TAG#v}" '$0 ~ "^## \\[?"v"\\]?" {f=1; next} /^## / && f {exit} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "WORLDFORGE ${TAG}" > notes.md
+      - if: steps.ver.outputs.exists == 'false'
+        name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "WORLDFORGE $TAG" \
             --notes-file notes.md \
-            "worldforge-${GITHUB_REF_NAME}-offline.html"
+            "worldforge-${TAG}-offline.html"
