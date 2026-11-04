@@ -151,7 +151,7 @@ function unzipNames(buf: Uint8Array): string[] {
 }
 
 /** zip이면 첫 로컬 헤더 위치(앞에 다른 데이터가 붙어 있을 수 있음), 아니면 -1 */
-function findZipStart(bytes: Uint8Array): number {
+export function findZipStart(bytes: Uint8Array): number {
   if (bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) return 0;
   // 끝 64KB 안에 중앙 디렉터리 끝(EOCD) 서명이 있어야 zip이다
   const from = Math.max(0, bytes.length - 65_557);
@@ -255,4 +255,9 @@ export function replaceMacros(text: string, charName: string): string {
   const fill = (marker: string, word: string) => (t: string) =>
     t.replace(new RegExp(`${marker}(이|가|은|는|을|를|과|와)(?![가-힣])`, 'g'), (_, p: string) => josa(word, PAIRS[p]!)).split(marker).join(word);
   return fill('\u0002', '당신')(fill('\u0001', charName)(out));
+}
+
+/** 캐릭터 카드 파일로 보이는가 (패키지 가져오기에 잘못 넣었을 때 안내용) */
+export function looksLikeCardFile(bytes: Uint8Array): boolean {
+  return parseCardFile('probe', bytes).card !== null;
 }

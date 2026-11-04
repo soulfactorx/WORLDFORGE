@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
 import { parseCardFile, type NormalizedCard } from '../importers/charx';
 import { portraitDataUrl } from '../importers/portrait';
@@ -10,6 +10,8 @@ import type { LlmSettings } from '../llm/types';
 import { db } from '../storage/db';
 
 export interface ImportedEntities {
+  /** 가져온 카드의 이름 (빈 세계를 카드로 만들 때 세계 이름으로) */
+  cardName?: string;
   characters: import('../engine/schema').Character[];
   facts: import('../engine/schema').Fact[];
   claims: import('../engine/schema').Claim[];
@@ -20,8 +22,10 @@ const ENTRY_CHOICES: [EntryChoice, string][] = [['character', '인물로'], ['wo
 const KIND_LABEL = { character: '인물', world: '설정', instruction: 'AI 지시문' } as const;
 
 /** CHARX · 캐릭터 카드 가져오기: 읽기 → 미리보기·분류 → 인물로 추가 */
-export function CardImportDialog({ world, settings, onAdd, onClose }: {
+export function CardImportDialog({ world, settings, onAdd, onClose, initialFile }: {
   world: WorldPackage; settings?: LlmSettings | null; onAdd: (e: ImportedEntities) => void; onClose: () => void;
+  /** 홈 화면에서 넘겨받은 카드 파일 (바로 연다) */
+  initialFile?: File;
 }) {
   const [analyzed, setAnalyzed] = useState<AnalyzedEntry[]>([]);
   const [choices, setChoices] = useState<EntryChoice[]>([]);
@@ -34,6 +38,8 @@ export function CardImportDialog({ world, settings, onAdd, onClose }: {
   const [locationId, setLocationId] = useState(world.start.locationId);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+
+  useEffect(() => { if (initialFile) void load(initialFile); }, [initialFile]);
 
   async function load(file: File) {
     setError('');
@@ -81,7 +87,7 @@ export function CardImportDialog({ world, settings, onAdd, onClose }: {
       if (url) portraits[i] = url;
     }
     setBusy('');
-    onAdd(worldCardToEntities(card, world, analyzed, { choices, locationId, mature: world.manifest.contentRating === 'mature', portraits }));
+    onAdd({ ...worldCardToEntities(card, world, analyzed, { choices, locationId, mature: world.manifest.contentRating === 'mature', portraits }), cardName: card.name });
   }
   const nChars = choices.filter((c) => c === 'character').length;
   const nWorld = choices.filter((c) => c === 'world').length;
@@ -189,7 +195,7 @@ export function CardImportDialog({ world, settings, onAdd, onClose }: {
           )}
           <div className="row">
             <span className="spacer" />
-            <button type="button" className="primary" onClick={() => { const r = cardToEntities(card, world, { locationId, loreChoices: lore, improvisation: 'minor', portrait, overrides: fields }); onAdd({ characters: [r.character], facts: r.facts, claims: r.claims, beliefs: r.beliefs }); }}>
+            <button type="button" className="primary" onClick={() => { const r = cardToEntities(card, world, { locationId, loreChoices: lore, improvisation: 'minor', portrait, overrides: fields }); onAdd({ characters: [r.character], facts: r.facts, claims: r.claims, beliefs: r.beliefs, cardName: card.name }); }}>
               인물로 추가
             </button>
           </div>

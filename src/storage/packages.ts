@@ -2,6 +2,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { sampleWorld } from '../data/sample-world';
 import type { WorldPackage } from '../engine/schema';
 import { hasErrors, type Issue, validateWorld } from '../engine/package/validate';
+import { findZipStart, looksLikeCardFile } from '../importers/charx';
 import { db } from './db';
 
 /**
@@ -62,14 +63,20 @@ export function exportWpk(world: WorldPackage): Blob {
 export interface ParsedPackage {
   world: WorldPackage | null;
   issues: Issue[];
+  /** 세계관 패키지가 아니라 캐릭터 카드(CHARX·PNG·JSON 카드)다 */
+  isCard?: boolean;
 }
 
 /** .wpk(zip) 또는 .json을 읽어 검사한다. 압축 폭탄·과도한 파일 수를 막는다. 스크립트는 읽지도 실행하지도 않는다. */
-export function parsePackageFile(name: string, bytes: Uint8Array): ParsedPackage {
+export function parsePackageFile(name: string, input: Uint8Array): ParsedPackage {
+  const original = input;
+  let bytes = input;
   const fail = (message: string): ParsedPackage => ({ world: null, issues: [{ level: 'error', path: name, message }] });
   if (bytes.byteLength > MAX_FILE_BYTES) return fail('파일이 너무 큽니다 (최대 20MB).');
   let text: string;
-  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+  const zipStart = findZipStart(bytes);
+  if (zipStart > 0) bytes = bytes.subarray(zipStart); // 앞에 다른 데이터가 붙은 zip
+  const isZip = zipStart >= 0;
   if (isZip) {
     let total = 0;
     let count = 0;
@@ -86,13 +93,20 @@ export function parsePackageFile(name: string, bytes: Uint8Array): ParsedPackage
     } catch (e) {
       return fail(`압축 파일을 읽을 수 없습니다: ${(e as Error).message}`);
     }
-    if (!files['world.json']) return fail('패키지 안에 world.json이 없습니다.');
+    if (!files['world.json']) {
+      if (looksLikeCardFile(original)) return { world: null, isCard: true, issues: [] };
+      return fail('패키지 안에 world.json이 없습니다. 세계관 패키지(.wpk)가 아닌 것 같습니다.');
+    }
     text = strFromU8(files['world.json']);
   } else {
     text = new TextDecoder().decode(bytes);
   }
   let data: unknown;
-  try { data = JSON.parse(text); } catch { return fail('JSON 형식이 올바르지 않습니다.'); }
+  try { data = JSON.parse(text); } catch {
+    if (looksLikeCardFile(original)) return { world: null, isCard: true, issues: [] };
+    return fail('세계관 패키지(.wpk) 또는 world.json 형식이 아닙니다. 캐릭터 카드(.charx·.png)라면 "캐릭터 카드로 새 세계관 만들기"를 쓰세요.');
+  }
+  if (data && typeof data === 'object' && !('manifest' in data) && looksLikeCardFile(original)) return { world: null, isCard: true, issues: [] };
   const issues = validateWorld(data);
   return { world: hasErrors(issues) && !(data && typeof data === 'object' && 'manifest' in data) ? null : (data as WorldPackage), issues };
 }

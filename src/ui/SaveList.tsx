@@ -17,7 +17,9 @@ function download(blob: Blob, fileName: string) {
 }
 const safeName = (s: string) => s.replace(/[^\w가-힣.-]+/g, '_');
 
-export function SaveList({ onOpen, onEdit, onGenerate }: { onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void; onGenerate: () => void }) {
+export function SaveList({ onOpen, onEdit, onGenerate, onCard }: {
+  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void; onGenerate: () => void; onCard: (file: File) => void;
+}) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
   const packages = useLiveQuery(() => listPackages(), []);
   const [selectedKey, setSelectedKey] = useState<string>('');
@@ -40,6 +42,8 @@ export function SaveList({ onOpen, onEdit, onGenerate }: { onOpen: (saveId: stri
 
   async function importPackage(file: File) {
     const parsed = parsePackageFile(file.name, new Uint8Array(await file.arrayBuffer()));
+    // 캐릭터 카드를 패키지 가져오기에 넣었다면: 카드로 새 세계관을 만든다
+    if (parsed.isCard) { onCard(file); return; }
     if (!parsed.world) { setMessage({ text: '패키지를 가져오지 못했습니다.', issues: parsed.issues }); return; }
     try {
       await savePackage(parsed.world, 'import');
@@ -84,8 +88,11 @@ export function SaveList({ onOpen, onEdit, onGenerate }: { onOpen: (saveId: stri
       <div className="row">
         <button onClick={() => onEdit(null)}>＋ 새 세계관 만들기</button>
         <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
-        <label className="file">패키지 가져오기 (.wpk / .json)
-          <input type="file" accept=".wpk,.zip,.json,application/zip,application/json" onChange={(e) => { const f = e.target.files?.[0]; if (f) importPackage(f); e.target.value = ''; }} />
+        <label className="file">⇩ 캐릭터 카드로 새 세계관 만들기 (.charx · .png · .json)
+          <input type="file" accept=".charx,.png,.json,application/json,image/png,application/zip" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCard(f); e.target.value = ''; }} />
+        </label>
+ <label className="file">패키지 가져오기 (.wpk / .json)
+          <input type="file" accept=".wpk,.zip,.json,.charx,.png,application/zip,application/json" onChange={(e) => { const f = e.target.files?.[0]; if (f) importPackage(f); e.target.value = ''; }} />
         </label>
       </div>
       {message && (

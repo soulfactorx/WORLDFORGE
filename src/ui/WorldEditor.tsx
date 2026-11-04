@@ -103,17 +103,19 @@ function ItemList<T extends { id: string }>({ items, onChange, make, render, tit
 
 // ---------------------------------------------------------------- 편집기
 
-export function WorldEditor({ initial, onDone, settings, draftNotes }: {
+export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard }: {
   initial: WorldPackage | null; onDone: () => void; settings?: LlmSettings | null; draftNotes?: string[];
+  /** 이 카드 파일로 새 세계를 만든다 (인물 탭에서 가져오기 창을 바로 연다) */
+  initialCard?: File;
 }) {
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
-  const [tab, setTab] = useState<Tab>('basic');
+  const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
   const [approved, setApproved] = useState(!draftNotes);
   const [genStage, setGenStage] = useState('');
   const [genRequest, setGenRequest] = useState('');
-  const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState(!!initialCard);
 
   async function aiScenario() {
     if (!settings) return;
@@ -218,8 +220,10 @@ export function WorldEditor({ initial, onDone, settings, draftNotes }: {
         </div>
       )}
       {tab === 'characters' && importing && (
-        <CardImportDialog world={w} settings={settings} onClose={() => setImporting(false)} onAdd={(r) => {
-          set({ characters: [...w.characters, ...r.characters], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs] });
+        <CardImportDialog world={w} settings={settings} initialFile={initialCard} onClose={() => setImporting(false)} onAdd={(r) => {
+          // 카드로 새로 만드는 세계라면 이름도 카드에서 가져온다
+          const manifest = initialCard && w.manifest.name === '새 세계' && r.cardName ? { ...w.manifest, name: r.cardName } : w.manifest;
+          set({ manifest, characters: [...w.characters, ...r.characters], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs] });
           setImporting(false);
           setStatus(r.characters.length === 1
             ? `${josa(r.characters[0]!.name, '을/를')} 추가했습니다 — 지식 ${r.claims.length}개. 인물 목록 맨 아래에서 확인하세요.`
