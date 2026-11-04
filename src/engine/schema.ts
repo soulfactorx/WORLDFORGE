@@ -24,8 +24,16 @@ export interface Location {
   /** 플레이어가 그 장소에 있을 때 감각으로 알 수 있는 묘사 */
   description: string;
   connections: EntityId[];
+  /** AI가 이 장소의 세부사항을 지어낼 수 있는 범위 (기본 'minor') */
+  improvisation?: Improvisation;
 }
 
+/**
+ * AI 즉흥 설정 허용 범위 (Canon 계층 L2, 설계 리뷰 2.1절)
+ * - none: 세부사항을 지어낼 수 없다 (핵심 플롯 인물·장소)
+ * - minor: 작은 세부사항(가족, 취향, 물건 등)은 지어낼 수 있고, 지어낸 것은 기록되어 이후 확정된다
+ * - free: 자유롭게 지어낼 수 있다 (무명 행인 등)
+ */
 export type Improvisation = 'none' | 'minor' | 'free';
 
 export interface Character {
@@ -44,6 +52,13 @@ export interface Fact {
   statement: string;
   /** 0 = 상식, 5 = 극비 */
   secrecy: 0 | 1 | 2 | 3 | 4 | 5;
+  /** 이 사실과 관련된 엔티티 ID */
+  subjects?: EntityId[];
+  /**
+   * 보호 주제: 내용을 드러내지 않는 짧은 이름표 (예: "제단의 정체").
+   * AI는 이 주제에 대해 새 설정을 지어내지 못한다. 내용(statement)은 AI에게 전달되지 않는다.
+   */
+  protectedTopic?: string;
 }
 
 /** 누군가 믿을 수 있는 명제. 거짓일 수도 있다. */

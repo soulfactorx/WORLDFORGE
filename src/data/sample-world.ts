@@ -22,6 +22,7 @@ export const sampleWorld: WorldPackage = {
       name: '숲속 공터',
       description: '이끼 낀 돌 원형 제단이 있는 작은 공터. 짙은 안개가 나무 사이로 흐르고, 멀리 개 짖는 소리가 들린다.',
       connections: ['loc/village-gate'],
+      improvisation: 'none',
     },
     {
       id: 'loc/village-gate',
@@ -57,19 +58,30 @@ export const sampleWorld: WorldPackage = {
     },
   ],
   facts: [
-    { id: 'fact/altar-summoning', statement: '숲속 제단은 다른 세계의 존재를 불러오는 소환진이며, 마을 장로가 비밀리에 다시 작동시켰다.', secrecy: 5 },
+    {
+      id: 'fact/altar-summoning', statement: '숲속 제단은 다른 세계의 존재를 불러오는 소환진이며, 마을 장로가 비밀리에 다시 작동시켰다.', secrecy: 5,
+      subjects: ['loc/forest-clearing'], protectedTopic: '숲속 제단의 정체와 누가 작동시켰는지',
+    },
+    {
+      id: 'fact/ilse-burn', statement: '일제의 왼손 화상은 10년 전 제단 의식을 엿보다가 생긴 것이다.', secrecy: 4,
+      subjects: ['npc/ilse', 'loc/forest-clearing'], protectedTopic: '일제의 화상 자국이 생긴 경위',
+    },
     { id: 'fact/village-name', statement: '이 마을의 이름은 미스트베일이다.', secrecy: 0 },
   ],
   claims: [
     { id: 'claim/village-name', statement: '이 마을의 이름은 미스트베일이다.', truth: 'true', relatesTo: 'fact/village-name' },
     { id: 'claim/altar-cursed', statement: '숲속 제단은 저주받은 곳이라 가까이 가면 안 된다.', truth: 'partial', relatesTo: 'fact/altar-summoning' },
     { id: 'claim/altar-summoning', statement: '숲속 제단은 장로가 다시 작동시킨 소환진이다.', truth: 'true', relatesTo: 'fact/altar-summoning' },
+    { id: 'claim/ilse-burn', statement: '일제의 왼손 화상은 10년 전 제단 의식을 엿보다가 생긴 것이다.', truth: 'true', relatesTo: 'fact/ilse-burn' },
+    { id: 'claim/elder-strange', statement: '요즘 장로가 밤마다 숲으로 나간다.', truth: 'true' },
   ],
   beliefs: [
     { holder: 'npc/bran', claim: 'claim/village-name', state: 'confirmed' },
     { holder: 'npc/bran', claim: 'claim/altar-cursed', state: 'rumor' },
     { holder: 'npc/ilse', claim: 'claim/village-name', state: 'confirmed' },
     { holder: 'npc/ilse', claim: 'claim/altar-cursed', state: 'rumor' },
+    { holder: 'npc/ilse', claim: 'claim/ilse-burn', state: 'secret' },
+    { holder: 'npc/bran', claim: 'claim/elder-strange', state: 'confirmed' },
     // claim/altar-summoning 은 아직 아무 NPC도 플레이어도 모른다 (장로 NPC는 이후 추가).
   ],
   start: {

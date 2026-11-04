@@ -6,6 +6,7 @@ import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import { appendEvents, loadEvents, undoLastTurn } from '../storage/db';
 import { CharacterPanel } from './CharacterPanel';
+import { JournalPanel } from './JournalPanel';
 
 /**
  * 같은 세이브를 두 탭에서 동시에 열면 이벤트 로그가 꼬이므로 Web Locks로 한 탭만 허용한다.
@@ -33,7 +34,7 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [showSheet, setShowSheet] = useState(false);
+  const [panel, setPanel] = useState<'none' | 'sheet' | 'journal'>('none');
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -79,11 +80,13 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
         <b>{loc?.name}</b>
         <span className="muted small">턴 {state.turn}</span>
         <span className="spacer" />
-        <button onClick={() => setShowSheet((v) => !v)}>캐릭터 {showSheet ? '▲' : '▼'}</button>
+        <button onClick={() => setPanel((p) => (p === 'sheet' ? 'none' : 'sheet'))}>캐릭터 {panel === 'sheet' ? '▲' : '▼'}</button>
+        <button onClick={() => setPanel((p) => (p === 'journal' ? 'none' : 'journal'))}>수첩 {panel === 'journal' ? '▲' : '▼'}</button>
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null}>↶ 턴 되돌리기</button>
         <button onClick={onExit}>나가기</button>
       </div>
-      {showSheet && <CharacterPanel sheet={state.player.sheet} />}
+      {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} />}
+      {panel === 'journal' && <JournalPanel world={sampleWorld} state={state} />}
       <div className="log">
         {state.log.map((e, i) => <p key={i} className={`entry ${e.kind}`}>{e.text}</p>)}
         {streaming !== null && <p className="entry narration">{streaming || '…'}</p>}

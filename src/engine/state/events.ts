@@ -14,7 +14,14 @@ export type GameEvent =
   | { type: 'check_rolled'; skill: string; reason: string; result: D20Test; rngState: number; breakdown?: ModifierBreakdown; mode?: RollMode }
   | { type: 'narration'; text: string }
   | { type: 'moved'; to: EntityId }
-  | { type: 'knowledge_revealed'; belief: Belief }
+  /** statement는 화면 표시용 (v0.3부터) */
+  | { type: 'knowledge_revealed'; belief: Belief; statement?: string }
+  /** NPC 대사 (Actor 출력). 서술에 녹아들고, NPC 대화 기억으로 쓰인다. */
+  | { type: 'npc_spoke'; npcId: EntityId; dialogue: string; action: string }
+  /** AI가 지어내 기록된 사실 (Canon L2) */
+  | { type: 'fact_asserted'; subject: EntityId; statement: string }
+  /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
+  | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number };
 
 export interface StoredEvent {
