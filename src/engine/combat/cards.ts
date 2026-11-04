@@ -27,7 +27,7 @@ export interface AttackSpec {
 
 export type Effect =
   /** count: 여러 번 공격 (예: 불타는 광선). mark: 명중 시 대상에게 '표식' (다음 공격 이점) */
-  | { type: 'attack'; attack: AttackSpec; count?: number; mark?: boolean }
+  | { type: 'attack'; attack: AttackSpec; count?: number; mark?: boolean; knockProne?: { save: Ability; dc: number } }
   /** half: 내성 성공 시 절반 피해. bonus: 주문 능력 수정치를 피해에 더함 */
   | { type: 'save_damage'; save: Ability; damage: string; damageType: string; range: number; half?: boolean; bonus?: 'spell' }
   /** 범위 내성 피해: 대상 존의 모든 적 (range = 존 거리, 0이면 자기 존) */
@@ -40,6 +40,10 @@ export type Effect =
   | { type: 'hide' }
   | { type: 'aim' }
   | { type: 'extra_action' }
+  /** 이번 차례 동안 이동해도 기회 공격을 받지 않는다 */
+  | { type: 'disengage' }
+  /** 넘어짐에서 일어선다 (이동력 소모) */
+  | { type: 'stand' }
   | { type: 'flee' };
 
 /** 슬롯을 올려 시전할 때 1레벨당 추가 효과 */
@@ -71,6 +75,8 @@ export const BASIC_CARDS: CardDef[] = [
   card({ id: 'basic/dash', name: '질주', desc: '행동을 써서 인접한 존으로 한 번 더 이동한다.', kind: 'basic', cost: 'action', target: 'zone', effect: { type: 'move' } }),
   card({ id: 'basic/dodge', name: '회피', desc: '다음 내 차례까지 나를 노리는 공격은 불리점을 받는다.', kind: 'basic', cost: 'action', target: 'self', effect: { type: 'dodge' } }),
   card({ id: 'basic/hide', name: '숨기', desc: '은신 판정(DC 15). 성공하면 다음 공격에 이점. 같은 존에 적이 있으면 불가.', kind: 'basic', cost: 'action', target: 'self', effect: { type: 'hide' } }),
+  card({ id: 'basic/disengage', name: '후퇴', desc: '이번 차례에 이동해도 기회 공격을 받지 않는다.', kind: 'basic', cost: 'action', target: 'self', effect: { type: 'disengage' } }),
+  card({ id: 'basic/stand', name: '일어서기', desc: '넘어진 상태에서 일어난다. 이동력을 소모한다.', kind: 'basic', cost: 'move', target: 'self', effect: { type: 'stand' } }),
   card({ id: 'basic/flee', name: '도주', desc: '아군 후열에서 전장을 벗어난다. 같은 존에 적이 있으면 불가.', kind: 'basic', cost: 'action', target: 'self', effect: { type: 'flee' } }),
 ];
 
@@ -92,6 +98,7 @@ export const CLASS_CARDS: CardDef[] = [
   // ---- 2~3레벨 직업 능력 (SRD 5.2.1)
   card({ id: 'fighter/action_surge', name: '행동 연쇄', desc: '행동 없이 사용. 이번 차례에 행동을 한 번 더 얻는다. (짧은 휴식마다 1회)', kind: 'class', cost: 'free', target: 'self', resource: 'action_surge', effect: { type: 'extra_action' } }),
   card({ id: 'rogue/cunning_dash', name: '교활한 행동: 질주', desc: '보너스 행동으로 인접한 존으로 이동한다.', kind: 'class', cost: 'bonus', target: 'zone', effect: { type: 'move' } }),
+  card({ id: 'rogue/cunning_disengage', name: '교활한 행동: 후퇴', desc: '보너스 행동으로 후퇴 — 이번 차례에 기회 공격을 받지 않는다.', kind: 'class', cost: 'bonus', target: 'self', effect: { type: 'disengage' } }),
   card({ id: 'rogue/cunning_hide', name: '교활한 행동: 숨기', desc: '보너스 행동으로 숨기(은신 DC 15).', kind: 'class', cost: 'bonus', target: 'self', effect: { type: 'hide' } }),
   card({ id: 'rogue/steady_aim', name: '정밀 조준', desc: '보너스 행동. 이번 차례에 이동하지 않았다면 다음 공격에 이점 (이동을 소모).', kind: 'class', cost: 'bonus', target: 'self', effect: { type: 'aim' } }),
   card({ id: 'cleric/divine_spark_heal', name: '신성 불꽃: 치유', desc: '신성 변환. 1존 안의 아군 HP를 1d8 + 지혜 수정치만큼 회복.', kind: 'class', cost: 'action', target: 'ally', resource: 'channel_divinity', effect: { type: 'heal', dice: '1d8', add: 'spell', range: 1 } }),
@@ -128,8 +135,8 @@ export const CLASS_KITS: Record<string, ClassKit> = {
   },
   rogue: {
     cards: ['weapon/shortsword', 'weapon/shortbow'], ac: (d) => 11 + d, sneakAttack: '1d6', // 가죽 갑옷
-    progression: { 2: ['rogue/cunning_dash', 'rogue/cunning_hide'], 3: ['rogue/steady_aim'] },
-    features: { 2: ['교활한 행동'], 3: ['암습 2d6', '정밀 조준'] },
+    progression: { 2: ['rogue/cunning_dash', 'rogue/cunning_disengage', 'rogue/cunning_hide'], 3: ['rogue/steady_aim'] },
+    features: { 2: ['교활한 행동 (질주·후퇴·숨기)'], 3: ['암습 2d6', '정밀 조준'] },
   },
   cleric: {
     cards: ['weapon/mace', 'spell/sacred_flame', 'spell/cure_wounds'], ac: (d) => 13 + Math.min(d, 2) + 2, spellAbility: 'wis', // 체인 셔츠 + 방패

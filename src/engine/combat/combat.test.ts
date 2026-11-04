@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createRng } from '../dice/rng';
 import { classResources, createCharacter, suggestedStandardArray, type CharacterSheet } from '../character/sheet';
 import {
-  applyEffects, cardById, scaleDice, slotFor, type CombatState, currentActorId, endTurn, planEnemyAction, resolveCard, rollDamage,
+  applyEffects, cardById, dying, rollDeathSave, scaleDice, slotFor, type CombatState, currentActorId, endTurn, planEnemyAction, resolveCard, rollDamage,
   runEnemyTurns, runAutoTurns, planCompanionAction, startCombat, unusableReason, validTargets,
 } from './combat';
 
@@ -302,5 +302,100 @@ describe('2~3레벨 능력', () => {
     const cs = fight(at(wizard(), 3), [{ monsterId: 'goblin_warrior', zone: 3 }]);
     cs.combatants['goblin_warrior#1']!.hp = 999; cs.combatants['goblin_warrior#1']!.maxHp = 999;
     expect(resolveCard(cs, 'player', 'spell/scorching_ray', 'goblin_warrior#1', createRng(1)).log).toHaveLength(3);
+  });
+});
+
+describe('기회 공격·죽음 내성·넘어짐', () => {
+  const duel = (seed = 1) => {
+    const cs = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'goblin_warrior', zone: 2 }] }, fighter(), createRng(seed)));
+    cs.combatants['goblin_warrior#1']!.zone = 1;
+    return cs;
+  };
+  it('적이 있는 존을 떠나면 기회 공격, 반응은 라운드당 한 번', () => {
+    const cs = duel();
+    const r = resolveCard(cs, 'player', 'basic/move', 0, createRng(2));
+    expect(r.log[0]).toContain('기회 공격');
+    expect(r.effects).toContainEqual({ kind: 'flag', target: 'goblin_warrior#1', reactionUsed: true });
+    const after = applyEffects(cs, r.effects);
+    if (after.combatants.player!.zone === 0) {
+      // 같은 라운드에 다시 지나가도 반응이 없다
+      after.combatants['goblin_warrior#1']!.zone = 0;
+      after.economy.move = true;
+      expect(resolveCard(after, 'player', 'basic/move', 1, createRng(3)).log[0]).not.toContain('기회 공격');
+    }
+  });
+  it('후퇴하면 기회 공격이 없다, 들어가는 것은 괜찮다', () => {
+    let cs = duel();
+    cs = applyEffects(cs, resolveCard(cs, 'player', 'basic/disengage', 'player', createRng(1)).effects);
+    const r = resolveCard(cs, 'player', 'basic/move', 0, createRng(2));
+    expect(r.log.join()).not.toContain('기회 공격');
+    const cs2 = duel();
+    cs2.combatants['goblin_warrior#1']!.zone = 2;
+    expect(resolveCard(cs2, 'player', 'basic/move', 2, createRng(2)).log.join()).not.toContain('기회 공격');
+  });
+  it('고블린은 붙잡히면 재빠른 도주로 후퇴 후 뒤로 빠진다', () => {
+    let cs = duel();
+    cs = { ...cs, order: ['goblin_warrior#1', 'player'], turnIndex: 0 };
+    expect(planEnemyAction(cs)).toEqual({ cardId: 'monster/goblin/nimble_escape', target: 'goblin_warrior#1' });
+    cs = applyEffects(cs, resolveCard(cs, 'goblin_warrior#1', 'monster/goblin/nimble_escape', 'goblin_warrior#1', createRng(1)).effects);
+    expect(planEnemyAction(cs)).toEqual({ cardId: 'basic/move', target: 2 });
+  });
+  it('빈사: 죽음 내성 3성공이면 안정, 3실패면 사망, 20이면 HP 1', () => {
+    const base = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 3 }] }, fighter(), createRng(1),
+      [{ id: 'npc/b', name: '브란', sheet: { ...fighter(), name: '브란' } }]));
+    let cs = applyEffects(base, [{ kind: 'hp', target: 'player', delta: -99 }]);
+    expect(cs.combatants.player!.dead).toBe(true); // 12 HP에 99 피해: 즉사
+    cs = applyEffects(base, [{ kind: 'hp', target: 'player', delta: -13 }]);
+    expect(cs.combatants.player!.dead).toBeFalsy();
+    expect(cs.combatants.player!.prone).toBe(true);
+    expect(dying(cs.combatants.player!)).toBe(true);
+    expect(cs.outcome).toBeUndefined(); // 동료가 남아 있음
+    const stable = applyEffects(cs, [{ kind: 'death_save', target: 'player', success: 3, fail: 0 }]);
+    expect(stable.combatants.player!.stable).toBe(true);
+    const dead = applyEffects(cs, [{ kind: 'hp', target: 'player', delta: -1, crit: true }, { kind: 'death_save', target: 'player', success: 0, fail: 1 }]);
+    expect(dead.combatants.player!.dead).toBe(true);
+    const healed = applyEffects(cs, [{ kind: 'hp', target: 'player', delta: 5 }]);
+    expect(healed.combatants.player!.hp).toBe(5);
+    expect(healed.combatants.player!.deathSaves).toBeUndefined();
+    let saw20 = false;
+    for (let seed = 0; seed < 200 && !saw20; seed++) {
+      const r = rollDeathSave(cs.combatants.player!, createRng(seed));
+      if (r.log[0]!.includes('d20(20)')) { saw20 = true; expect(r.effects).toEqual([{ kind: 'hp', target: 'player', delta: 1 }]); }
+    }
+    expect(saw20).toBe(true);
+  });
+  it('빈사 아군은 차례마다 자동으로 죽음 내성을 굴리고, 동료 클레릭은 먼저 살린다', () => {
+    const cs0 = startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 3 }] }, fighter(), createRng(1),
+      [{ id: 'npc/i', name: '일제', sheet: { ...cleric(), name: '일제' } }]);
+    let cs = applyEffects({ ...cs0, order: ['player', 'npc/i', 'wolf#1'], turnIndex: 0 }, [{ kind: 'hp', target: 'player', delta: -13 }]);
+    cs = endTurn(cs);
+    expect(currentActorId(cs)).toBe('npc/i');
+    cs.combatants['npc/i']!.zone = cs.combatants.player!.zone;
+    expect(planCompanionAction(cs)).toEqual({ cardId: 'spell/cure_wounds', target: 'player' });
+    const { steps } = runAutoTurns({ ...cs, order: ['wolf#1', 'player', 'npc/i'], turnIndex: 1 }, createRng(4));
+    const first = steps[0]!;
+    expect(first.kind === 'action' && first.cardId).toBe('system/death_save');
+  });
+  it('넘어짐: 근접은 이점으로 당하고, 이동하려면 일어서야 한다', () => {
+    const cs = duel();
+    cs.combatants['goblin_warrior#1']!.prone = true;
+    expect(resolveCard(cs, 'player', 'weapon/longsword', 'goblin_warrior#1', createRng(1)).log[0]).toContain('이점(넘어진 대상)');
+    expect(resolveCard(cs, 'player', 'weapon/javelin', 'goblin_warrior#1', createRng(1)).log[0]).toContain('불리점');
+    cs.combatants.player!.prone = true;
+    expect(unusableReason(cs, 'player', cardById('basic/move'))).toContain('일어서야');
+    const up = applyEffects(cs, resolveCard(cs, 'player', 'basic/stand', 'player', createRng(1)).effects);
+    expect(up.combatants.player!.prone).toBe(false);
+    expect(up.economy.move).toBe(false);
+  });
+  it('늑대에게 물리면 넘어질 수 있다', () => {
+    let cs = startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }] }, wizard(), createRng(1));
+    cs.combatants['wolf#1']!.zone = 1;
+    cs = { ...cs, order: ['wolf#1', 'player'], turnIndex: 0 };
+    let knocked = 0;
+    for (let seed = 0; seed < 60; seed++) {
+      const r = resolveCard(cs, 'wolf#1', 'monster/wolf/bite', 'player', createRng(seed));
+      if (r.effects.some((e) => e.kind === 'flag' && e.prone)) knocked++;
+    }
+    expect(knocked).toBeGreaterThan(0);
   });
 });

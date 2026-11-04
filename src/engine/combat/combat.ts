@@ -9,7 +9,9 @@
  *
  * 모든 함수는 순수 함수다. 주사위는 시드 RNG만 사용하고, 결과는 effects로 반환해 이벤트에 저장한다.
  * 아군 NPC 동료는 규칙 기반 전술 AI가 플레이어의 명령(PartyOrder)에 따라 움직인다.
- * TODO: 기회 공격, 반응, 사망 내성 굴림, 상태 이상.
+ * 기회 공격: 적이 있는 존을 떠나면 그 존의 적이 반응으로 근접 공격 1회 (후퇴하면 면제).
+ * 죽음 내성: 아군은 HP 0이 되면 빈사 상태로 차례마다 d20 (10 이상 성공, 3성공 안정, 3실패 사망, 20은 HP 1 회복).
+ * 상태 이상: 넘어짐 (근접 공격은 이점·원거리는 불리점으로 당하고, 자신의 공격은 불리점, 이동하려면 일어서야 함).
  */
 import type { Ability } from '../character/rules';
 import { type Abilities, type CharacterSheet, resourcesOf } from '../character/sheet';
@@ -50,6 +52,16 @@ export interface Combatant {
   marked?: boolean;
   /** 이 값 이상의 d20이면 치명타 (기본 20, 투사 3레벨 19) */
   critRange?: number;
+  /** 이번 라운드에 반응(기회 공격)을 썼다 */
+  reactionUsed?: boolean;
+  /** 후퇴: 이번 차례에 기회 공격을 받지 않는다 */
+  disengaged?: boolean;
+  /** 넘어짐 */
+  prone?: boolean;
+  /** 죽음 내성 (아군만) */
+  deathSaves?: { success: number; fail: number };
+  stable?: boolean;
+  dead?: boolean;
   sneakAttack?: string;
   packTactics?: boolean;
   preferRanged?: boolean;
@@ -81,9 +93,12 @@ export interface EncounterSpec {
 export type Target = string | number | null;
 
 export type CombatEffect =
-  | { kind: 'hp'; target: string; delta: number }
+  /** crit: 빈사 상태에서 치명타를 맞으면 죽음 내성 실패 2회 */
+  | { kind: 'hp'; target: string; delta: number; crit?: boolean }
   | { kind: 'zone'; target: string; zone: number }
-  | { kind: 'flag'; target: string; dodging?: boolean; hidden?: boolean; aimed?: boolean; marked?: boolean }
+  | { kind: 'flag'; target: string; dodging?: boolean; hidden?: boolean; aimed?: boolean; marked?: boolean; reactionUsed?: boolean; disengaged?: boolean; prone?: boolean }
+  /** 죽음 내성 결과 */
+  | { kind: 'death_save'; target: string; success: number; fail: number }
   | { kind: 'gain_action' }
   | { kind: 'spend'; cost: Cost }
   | { kind: 'resource'; target: string; key: string; delta: number }
@@ -110,7 +125,7 @@ export function cardById(id: string): CardDef {
 
 /** 손패: 기본 행동 + 캐릭터 카드. 몬스터는 기본 행동 중 이동·질주만 쓴다. */
 export function handOf(c: Combatant): CardDef[] {
-  const basics = c.side === 'party' ? BASIC_CARDS.map((b) => b.id) : ['basic/move', 'basic/dash'];
+  const basics = c.side === 'party' ? BASIC_CARDS.map((b) => b.id) : ['basic/move', 'basic/dash', 'basic/stand'];
   return [...c.cards, ...basics].map(cardById);
 }
 
@@ -191,6 +206,8 @@ export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng,
 
 export const currentActorId = (cs: CombatState) => cs.order[cs.turnIndex]!;
 export const alive = (c: Combatant) => c.hp > 0;
+/** 빈사: 아군이 HP 0이고 아직 안정·사망이 아님 → 차례마다 죽음 내성 */
+export const dying = (c: Combatant) => c.side === 'party' && c.hp <= 0 && !c.stable && !c.dead;
 const opponents = (cs: CombatState, c: Combatant) => Object.values(cs.combatants).filter((o) => o.side !== c.side && alive(o));
 const hostileInZone = (cs: CombatState, c: Combatant, zone = c.zone) => opponents(cs, c).some((o) => o.zone === zone);
 const mod = (c: Combatant, a: Ability) => abilityModifier(c.abilities[a]);
@@ -220,7 +237,8 @@ export function validTargets(cs: CombatState, actorId: string, card: CardDef): T
   if (card.target === 'zone') return [a.zone - 1, a.zone + 1].filter((z) => z >= 0 && z < ZONE_COUNT);
   if (card.target === 'ally') {
     const range = healRange(card);
-    return Object.values(cs.combatants).filter((o) => o.side === a.side && alive(o) && Math.abs(o.zone - a.zone) <= range && o.hp < o.maxHp).map((o) => o.id);
+    // 빈사(HP 0)인 아군도 치료 대상 — 치료받으면 정신을 차린다
+    return Object.values(cs.combatants).filter((o) => o.side === a.side && !o.dead && Math.abs(o.zone - a.zone) <= range && o.hp < o.maxHp).map((o) => o.id);
   }
   if (card.target === 'area' && card.effect.type === 'area_save') {
     const range = card.effect.range;
@@ -241,6 +259,9 @@ export function unusableReason(cs: CombatState, actorId: string, card: CardDef):
   if (card.resource && (a.resources[card.resource]?.cur ?? 0) <= 0) return '남은 사용 횟수가 없다';
   if (card.spellLevel && slotFor(a, card.spellLevel) === null) return `${card.spellLevel}레벨 이상 주문 슬롯이 없다`;
   if (card.effect.type === 'aim' && !cs.economy.move) return '이번 차례에 이미 움직였다';
+  if (card.effect.type === 'stand' && !a.prone) return '넘어져 있지 않다';
+  if (card.effect.type === 'move' && a.prone) return '넘어져 있다 — 먼저 일어서야 한다';
+  if (card.effect.type === 'disengage' && a.disengaged) return '이미 후퇴 중이다';
   if (card.effect.type === 'extra_action' && cs.economy.action) return '아직 행동이 남아 있다';
   if (card.effect.type === 'hide' && hostileInZone(cs, a)) return '같은 존에 적이 있어 숨을 수 없다';
   if (card.effect.type === 'flee') {
@@ -290,14 +311,16 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
   const abil = attackAbilityMod(a, spec.ability);
   const toHit = spec.toHit ?? abil + a.profBonus;
   const pack = !!a.packTactics && Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
-  const adv = a.hidden || a.aimed || t.marked || pack;
+  const proneMelee = !!t.prone && spec.kind === 'melee';
+  const proneRanged = !!t.prone && spec.kind === 'ranged';
+  const adv = a.hidden || a.aimed || t.marked || pack || proneMelee;
   const engaged = spec.kind === 'ranged' && hostileInZone(cs, a);
-  const dis = t.dodging || engaged;
+  const dis = t.dodging || engaged || !!a.prone || proneRanged;
   const mode = combineMode(adv, dis);
   const r = d20Test(rng, toHit, t.ac, mode);
   const crit = !r.natural1 && r.kept >= (a.critRange ?? 20);
   const hit = !r.natural1 && (crit || r.success);
-  const why = [a.hidden && '숨음', a.aimed && '조준', t.marked && '표식', pack && '무리 전술', t.dodging && '대상 회피', engaged && '근접한 적'].filter(Boolean).join(', ');
+  const why = [a.hidden && '숨음', a.aimed && '조준', t.marked && '표식', pack && '무리 전술', proneMelee && '넘어진 대상', t.dodging && '대상 회피', engaged && '근접한 적', a.prone && '넘어짐', proneRanged && '넘어진 대상'].filter(Boolean).join(', ');
   const modeText = mode === 'normal' ? '' : ` ${mode === 'advantage' ? '이점' : '불리점'}${why ? `(${why})` : ''}`;
   const head = `${a.name}의 ${cardName} → ${t.name}: d20(${r.rolls.join(', ')})${modeText} ${toHit >= 0 ? '+' : ''}${toHit} = ${r.total} vs AC ${t.ac}`;
   if (t.marked) effects.push({ kind: 'flag', target: t.id, marked: false });
@@ -314,11 +337,19 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
     extra = ` + 암습 ${s.total}`;
     effects.push({ kind: 'sneak_used' });
   }
-  effects.push({ kind: 'hp', target: t.id, delta: -total });
+  effects.push({ kind: 'hp', target: t.id, delta: -total, crit });
   if (at.mark) effects.push({ kind: 'flag', target: t.id, marked: true });
+  // 넘어뜨리기: 살아남은 대상은 내성 굴림
+  let proneText = '';
+  if (at.knockProne && hpBefore - total > 0 && !t.prone) {
+    const sb = mod(t, at.knockProne.save) + (t.saveProfs.includes(at.knockProne.save) ? t.profBonus : 0);
+    const sr = d20Test(rng, sb, at.knockProne.dc);
+    if (!sr.success) effects.push({ kind: 'flag', target: t.id, prone: true });
+    proneText = `, 넘어뜨리기 내성 ${sr.total} vs DC ${at.knockProne.dc} → ${sr.success ? '버팀' : '넘어짐'}`;
+  }
   return {
     effects, damage: total,
-    line: `${head} → ${crit ? '치명타!' : '명중'} ${spec.damageType} 피해 ${total} (${dmg.rolls.join('+')}${dmgBonus ? `${dmgBonus > 0 ? '+' : ''}${dmgBonus}` : ''}${extra})${at.mark ? ', 표식' : ''}${hpBefore - total <= 0 ? ` — ${t.name} 쓰러짐` : ''}`,
+    line: `${head} → ${crit ? '치명타!' : '명중'} ${spec.damageType} 피해 ${total} (${dmg.rolls.join('+')}${dmgBonus ? `${dmgBonus > 0 ? '+' : ''}${dmgBonus}` : ''}${extra})${at.mark ? ', 표식' : ''}${hpBefore - total <= 0 ? ` — ${t.name} 쓰러짐` : ''}${proneText}`,
   };
 }
 
@@ -419,8 +450,37 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       break;
     }
     case 'move': {
+      // 기회 공격: 떠나는 존의 적이 반응으로 근접 공격 1회씩 (후퇴 중이면 면제)
+      let hp = a.hp;
+      let knocked = false;
+      if (!a.disengaged) {
+        for (const foe of opponents(cs, a).filter((o) => o.zone === a.zone && !o.reactionUsed)) {
+          const melee = handOf(foe).find((c) => c.effect.type === 'attack' && c.effect.attack.kind === 'melee');
+          if (!melee || melee.effect.type !== 'attack' || hp <= 0) continue;
+          effects.push({ kind: 'flag', target: foe.id, reactionUsed: true });
+          const r = rollAttack(cs, foe, { ...a, hp }, `기회 공격(${melee.name})`, melee.effect, melee.effect.attack.damage, rng, false, hp);
+          effects.push(...r.effects.filter((x) => x.kind !== 'sneak_used'));
+          if (r.effects.some((x) => x.kind === 'flag' && x.prone)) knocked = true;
+          hp -= r.damage;
+          log.push(r.line);
+        }
+      }
+      if (hp <= 0 || knocked) {
+        log.push(`${a.name}: 이동하지 못했다`);
+        break;
+      }
       effects.push({ kind: 'zone', target: a.id, zone: target as number });
       log.push(`${a.name}: ${ZONE_NAMES[a.zone]} → ${ZONE_NAMES[target as number]} (${name})`);
+      break;
+    }
+    case 'disengage': {
+      effects.push({ kind: 'flag', target: a.id, disengaged: true });
+      log.push(`${a.name}: ${name} — 이번 차례에는 기회 공격을 받지 않는다`);
+      break;
+    }
+    case 'stand': {
+      effects.push({ kind: 'flag', target: a.id, prone: false });
+      log.push(`${a.name}: 일어섰다`);
       break;
     }
     case 'dodge': {
@@ -460,7 +520,29 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
     switch (e.kind) {
       case 'hp': {
         const c = next.combatants[e.target]!;
+        const before = c.hp;
+        if (c.side === 'party' && !c.dead) {
+          if (before <= 0 && e.delta < 0) {
+            // 빈사 중 피해: 죽음 내성 실패 (치명타는 2회)
+            c.deathSaves = { success: c.deathSaves?.success ?? 0, fail: (c.deathSaves?.fail ?? 0) + (e.crit ? 2 : 1) };
+            c.stable = false;
+            if (c.deathSaves.fail >= 3) c.dead = true;
+          } else if (before > 0 && before + e.delta <= -c.maxHp) {
+            c.dead = true; // 즉사: 남은 피해가 최대 HP 이상
+          }
+          if (before <= 0 && e.delta > 0) { c.deathSaves = undefined; c.stable = false; }
+        }
+        if (c.dead) { c.hp = 0; break; }
         c.hp = Math.max(0, Math.min(c.maxHp, c.hp + e.delta));
+        if (c.hp <= 0 && before > 0) { c.prone = true; c.deathSaves = c.side === 'party' ? { success: 0, fail: 0 } : undefined; }
+        break;
+      }
+      case 'death_save': {
+        const c = next.combatants[e.target]!;
+        const ds = { success: (c.deathSaves?.success ?? 0) + e.success, fail: (c.deathSaves?.fail ?? 0) + e.fail };
+        c.deathSaves = ds;
+        if (ds.fail >= 3) c.dead = true;
+        else if (ds.success >= 3) c.stable = true;
         break;
       }
       case 'zone': next.combatants[e.target]!.zone = e.zone; break;
@@ -470,6 +552,9 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
         if (e.hidden !== undefined) c.hidden = e.hidden;
         if (e.aimed !== undefined) c.aimed = e.aimed;
         if (e.marked !== undefined) c.marked = e.marked;
+        if (e.reactionUsed !== undefined) c.reactionUsed = e.reactionUsed;
+        if (e.disengaged !== undefined) c.disengaged = e.disengaged;
+        if (e.prone !== undefined) c.prone = e.prone;
         break;
       }
       case 'spend': if (e.cost !== 'free') next.economy[e.cost] = false; break;
@@ -485,7 +570,8 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
   }
   if (!next.outcome) {
     const all = Object.values(next.combatants);
-    if (all.filter((c) => c.side === 'party').every((c) => !alive(c))) next.outcome = 'defeat';
+    // 패배: 아군 전원이 쓰러졌고, 빈사 중인 사람도 없을 때 (안정 또는 사망). 빈사 중이면 죽음 내성을 계속 굴린다.
+    if (all.filter((c) => c.side === 'party').every((c) => !alive(c) && !dying(c))) next.outcome = 'defeat';
     else if (all.filter((c) => c.side === 'enemy').every((c) => !alive(c))) next.outcome = 'victory';
   }
   return next;
@@ -494,12 +580,16 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
 /** 다음 살아 있는 전투원의 차례로 넘긴다. 회피 자세는 자기 차례가 시작될 때 풀린다. */
 export function endTurn(cs: CombatState): CombatState {
   const next: CombatState = structuredClone(cs);
+  next.combatants[currentActorId(next)]!.disengaged = false;
   for (let i = 0; i < next.order.length; i++) {
     next.turnIndex = (next.turnIndex + 1) % next.order.length;
     if (next.turnIndex === 0) next.round++;
-    if (alive(next.combatants[currentActorId(next)]!)) break;
+    const c = next.combatants[currentActorId(next)]!;
+    if (alive(c) || dying(c)) break; // 빈사 상태의 아군도 차례를 받는다 (죽음 내성)
   }
-  next.combatants[currentActorId(next)]!.dodging = false;
+  const cur = next.combatants[currentActorId(next)]!;
+  cur.dodging = false;
+  cur.reactionUsed = false;
   next.economy = { ...FRESH };
   next.sneakUsed = false;
   return next;
@@ -533,6 +623,16 @@ export function planEnemyAction(cs: CombatState): PlannedAction | null {
     return best;
   };
   const isRanged = (c: CardDef) => c.effect.type === 'attack' && c.effect.attack.kind === 'ranged';
+  // 넘어졌으면 먼저 일어선다
+  if (a.prone && cs.economy.move) return { cardId: 'basic/stand', target: a.id };
+  // 원거리형이 붙잡히면: 보너스 행동 후퇴 → 뒤로 빠진 뒤 쏜다 (고블린의 재빠른 도주)
+  if (a.preferRanged && hostileInZone(cs, a) && a.zone < ZONE_COUNT - 1) {
+    const escape = hand.find((c) => c.effect.type === 'disengage' && c.cost === 'bonus' && !unusableReason(cs, id, c));
+    if (escape) return { cardId: escape.id, target: id };
+    if (a.disengaged && cs.economy.move) return { cardId: 'basic/move', target: a.zone + 1 };
+  }
+  // 원거리형은 이미 쏘았으면 다가가지 않는다
+  if (a.preferRanged && !cs.economy.action) return null;
   const melee = pick(attacks.filter((c) => !isRanged(c)));
   const ranged = pick(attacks.filter(isRanged));
   if (a.preferRanged && ranged && !hostileInZone(cs, a)) return ranged;
@@ -585,6 +685,13 @@ export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT
   const usable = handOf(a).filter((c) => !unusableReason(cs, id, c));
   const party = Object.values(cs.combatants).filter((o) => o.side === 'party' && alive(o));
   const critical = (c: Combatant) => c.hp <= c.maxHp / 3;
+  if (a.prone && cs.economy.move) return { cardId: 'basic/stand', target: a.id };
+
+  // 0) 빈사 아군 살리기: 치료 카드로 쓰러진 아군을 일으킨다 (무엇보다 우선)
+  for (const card of usable.filter((c) => c.effect.type === 'heal' && c.target === 'ally')) {
+    const down = validTargets(cs, id, card).map((t) => cs.combatants[t as string]!).find((o) => o.hp <= 0 && !o.dead);
+    if (down) return { cardId: card.id, target: down.id };
+  }
 
   // 1) 치료: 위급한 아군(자원 아끼기여도 예외)
   for (const card of usable.filter((c) => c.effect.type === 'heal')) {
@@ -640,6 +747,12 @@ export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT
     }
     if (dest !== null && dest !== a.zone) {
       const step = a.zone + Math.sign(dest - a.zone);
+      // 적에게 붙잡힌 채 물러나야 하면 먼저 후퇴 (보너스 → 행동 순)
+      if (cs.economy.move && hostileInZone(cs, a) && !a.disengaged) {
+        const bonusEscape = usable.find((c) => c.effect.type === 'disengage' && c.cost === 'bonus');
+        if (bonusEscape) return { cardId: bonusEscape.id, target: a.id };
+        if (order.mode === 'hold_back' && usable.some((c) => c.id === 'basic/disengage')) return { cardId: 'basic/disengage', target: a.id };
+      }
       if (cs.economy.move) return { cardId: 'basic/move', target: step };
     }
   }
@@ -647,6 +760,23 @@ export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT
   if (cs.economy.action && hostileInZone(cs, a) && !usable.some(isAttackCard)) return { cardId: 'basic/dodge', target: a.id };
   if (cs.economy.action && party.length && critical(a) && usable.some((c) => c.id === 'basic/dodge') && !usable.some(isAttackCard)) return { cardId: 'basic/dodge', target: a.id };
   return null;
+}
+
+/** 빈사 아군의 죽음 내성 굴림 (SRD 5.2.1) */
+export function rollDeathSave(c: Combatant, rng: Rng): Resolution {
+  const roll = rollDie(rng, 20);
+  const ds = c.deathSaves ?? { success: 0, fail: 0 };
+  if (roll === 20) {
+    return { effects: [{ kind: 'hp', target: c.id, delta: 1 }], log: [`${c.name}: 죽음 내성 d20(20) → 기적처럼 정신을 차렸다 (HP 1)`] };
+  }
+  const success = roll >= 10 ? 1 : 0;
+  const fail = roll === 1 ? 2 : roll < 10 ? 1 : 0;
+  const s2 = ds.success + success, f2 = ds.fail + fail;
+  const tail = f2 >= 3 ? ' — 숨이 멎었다' : s2 >= 3 ? ' — 안정되었다' : '';
+  return {
+    effects: [{ kind: 'death_save', target: c.id, success, fail }],
+    log: [`${c.name}: 죽음 내성 d20(${roll}) → ${success ? '성공' : roll === 1 ? '실패 2회' : '실패'} (성공 ${Math.min(3, s2)} · 실패 ${Math.min(3, f2)})${tail}`],
+  };
 }
 
 export type CombatStep =
@@ -663,6 +793,13 @@ export function runAutoTurns(cs: CombatState, rng: Rng, orders: Record<string, P
   for (let guard = 0; guard < 400 && !state.outcome; guard++) {
     const actor = state.combatants[currentActorId(state)]!;
     if (actor.isPlayer && alive(actor)) break;
+    if (dying(actor)) {
+      const resolution = rollDeathSave(actor, rng);
+      state = applyEffects(state, resolution.effects);
+      steps.push({ kind: 'action', actorId: actor.id, cardId: 'system/death_save', target: actor.id, resolution, rngState: rng.state() });
+      if (!state.outcome) { state = endTurn(state); steps.push({ kind: 'end_turn' }); }
+      continue;
+    }
     const plan = !alive(actor) ? null
       : actor.side === 'enemy' ? planEnemyAction(state)
       : actor.isPlayer ? null
@@ -672,7 +809,15 @@ export function runAutoTurns(cs: CombatState, rng: Rng, orders: Record<string, P
       steps.push({ kind: 'end_turn' });
       continue;
     }
-    const resolution = resolveCard(state, actor.id, plan.cardId, plan.target, rng);
+    let resolution: Resolution;
+    try {
+      resolution = resolveCard(state, actor.id, plan.cardId, plan.target, rng);
+    } catch {
+      // 안전장치: AI가 잘못된 행동을 계획하면 그 차례를 끝낸다 (전투가 멈추지 않도록)
+      state = endTurn(state);
+      steps.push({ kind: 'end_turn' });
+      continue;
+    }
     state = applyEffects(state, resolution.effects);
     steps.push({ kind: 'action', actorId: actor.id, cardId: plan.cardId, target: plan.target, resolution, rngState: rng.state() });
   }

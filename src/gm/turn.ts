@@ -168,6 +168,7 @@ export async function runTurn(
   signal?: AbortSignal,
 ): Promise<TurnResult> {
   if (state.combat) throw new Error('전투 중에는 카드로 행동한다');
+  if (state.playerDead) throw new Error('당신은 죽었다. 턴 되돌리기로 이전으로 돌아갈 수 있다.');
   const turn = state.turn + 1;
   const events: GameEvent[] = [];
   let s = state;

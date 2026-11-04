@@ -19,7 +19,7 @@ export function npcLocation(state: GameState, c: Character): EntityId {
 }
 
 export function presentCharacters(world: WorldPackage, state: GameState): Character[] {
-  return world.characters.filter((c) => npcLocation(state, c) === state.player.locationId);
+  return world.characters.filter((c) => !state.deadNpcs?.includes(c.id) && npcLocation(state, c) === state.player.locationId);
 }
 
 function partyLines(world: WorldPackage, state: GameState): string[] {

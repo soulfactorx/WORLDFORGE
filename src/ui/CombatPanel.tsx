@@ -59,11 +59,17 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
                 const targetable = (selected?.target === 'enemy' || selected?.target === 'ally') && targets.includes(c.id);
                 return (
                   <button key={c.id} type="button" disabled={!targetable && !!selected}
-                    className={`chip ${c.side} ${c.hp <= 0 ? 'down' : ''} ${targetable ? 'targetable' : ''} ${currentActorId(cs) === c.id ? 'active' : ''}`}
+                    className={`chip ${c.side} ${c.hp <= 0 ? (c.side === 'party' && !c.dead ? 'downed' : 'down') : ''} ${targetable ? 'targetable' : ''} ${currentActorId(cs) === c.id ? 'active' : ''}`}
                     onClick={(e) => { e.stopPropagation(); if (targetable) pick(c.id); }}>
                     <span className="chip-name">{c.isPlayer ? '당신' : c.name}{c.side === 'party' && !c.isPlayer ? ' (동료)' : ''}</span>
                     <span className="hpbar"><span style={{ width: `${(100 * c.hp) / c.maxHp}%` }} /></span>
-                    <span className="small">HP {c.hp}/{c.maxHp} · AC {c.ac}{c.dodging ? ' · 회피' : ''}{c.hidden ? ' · 숨음' : ''}</span>
+                    <span className="small">HP {c.hp}/{c.maxHp} · AC {c.ac}{c.dodging ? ' · 회피' : ''}{c.hidden ? ' · 숨음' : ''}{c.disengaged ? ' · 후퇴' : ''}</span>
+                    {(c.prone || c.dead || c.stable || (c.hp <= 0 && c.side === 'party')) && (
+                      <span className="small cond">
+                        {c.dead ? '✝ 사망' : c.stable ? '안정 (의식 없음)' : c.hp <= 0 && c.side === 'party' ? `빈사 — 성공 ${c.deathSaves?.success ?? 0} · 실패 ${c.deathSaves?.fail ?? 0}` : ''}
+                        {c.prone && !c.dead && c.hp > 0 ? '넘어짐' : ''}
+                      </span>
+                    )}
                   </button>
                 );
               })}

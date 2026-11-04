@@ -25,6 +25,8 @@ export const MONSTERS: Record<string, MonsterDef> = {
     cards: [
       { id: 'monster/goblin/scimitar', name: '시미터', desc: '', kind: 'monster', cost: 'action', target: 'enemy', effect: { type: 'attack', attack: { kind: 'melee', ability: 'dex', damage: '1d6', damageType: '참격', range: 0, toHit: 4, damageBonus: 2 } } },
       { id: 'monster/goblin/shortbow', name: '숏보우', desc: '', kind: 'monster', cost: 'action', target: 'enemy', effect: { type: 'attack', attack: { kind: 'ranged', ability: 'dex', damage: '1d6', damageType: '관통', range: 3, toHit: 4, damageBonus: 2 } } },
+      // 재빠른 도주: 보너스 행동으로 후퇴
+      { id: 'monster/goblin/nimble_escape', name: '재빠른 도주', desc: '', kind: 'monster', cost: 'bonus', target: 'self', effect: { type: 'disengage' } },
     ],
   },
   wolf: {
@@ -32,7 +34,8 @@ export const MONSTERS: Record<string, MonsterDef> = {
     abilities: { str: 14, dex: 15, con: 12, int: 3, wis: 12, cha: 6 },
     packTactics: true,
     cards: [
-      { id: 'monster/wolf/bite', name: '물기', desc: '', kind: 'monster', cost: 'action', target: 'enemy', effect: { type: 'attack', attack: { kind: 'melee', ability: 'str', damage: '1d6', damageType: '관통', range: 0, toHit: 4, damageBonus: 2 } } },
+      // 물리면 근력 내성(DC 11)에 실패하면 넘어진다
+      { id: 'monster/wolf/bite', name: '물기', desc: '', kind: 'monster', cost: 'action', target: 'enemy', effect: { type: 'attack', attack: { kind: 'melee', ability: 'str', damage: '1d6', damageType: '관통', range: 0, toHit: 4, damageBonus: 2 }, knockProne: { save: 'str', dc: 11 } } },
     ],
   },
 };

@@ -43,6 +43,10 @@ export interface GameState {
   flags: string[];
   /** 도달한 결말 ID */
   ending?: string;
+  /** 플레이어 사망 (턴 되돌리기로만 돌아갈 수 있다) */
+  playerDead?: boolean;
+  /** 죽은 NPC */
+  deadNpcs: string[];
   log: LogEntry[];
 }
 
@@ -57,7 +61,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, quests: {}, flags: [], log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, quests: {}, flags: [], deadNpcs: [], log: [],
   };
 }
 
@@ -112,9 +116,9 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'combat_turn_ended':
       return s.combat ? { ...s, combat: endTurn(s.combat) } : s;
     case 'combat_ended': {
-      const label = { victory: '승리', defeat: '쓰러짐', fled: '도주' }[e.outcome];
+      const label = e.playerDead ? '사망' : { victory: '승리', defeat: '쓰러짐', fled: '도주' }[e.outcome];
       return {
-        ...s, combat: undefined,
+        ...s, combat: undefined, playerDead: e.playerDead || s.playerDead,
         clearedEncounters: e.outcome === 'victory' && s.combat ? [...s.clearedEncounters, s.combat.encounterId] : s.clearedEncounters,
         player: { ...s.player, sheet: { ...s.player.sheet, hp: e.hp, resources: e.resources } },
         party: Object.fromEntries(Object.entries(s.party).map(([id, sh]) => [id, e.party?.[id] ? { ...sh, ...e.party[id] } : sh])),
@@ -164,6 +168,12 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const base = s.relationships[e.npcId] ?? e.base ?? { affinity: 0, trust: 0, respect: 0, fear: 0 };
       return { ...s, relationships: { ...s.relationships, [e.npcId]: applyDelta(base, e.delta) },
         log: [...s.log, { turn, kind: 'relation', text: `${e.name ?? e.npcId}: ${describeDelta(e.delta)} — ${e.reason}` }] };
+    }
+    case 'companion_died': {
+      const { [e.npcId]: _p, ...party } = s.party;
+      const { [e.npcId]: _o, ...partyOrders } = s.partyOrders;
+      return { ...s, party, partyOrders, deadNpcs: [...s.deadNpcs, e.npcId],
+        log: [...s.log, { turn, kind: 'combat', text: `✝ ${josa(e.name, '이/가')} 숨을 거두었다.` }] };
     }
     case 'party_order':
       return { ...s, partyOrders: { ...s.partyOrders, [e.npcId]: e.order } };

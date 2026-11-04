@@ -146,6 +146,11 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null}>↶ 턴 되돌리기</button>
         <button onClick={onExit}>나가기</button>
       </div>
+      {state.playerDead && (
+        <div className="ending dead small">
+          ✝ <b>당신은 죽었다.</b> 이 세계에서의 이야기는 여기서 끝났다. <b>↶ 턴 되돌리기</b>로 전투 전으로 돌아갈 수 있다.
+        </div>
+      )}
       {state.ending && (
         <div className="ending small">
           ◆ 결말: <b>{world.endings?.find((e) => e.id === state.ending)?.name}</b> — 이야기는 여기서 매듭지어졌다. 원하면 계속 이 세계를 돌아다닐 수 있다.
@@ -159,7 +164,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         <div ref={bottom} />
       </div>
       {error && <p className="status">❌ {error}</p>}
-      {state.combat ? (
+      {state.playerDead ? null : state.combat ? (
         <CombatPanel cs={state.combat} busy={streaming !== null} orders={state.partyOrders}
           onOrder={(npcId: string, order: PartyOrder) => commitCombat((s) => setPartyOrder(s, npcId, order))}
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}

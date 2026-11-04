@@ -31,14 +31,19 @@ function finishIfOver(b: Builder) {
   const cs = b.state.combat;
   if (!cs?.outcome) return;
   const p = cs.combatants.player!;
-  // 쓰러진 사람은 전투가 끝나면 HP 1로 깨어난다 (사망 규칙은 아직 없음)
+  // 빈사·안정 상태였던 사람은 전투가 끝나면 HP 1로 정신을 차린다. 죽은 사람은 돌아오지 않는다.
   const after = (hp: number) => Math.max(1, hp);
   const party: Record<string, { hp: number; resources: Record<string, { cur: number; max: number }> }> = {};
+  const fallen: string[] = [];
   for (const id of Object.keys(b.state.party)) {
     const c = cs.combatants[id];
-    if (c) party[id] = { hp: after(c.hp), resources: c.resources };
+    if (!c) continue;
+    if (c.dead) fallen.push(id);
+    else party[id] = { hp: after(c.hp), resources: c.resources };
   }
-  b.push({ type: 'combat_ended', outcome: cs.outcome, hp: after(p.hp), resources: p.resources, party });
+  b.push({ type: 'combat_ended', outcome: p.dead ? 'defeat' : cs.outcome, playerDead: !!p.dead, hp: p.dead ? 0 : after(p.hp), resources: p.resources, party });
+  for (const id of fallen) b.push({ type: 'companion_died', npcId: id, name: cs.combatants[id]!.name });
+  if (p.dead) return;
   // 경험치: 승리하면 쓰러뜨린 적의 경험치를 아군 참가자에게 똑같이 나눈다 (SRD 5.2.1)
   if (cs.outcome === 'victory') {
     const total = Object.values(cs.combatants)
@@ -125,6 +130,8 @@ export async function narrateCombat(
 - 전투 기록의 결과(명중·빗나감·피해·쓰러짐·승패)를 그대로 따른다. 결과를 바꾸거나 새 사건을 만들지 않는다.
 - 수치(주사위, AC, 피해 숫자)는 서술에 쓰지 않는다.
 - 패배(쓰러짐)했다면 정신을 잃었다가 한참 뒤 깨어나는 것으로 마무리한다. 누가 구해 줬는지는 지어내지 않는다.
+- 기록에 "숨을 거두었다"가 있는 동료는 정말로 죽었다. 그 죽음을 무게 있게 다룬다.
+- 결과가 "사망"이면 플레이어가 죽은 것이다. 되살리지 말고, 이야기가 여기서 끝나는 장면으로 조용히 마무리한다.
 - 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.`,
     user: `## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${c.name} (${c.side === 'party' ? '아군' : '적'})`).join('\n')}\n\n## 전투 기록\n${combatLog.join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
     maxTokens: 3000,

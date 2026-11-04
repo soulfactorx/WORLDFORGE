@@ -27,7 +27,8 @@ export type GameEvent =
   | { type: 'combat_action'; actorId: string; cardId: string; target: Target; effects: CombatEffect[]; log: string[]; rngState: number }
   | { type: 'combat_turn_ended' }
   /** party: 동료별 전투 후 HP·자원 (v0.5) */
-  | { type: 'combat_ended'; outcome: Outcome; hp: number; resources: Record<string, { cur: number; max: number }>; party?: Record<string, { hp: number; resources: Record<string, { cur: number; max: number }> }> }
+  /** playerDead: 플레이어가 죽음 내성에 실패해 사망 (v0.11) */
+  | { type: 'combat_ended'; outcome: Outcome; playerDead?: boolean; hp: number; resources: Record<string, { cur: number; max: number }>; party?: Record<string, { hp: number; resources: Record<string, { cur: number; max: number }> }> }
   /** 시나리오 (v0.8) */
   | { type: 'quest_started'; questId: EntityId; name: string; objective: string }
   | { type: 'quest_advanced'; questId: EntityId; name: string; stage: number; objective: string }
@@ -40,6 +41,8 @@ export type GameEvent =
   /** 동료 (v0.5) */
   | { type: 'companion_joined'; npcId: EntityId; sheet: CharacterSheet }
   | { type: 'companion_left'; npcId: EntityId; locationId: EntityId }
+  /** 동료가 전투에서 죽었다 (v0.11, 되돌릴 수 없음 — 턴 되돌리기 제외) */
+  | { type: 'companion_died'; npcId: EntityId; name: string }
   | { type: 'party_order'; npcId: EntityId; order: PartyOrder }
   /**
    * 관계 변화 (v0.6). delta는 엔진이 한도로 자른 값.
