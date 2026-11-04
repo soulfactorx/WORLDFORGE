@@ -126,3 +126,14 @@ export function legacyCharacter(name: string): CharacterSheet {
     skillProficiencies: [], saveProficiencies: [], maxHp: 8, hp: 8,
   };
 }
+
+/** 동료 NPC의 1레벨 시트 (직업 기본 내성·HP·자원, 기술 숙련 없음) */
+export function companionSheet(name: string, classId: string, abilities: Abilities): CharacterSheet {
+  const cls = CLASSES[classId];
+  if (!cls) throw new Error(`unknown class: ${classId}`);
+  const maxHp = Math.max(1, cls.hitDie + abilityModifier(abilities.con));
+  return {
+    name, classId, level: 1, abilities: { ...abilities }, skillProficiencies: [], saveProficiencies: [...cls.saves],
+    maxHp, hp: maxHp, resources: classResources(classId, 1),
+  };
+}

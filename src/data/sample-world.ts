@@ -52,6 +52,11 @@ export const sampleWorld: WorldPackage = {
       speech: '짧고 퉁명스러운 반말. "흠", "어디서 왔나" 같은 말을 자주 쓴다.',
       locationId: 'loc/village-gate',
       improvisation: 'minor',
+      companion: {
+        classId: 'fighter',
+        abilities: { str: 15, dex: 12, con: 14, int: 8, wis: 13, cha: 10 },
+        joinCondition: '마을 문을 지키는 게 일이라 쉽게 자리를 비우지 않는다. 다만 낡은 숲길의 고블린을 처치하러 가거나 장로의 수상한 행동을 함께 조사하자는 제안이라면, 투덜대면서도 따라나선다. 무례한 외지인은 거절한다.',
+      },
     },
     {
       id: 'npc/ilse',
@@ -61,6 +66,11 @@ export const sampleWorld: WorldPackage = {
       speech: '친근한 존댓말. 말끝을 흐리는 버릇이 있다.',
       locationId: 'loc/inn',
       improvisation: 'minor',
+      companion: {
+        classId: 'cleric',
+        abilities: { str: 12, dex: 10, con: 13, int: 10, wis: 15, cha: 14 },
+        joinCondition: '여관을 비우기 싫어한다. 상대가 진심으로 제단이나 마을의 비밀을 밝히려 한다고 느끼면 망설이다 동행한다. 처음 만난 자리에서 바로 따라나서지는 않는다.',
+      },
     },
   ],
   facts: [

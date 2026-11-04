@@ -2,7 +2,8 @@ import type { Belief, EntityId } from '../schema';
 import type { GameEvent, StoredEvent } from './events';
 import { type CharacterSheet, legacyCharacter } from '../character/sheet';
 import type { ImprovisedFact } from '../canon';
-import { applyEffects, type CombatState, endTurn, ZONE_NAMES } from '../combat/combat';
+import { josa } from '../text/josa';
+import { applyEffects, type CombatState, endTurn, type PartyOrder, ZONE_NAMES } from '../combat/combat';
 import { classResources, resourcesOf } from '../character/sheet';
 
 export interface LogEntry {
@@ -28,8 +29,15 @@ export interface GameState {
   combat?: CombatState;
   /** 끝난 조우 (승리한 조우는 다시 일어나지 않는다) */
   clearedEncounters: string[];
+  /** 동행 중인 동료 (NPC ID → 캐릭터 시트) */
+  party: Record<EntityId, CharacterSheet>;
+  partyOrders: Record<EntityId, PartyOrder>;
+  /** 패키지 기본값과 다른 NPC 위치 (동료에서 빠진 NPC 등) */
+  npcLocations: Record<EntityId, EntityId>;
   log: LogEntry[];
 }
+
+export const MAX_PARTY = 2;
 
 export const NPC_MEMORY_LIMIT = 12;
 
@@ -40,7 +48,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, log: [],
   };
 }
 
@@ -100,19 +108,39 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         ...s, combat: undefined,
         clearedEncounters: e.outcome === 'victory' && s.combat ? [...s.clearedEncounters, s.combat.encounterId] : s.clearedEncounters,
         player: { ...s.player, sheet: { ...s.player.sheet, hp: e.hp, resources: e.resources } },
+        party: Object.fromEntries(Object.entries(s.party).map(([id, sh]) => [id, e.party?.[id] ? { ...sh, ...e.party[id] } : sh])),
         log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 종료 — ${label}` }],
       };
     }
+    case 'companion_joined': {
+      const { [e.npcId]: _, ...npcLocations } = s.npcLocations;
+      return { ...s, party: { ...s.party, [e.npcId]: e.sheet }, npcLocations,
+        log: [...s.log, { turn, kind: 'knowledge', text: `${josa(e.sheet.name, '이/가')} 동료가 되었다.` }] };
+    }
+    case 'companion_left': {
+      const { [e.npcId]: left, ...party } = s.party;
+      const { [e.npcId]: _o, ...partyOrders } = s.partyOrders;
+      return { ...s, party, partyOrders, npcLocations: { ...s.npcLocations, [e.npcId]: e.locationId },
+        log: [...s.log, { turn, kind: 'knowledge', text: `${josa(left?.name ?? e.npcId, '이/가')} 일행을 떠났다.` }] };
+    }
+    case 'party_order':
+      return { ...s, partyOrders: { ...s.partyOrders, [e.npcId]: e.order } };
     case 'rested': {
       const sheet = s.player.sheet;
       if (e.kind === 'long') {
-        return { ...s, worldMinutes: s.worldMinutes + 8 * 60,
+        const party = Object.fromEntries(Object.entries(s.party).map(([id, sh]) => [id, { ...sh, hp: sh.maxHp, resources: classResources(sh.classId, sh.level) }]));
+        return { ...s, worldMinutes: s.worldMinutes + 8 * 60, party,
           player: { ...s.player, sheet: { ...sheet, hp: sheet.maxHp, resources: classResources(sheet.classId, sheet.level) } },
           log: [...s.log, { turn, kind: 'check', text: '긴 휴식 (8시간) — HP와 자원 모두 회복' }] };
       }
-      const res = structuredClone(resourcesOf(sheet));
-      if (res.second_wind) res.second_wind.cur = Math.min(res.second_wind.max, res.second_wind.cur + 1);
-      return { ...s, worldMinutes: s.worldMinutes + 60, player: { ...s.player, sheet: { ...sheet, resources: res } },
+      const shortRest = (sh: CharacterSheet): CharacterSheet => {
+        const res = structuredClone(resourcesOf(sh));
+        if (res.second_wind) res.second_wind.cur = Math.min(res.second_wind.max, res.second_wind.cur + 1);
+        return { ...sh, resources: res };
+      };
+      const res = shortRest(sheet).resources!;
+      const party = Object.fromEntries(Object.entries(s.party).map(([id, sh]) => [id, shortRest(sh)]));
+      return { ...s, worldMinutes: s.worldMinutes + 60, party, player: { ...s.player, sheet: { ...sheet, resources: res } },
         log: [...s.log, { turn, kind: 'check', text: '짧은 휴식 (1시간)' + (res.second_wind ? ' — 재기의 바람 1회 회복' : '') }] };
     }
     case 'time_advanced':

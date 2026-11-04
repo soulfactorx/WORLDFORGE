@@ -11,8 +11,23 @@ import type { GameState } from '../engine/state/state';
  * 세계의 진실(facts.statement)은 어떤 프롬프트에도 직접 들어가지 않는다.
  */
 
+/** NPC의 현재 위치: 동료면 플레이어 곁, 아니면 세이브의 위치 변경 또는 패키지 기본값 */
+export function npcLocation(state: GameState, c: Character): EntityId {
+  if (state.party[c.id]) return state.player.locationId;
+  return state.npcLocations[c.id] ?? c.locationId;
+}
+
 export function presentCharacters(world: WorldPackage, state: GameState): Character[] {
-  return world.characters.filter((c) => c.locationId === state.player.locationId);
+  return world.characters.filter((c) => npcLocation(state, c) === state.player.locationId);
+}
+
+function partyLines(world: WorldPackage, state: GameState): string[] {
+  const ids = Object.keys(state.party);
+  if (!ids.length) return ['(없음 — 혼자다)'];
+  return ids.map((id) => {
+    const sh = state.party[id]!;
+    return `- ${sh.name} [${id}] HP ${sh.hp}/${sh.maxHp}`;
+  });
 }
 
 export function sceneSubjects(world: WorldPackage, state: GameState): EntityId[] {
@@ -64,6 +79,7 @@ export function buildDirectorContext(world: WorldPackage, state: GameState): str
     ...sceneHeader(world, state), '',
     '## 이동 가능한 곳', ...exits(world, state), '',
     '## 이 장소에 있는 인물', ...(npcs.length ? npcs : ['(없음)']), '',
+    '## 플레이어와 동행 중인 동료', ...partyLines(world, state), '',
     '## 최근 진행', ...recentLog(state),
   ].join('\n');
 }
@@ -85,7 +101,12 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     ...canonBlock(world, state, npc.id, ''), '',
     `## 지금 있는 곳: ${loc?.name}`, '',
     '## 네가 아는 것 (이 목록 밖의 세계 사실은 모른다)', ...(claimLines.length ? claimLines : ['(특별히 아는 것 없음)']), '',
-    '## 이 낯선 이와의 지난 대화', ...(state.npcMemory[npc.id]?.length ? state.npcMemory[npc.id]! : ['(처음 만난다)']),
+    '## 이 낯선 이와의 지난 대화', ...(state.npcMemory[npc.id]?.length ? state.npcMemory[npc.id]! : ['(처음 만난다)']), '',
+    '## 동행', ...(state.party[npc.id]
+      ? ['너는 지금 이 낯선 이와 함께 다니는 동료다. 크게 실망하거나 위험이 지나치면 떠날 수 있다.']
+      : npc.companion
+        ? [`너는 아직 동료가 아니다. 함께 가자는 제안을 받으면 다음 기준으로 스스로 판단한다: ${npc.companion.joinCondition}`]
+        : ['너는 누구와도 동행하지 않는다. 동행 제안은 거절한다.']),
   ].join('\n');
 }
 
@@ -99,6 +120,7 @@ export function buildNarratorContext(world: WorldPackage, state: GameState): str
     ...canonBlock(world, state, state.player.locationId, ''), '',
     '## 이동 가능한 곳', ...exits(world, state), '',
     '## 이 장소에 있는 인물', ...(npcs.length ? npcs : ['(없음)']), '',
+    '## 동행 중인 동료', ...partyLines(world, state), '',
     '## 플레이어의 몸 상태', `HP ${state.player.sheet.hp}/${state.player.sheet.maxHp}${state.player.sheet.hp <= state.player.sheet.maxHp / 3 ? ' (심하게 다침)' : ''}`, '',
     '## 플레이어가 알고 있는 것', ...playerKnowledge(world, state), '',
     '## 최근 진행', ...recentLog(state),

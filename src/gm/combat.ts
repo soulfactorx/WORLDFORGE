@@ -1,6 +1,6 @@
 import { createRng, type Rng } from '../engine/dice/rng';
 import {
-  type CombatState, currentActorId, resolveCard, runEnemyTurns, startCombat, type Target,
+  type CombatState, currentActorId, resolveCard, runAutoTurns, startCombat, type Target, type PartyOrder, type CompanionEntry,
 } from '../engine/combat/combat';
 import type { WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
@@ -27,14 +27,21 @@ function finishIfOver(b: Builder) {
   const cs = b.state.combat;
   if (!cs?.outcome) return;
   const p = cs.combatants.player!;
-  b.push({ type: 'combat_ended', outcome: cs.outcome, hp: cs.outcome === 'defeat' ? 1 : p.hp, resources: p.resources });
+  // 쓰러진 사람은 전투가 끝나면 HP 1로 깨어난다 (사망 규칙은 아직 없음)
+  const after = (hp: number) => Math.max(1, hp);
+  const party: Record<string, { hp: number; resources: Record<string, { cur: number; max: number }> }> = {};
+  for (const id of Object.keys(b.state.party)) {
+    const c = cs.combatants[id];
+    if (c) party[id] = { hp: after(c.hp), resources: c.resources };
+  }
+  b.push({ type: 'combat_ended', outcome: cs.outcome, hp: after(p.hp), resources: p.resources, party });
   if (cs.outcome === 'defeat') b.push({ type: 'time_advanced', minutes: 60 });
 }
 
 function runEnemies(b: Builder, rng: Rng) {
   const cs = b.state.combat;
   if (!cs || cs.outcome) return;
-  const { steps } = runEnemyTurns(cs, rng);
+  const { steps } = runAutoTurns(cs, rng, b.state.partyOrders);
   for (const st of steps) {
     if (st.kind === 'end_turn') b.push({ type: 'combat_turn_ended' });
     else b.push({ type: 'combat_action', actorId: st.actorId, cardId: st.cardId, target: st.target, effects: st.resolution.effects, log: st.resolution.log, rngState: st.rngState });
@@ -47,7 +54,8 @@ export function beginEncounter(world: WorldPackage, state: GameState, encounterI
   const enc = availableEncounters(world, state).find((e) => e.id === encounterId);
   if (!enc) throw new Error('이 장소에서 시작할 수 없는 조우');
   const rng = createRng(state.rngState);
-  const combat = startCombat(enc, state.player.sheet, rng);
+  const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id] }));
+  const combat = startCombat(enc, state.player.sheet, rng, companions);
   const b = new Builder(state, turn);
   b.push({ type: 'combat_started', combat, rngState: rng.state() });
   runEnemies(b, rng);
@@ -73,6 +81,12 @@ export function playerEndTurn(state: GameState): GameEvent[] {
   b.push({ type: 'combat_turn_ended' });
   runEnemies(b, rng);
   return b.events;
+}
+
+/** 동료에게 전술 명령 (말로 지시하는 것이므로 행동 경제를 쓰지 않는다) */
+export function setPartyOrder(state: GameState, npcId: string, order: PartyOrder): GameEvent[] {
+  if (!state.party[npcId]) throw new Error('동료가 아니다');
+  return [{ type: 'party_order', npcId, order }];
 }
 
 /** 전투 결과 서술 — 확정된 전투 기록만 넘긴다 */

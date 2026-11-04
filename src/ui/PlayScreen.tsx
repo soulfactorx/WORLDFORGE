@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { sampleWorld } from '../data/sample-world';
 import { replay, type GameState } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
-import { narrateCombat, playerCombatAction, playerEndTurn } from '../gm/combat';
-import type { Target } from '../engine/combat/combat';
+import { narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
+import type { PartyOrder, Target } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
 import { CombatPanel } from './CombatPanel';
 import { createLlmClient } from '../llm';
@@ -111,6 +111,7 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
     <section className="play">
       <div className="scene-bar">
         <b>{loc?.name}</b>
+        {Object.keys(state.party).length > 0 && <span className="small muted">동행: {Object.values(state.party).map((c) => c.name).join(', ')}</span>}
         <span className="muted small">턴 {state.turn}</span>
         <span className="spacer" />
         <button onClick={() => setPanel((p) => (p === 'sheet' ? 'none' : 'sheet'))}>캐릭터 {panel === 'sheet' ? '▲' : '▼'}</button>
@@ -118,7 +119,7 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null}>↶ 턴 되돌리기</button>
         <button onClick={onExit}>나가기</button>
       </div>
-      {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} />}
+      {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} />}
       {panel === 'journal' && <JournalPanel world={sampleWorld} state={state} />}
       <div className="log">
         {state.log.map((e, i) => <p key={i} className={`entry ${e.kind}`}>{e.text}</p>)}
@@ -127,7 +128,8 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
       </div>
       {error && <p className="status">❌ {error}</p>}
       {state.combat ? (
-        <CombatPanel cs={state.combat} busy={streaming !== null}
+        <CombatPanel cs={state.combat} busy={streaming !== null} orders={state.partyOrders}
+          onOrder={(npcId: string, order: PartyOrder) => commitCombat((s) => setPartyOrder(s, npcId, order))}
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(s, cardId, target))}
           onEndTurn={() => commitCombat((s) => playerEndTurn(s))} />
       ) : (

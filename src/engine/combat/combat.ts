@@ -8,7 +8,8 @@
  *  - 행동 경제: 차례마다 행동 1 · 보너스 행동 1 · 이동 1.
  *
  * 모든 함수는 순수 함수다. 주사위는 시드 RNG만 사용하고, 결과는 effects로 반환해 이벤트에 저장한다.
- * TODO: 기회 공격, 반응, 사망 내성 굴림, 아군 NPC 파티, 상태 이상.
+ * 아군 NPC 동료는 규칙 기반 전술 AI가 플레이어의 명령(PartyOrder)에 따라 움직인다.
+ * TODO: 기회 공격, 반응, 사망 내성 굴림, 상태 이상.
  */
 import type { Ability } from '../character/rules';
 import { type Abilities, type CharacterSheet, resourcesOf } from '../character/sheet';
@@ -109,11 +110,16 @@ export function handOf(c: Combatant): CardDef[] {
 // ---------------------------------------------------------------- 시작
 
 export function playerCombatant(sheet: CharacterSheet): Combatant {
+  return sheetCombatant(sheet, 'player', sheet.name || '당신', true, 1);
+}
+
+/** 캐릭터 시트(플레이어·동료)로 전투원 생성 */
+export function sheetCombatant(sheet: CharacterSheet, id: string, name: string, isPlayer: boolean, zone: number): Combatant {
   const kit = CLASS_KITS[sheet.classId] ?? CLASS_KITS.none!;
   const dex = abilityModifier(sheet.abilities.dex);
   const pb = proficiencyBonus(sheet.level);
   return {
-    id: 'player', name: sheet.name || '당신', side: 'party', isPlayer: true, zone: 1,
+    id, name, side: 'party', isPlayer, zone,
     hp: sheet.hp, maxHp: sheet.maxHp, ac: kit.ac(dex), level: sheet.level, abilities: { ...sheet.abilities },
     profBonus: pb, saveProfs: [...sheet.saveProficiencies],
     stealthBonus: abilityModifier(sheet.abilities[SKILLS.stealth.ability]) + (sheet.skillProficiencies.includes('stealth') ? pb : 0),
@@ -136,8 +142,23 @@ export function monsterCombatant(monsterId: string, index: number, zone: number)
 const FRESH: Economy = { action: true, bonus: true, move: true };
 
 /** 전투 시작: 우선권 굴림(d20 + 민첩 수정치) 후 순서 결정 */
-export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng): CombatState {
+export interface CompanionEntry {
+  id: string;
+  name: string;
+  sheet: CharacterSheet;
+  order?: PartyOrder;
+}
+
+/** 동료의 시작 존: 후방 유지 명령이거나 위저드면 후열, 아니면 전열 */
+function companionStartZone(c: CompanionEntry): number {
+  return c.order?.mode === 'hold_back' || c.sheet.classId === 'wizard' ? 0 : 1;
+}
+
+export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng, companions: CompanionEntry[] = []): CombatState {
   const list: Combatant[] = [playerCombatant(sheet)];
+  for (const c of companions) {
+    if (c.sheet.hp > 0) list.push(sheetCombatant(c.sheet, c.id, c.name, false, companionStartZone(c)));
+  }
   const counts: Record<string, number> = {};
   for (const e of enc.enemies) {
     counts[e.monsterId] = (counts[e.monsterId] ?? 0) + 1;
@@ -180,6 +201,9 @@ export function validTargets(cs: CombatState, actorId: string, card: CardDef): T
   const a = cs.combatants[actorId]!;
   if (card.target === 'self') return [actorId];
   if (card.target === 'zone') return [a.zone - 1, a.zone + 1].filter((z) => z >= 0 && z < ZONE_COUNT);
+  if (card.target === 'ally') {
+    return Object.values(cs.combatants).filter((o) => o.side === a.side && alive(o) && o.zone === a.zone && o.hp < o.maxHp).map((o) => o.id);
+  }
   return opponents(cs, a).filter((o) => inRange(card, a, o)).map((o) => o.id);
 }
 
@@ -197,7 +221,8 @@ export function unusableReason(cs: CombatState, actorId: string, card: CardDef):
     if (a.zone !== 0) return '아군 후열에서만 도주할 수 있다';
     if (hostileInZone(cs, a)) return '같은 존에 적이 있어 도주할 수 없다';
   }
-  if (card.effect.type === 'heal' && a.hp >= a.maxHp) return 'HP가 가득 차 있다';
+  if (card.effect.type === 'heal' && card.target === 'self' && a.hp >= a.maxHp) return 'HP가 가득 차 있다';
+  if (card.effect.type === 'heal' && card.target === 'ally' && validTargets(cs, actorId, card).length === 0) return '같은 존에 다친 아군이 없다';
   if (validTargets(cs, actorId, card).length === 0) return '사거리 안에 대상이 없다';
   return null;
 }
@@ -253,7 +278,9 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       const dmg = rollDamage(rng, at.damage, r.natural20);
       let total = Math.max(0, dmg.total + dmgBonus);
       let extra = '';
-      const sneakOk = a.sneakAttack && !cs.sneakUsed && mode === 'advantage' && (at.kind === 'ranged' || at.ability === 'finesse');
+      // 암습: 이점이 있거나, 불리점 없이 대상과 같은 존에 다른 아군이 있을 때 (SRD 5.2.1)
+      const allyNearTarget = Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
+      const sneakOk = a.sneakAttack && !cs.sneakUsed && (mode === 'advantage' || (mode === 'normal' && allyNearTarget)) && (at.kind === 'ranged' || at.ability === 'finesse');
       if (sneakOk) {
         const s = rollDamage(rng, a.sneakAttack!, r.natural20);
         total += s.total;
@@ -287,10 +314,11 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       break;
     }
     case 'heal': {
+      const t = cs.combatants[(target as string) ?? a.id]!;
       const h = rollDamage(rng, e.dice).total + (e.add === 'spell' ? spellMod(a) : a.level);
-      const healed = Math.min(a.maxHp - a.hp, Math.max(0, h));
-      effects.push({ kind: 'hp', target: a.id, delta: healed });
-      log.push(`${a.name}의 ${card.name}: HP ${healed} 회복 (${a.hp} → ${a.hp + healed})`);
+      const healed = Math.min(t.maxHp - t.hp, Math.max(0, h));
+      effects.push({ kind: 'hp', target: t.id, delta: healed });
+      log.push(`${a.name}의 ${card.name}${t.id === a.id ? '' : ` → ${t.name}`}: HP ${healed} 회복 (${t.hp} → ${t.hp + healed})`);
       break;
     }
     case 'move': {
@@ -347,7 +375,7 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
   }
   if (!next.outcome) {
     const all = Object.values(next.combatants);
-    if (all.filter((c) => c.isPlayer).every((c) => !alive(c))) next.outcome = 'defeat';
+    if (all.filter((c) => c.side === 'party').every((c) => !alive(c))) next.outcome = 'defeat';
     else if (all.filter((c) => c.side === 'enemy').every((c) => !alive(c))) next.outcome = 'victory';
   }
   return next;
@@ -417,18 +445,112 @@ export function planEnemyAction(cs: CombatState): PlannedAction | null {
   return ranged;
 }
 
+// ---------------------------------------------------------------- 동료 AI (규칙 기반 + 플레이어 명령)
+
+/**
+ * 동료 전술 명령 (설계 리뷰 11.6절)
+ * - free:      자율. 가장 약한 적을 노린다
+ * - focus:     지정한 적을 집중 공격
+ * - guard:     플레이어 곁을 지키며 플레이어와 같은 존의 적부터 공격
+ * - hold_back: 후열에 머물며 원거리로만 싸운다
+ * conserve:    주문 슬롯 등 자원을 아낀다 (위급한 치료는 예외)
+ */
+export interface PartyOrder {
+  mode: 'free' | 'focus' | 'guard' | 'hold_back';
+  focus?: string;
+  conserve: boolean;
+}
+
+export const DEFAULT_ORDER: PartyOrder = { mode: 'free', conserve: false };
+
+const isAttackCard = (c: CardDef) => c.effect.type === 'attack' || c.effect.type === 'save_damage' || c.effect.type === 'auto_damage';
+const isRangedCard = (c: CardDef) =>
+  (c.effect.type === 'attack' && c.effect.attack.kind === 'ranged') || c.effect.type === 'save_damage' || c.effect.type === 'auto_damage';
+
+export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT_ORDER): PlannedAction | null {
+  const id = currentActorId(cs);
+  const a = cs.combatants[id]!;
+  if (a.side !== 'party' || a.isPlayer || cs.outcome) return null;
+  const usable = handOf(a).filter((c) => !unusableReason(cs, id, c));
+  const party = Object.values(cs.combatants).filter((o) => o.side === 'party' && alive(o));
+  const critical = (c: Combatant) => c.hp <= c.maxHp / 3;
+
+  // 1) 치료: 위급한 아군(자원 아끼기여도 예외)
+  for (const card of usable.filter((c) => c.effect.type === 'heal')) {
+    const ts = validTargets(cs, id, card).map((t) => cs.combatants[t as string]!).filter(critical);
+    if (ts.length) {
+      const t = ts.reduce((m, x) => (x.hp / x.maxHp < m.hp / m.maxHp ? x : m));
+      return { cardId: card.id, target: t.id };
+    }
+  }
+
+  // 2) 공격
+  const player = cs.combatants.player!;
+  let attacks = usable.filter(isAttackCard);
+  if (order.conserve) attacks = attacks.filter((c) => !c.resource);
+  if (order.mode === 'hold_back') attacks = attacks.filter(isRangedCard);
+  const choose = (cards: CardDef[], filter: (t: Combatant) => boolean) => {
+    let best: PlannedAction | null = null;
+    let bestHp = Infinity;
+    for (const c of cards) for (const t of validTargets(cs, id, c)) {
+      const tc = cs.combatants[t as string]!;
+      if (filter(tc) && tc.hp < bestHp) { bestHp = tc.hp; best = { cardId: c.id, target: t }; }
+    }
+    return best;
+  };
+  // 근접 무기를 쓸 수 있으면 원거리 주문보다 우선 (소마법·무기는 자원 무료)
+  const ordered = [...attacks.filter((c) => !isRangedCard(c)), ...attacks.filter(isRangedCard)];
+  const focusAlive = order.mode === 'focus' && order.focus && cs.combatants[order.focus] && alive(cs.combatants[order.focus]!);
+  if (focusAlive) {
+    const f = choose(ordered, (t) => t.id === order.focus);
+    if (f) return f;
+  } else if (order.mode === 'guard') {
+    const g = choose(ordered, (t) => t.zone === player.zone);
+    if (g) return g;
+  }
+  if (!focusAlive || !cs.economy.move) {
+    const any = choose(ordered, () => true);
+    if (any && (order.mode !== 'guard' || !opponents(cs, a).some((o) => o.zone === player.zone))) return any;
+  }
+
+  // 3) 이동
+  if (cs.economy.move || cs.economy.action) {
+    let dest: number | null = null;
+    if (order.mode === 'hold_back') dest = 0;
+    else if (order.mode === 'guard') dest = player.zone;
+    else {
+      const goal = focusAlive ? cs.combatants[order.focus!]! : opponents(cs, a).reduce<Combatant | null>((n, f) => (!n || Math.abs(f.zone - a.zone) < Math.abs(n.zone - a.zone) ? f : n), null);
+      if (goal && !ordered.some((c) => validTargets(cs, id, c).includes(goal.id))) dest = goal.zone;
+    }
+    if (dest !== null && dest !== a.zone) {
+      const step = a.zone + Math.sign(dest - a.zone);
+      if (cs.economy.move) return { cardId: 'basic/move', target: step };
+    }
+  }
+  // 할 일이 없으면, 적과 붙어 있을 때는 회피
+  if (cs.economy.action && hostileInZone(cs, a) && !usable.some(isAttackCard)) return { cardId: 'basic/dodge', target: a.id };
+  if (cs.economy.action && party.length && critical(a) && usable.some((c) => c.id === 'basic/dodge') && !usable.some(isAttackCard)) return { cardId: 'basic/dodge', target: a.id };
+  return null;
+}
+
 export type CombatStep =
   | { kind: 'action'; actorId: string; cardId: string; target: Target; resolution: Resolution; rngState: number }
   | { kind: 'end_turn' };
 
-/** 적의 차례를 플레이어 차례가 오거나 전투가 끝날 때까지 자동 진행한다. */
-export function runEnemyTurns(cs: CombatState, rng: Rng): { state: CombatState; steps: CombatStep[] } {
+/**
+ * 플레이어가 아닌 전투원(적·동료)의 차례를 플레이어 차례가 오거나 전투가 끝날 때까지 자동 진행한다.
+ * 플레이어가 쓰러져 있으면 플레이어 차례도 건너뛴다.
+ */
+export function runAutoTurns(cs: CombatState, rng: Rng, orders: Record<string, PartyOrder> = {}): { state: CombatState; steps: CombatStep[] } {
   let state = cs;
   const steps: CombatStep[] = [];
-  for (let guard = 0; guard < 200 && !state.outcome; guard++) {
+  for (let guard = 0; guard < 400 && !state.outcome; guard++) {
     const actor = state.combatants[currentActorId(state)]!;
-    if (actor.side === 'party' && alive(actor)) break;
-    const plan = actor.side === 'enemy' ? planEnemyAction(state) : null;
+    if (actor.isPlayer && alive(actor)) break;
+    const plan = !alive(actor) ? null
+      : actor.side === 'enemy' ? planEnemyAction(state)
+      : actor.isPlayer ? null
+      : planCompanionAction(state, orders[actor.id] ?? DEFAULT_ORDER);
     if (!plan) {
       state = endTurn(state);
       steps.push({ kind: 'end_turn' });
@@ -441,3 +563,6 @@ export function runEnemyTurns(cs: CombatState, rng: Rng): { state: CombatState; 
   return { state, steps };
 }
 
+
+/** @deprecated runAutoTurns 사용 */
+export const runEnemyTurns = (cs: CombatState, rng: Rng) => runAutoTurns(cs, rng);

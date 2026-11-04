@@ -2,9 +2,10 @@ import { ABILITIES, ABILITY_NAMES, CLASSES, SKILL_IDS, SKILLS, proficiencyBonus 
 import { type CharacterSheet, checkModifier } from '../engine/character/sheet';
 import { abilityModifier } from '../engine/dice/dice';
 
+const RESOURCE_LABEL: Record<string, string> = { slot1: '1레벨 슬롯', second_wind: '재기의 바람' };
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
-export function CharacterPanel({ sheet }: { sheet: CharacterSheet }) {
+export function CharacterPanel({ sheet, party = {} }: { sheet: CharacterSheet; party?: Record<string, CharacterSheet> }) {
   return (
     <aside className="sheet">
       <div className="row">
@@ -30,6 +31,20 @@ export function CharacterPanel({ sheet }: { sheet: CharacterSheet }) {
         ))}
       </div>
       <p className="muted small">● 숙련 · 내성 굴림 숙련은 능력치 옆 ●</p>
+      {Object.keys(party).length > 0 && (
+        <div className="party">
+          <b className="small">동료</b>
+          {Object.entries(party).map(([id, c]) => (
+            <div key={id} className="row small">
+              <b>{c.name}</b>
+              <span className="muted">{CLASSES[c.classId]?.name} {c.level}레벨</span>
+              <span className="spacer" />
+              {Object.entries(c.resources ?? {}).map(([k, r]) => <span key={k} className="muted">{RESOURCE_LABEL[k] ?? k} {r.cur}/{r.max}</span>)}
+              <span>HP {c.hp}/{c.maxHp}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

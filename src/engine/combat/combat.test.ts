@@ -3,7 +3,7 @@ import { createRng } from '../dice/rng';
 import { createCharacter, suggestedStandardArray } from '../character/sheet';
 import {
   applyEffects, cardById, type CombatState, currentActorId, endTurn, planEnemyAction, resolveCard, rollDamage,
-  runEnemyTurns, startCombat, unusableReason, validTargets,
+  runEnemyTurns, runAutoTurns, planCompanionAction, startCombat, unusableReason, validTargets,
 } from './combat';
 
 const sheet = (classId: string, skills: string[]) =>
@@ -154,5 +154,72 @@ describe('적 AI와 승패', () => {
       }
       expect(cs.outcome).toBeDefined();
     }
+  });
+});
+
+describe('동료 파티', () => {
+  const cleric = () => sheet('cleric', ['insight', 'medicine']);
+  const withParty = (seed = 1) => startCombat(
+    { id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }, { monsterId: 'goblin_warrior', zone: 3 }] },
+    fighter(), createRng(seed),
+    [{ id: 'npc/ilse', name: '일제', sheet: { ...cleric(), name: '일제' } }],
+  );
+  const turnOf = (cs: CombatState, id: string): CombatState => ({ ...cs, order: [id, ...cs.order.filter((x) => x !== id)], turnIndex: 0 });
+
+  it('동료가 아군으로 참가한다', () => {
+    const cs = withParty();
+    expect(cs.combatants['npc/ilse']!.side).toBe('party');
+    expect(cs.order).toHaveLength(4);
+  });
+  it('클레릭 동료는 위급한 아군을 치료한다', () => {
+    let cs = turnOf(withParty(), 'npc/ilse');
+    cs.combatants.player!.hp = 2;
+    expect(planCompanionAction(cs)).toEqual({ cardId: 'spell/cure_wounds', target: 'player' });
+    cs = applyEffects(cs, resolveCard(cs, 'npc/ilse', 'spell/cure_wounds', 'player', createRng(1)).effects);
+    expect(cs.combatants.player!.hp).toBeGreaterThan(2);
+    expect(cs.combatants['npc/ilse']!.resources.slot1!.cur).toBe(1);
+  });
+  it('집중 공격 명령: 지정한 적을 노린다', () => {
+    const cs = turnOf(withParty(), 'npc/ilse');
+    expect(planCompanionAction(cs, { mode: 'focus', focus: 'goblin_warrior#1', conserve: false }))
+      .toEqual({ cardId: 'spell/sacred_flame', target: 'goblin_warrior#1' });
+  });
+  it('자원 아끼기: 슬롯 주문을 쓰지 않는다 (위급 치료는 예외)', () => {
+    const wiz = startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 3 }] }, fighter(), createRng(1),
+      [{ id: 'npc/w', name: '마법사', sheet: { ...wizard(), name: '마법사' } }]);
+    const cs = turnOf(wiz, 'npc/w');
+    const p = planCompanionAction(cs, { mode: 'free', conserve: true });
+    expect(p?.cardId).toBe('spell/fire_bolt');
+  });
+  it('후방 유지: 후열로 물러난다', () => {
+    const cs = turnOf(withParty(), 'npc/ilse');
+    expect(cs.combatants['npc/ilse']!.zone).toBe(1);
+    expect(planCompanionAction(cs, { mode: 'hold_back', conserve: false })?.cardId).toBe('spell/sacred_flame');
+    const noTargets: CombatState = structuredClone(cs);
+    noTargets.combatants['wolf#1']!.hp = 0;
+    noTargets.combatants['npc/ilse']!.cards = ['weapon/mace'];
+    expect(planCompanionAction(noTargets, { mode: 'hold_back', conserve: false })).toEqual({ cardId: 'basic/move', target: 0 });
+  });
+  it('플레이어가 쓰러져도 동료가 남아 있으면 전투는 계속된다', () => {
+    let cs = withParty();
+    cs = applyEffects(cs, [{ kind: 'hp', target: 'player', delta: -99 }]);
+    expect(cs.outcome).toBeUndefined();
+    cs = applyEffects(cs, [{ kind: 'hp', target: 'npc/ilse', delta: -99 }]);
+    expect(cs.outcome).toBe('defeat');
+  });
+  it('플레이어가 쓰러지면 자동 진행이 전투 끝까지 간다', () => {
+    let cs = withParty(3);
+    cs = applyEffects(cs, [{ kind: 'hp', target: 'player', delta: -99 }]);
+    const { state } = runAutoTurns(cs, createRng(3));
+    expect(state.outcome).toBeDefined();
+  });
+  it('암습: 대상 옆에 아군이 있으면 이점 없이도 발동', () => {
+    const cs0 = startCombat({ id: 'e', enemies: [{ monsterId: 'wolf', zone: 2 }] }, rogue(), createRng(1),
+      [{ id: 'npc/b', name: '브란', sheet: { ...fighter(), name: '브란' } }]);
+    const cs = playerFirst(cs0);
+    cs.combatants['npc/b']!.zone = 2;
+    let sneaks = 0;
+    for (let seed = 0; seed < 30; seed++) if (resolveCard(cs, 'player', 'weapon/shortbow', 'wolf#1', createRng(seed)).log[0]!.includes('암습')) sneaks++;
+    expect(sneaks).toBeGreaterThan(0);
   });
 });

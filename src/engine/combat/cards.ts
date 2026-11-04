@@ -40,7 +40,8 @@ export interface CardDef {
   desc: string;
   kind: 'basic' | 'weapon' | 'class' | 'spell' | 'monster';
   cost: Cost;
-  target: 'enemy' | 'self' | 'zone';
+  /** ally = 같은 존의 아군(자신 포함) 중 다친 대상 */
+  target: 'enemy' | 'self' | 'ally' | 'zone';
   effect: Effect;
   /** 소모 자원 키 (예: slot1, second_wind) */
   resource?: string;
@@ -68,7 +69,7 @@ export const WEAPON_CARDS: CardDef[] = [
 export const CLASS_CARDS: CardDef[] = [
   card({ id: 'fighter/second_wind', name: '재기의 바람', desc: '보너스 행동. HP를 1d10 + 파이터 레벨만큼 회복.', kind: 'class', cost: 'bonus', target: 'self', resource: 'second_wind', effect: { type: 'heal', dice: '1d10', add: 'level' } }),
   card({ id: 'spell/sacred_flame', name: '성스러운 불꽃', desc: '소마법. 대상은 민첩 내성, 실패 시 1d8 광휘 (2존).', kind: 'spell', cost: 'action', target: 'enemy', effect: { type: 'save_damage', save: 'dex', damage: '1d8', damageType: '광휘', range: 2 } }),
-  card({ id: 'spell/cure_wounds', name: '상처 치료', desc: '1레벨 주문. HP를 2d8 + 주문 능력 수정치만큼 회복.', kind: 'spell', cost: 'action', target: 'self', resource: 'slot1', effect: { type: 'heal', dice: '2d8', add: 'spell' } }),
+  card({ id: 'spell/cure_wounds', name: '상처 치료', desc: '1레벨 주문. 같은 존의 아군(자신 포함) HP를 2d8 + 주문 능력 수정치만큼 회복.', kind: 'spell', cost: 'action', target: 'ally', resource: 'slot1', effect: { type: 'heal', dice: '2d8', add: 'spell' } }),
   card({ id: 'spell/fire_bolt', name: '화염 화살', desc: '소마법. 원거리 주문 공격 1d10 화염 (3존).', kind: 'spell', cost: 'action', target: 'enemy', effect: { type: 'attack', attack: { kind: 'ranged', ability: 'spell', damage: '1d10', damageType: '화염', range: 3 } } }),
   card({ id: 'spell/magic_missile', name: '마법 화살', desc: '1레벨 주문. 반드시 명중하는 화살 3발, 각 1d4+1 역장 (3존).', kind: 'spell', cost: 'action', target: 'enemy', resource: 'slot1', effect: { type: 'auto_damage', count: 3, damage: '1d4+1', damageType: '역장', range: 3 } }),
 ];

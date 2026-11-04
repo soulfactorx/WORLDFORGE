@@ -1,17 +1,23 @@
 import { useState } from 'react';
 import type { CardDef } from '../engine/combat/cards';
 import {
-  type CombatState, currentActorId, handOf, type Target, unusableReason, validTargets, ZONE_NAMES,
+  alive, type CombatState, currentActorId, DEFAULT_ORDER, handOf, type PartyOrder, type Target, unusableReason, validTargets, ZONE_NAMES,
 } from '../engine/combat/combat';
+
+const ORDER_LABEL: Record<PartyOrder['mode'], string> = { free: '자율', focus: '집중 공격', guard: '나를 지켜라', hold_back: '후방 유지' };
 
 const COST_LABEL = { action: '행동', bonus: '보너스', move: '이동' } as const;
 
-export function CombatPanel({ cs, busy, onAct, onEndTurn }: {
+export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
   cs: CombatState;
   busy: boolean;
+  orders: Record<string, PartyOrder>;
   onAct: (cardId: string, target: Target) => void;
   onEndTurn: () => void;
+  onOrder: (npcId: string, order: PartyOrder) => void;
 }) {
+  const companions = Object.values(cs.combatants).filter((c) => c.side === 'party' && !c.isPlayer);
+  const enemies = Object.values(cs.combatants).filter((c) => c.side === 'enemy' && alive(c));
   const [selected, setSelected] = useState<CardDef | null>(null);
   const me = cs.combatants.player!;
   const myTurn = currentActorId(cs) === 'player' && !cs.outcome;
@@ -31,7 +37,7 @@ export function CombatPanel({ cs, busy, onAct, onEndTurn }: {
   }
 
   return (
-    <section className="combat">
+    <section className="combat-panel">
       <div className="row">
         <b>⚔ {cs.round}라운드</b>
         <span className="muted small">{myTurn ? '당신의 차례' : `${cs.combatants[currentActorId(cs)]?.name}의 차례`}</span>
@@ -48,12 +54,12 @@ export function CombatPanel({ cs, busy, onAct, onEndTurn }: {
             <div key={z} className={`zone ${z < 2 ? 'party' : 'enemy'} ${zoneTarget ? 'targetable' : ''}`} onClick={() => zoneTarget && pick(z)}>
               <div className="zone-name small">{name}</div>
               {Object.values(cs.combatants).filter((c) => c.zone === z).map((c) => {
-                const targetable = selected?.target === 'enemy' && targets.includes(c.id);
+                const targetable = (selected?.target === 'enemy' || selected?.target === 'ally') && targets.includes(c.id);
                 return (
                   <button key={c.id} type="button" disabled={!targetable && !!selected}
                     className={`chip ${c.side} ${c.hp <= 0 ? 'down' : ''} ${targetable ? 'targetable' : ''} ${currentActorId(cs) === c.id ? 'active' : ''}`}
                     onClick={(e) => { e.stopPropagation(); if (targetable) pick(c.id); }}>
-                    <span className="chip-name">{c.isPlayer ? '당신' : c.name}</span>
+                    <span className="chip-name">{c.isPlayer ? '당신' : c.name}{c.side === 'party' && !c.isPlayer ? ' (동료)' : ''}</span>
                     <span className="hpbar"><span style={{ width: `${(100 * c.hp) / c.maxHp}%` }} /></span>
                     <span className="small">HP {c.hp}/{c.maxHp} · AC {c.ac}{c.dodging ? ' · 회피' : ''}{c.hidden ? ' · 숨음' : ''}</span>
                   </button>
@@ -69,6 +75,32 @@ export function CombatPanel({ cs, busy, onAct, onEndTurn }: {
           <b>{selected.name}</b>: {selected.target === 'zone' ? '이동할 존을 고르세요.' : '대상을 고르세요.'}{' '}
           <button type="button" onClick={() => setSelected(null)}>취소</button>
         </p>
+      )}
+
+      {companions.length > 0 && (
+        <div className="orders">
+          {companions.map((c) => {
+            const o = orders[c.id] ?? DEFAULT_ORDER;
+            const set = (patch: Partial<PartyOrder>) => onOrder(c.id, { ...o, ...patch });
+            return (
+              <div key={c.id} className="row small">
+                <b>{c.name}</b>
+                <select value={o.mode} disabled={busy || !alive(c)} onChange={(e) => {
+                  const mode = e.target.value as PartyOrder['mode'];
+                  set({ mode, focus: mode === 'focus' ? (o.focus && cs.combatants[o.focus] && alive(cs.combatants[o.focus]!) ? o.focus : enemies[0]?.id) : undefined });
+                }}>
+                  {Object.entries(ORDER_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+                {o.mode === 'focus' && (
+                  <select value={o.focus ?? ''} disabled={busy} onChange={(e) => set({ focus: e.target.value })}>
+                    {enemies.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
+                  </select>
+                )}
+                <label className="check"><input type="checkbox" checked={o.conserve} disabled={busy} onChange={(e) => set({ conserve: e.target.checked })} /> 자원 아끼기</label>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       <div className="hand">

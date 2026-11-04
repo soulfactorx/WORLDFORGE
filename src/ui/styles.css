@@ -57,7 +57,7 @@ legend { font-weight: 600; padding: 0 4px; }
 .tag { display: inline-block; font-size: .75rem; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; margin-right: 4px; color: var(--muted); }
 .tag.confirmed { color: var(--accent); border-color: var(--accent); }
 .entry.combat { font-family: ui-monospace, monospace; font-size: .8rem; color: var(--muted); margin-bottom: 4px; line-height: 1.5; }
-.combat { display: flex; flex-direction: column; gap: 10px; position: sticky; bottom: 0; background: var(--bg); padding: 8px 0 16px; border-top: 1px solid var(--border); }
+.combat-panel { display: flex; flex-direction: column; gap: 10px; position: sticky; bottom: 0; background: var(--bg); padding: 8px 0 16px; border-top: 1px solid var(--border); }
 .zones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .zone { border: 1px dashed var(--border); border-radius: 8px; padding: 6px; min-height: 92px; display: flex; flex-direction: column; gap: 4px; }
 .zone.enemy { background: color-mix(in srgb, #b3412c 6%, transparent); }
@@ -85,8 +85,14 @@ legend { font-weight: 600; padding: 0 4px; }
 @media (max-width: 560px) { .chip { font-size: .7rem; padding: 3px 4px; } .hand { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .topbar button { white-space: nowrap; }
 @media (max-width: 560px) {
-  .combat { position: static; }
+  .combat-panel { position: static; }
   .card .card-desc { display: none; }
   .zone { min-height: 72px; padding: 4px; }
   .log { max-height: none; }
 }
+.orders { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.orders select { width: auto; padding: 2px 6px; }
+.party { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); padding-top: 8px; }
+.chip.party.targetable { border-color: #4f9a5a; box-shadow: 0 0 0 2px #4f9a5a; }
+.row input[type='checkbox'], .row input[type='radio'] { flex: none; min-width: 0; width: auto; }
+.orders label.check { flex-direction: row; }

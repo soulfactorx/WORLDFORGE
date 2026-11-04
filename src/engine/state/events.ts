@@ -1,7 +1,7 @@
 import type { Belief, EntityId } from '../schema';
 import type { D20Test, RollMode } from '../dice/dice';
 import type { CharacterSheet, ModifierBreakdown } from '../character/sheet';
-import type { CombatEffect, CombatState, Outcome, Target } from '../combat/combat';
+import type { CombatEffect, CombatState, Outcome, PartyOrder, Target } from '../combat/combat';
 
 /**
  * 세이브의 진실의 원본은 이 이벤트 로그다.
@@ -25,7 +25,12 @@ export type GameEvent =
   | { type: 'combat_started'; combat: CombatState; rngState: number }
   | { type: 'combat_action'; actorId: string; cardId: string; target: Target; effects: CombatEffect[]; log: string[]; rngState: number }
   | { type: 'combat_turn_ended' }
-  | { type: 'combat_ended'; outcome: Outcome; hp: number; resources: Record<string, { cur: number; max: number }> }
+  /** party: 동료별 전투 후 HP·자원 (v0.5) */
+  | { type: 'combat_ended'; outcome: Outcome; hp: number; resources: Record<string, { cur: number; max: number }>; party?: Record<string, { hp: number; resources: Record<string, { cur: number; max: number }> }> }
+  /** 동료 (v0.5) */
+  | { type: 'companion_joined'; npcId: EntityId; sheet: CharacterSheet }
+  | { type: 'companion_left'; npcId: EntityId; locationId: EntityId }
+  | { type: 'party_order'; npcId: EntityId; order: PartyOrder }
   /** 휴식 (v0.4). 짧은 휴식 1시간, 긴 휴식 8시간 */
   | { type: 'rested'; kind: 'short' | 'long' }
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */

@@ -44,6 +44,15 @@ export interface Character {
   speech: string;
   locationId: EntityId;
   improvisation: Improvisation;
+  /** 동료로 영입할 수 있는 NPC의 전투 능력과 영입 조건 (v0.5) */
+  companion?: CompanionSpec;
+}
+
+export interface CompanionSpec {
+  classId: string;
+  abilities: { str: number; dex: number; con: number; int: number; wis: number; cha: number };
+  /** Actor(해당 NPC)에게만 주는 동행 조건. NPC가 대화 중 스스로 판단한다. */
+  joinCondition: string;
 }
 
 /** 세계의 실제 진실 (L0 Canon). 프롬프트에는 해당 Belief를 가진 주체에게만 들어간다. */
