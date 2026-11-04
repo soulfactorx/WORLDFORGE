@@ -62,18 +62,38 @@ export function pickSceneImage(world: WorldPackage, locationId: EntityId, tag: s
 }
 
 /** 글에 이름(한글 이름 또는 영문 ID)이 나오는 인물 — 처음 나온 순서대로 */
-export function mentionedCharacters(chars: Pick<Character, 'id' | 'name'>[], text: string): string[] {
-  const t = text.toLowerCase();
-  return chars.map((c) => {
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** 한 글자 이름(윤, 핀)은 앞뒤가 다른 한글 낱말의 일부가 아닐 때만 (조사는 허용) */
+const JOSA = '이은는을를의에과와도아야랑께가로만처보한';
+const findName = (text: string, name: string): number => {
+  if (!name) return -1;
+  if (name.length >= 2) return text.toLowerCase().indexOf(name.toLowerCase());
+  const m = new RegExp(`(?<![가-힣])${esc(name)}(?=[${JOSA}]|[^가-힣]|$)`).exec(text);
+  return m ? m.index : -1;
+};
+
+/** 직함 (배경 첫 줄 "직함: 시녀장 · …") — 다른 인물과 겹치지 않을 때만 이름처럼 쓴다 */
+function titleOf(c: Pick<Character, 'background'>): string {
+  const m = /^직함:\s*([^\n·,]+)/.exec(c.background ?? '');
+  const t = m?.[1]?.trim() ?? '';
+  return t.length >= 2 && t.length <= 14 ? t : '';
+}
+
+/** 글에 이름(한글 이름·영문 ID·고유한 직함)이 나오는 인물 — 처음 나온 순서대로 */
+export function mentionedCharacters(chars: Pick<Character, 'id' | 'name' | 'background'>[], text: string): string[] {
+  const titles = chars.map(titleOf);
+  return chars.map((c, i) => {
     const latin = c.id.replace(/^npc\//, '').replace(/-\d+$/, '');
-    let at = c.name.length >= 2 ? t.indexOf(c.name.toLowerCase()) : -1;
+    let at = findName(text, c.name);
     if (at < 0 && latin.length >= 3) { const m = new RegExp(`\\b${latin.replace(/[^a-z0-9-]/gi, '').replace(/-/g, '[ -]')}\\b`, 'i').exec(text); if (m) at = m.index; }
+    const title = titles[i]!;
+    if (at < 0 && title && titles.filter((t) => t === title).length === 1) at = text.indexOf(title);
     return { id: c.id, at };
   }).filter((x) => x.at >= 0).sort((a, b) => a.at - b.at).map((x) => x.id);
 }
 
 /** 글에 나온 인물들의 이미지 (이미지가 있는 인물만, 최대 n장) */
-export function mentionedImages(world: WorldPackage, text: string, salt: string, n = 3, skip: string[] = []): { id: string; caption: string }[] {
+export function mentionedImages(world: WorldPackage, text: string, salt: string, n = 4, skip: string[] = []): { id: string; caption: string }[] {
   const out: { id: string; caption: string }[] = [];
   for (const id of mentionedCharacters(world.characters, text)) {
     if (out.length >= n) break;

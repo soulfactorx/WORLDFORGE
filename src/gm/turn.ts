@@ -449,12 +449,20 @@ function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speaker
     const img = pickCharacterImage(world, sp.id, sp.expression, String(turn));
     if (img && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: sp.name });
   }
-  // 서술에 나온 인물 (말하지 않았어도 묘사되면)
+  // 서술에 나온 인물 (말하지 않았어도 이름·직함이 나오면)
   const shown = new Set(out.map((o) => o.caption));
-  for (const m of mentionedImages(world, narration, String(turn), 4, out.map((o) => o.id))) if (!shown.has(m.caption)) out.push(m);
+  for (const m of mentionedImages(world, narration, String(turn), 5, out.map((o) => o.id))) if (!shown.has(m.caption)) { out.push(m); shown.add(m.caption); }
+  // 이름을 모르는 인물은 서술이 외형으로만 부르므로, 이 장면에 있는 인물·동료도 함께 보여준다 (인물 이미지 3장까지 채움)
+  const people = [...presentCharacters(world, s), ...world.characters.filter((c) => s.party[c.id])];
+  for (const c of people) {
+    if (out.filter((o) => o.caption !== loc?.name).length >= 3) break;
+    if (shown.has(c.name)) continue;
+    const img = pickCharacterImage(world, c.id, '', String(turn));
+    if (img && !out.some((o) => o.id === img.id)) { out.push({ id: img.id, caption: c.name }); shown.add(c.name); }
+  }
   // 매 턴 한 장은 보여준다: 이 장소의 인물·동료 → 장소 이미지 → 지도 → 표지
   if (!out.length) { const f = fallbackImage(world, s, String(turn)); if (f) out.push(f); }
-  return out.slice(0, 4);
+  return out.slice(0, 6);
 }
 
 export function fallbackImage(world: WorldPackage, s: GameState, salt: string): { id: string; caption: string } | undefined {

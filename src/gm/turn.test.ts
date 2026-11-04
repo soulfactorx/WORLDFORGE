@@ -45,3 +45,21 @@ describe('턴: 고른 기술 · 서술에 나온 인물 이미지', () => {
     expect(n && n.type === 'narration' && n.images).toContainEqual({ id: 'stock.knight-m--0', caption: far.name });
   });
 });
+
+describe('여러 인물 이미지', () => {
+  it('한 글자 이름·직함으로 나온 인물과 이 장면의 인물을 모두 보여준다', async () => {
+    const { mentionedCharacters } = await import('../engine/assets');
+    const chars = [{ id: 'npc/yun', name: '윤', background: '직함: 윤 사무소 대표' }, { id: 'npc/finn', name: '핀' }, { id: 'npc/hed', name: '헤드비히', background: '직함: 시녀장' }];
+    expect(mentionedCharacters(chars, '핀이 고개를 들자 시녀장이 웃었다. 윤은 담배를 문다.')).toEqual(['npc/finn', 'npc/hed', 'npc/yun']);
+    expect(mentionedCharacters(chars, '윤기 나는 머리카락, 핀셋')).toEqual([]);
+
+    const w = structuredClone(sampleWorld);
+    const here = w.start.locationId;
+    w.characters = w.characters.slice(0, 1).map((c) => ({ ...c, locationId: here }));
+    w.characters.push({ ...w.characters[0]!, id: 'npc/b', name: '베르타' }, { ...w.characters[0]!, id: 'npc/c', name: '카를' });
+    w.assets = w.characters.map((c, i) => ({ id: `stock.knight-m--${i}`, name: 'k', kind: 'character' as const, characterId: c.id, tags: ['default'], mime: 'image/svg+xml', size: 0 }));
+    const r = await runTurn(mock('키 큰 남자가 문 앞을 막아선다.', 'none'), w, start(w), '둘러본다', () => {});
+    const n = r.events.find((e) => e.type === 'narration');
+    expect(n && n.type === 'narration' && n.images!.length).toBe(3);
+  });
+});
