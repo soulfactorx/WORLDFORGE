@@ -90,6 +90,8 @@ export function buildDirectorContext(world: WorldPackage, state: GameState): str
   ].join('\n');
 }
 
+const MAX_ACTOR_CLAIMS = 80;
+
 export function buildActorContext(world: WorldPackage, state: GameState, npc: Character): string {
   const rel = relationshipOf(world, state.relationships, npc.id);
   const knows = knowledgeOf(world, state.beliefs, npc.id);
@@ -102,6 +104,15 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
       : '  ← 비밀: 지금 신뢰로는 절대 말하지 않는다';
     return c ? `- [${id}] (${st}) ${c.statement}${secretNote}` : '';
   }).filter(Boolean);
+  // 아는 것이 너무 많으면(큰 세계) 지금 장면과 관련된 것 위주로 줄인다: 비밀 → 이 장소·이 자리 인물이 나오는 것 → 나머지
+  if (claimLines.length > MAX_ACTOR_CLAIMS) {
+    const here = world.locations.find((l) => l.id === state.player.locationId)?.name ?? '';
+    const names = [here, ...presentCharacters(world, state).map((c) => c.name)].filter((n) => n.length >= 2);
+    const rank = (l: string) => (l.includes('← 비밀') ? 0 : names.some((n) => l.includes(n)) ? 1 : 2);
+    const kept = claimLines.map((l, i) => ({ l, i, r: rank(l) })).sort((a, b) => a.r - b.r || a.i - b.i).slice(0, MAX_ACTOR_CLAIMS).sort((a, b) => a.i - b.i).map((x) => x.l);
+    claimLines.length = 0;
+    claimLines.push(...kept, `- (그 밖에도 아는 것이 더 있다. 위 목록에 없는 일은 어렴풋하게만 기억한다)`);
+  }
   const loc = world.locations.find((l) => l.id === state.player.locationId);
   return [
     `## 너는 ${npc.name} [${npc.id}]`,

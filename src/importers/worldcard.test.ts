@@ -95,3 +95,47 @@ describe('실제 RisuAI 카드 형태', () => {
     expect(JSON.stringify(r)).not.toMatch(/STATUS RULE|image tag|Absolute rule|hidden/);
   });
 });
+
+describe('항목형 프로필 카드 (### 이름 (별칭) ─ 직함 + - Look: …)', () => {
+  const profile = (head: string, extra = '') => `${head}\n- Where: 23구 소문 골목의 사무소.\n- Look: 179 cm; ash-blond hair.\n- Manner: sharp and cold.\n- Wants: one big job.\n- Speech: clipped 반말. "증거를 보여줘."\n- Ties: 에리.${extra}`;
+  const card = (lore: { name: string; content: string; constant?: boolean }[]) => ({
+    format: 'charx' as const, name: '도시', nickname: '', description: 'narrator and world engine', personality: '', scenario: '', firstMes: '', mesExample: '', creator: '', version: '', tags: [],
+    lore: lore.map((l) => ({ keys: [], enabled: true, ...l })), ignoredPrompts: [], unsupported: [], images: [],
+  });
+  it('이름에 괄호가 없어도 제목·항목으로 인물을 알아보고 필드를 나눈다', () => {
+    const c = card([
+      { name: '윤', content: profile('### 윤 (Yun) ─ 윤 사무소 대표, 23구') },
+      { name: '목련 반장', content: profile('### 오목련 (목련 반장) ─ 심연 로프 조합 반장, 12구 (이 세계 창작)') },
+      { name: '인물 명단', content: profile('### People in the City (인물 명단)') },
+      { name: '구역', content: '### 구역\n큰 도시.' },
+    ]);
+    const an = analyzeEntries(c);
+    expect(an.map((a) => a.kind)).toEqual(['character', 'character', 'world', 'world']);
+    expect(an[0]).toMatchObject({ displayName: '윤', latin: 'Yun', title: '윤 사무소 대표, 23구' });
+    expect(an[1]).toMatchObject({ displayName: '오목련', latin: '', title: '목련 반장 · 심연 로프 조합 반장, 12구' });
+    const f = profileFields(c.lore[0]!, '윤', false);
+    expect(f.appearance).toBe('179 cm; ash-blond hair.');
+    expect(f.personality.startsWith('sharp and cold.')).toBe(true);
+    expect(f.speech).toContain('반말');
+    expect(f.background).toContain('[Where]');
+    expect(f.background).not.toContain('Look');
+  });
+  it('설정 항목이 많으면 관련 인물만 안다 (상수 항목은 모두)', () => {
+    const lore = [
+      { name: '윤', content: profile('### 윤 (Yun) ─ 윤 사무소 대표, 23구') },
+      { name: '로즈', content: profile('### 로즈 (Rose) ─ W사 정리부 분대장, 11구').replace('23구 소문 골목', '11구 정비창') },
+      { name: '도시 · 한눈에 보기', content: '### 도시\n모두가 아는 것.', constant: true },
+      { name: '소문 골목', content: '### 소문 골목 (23구 아래층)\n찻집 미로.' },
+      ...Array.from({ length: 31 }, (_, i) => ({ name: `기타 ${i}`, content: `### 기타 ${i}\n먼 곳 이야기.` })),
+    ];
+    const c = card(lore);
+    const an = analyzeEntries(c);
+    const r = worldCardToEntities(c, sampleWorld, an, { choices: an.map((a) => a.choice), locationId: sampleWorld.start.locationId, mature: false });
+    const knows = (who: string, what: string) => r.beliefs.some((b) => b.holder === who && r.claims.find((x) => x.id === b.claim)!.statement.startsWith(what));
+    expect(knows('npc/yun', '도시 · 한눈에 보기')).toBe(true);
+    expect(knows('npc/rose', '도시 · 한눈에 보기')).toBe(true);
+    expect(knows('npc/yun', '소문 골목')).toBe(true);
+    expect(knows('npc/rose', '소문 골목')).toBe(false);
+    expect(knows('npc/yun', '기타 3')).toBe(false);
+  });
+});

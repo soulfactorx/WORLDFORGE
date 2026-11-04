@@ -78,7 +78,7 @@ export async function readCharxBundle(file: Blob, fileName = 'card.charx', onPro
   const cardLoreKeys = new Set(card.lore.map((e) => e.content.slice(0, 200)));
   const extraLore: LoreEntry[] = (module?.lorebook ?? [])
     .filter((e) => e.content && e.mode !== 'folder' && !cardLoreKeys.has(e.content.slice(0, 200)))
-    .map((e) => ({ name: e.comment ?? '', keys: (e.key ?? '').split(',').map((k) => k.trim()).filter(Boolean), content: e.content!.trim(), enabled: true }));
+    .map((e) => ({ name: e.comment ?? '', keys: (e.key ?? '').split(',').map((k) => k.trim()).filter(Boolean), content: e.content!.trim(), enabled: true, ...(e.alwaysActive ? { constant: true } : {}) }));
 
   // ---- Lua (트리거 코드) — 실행하지 않고 데이터만
   const codes = (module?.trigger ?? []).flatMap((t) => (t.effect ?? []).map((e) => e.code ?? '')).filter(Boolean);

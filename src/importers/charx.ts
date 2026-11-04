@@ -17,6 +17,8 @@ export interface LoreEntry {
   keys: string[];
   content: string;
   enabled: boolean;
+  /** 늘 켜진 항목 (카드의 constant) — 세계의 상식으로 본다 */
+  constant?: boolean;
 }
 
 export interface NormalizedCard {
@@ -109,6 +111,7 @@ export function normalize(raw: unknown, format: CardFormat): NormalizedCard {
       keys: Array.isArray(e.keys) ? (e.keys as unknown[]).map(String).filter(Boolean) : [],
       content: str(e.content).trim(),
       enabled: e.enabled !== false,
+      ...(e.constant === true ? { constant: true } : {}),
     })).filter((e) => e.content) // 내용 없는 폴더·구분선 항목은 버린다
     : [];
 

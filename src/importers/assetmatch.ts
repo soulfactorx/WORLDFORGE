@@ -20,6 +20,10 @@ export function tokenize(name: string): { tokens: string[]; gender?: 'M' | 'F'; 
   return { tokens, gender, compact: tokens.join('') };
 }
 
+/** 평상시 모습을 뜻하는 태그면 기본(default)으로도 쓴다 */
+const DEFAULT_WORDS = /^(standing|stand|idle|normal|neutral|base|basic|default|평상시|기본|무표정)$/;
+const withDefault = (tags: string[]) => (!tags.length ? ['default'] : tags.some((t) => DEFAULT_WORDS.test(t)) && !tags.includes('default') ? [...tags, 'default'] : tags);
+
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
 function findTarget(tokens: string[], compact: string, targets: MatchTarget[]): { t: MatchTarget; used: Set<string> } | undefined {
@@ -51,7 +55,7 @@ export function matchAssets(inputs: AssetInput[], characters: MatchTarget[], loc
     const rest = (used: Set<string>) => tokens.filter((t) => !used.has(t) && !FILLER.has(t) && !/^\d+$/.test(t));
     if (a.cardType === 'icon' && /^(main|icon|cover)$/i.test(a.name)) return { ...base, kind: 'cover' as const, tags: [] };
     const ch = findTarget(tokens, compact, characters);
-    if (ch) { const tags = rest(ch.used); return { ...base, kind: 'character' as const, characterId: ch.t.id, tags: tags.length ? tags : ['default'] }; }
+    if (ch) { const tags = withDefault(rest(ch.used)); return { ...base, kind: 'character' as const, characterId: ch.t.id, tags }; }
     if (tokens.some((t) => MAP_WORDS.test(t))) return { ...base, kind: 'map' as const, tags: rest(new Set(tokens.filter((t) => MAP_WORDS.test(t)))) };
     const loc = findTarget(tokens, compact, locations);
     if (loc) return { ...base, kind: 'scene' as const, locationId: loc.t.id, tags: rest(loc.used) };

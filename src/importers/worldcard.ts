@@ -45,7 +45,20 @@ function parseName(raw: string): { displayName: string; latin: string; gender: '
 /** 인물 프로필로 보이는가: 이름(영문) 형식이고 외형·목소리 같은 항목이 있거나 충분히 길다 */
 const LATIN = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’ .-]*$/;
 
+/** 프로필 첫 제목: "### 윤 (Yun) ─ 윤 사무소 대표, 23구" → 이름·괄호·직함 */
+const PROFILE_HEAD = /^#{1,6}\s+([^\n(─—–]{1,24}?)\s*\(([^)\n]{1,40})\)\s*(?:[─—–-]\s*([^\n]*))?$/m;
+/** "- Look: …" 식 항목 프로필 */
+const FIELD_BULLET = /^\s*[-*]\s*(look|looks|appearance|speech|voice|manner|personality|where|who|routine|wants|weak spot|ties|외모|외형|말투|성격|정체|직업)\s*[:：]/gim;
+
+function bulletProfile(text: string): boolean {
+  const fields = new Set([...text.matchAll(FIELD_BULLET)].map((m) => m[1]!.toLowerCase()));
+  return fields.size >= 2 && [...fields].some((f) => /look|appearance|speech|voice|manner|personality|외모|외형|말투|성격/.test(f));
+}
+
 function looksLikeCharacter(e: LoreEntry): boolean {
+  if (/list|목록|명단/i.test(e.name)) return false;
+  // 항목형 프로필 (### 이름 (별칭) ─ 직함 + - Look: / - Speech: …)
+  if (PROFILE_HEAD.test(e.content.slice(0, 300)) && bulletProfile(e.content)) return true;
   const n = parseName(e.name);
   // 이름 괄호가 영문 이름이거나(헤드비히(Hedwig)), 성별 기호가 붙은 항목(♂️카르엔야(NPC 버전))만 인물로 본다
   if (!(LATIN.test(n.latin) || n.gender) || /list|목록/i.test(e.name)) return false;
@@ -56,6 +69,15 @@ export function analyzeEntries(card: NormalizedCard): AnalyzedEntry[] {
   const seen = new Map<string, number>();
   return card.lore.map((e, index) => {
     const n = parseName(e.name);
+    const head = PROFILE_HEAD.exec(replaceMacros(e.content, '').slice(0, 300));
+    if (head && !NAME_RE.test(e.name)) {
+      // 항목 이름에 괄호가 없으면 첫 제목에서: "### 오목련 (목련 반장) ─ 심연 로프 조합 반장, 12구"
+      const inParen = head[2]!.trim();
+      if (LATIN.test(inParen)) n.latin = inParen;
+      n.displayName = head[1]!.trim() || n.displayName;
+      const role = (head[3] ?? '').replace(/\(이 세계 창작\)/, '').trim();
+      n.title = [LATIN.test(inParen) ? '' : inParen, role].filter(Boolean).join(' · ');
+    }
     if (!LATIN.test(n.latin)) {
       // 괄호가 영문 이름이 아니면(NPC 버전 등) 프로필 첫 제목의 영문 이름을 쓴다: "### Karenya Valkzephas …" → Karenya
       const h = /^#{1,6}\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’-]+)/m.exec(replaceMacros(e.content, ''));
@@ -100,16 +122,26 @@ export function dropExplicit(text: string): string {
   return text.split('\n').filter((l) => !/^\s*[-*]?\s*(intimate|sexual|nsfw|성적|19금|성감대)\s*[:：]/i.test(l)).join('\n');
 }
 
+/** "- Look: 179 cm; …" 항목을 구역으로 */
+function bulletSections(text: string): { heading: string; body: string }[] {
+  const out: { heading: string; body: string }[] = [];
+  for (const m of text.matchAll(/^\s*[-*]\s*([A-Za-z가-힣' ]{2,20})\s*[:：]\s*(.+)$/gm)) out.push({ heading: m[1]!.trim(), body: m[2]!.trim() });
+  return out;
+}
+
 const pick = (secs: { heading: string; body: string }[], re: RegExp) => secs.filter((s) => re.test(s.heading)).map((s) => s.body).join('\n');
 
 export function profileFields(entry: LoreEntry, name: string, mature: boolean) {
   let text = replaceMacros(entry.content, name);
   if (!mature) text = dropExplicit(text);
-  const secs = sections(text);
-  const appearance = pick(secs, /appearance|looks|외모|외형/i);
-  const personality = pick(secs, /personality|first impression|성격|인상|briefly/i);
+  const bullets = bulletSections(text);
+  const heads = sections(text);
+  // 소제목(#### Appearance 등)이 없고 "- Look:" 식 항목만 있는 프로필이면 항목을 구역으로 쓴다
+  const secs = heads.length <= 1 && bullets.length >= 3 ? bullets : heads;
+  const appearance = pick(secs, /appearance|looks?$|외모|외형/i);
+  const personality = [pick(secs, /personality|first impression|성격|인상|briefly|manner|^who$/i), pick(secs, /wants|weak spot|don.?t flatten/i)].filter(Boolean).join('\n');
   const speech = pick(secs, /voice|speech|tone|말투|목소리/i);
-  const used = /appearance|looks|외모|외형|personality|first impression|성격|인상|briefly|voice|speech|tone|말투|목소리/i;
+  const used = /appearance|looks?$|외모|외형|personality|first impression|성격|인상|briefly|voice|speech|tone|말투|목소리|manner|wants|weak spot|don.?t flatten|^who$/i;
   const rest = secs.filter((s) => !used.test(s.heading)).map((s) => (s.heading ? `[${s.heading}] ${s.body}` : s.body)).join('\n');
   const firstLine = text.split('\n').find((l) => l.trim() && !l.startsWith('#'))?.trim() ?? '';
   return {
@@ -138,6 +170,32 @@ export function findImage(card: NormalizedCard, a: AnalyzedEntry) {
   return exact ?? card.images.find((i) => i.name.toLowerCase().replace(/\(.*\)/, '') === base);
 }
 
+/** 설정 글을 명제 조각으로: 소제목 구역마다, 긴 구역은 줄 단위로 380자 안쪽씩 */
+export function knowledgePieces(text: string): { heading: string; body: string }[] {
+  const out: { heading: string; body: string }[] = [];
+  const secs = sections(text);
+  for (const sec of secs.length ? secs : [{ heading: '', body: text }]) {
+    let cur = '';
+    for (const line of sec.body.split('\n').map((l) => l.trim()).filter(Boolean)) {
+      if (cur && cur.length + line.length > 380) { out.push({ heading: sec.heading, body: cur }); cur = ''; }
+      cur = cur ? `${cur} ${line}` : line;
+    }
+    if (cur) out.push({ heading: sec.heading, body: cur });
+  }
+  return out;
+}
+
+/** 이 설정 항목을 이 인물이 알 만한가 */
+function relevantTo(e: LoreEntry, text: string, c: Character, profile: string): boolean {
+  const parts = e.name.split(/[·,/()]|\s[-─]\s/).map((x) => x.trim().toLowerCase()).filter((x) => x.length >= 2);
+  if (parts.some((p) => profile.includes(p))) return true;
+  const latin = c.id.replace(/^npc\//, '').replace(/-\d+$/, '').replace(/-/g, ' ');
+  if ((c.name.length >= 2 && text.includes(c.name)) || (latin.length >= 3 && new RegExp(`\\b${latin}\\b`, 'i').test(text))) return true;
+  // 같은 구역 (예: 23구)
+  const districts = e.name.match(/\d+구/g) ?? [];
+  return districts.some((d) => (c.background ?? '').includes(d));
+}
+
 export function worldCardToEntities(card: NormalizedCard, world: WorldPackage, analyzed: AnalyzedEntry[], opts: WorldCardOptions): {
   characters: Character[]; facts: Fact[]; claims: Claim[]; beliefs: Belief[];
 } {
@@ -148,8 +206,10 @@ export function worldCardToEntities(card: NormalizedCard, world: WorldPackage, a
   const facts: Fact[] = [], claims: Claim[] = [], beliefs: Belief[] = [];
   const cardSlug = slug(card.name) || 'card';
 
+  const charEntries: AnalyzedEntry[] = [];
   analyzed.forEach((a, i) => {
     if (opts.choices[i] !== 'character') return;
+    charEntries.push(a);
     const e = card.lore[a.index]!;
     const name = a.displayName || a.latin || `인물 ${i + 1}`;
     const f = profileFields(e, name, opts.mature);
@@ -163,18 +223,24 @@ export function worldCardToEntities(card: NormalizedCard, world: WorldPackage, a
     });
   });
 
-  // 세계 지식: 구역마다 명제 하나 (최대 6개, 각 400자), 가져온 인물 모두가 안다
+  // 세계 지식: 항목을 400자 안쪽 명제로 나눈다 (항목당 최대 8개)
+  // 설정 항목이 많으면(30개 초과) 모두가 다 알지 않는다: 늘 켜진(상수) 항목은 모두가,
+  // 나머지는 그 항목을 언급하거나 그 항목에 언급되는 인물, 같은 구역의 인물만 안다
+  const worldCount = analyzed.filter((_, i) => opts.choices[i] === 'world').length;
+  const selective = worldCount > 30;
+  const charText = new Map(characters.map((c, k) => [c.id, `${c.name} ${c.background ?? ''} ${card.lore[charEntries[k]!.index]!.content}`.toLowerCase()]));
   analyzed.forEach((a, i) => {
     if (opts.choices[i] !== 'world') return;
     const e = card.lore[a.index]!;
     let text = replaceMacros(e.content, '');
     if (!opts.mature) text = dropExplicit(text);
-    const parts = sections(text).slice(0, 6);
-    (parts.length ? parts : [{ heading: '', body: text }]).forEach((sec, j) => {
+    const pieces = knowledgePieces(text).slice(0, 8);
+    const knowers = !selective || e.constant ? characters : characters.filter((c) => relevantTo(e, text, c, charText.get(c.id)!));
+    pieces.forEach((sec, j) => {
       const statement = cut(`${e.name}${sec.heading ? ` — ${sec.heading}` : ''}: ${sec.body.replace(/\s+/g, ' ')}`, 400);
       const id = unique(`claim/${cardSlug}-${slug(sec.heading) || `lore-${i + 1}`}-${j + 1}`);
       claims.push({ id, statement, truth: 'true' });
-      for (const c of characters) beliefs.push({ holder: c.id, claim: id, state: 'confirmed' });
+      for (const c of knowers) beliefs.push({ holder: c.id, claim: id, state: 'confirmed' });
     });
   });
   return { characters, facts, claims, beliefs };
