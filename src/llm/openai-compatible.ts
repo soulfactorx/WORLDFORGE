@@ -1,4 +1,4 @@
-import type { LlmClient, LlmRequest, LlmSettings } from './types';
+import { type LlmClient, LlmHttpError, LlmJsonError, type LlmRequest, type LlmSettings, LlmTruncatedError } from './types';
 
 /**
  * OpenAI 호환 Chat Completions 엔드포인트 어댑터 (OpenAI, OpenRouter, Ollama, LM Studio 등).
@@ -19,7 +19,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
         method: 'POST', headers, signal,
         body: JSON.stringify({ model: s.model, max_tokens: req.maxTokens, stream: true, messages: messages(req) }),
       });
-      if (!res.ok || !res.body) throw new Error(`LLM 요청 실패 (${res.status}): ${await res.text()}`);
+      if (!res.ok || !res.body) throw new LlmHttpError(res.status, `LLM 요청 실패 (${res.status}): ${(await res.text()).slice(0, 500)}`);
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
       let buf = '', full = '';
       for (;;) {
@@ -49,11 +49,14 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
           ],
         }),
       });
-      if (!res.ok) throw new Error(`LLM 요청 실패 (${res.status}): ${await res.text()}`);
-      const text: string = (await res.json()).choices?.[0]?.message?.content ?? '';
+      if (!res.ok) throw new LlmHttpError(res.status, `LLM 요청 실패 (${res.status}): ${(await res.text()).slice(0, 500)}`);
+      const body = await res.json();
+      const text: string = body.choices?.[0]?.message?.content ?? '';
+      const start = text.indexOf('{');
+      if (body.choices?.[0]?.finish_reason === 'length') throw new LlmTruncatedError(start >= 0 ? text.slice(start) : text);
       const match = text.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error('JSON 응답을 해석할 수 없습니다.');
-      return JSON.parse(match[0]) as T;
+      if (!match) throw new LlmJsonError(text, 'JSON 객체가 없습니다');
+      try { return JSON.parse(match[0]) as T; } catch (e) { throw new LlmJsonError(start >= 0 ? text.slice(start) : text, (e as Error).message); }
     },
   };
 }

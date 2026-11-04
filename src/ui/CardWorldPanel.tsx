@@ -5,6 +5,8 @@ import { type CharxBundle, parseToggles, readCharxBundle } from '../importers/bu
 import { portraitDataUrl } from '../importers/portrait';
 import type { EntryChoice } from '../importers/worldcard';
 import { createLlmClient } from '../llm';
+import { cached } from '../llm/robust';
+import { clearGenCache, genCache, genCacheCount } from '../storage/gencache';
 import type { LlmSettings } from '../llm/types';
 import { storeAssets } from '../storage/assets';
 import { savePackage } from '../storage/packages';
@@ -39,6 +41,9 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
   const abort = useRef<AbortController | null>(null);
   const [translate, setTranslate] = useState(true);
   const [findChars, setFindChars] = useState(true);
+  const [stored, setStored] = useState(0);
+  const [reuse, setReuse] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [pct, setPct] = useState<{ at: number; next: number; since: number; start: number }>({ at: 0, next: 0, since: 0, start: 0 });
   const [, tick] = useState(0);
   useEffect(() => { if (!stage) return; const t = setInterval(() => tick((n) => n + 1), 500); return () => clearInterval(t); }, [stage !== '']);
@@ -54,6 +59,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
         const b = await readCharxBundle(file, file.name, (m) => live && setLoading(m));
         if (!live) return;
         setBundle(b);
+        setStored(await genCacheCount(b.fingerprint));
         setChoices(analyzeBundle(b).analyzed.map((a) => a.choice));
         if (/nsfw|성인|19금|adult/i.test(b.card.tags.join(' '))) setRating('mature');
         const t: { name: string; url: string }[] = [];
@@ -76,8 +82,12 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
     abort.current = new AbortController();
     const signal = abort.current.signal;
     setPct({ at: 0, next: 3, since: Date.now(), start: Date.now() });
+    setFailed(false);
     try {
-      const llm = createLlmClient(settings);
+      if (!reuse) await clearGenCache(bundle.fingerprint);
+      let hits = 0;
+      // 재시도·잘린 응답 처리 + 단계별 결과 저장(같은 카드로 다시 하면 끝난 단계는 건너뜀)
+      const llm = cached(createLlmClient(settings, { onRetry: (n, why) => setStage(`AI 응답 문제로 다시 시도하는 중 (${n}번째)… ${why.slice(0, 60)}`) }), genCache(bundle.fingerprint), () => { hits++; setStage(`저장된 결과를 다시 쓰는 중… (${hits}개)`); });
       const r = await cardToWorld(llm, bundle, {
         contentRating: rating, classifyImages: classify, withScenario, choices, translate, aiFindCharacters: findChars,
         makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),
@@ -94,7 +104,8 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
       onStage('완료', 100, 100);
       onDone(r.world, r.notes);
     } catch (e) {
-      if (!signal.aborted) setError((e as Error).message);
+      if (!signal.aborted) { setError((e as Error).message); setFailed(true); }
+      setStored(await genCacheCount(bundle.fingerprint));
     } finally {
       setStage(''); setProgress(null); setPct({ at: 0, next: 0, since: 0, start: 0 });
     }
@@ -115,7 +126,17 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
       </p>
       <p className="muted small">파일: {file.name} ({mb(file.size)})</p>
       {loading && <p className="status">{loading}</p>}
-      {error && <p className="status">❌ {error}</p>}
+      {error && (
+        <div className="status">
+          <p>❌ {error}</p>
+          {failed && b && (
+            <p className="small">
+              끝난 단계의 AI 결과 {stored}개는 저장되어 있습니다. <button className="primary" onClick={run} disabled={!settings}>↻ 이어서 다시 시도</button>
+              {' '}<span className="muted">— 끝난 단계는 AI를 다시 쓰지 않고 건너뜁니다. 나중에 같은 카드를 다시 열어도 이어집니다 (30일 보관).</span>
+            </p>
+          )}
+        </div>
+      )}
       {b && analysis && (
         <>
           <div className="row">
@@ -151,6 +172,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
             </label>
             <label className="check"><input type="checkbox" checked={classify} disabled={busy} onChange={(e) => setClassify(e.target.checked)} /> 이름 규칙으로 못 찾은 이미지를 AI로 분류 (파일 이름만 보냄)</label>
             <label className="check"><input type="checkbox" checked={withScenario} disabled={busy} onChange={(e) => setWithScenario(e.target.checked)} /> 임무·결말까지 만들기</label>
+            {stored > 0 && <label className="check"><input type="checkbox" checked={reuse} disabled={busy} onChange={(e) => setReuse(e.target.checked)} /> 이전에 진행한 AI 결과 {stored}개 다시 쓰기 (끄면 처음부터 새로 만듦)</label>}
             <label className="check"><input type="checkbox" checked={findChars} disabled={busy} onChange={(e) => setFindChars(e.target.checked)} /> 규칙으로 못 찾은 인물을 AI가 로어북에서 더 찾기</label>
             <label className="check"><input type="checkbox" checked={translate} disabled={busy} onChange={(e) => setTranslate(e.target.checked)} /> 외국어(영어 등) 인물·설정 글을 한국어로 번역</label>
           </div>

@@ -27,3 +27,16 @@ export interface LlmClient {
 }
 
 export class LlmRefusalError extends Error {}
+
+/** 응답이 길이 제한에 걸려 잘렸다 (text = 잘린 응답) */
+export class LlmTruncatedError extends Error {
+  constructor(readonly text: string) { super('AI 응답이 길이 제한에 걸려 잘렸습니다.'); }
+}
+/** JSON으로 해석할 수 없는 응답 */
+export class LlmJsonError extends Error {
+  constructor(readonly text: string, cause: string) { super(`AI 응답을 JSON으로 해석할 수 없습니다: ${cause}`); }
+}
+/** 서버·네트워크 오류 (status 0 = 네트워크) */
+export class LlmHttpError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}

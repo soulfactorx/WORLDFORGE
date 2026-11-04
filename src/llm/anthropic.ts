@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { type LlmClient, type LlmRequest, type LlmSettings, LlmRefusalError } from './types';
+import { type LlmClient, LlmJsonError, type LlmRequest, type LlmSettings, LlmRefusalError, LlmTruncatedError } from './types';
 
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
@@ -35,7 +35,8 @@ export function createAnthropicClient(s: LlmSettings): LlmClient {
       );
       if (msg.stop_reason === 'refusal') throw new LlmRefusalError('모델이 이 요청을 거절했습니다.');
       const text = msg.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
-      return JSON.parse(text) as T;
+      if (msg.stop_reason === 'max_tokens') throw new LlmTruncatedError(text);
+      try { return JSON.parse(text) as T; } catch (e) { throw new LlmJsonError(text, (e as Error).message); }
     },
   };
 }

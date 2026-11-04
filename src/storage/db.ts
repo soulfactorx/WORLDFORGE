@@ -35,6 +35,8 @@ class WorldforgeDB extends Dexie {
   assets!: EntityTable<{ key: string; pkg: string; blob: Blob }, 'key'>;
   /** 사용자가 만든 기본 이미지 세트 (v0.17) — 모든 세계에서 쓴다 */
   userArt!: EntityTable<UserArt, 'id'>;
+  /** 세계 만들기 중간 결과 (AI 응답) — 멈춰도 이어서 처리 (v0.19.1) */
+  genCache!: EntityTable<{ key: string; ns: string; value: unknown; at: number }, 'key'>;
   constructor() {
     super('worldforge');
     this.version(1).stores({
@@ -70,6 +72,16 @@ class WorldforgeDB extends Dexie {
       imports: 'id, importedAt',
       assets: 'key, pkg',
       userArt: 'id, kind, createdAt',
+    });
+    // v0.19.1: 세계 만들기 중간 결과
+    this.version(6).stores({
+      saves: 'id, updatedAt',
+      events: '[saveId+seq], saveId',
+      packages: 'key, id, updatedAt',
+      imports: 'id, importedAt',
+      assets: 'key, pkg',
+      userArt: 'id, kind, createdAt',
+      genCache: 'key, ns, at',
     });
   }
 }
