@@ -162,7 +162,8 @@ export function validateWorld(input: unknown): Issue[] {
   claims.forEach((c, i) => {
     const known = beliefs.some((b) => b.claim === c.id);
     const found = locations.some((l) => l.discoveries?.some((d) => d.claim === c.id));
-    if (!known && !found) warn(`claims[${i}]`, `"${c.id}"는 아무도 모르고 발견할 수도 없어, 플레이어가 알 방법이 없습니다.`);
+    const atStart = Array.isArray(w.starts) && w.starts.some((st) => st?.knows?.includes(c.id));
+    if (!known && !found && !atStart) warn(`claims[${i}]`, `"${c.id}"는 아무도 모르고 발견할 수도 없어, 플레이어가 알 방법이 없습니다.`);
   });
 
   // ---- 조우

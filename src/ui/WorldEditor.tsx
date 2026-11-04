@@ -5,6 +5,7 @@ import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { Belief, Character, Claim, Fact, Location, WorldPackage } from '../engine/schema';
 import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
 import { AssetGallery } from './AssetGallery';
+import { fillOrphanKnowledge } from '../gm/worldgen/fromCard';
 import { IssueList } from './IssueList';
 import { CardImportDialog } from './CardImportDialog';
 import { josa } from '../engine/text/josa';
@@ -185,6 +186,16 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
       {w.manifest.private && <div className="private-banner">🔒 {w.manifest.private.note}<br /><span className="muted">원작: {w.manifest.private.source}</span></div>}
       <IssueList issues={issues} onPick={(p) => setTab(tabForPath(p))} limit={8} />
+      {issues.some((i) => /아무도 모르고|보호 주제는 subjects/.test(i.message)) && (
+        <p className="small">
+          <button onClick={() => {
+            const r = fillOrphanKnowledge(w);
+            setW(r.world);
+            setStatus(r.fixed ? `글에 이름이 나오는 인물에게 지식 ${r.fixed}건을 연결했습니다. 확인 후 저장하세요.` : '연결할 인물을 찾지 못했습니다. 지식 탭에서 직접 아는 사람을 정해 주세요.');
+          }}>아무도 모르는 지식을 관련 인물에게 연결</button>
+          <span className="muted"> — 경고는 플레이를 막지 않습니다. 아무도 모르는 연표는 NPC가 말해 줄 수 없을 뿐입니다.</span>
+        </p>
+      )}
       <div className="tabs">
         {TABS.filter(([id]) => !(id === 'json' && w.manifest.private) && !(id === 'images' && !w.assets?.length)).map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
       </div>

@@ -35,7 +35,7 @@ export interface CardWorldDraft {
   opening_scene: string;
   locations: { key: string; name: string; description: string; connections: string[]; improvisation: 'none' | 'minor' | 'free' }[];
   character_places: { character: string; location: string; improvisation: 'none' | 'minor' | 'free'; initial_affinity: number; initial_trust: number; companion_class: string; join_condition: string }[];
-  timeline: { key: string; when: string; title: string; statement: string; secrecy: number; protected_topic: string; known_by: string[]; rumor_by: string[] }[];
+  timeline: { key: string; when: string; title: string; statement: string; status: 'past' | 'ongoing' | 'future'; secrecy: number; protected_topic: string; known_by: string[]; rumor_by: string[] }[];
   starts: { key: string; name: string; description: string; location: string; opening_scene: string; knows: string[] }[];
   plot_request: string;
 }
@@ -61,7 +61,9 @@ export const CARD_WORLD_SCHEMA = obj({
   })),
   timeline: arr(obj({
     key: str, when: { type: 'string', description: '원작 속 날짜·시점 (예: 제국력 429년 9월 21일, D-100)' }, title: str,
-    statement: { type: 'string', description: '그 사건의 내용 한두 문장' }, secrecy: { type: 'integer', description: '0 공공연함 ~ 5 극비' },
+    statement: { type: 'string', description: '그 사건의 내용 한두 문장' },
+    status: { type: 'string', enum: ['past', 'ongoing', 'future'], description: '기본 시작 시점 기준: 이미 일어난 일 / 진행 중인 일(숨은 계획 포함) / 앞으로 일어날 일' },
+    secrecy: { type: 'integer', description: '0 공공연함 ~ 5 극비' },
     protected_topic: { type: 'string', description: '비밀이면 내용을 드러내지 않는 짧은 이름표, 아니면 ""' },
     known_by: { type: 'array', items: str, description: '이 사건(계획)을 아는 인물 ID' }, rumor_by: { type: 'array', items: str, description: '소문으로만 아는 인물 ID' },
   })),
@@ -79,6 +81,7 @@ const SYSTEM = `너는 1인칭 AI TRPG의 세계관 설계자다. 다른 플랫�
 - 장소는 원작에 나오는 곳으로 5~12곳. 서로 이어지고 시작 장소에서 갈 수 있어야 한다. 장소 묘사는 감각으로 알 수 있는 것만.
 - 인물은 주어진 ID만 쓴다. 모든 인물을 평소 있을 장소에 배치한다. 핵심 인물은 improvisation none.
 - 연표(timeline)는 데이터 표(EVENTS 등)와 로어북의 사건을 시간순으로. 숨겨진 계획·음모는 secrecy 3 이상과 protected_topic, 아는 인물(known_by).
+- 이미 일어난 사건(past)은 그 일을 겪었거나 들었을 인물을 known_by에 반드시 넣는다. 세상이 다 아는 일이면 비워도 된다(모두가 안다). 앞으로 일어날 일(future)은 그 일을 꾸미는 인물만 안다.
 - 시작 방식(starts)은 카드에 있는 시작 선택지(빙의 대상·도입 상황 등)를 옮긴다. 없으면 1개. {{user}}는 플레이어다.
 - 문체(style)는 원작 첫 메시지와 묘사의 문체만 요약한다. 출력 형식·상태창·이미지 태그 규칙은 넣지 않는다.
 - 한국어로 쓴다. key는 영문 소문자 슬러그.`;
@@ -193,13 +196,20 @@ export async function cardToWorld(
   for (const t of timeline) {
     const cl = claimByKey(t.key);
     if (!cl) continue;
-    for (const h of t.known_by ?? []) if (charIds.has(h)) beliefs.push({ holder: h, claim: cl, state: t.secrecy >= 3 ? 'secret' : 'confirmed' });
-    for (const h of t.rumor_by ?? []) if (charIds.has(h) && !(t.known_by ?? []).includes(h)) beliefs.push({ holder: h, claim: cl, state: 'rumor' });
+    let knowers = (t.known_by ?? []).filter((h) => charIds.has(h));
+    // 아는 사람이 없는 사건: 언급된 인물 → (이미 일어난 공공연한 일이면) 모든 인물
+    if (!knowers.length) knowers = mentionedCharacters(ents.characters, `${t.title} ${t.statement}`);
+    if (!knowers.length && t.status !== 'future' && t.secrecy < 3) knowers = [...charIds];
+    for (const h of knowers) beliefs.push({ holder: h, claim: cl, state: t.secrecy >= 3 ? 'secret' : 'confirmed' });
+    for (const h of t.rumor_by ?? []) if (charIds.has(h) && !knowers.includes(h)) beliefs.push({ holder: h, claim: cl, state: 'rumor' });
   }
   // 비밀 사실의 관련 인물
   for (const f of world.facts) {
     const t = timeline.find((x) => `fact/${slug(x.key)}` === f.id);
-    if (t) f.subjects = (t.known_by ?? []).filter((h) => charIds.has(h));
+    if (!t) continue;
+    const subj = (t.known_by ?? []).filter((h) => charIds.has(h));
+    f.subjects = subj.length ? subj : mentionedCharacters(ents.characters, `${t.title} ${t.statement}`);
+    if (!f.subjects.length) f.subjects = [...charIds];
   }
   // 시작 방식
   const starts: StartOption[] = [];
@@ -276,4 +286,37 @@ export async function cardToWorld(
   }
   onStage('검사 중…');
   return { world, notes, issues: validateWorld(world), images };
+}
+
+/** 글에 이름(한글 이름 또는 영문 ID)이 나오는 인물 */
+export function mentionedCharacters(chars: Pick<WorldPackage['characters'][number], 'id' | 'name'>[], text: string): string[] {
+  const t = text.toLowerCase();
+  return chars.filter((c) => {
+    const latin = c.id.replace(/^npc\//, '').replace(/-\d+$/, '');
+    return (c.name.length >= 2 && t.includes(c.name.toLowerCase())) || (latin.length >= 3 && new RegExp(`\\b${latin.replace(/-/g, '[ -]')}\\b`, 'i').test(text));
+  }).map((c) => c.id);
+}
+
+/**
+ * 이미 만든 세계 보완: 아무도 모르는 명제를 그 글에 이름이 나오는 인물에게,
+ * 관련 인물이 없는 보호 주제에는 언급된 인물(없으면 모든 인물)을 붙인다. 시작 방식으로 알게 되는 명제는 그대로 둔다.
+ */
+export function fillOrphanKnowledge(world: WorldPackage): { world: WorldPackage; fixed: number } {
+  const w = structuredClone(world);
+  let fixed = 0;
+  const startKnows = new Set((w.starts ?? []).flatMap((s) => s.knows ?? []));
+  for (const c of w.claims) {
+    if (startKnows.has(c.id) || w.beliefs.some((b) => b.claim === c.id) || w.locations.some((l) => l.discoveries?.some((d) => d.claim === c.id))) continue;
+    const secret = (w.facts.find((f) => f.id === c.relatesTo)?.secrecy ?? 0) >= 3;
+    const who = mentionedCharacters(w.characters, c.statement);
+    for (const h of who) w.beliefs.push({ holder: h, claim: c.id, state: secret ? 'secret' : 'confirmed' });
+    if (who.length) fixed++;
+  }
+  for (const f of w.facts) {
+    if (!f.protectedTopic || f.subjects?.length) continue;
+    const who = mentionedCharacters(w.characters, `${f.protectedTopic} ${f.statement}`);
+    f.subjects = who.length ? who : w.characters.map((c) => c.id);
+    if (f.subjects.length) fixed++;
+  }
+  return { world: w, fixed };
 }

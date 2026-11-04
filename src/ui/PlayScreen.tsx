@@ -14,6 +14,7 @@ import { appendEvents, loadEvents, undoLastTurn } from '../storage/db';
 import { CharacterPanel } from './CharacterPanel';
 import { JournalPanel } from './JournalPanel';
 import { AssetImage } from './AssetImage';
+import { RichText } from './RichText';
 import { pickSceneImage } from '../engine/assets';
 
 /**
@@ -170,10 +171,10 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                 {e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} /><figcaption>{im.caption}</figcaption></figure>)}
               </div>
             )}
-            <p className={`entry ${e.kind}`}>{e.text}</p>
+            <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : e.text}</p>
           </div>
         ))}
-        {streaming !== null && <p className="entry narration">{streaming || '…'}</p>}
+        {streaming !== null && <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>}
         <div ref={bottom} />
       </div>
       {error && <p className="status">❌ {error}</p>}

@@ -28,8 +28,8 @@ const draft: CardWorldDraft = {
     { character: 'npc/karenya', location: 'nowhere', improvisation: 'none', initial_affinity: 0, initial_trust: 0, companion_class: '', join_condition: '' },
   ],
   timeline: [
-    { key: 'ruin', when: '429년 9월 21일', title: '제국 멸망', statement: '제국이 무너진다.', secrecy: 4, protected_topic: '멸망의 날', known_by: ['npc/hedwig', 'npc/ghost'], rumor_by: [] },
-    { key: 'ball', when: '429년 6월 20일', title: '무도회', statement: '무도회가 열린다.', secrecy: 0, protected_topic: '', known_by: [], rumor_by: ['npc/hedwig'] },
+    { key: 'ruin', when: '429년 9월 21일', title: '제국 멸망', statement: '제국이 무너진다.', status: 'future', secrecy: 4, protected_topic: '멸망의 날', known_by: ['npc/hedwig', 'npc/ghost'], rumor_by: [] },
+    { key: 'ball', when: '429년 6월 20일', title: '무도회', statement: '무도회가 열린다.', status: 'past', secrecy: 0, protected_topic: '', known_by: [], rumor_by: ['npc/hedwig'] },
   ],
   starts: [
     { key: 'karenya', name: '황제에게 빙의', description: '당신은 황제가 되었다.', location: 'bedchamber', opening_scene: '거울 속 얼굴이 낯설다.', knows: ['ruin', 'ball'] },
@@ -69,7 +69,8 @@ describe('cardToWorld', () => {
     // 연표 → 비밀 사실 + 아는 인물
     expect(w.facts.some((f) => f.protectedTopic === '멸망의 날')).toBe(true);
     expect(w.beliefs).toContainEqual({ holder: 'npc/hedwig', claim: 'claim/ruin', state: 'secret' });
-    expect(w.beliefs).toContainEqual({ holder: 'npc/hedwig', claim: 'claim/ball', state: 'rumor' });
+    // 아는 사람이 없는 지난 공공연한 사건은 모두가 안다
+    expect(w.beliefs.filter((x) => x.claim === 'claim/ball').map((x) => x.state)).toEqual(['confirmed', 'confirmed']);
     expect(w.beliefs.some((x) => x.holder === 'npc/ghost')).toBe(false);
     // 시작 방식
     expect(w.starts!.map((s) => s.id)).toEqual(['start/karenya', 'start/native']);
@@ -96,5 +97,28 @@ describe('cardToWorld', () => {
     const ev2 = startEvents(w, legacyCharacter('나'), 1, 'start/karenya');
     expect(ev2.filter((e) => e.type === 'knowledge_revealed').length).toBe(2);
     expect(w.assets!.find((a) => a.name === '???')).toMatchObject({ kind: 'character', characterId: 'npc/hedwig', tags: ['angry'] });
+  });
+});
+
+describe('보완·이미지 대체', () => {
+  it('아무도 모르는 지식을 이름이 나오는 인물에게 연결하고, 말한 인물 이미지가 없으면 다른 이미지를 보여준다', async () => {
+    const { fillOrphanKnowledge } = await import('./fromCard');
+    const { fallbackImage } = await import('../turn');
+    const { sampleWorld } = await import('../../data/sample-world');
+    const { applyEvent, initialState } = await import('../../engine/state/state');
+    const w = structuredClone(sampleWorld);
+    const npc = w.characters[0]!;
+    w.claims.push({ id: 'claim/orphan', statement: `[416년] ${npc.name}이(가) 처음 궁에 왔다.`, truth: 'true' }, { id: 'claim/nobody', statement: '아무 관련 없는 일', truth: 'true' });
+    w.facts.push({ id: 'fact/x', statement: '비밀', secrecy: 4, protectedTopic: '그 일' });
+    const r = fillOrphanKnowledge(w);
+    expect(r.world.beliefs).toContainEqual({ holder: npc.id, claim: 'claim/orphan', state: 'confirmed' });
+    expect(r.world.beliefs.some((b) => b.claim === 'claim/nobody')).toBe(false);
+    expect(r.world.facts.find((f) => f.id === 'fact/x')!.subjects!.length).toBe(w.characters.length);
+    // 이미지 대체: 이 장소 인물 → 지도 → 표지
+    const s = applyEvent(initialState(), { type: 'game_started', packageId: w.manifest.id, packageVersion: '1', seed: 1, locationId: npc.locationId, playerName: 'p' }, 0);
+    w.assets = [{ id: 'm', name: 'map', kind: 'map', tags: [], mime: 'image/png', size: 1 }, { id: 'c', name: 'cover', kind: 'cover', tags: [], mime: 'image/png', size: 1 }];
+    expect(fallbackImage(w, s, '1')!.id).toBe('m');
+    w.assets.push({ id: 'p', name: 'x', kind: 'character', characterId: npc.id, tags: ['default'], mime: 'image/png', size: 1 });
+    expect(fallbackImage(w, s, '1')).toEqual({ id: 'p', caption: npc.name });
   });
 });

@@ -1,12 +1,12 @@
 :root {
   --bg: #f6f4ef; --surface: #ffffff; --text: #1f1d1a; --muted: #6b665d; --border: #ddd7cc;
-  --accent: #8a5a2b; --accent-text: #ffffff; --check: #2e5d8a; --player: #4a4640;
+  --accent: #8a5a2b; --accent-text: #ffffff; --check: #2e5d8a; --player: #4a4640; --dialogue: #9a3f2b; --thought: #5d6b8a;
   color-scheme: light;
   font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #16150f; --surface: #201e18; --text: #ebe6dc; --muted: #9c958a; --border: #36332b;
-    --accent: #d39a5c; --accent-text: #16150f; --check: #7fb0e0; --player: #c9c2b6; color-scheme: dark; }
+    --accent: #d39a5c; --accent-text: #16150f; --check: #7fb0e0; --player: #c9c2b6; --dialogue: #f0b77a; --thought: #a9b4d0; color-scheme: dark; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); }
@@ -34,7 +34,7 @@ label.check input { width: auto; }
 .saves { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .saves li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .play { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 8px; }
-.scene-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scene-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 8px 0; border-bottom: 1px solid var(--border); }
 .spacer { flex: 1; }
 .log { flex: 1; overflow-y: auto; max-height: calc(100vh - 220px); padding: 4px 0; }
 .entry { white-space: pre-wrap; line-height: 1.75; margin: 0 0 14px; }
@@ -166,3 +166,7 @@ label.file input[type='file'] { font-size: .8rem; }
 .progress-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
 .progress-bar > span { display: block; height: 100%; background: var(--accent); }
 @media (max-width: 600px) { .scene-images figure { max-width: 46%; } }
+
+/* v0.13.1 대사·속마음 */
+.entry .dlg { color: var(--dialogue); font-weight: 500; }
+.entry .thought { color: var(--thought); }
