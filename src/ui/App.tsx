@@ -5,9 +5,10 @@ import { PlayScreen } from './PlayScreen';
 import { SaveList } from './SaveList';
 import { SettingsPanel } from './SettingsPanel';
 import { WorldEditor } from './WorldEditor';
+import { WorldGenPanel } from './WorldGenPanel';
 import type { WorldPackage } from '../engine/schema';
 
-type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null };
+type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[] } | { name: 'worldgen' };
 
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
@@ -25,8 +26,9 @@ export function App() {
         {view.name === 'settings' && (
           <SettingsPanel initial={settings} onSaved={(s) => { setSettings(s); setView({ name: 'saves' }); }} />
         )}
-        {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world) => setView({ name: 'editor', world })} />}
-        {view.name === 'editor' && <WorldEditor initial={view.world} onDone={() => setView({ name: 'saves' })} />}
+        {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world) => setView({ name: 'editor', world })} onGenerate={() => setView({ name: 'worldgen' })} />}
+        {view.name === 'editor' && <WorldEditor key={view.world?.manifest.id ?? 'new'} initial={view.world} draftNotes={view.notes} settings={settings} onDone={() => setView({ name: 'saves' })} />}
+        {view.name === 'worldgen' && <WorldGenPanel settings={settings} onCancel={() => setView({ name: 'saves' })} onDraft={(world, notes) => setView({ name: 'editor', world, notes })} />}
         {view.name === 'play' && (
           settings
             ? <PlayScreen saveId={view.saveId} settings={settings} onExit={() => setView({ name: 'saves' })} />

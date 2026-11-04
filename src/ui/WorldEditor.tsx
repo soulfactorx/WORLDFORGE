@@ -5,6 +5,9 @@ import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { Belief, Character, Claim, Fact, Location, WorldPackage } from '../engine/schema';
 import { blankWorld, exportWpk, savePackage } from '../storage/packages';
 import { IssueList } from './IssueList';
+import { generateScenario } from '../gm/worldgen/generate';
+import { createLlmClient } from '../llm';
+import type { LlmSettings } from '../llm/types';
 
 /**
  * 세계관 제작 도구 1단계 (설계서 PART 5): 폼 편집 + 고급 항목 JSON 편집 + 실시간 검사.
@@ -98,10 +101,31 @@ function ItemList<T extends { id: string }>({ items, onChange, make, render, tit
 
 // ---------------------------------------------------------------- 편집기
 
-export function WorldEditor({ initial, onDone }: { initial: WorldPackage | null; onDone: () => void }) {
+export function WorldEditor({ initial, onDone, settings, draftNotes }: {
+  initial: WorldPackage | null; onDone: () => void; settings?: LlmSettings | null; draftNotes?: string[];
+}) {
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
   const [tab, setTab] = useState<Tab>('basic');
   const [status, setStatus] = useState('');
+  const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
+  const [approved, setApproved] = useState(!draftNotes);
+  const [genStage, setGenStage] = useState('');
+  const [genRequest, setGenRequest] = useState('');
+
+  async function aiScenario() {
+    if (!settings) return;
+    try {
+      const r = await generateScenario(createLlmClient(settings), w, setGenStage, undefined, genRequest);
+      setW({ ...r.world, manifest: { ...r.world.manifest, aiAssisted: true } });
+      setNotes(r.notes);
+      setApproved(false);
+      setStatus('AI가 임무·조우·결말 초안을 덧붙였습니다. 검토 후 저장하세요.');
+    } catch (e) {
+      setStatus(`❌ ${(e as Error).message}`);
+    } finally {
+      setGenStage('');
+    }
+  }
   const issues = useMemo(() => validateWorld(w), [w]);
   const set = (patch: Partial<WorldPackage>) => setW((p) => ({ ...p, ...patch }));
   const locOptions = w.locations.map((l) => [l.id, `${l.name} (${l.id})`] as const);
@@ -111,6 +135,7 @@ export function WorldEditor({ initial, onDone }: { initial: WorldPackage | null;
   async function save() {
     try {
       await savePackage(w, 'created');
+      setApproved(true);
       setStatus(`저장했습니다 (${w.manifest.id}@${w.manifest.version}).${hasErrors(issues) ? ' 오류를 고쳐야 플레이할 수 있습니다.' : ''}`);
     } catch (e) {
       setStatus(`❌ ${(e as Error).message}`);
@@ -132,6 +157,17 @@ export function WorldEditor({ initial, onDone }: { initial: WorldPackage | null;
         <button className="primary" onClick={save}>저장</button>
       </div>
       {status && <p className="status small">{status}</p>}
+      {!approved && (
+        <div className="ai-draft small">
+          <b>✦ AI가 만든 초안입니다.</b> 아직 라이브러리에 등록되지 않았습니다. 내용을 읽고 고친 뒤 <b>저장</b>하면 승인됩니다.
+          {notes && notes.length > 0 && (
+            <details>
+              <summary>자동으로 고친 내용 {notes.length}건</summary>
+              <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+            </details>
+          )}
+        </div>
+      )}
       <IssueList issues={issues} onPick={(p) => setTab(tabForPath(p))} limit={8} />
       <div className="tabs">
         {TABS.map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
@@ -280,6 +316,12 @@ export function WorldEditor({ initial, onDone }: { initial: WorldPackage | null;
             <code>{'{ "at": "loc/…" }'}</code> <code>{'{ "cleared": "enc/…" }'}</code> <code>{'{ "inParty": "npc/…" }'}</code>{' '}
             <code>{'{ "relationship": "npc/…", "axis": "trust", "gte": 20 }'}</code> <code>{'{ "flag": "…" }'}</code> <code>{'{ "questDone": "quest/…" }'}</code> <code>{'{ "level": 2 }'}</code>
           </p>
+          {settings && (
+            <div className="row">
+              <input value={genRequest} placeholder="(선택) 원하는 이야기 방향 — 예: 배신하는 동료가 있는 메인 임무" onChange={(e) => setGenRequest(e.target.value)} />
+              <button type="button" disabled={!!genStage} onClick={aiScenario}>{genStage || '✦ AI로 임무·조우·결말 추가'}</button>
+            </div>
+          )}
           <JsonField label="임무" value={w.quests ?? []} onChange={(quests) => set({ quests })} rows={16} />
           <JsonField label="이야기 플래그 (Director가 세울 수 있는 결정)" value={w.flags ?? []} onChange={(flags) => set({ flags })} rows={8} />
           <JsonField label="결말" value={w.endings ?? []} onChange={(endings) => set({ endings })} rows={8} />

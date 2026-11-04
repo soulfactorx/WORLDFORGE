@@ -1,0 +1,72 @@
+import { useRef, useState } from 'react';
+import { generateWorld, type Size } from '../gm/worldgen/generate';
+import { createLlmClient } from '../llm';
+import type { LlmSettings } from '../llm/types';
+import type { WorldPackage } from '../engine/schema';
+
+const EXAMPLE = '안개가 걷히지 않는 산골 수도원. 수도사들은 매일 밤 종을 치는데, 종소리가 멈추면 무언가가 깨어난다고 믿는다. 수도원장은 무언가를 숨기고 있고, 젊은 견습 수도사는 바깥세상을 동경한다.';
+
+/** AI 세계관 생성: 설명 → 초안 → 편집기에서 검토·승인 */
+export function WorldGenPanel({ settings, onDraft, onCancel }: {
+  settings: LlmSettings | null;
+  onDraft: (world: WorldPackage, notes: string[]) => void;
+  onCancel: () => void;
+}) {
+  const [prompt, setPrompt] = useState('');
+  const [size, setSize] = useState<Size>('small');
+  const [rating, setRating] = useState<WorldPackage['manifest']['contentRating']>('teen');
+  const [withScenario, setWithScenario] = useState(true);
+  const [stage, setStage] = useState('');
+  const [error, setError] = useState('');
+  const abort = useRef<AbortController | null>(null);
+
+  async function run() {
+    if (!settings) return;
+    setError('');
+    abort.current = new AbortController();
+    try {
+      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario }, setStage, abort.current.signal);
+      onDraft(r.world, r.notes);
+    } catch (e) {
+      if (!abort.current.signal.aborted) setError((e as Error).message);
+    } finally {
+      setStage('');
+    }
+  }
+
+  const busy = stage !== '';
+  return (
+    <section className="panel">
+      <h2>✦ AI로 세계관 만들기</h2>
+      <p className="muted small">
+        만들고 싶은 세계를 자유롭게 설명하세요. AI가 장소·인물·비밀·단서와 임무·결말까지 초안을 만들고, 검사기가 참조를 정리합니다.
+        초안은 <b>편집기에서 검토하고 저장해야</b> 라이브러리에 등록됩니다. AI가 만든 내용은 그대로 쓰기 전에 꼭 읽어 보세요.
+      </p>
+      {!settings && <p className="status">❌ 먼저 AI 설정을 해 주세요.</p>}
+      <label>세계 설명
+        <textarea rows={6} value={prompt} placeholder={EXAMPLE} disabled={busy} onChange={(e) => setPrompt(e.target.value)} />
+      </label>
+      <div className="row">
+        <label>규모
+          <select value={size} disabled={busy} onChange={(e) => setSize(e.target.value as Size)}>
+            <option value="small">작게 (장소 3~4, 인물 3~4)</option>
+            <option value="medium">보통 (장소 5~7, 인물 5~7)</option>
+          </select>
+        </label>
+        <label>콘텐츠 등급
+          <select value={rating} disabled={busy} onChange={(e) => setRating(e.target.value as typeof rating)}>
+            <option value="all">전체</option><option value="teen">청소년</option><option value="mature">성인</option>
+          </select>
+        </label>
+        <label className="check"><input type="checkbox" checked={withScenario} disabled={busy} onChange={(e) => setWithScenario(e.target.checked)} /> 임무·결말까지 만들기</label>
+      </div>
+      <p className="muted small">AI 호출 {withScenario ? 2 : 1}회 · 설정한 모델과 API 키를 씁니다. 큰 응답이라 시간이 조금 걸립니다.</p>
+      <div className="row">
+        <button onClick={() => (busy ? abort.current?.abort() : onCancel())}>{busy ? '중단' : '취소'}</button>
+        <button className="primary" disabled={!settings || busy || prompt.trim().length < 10} onClick={run}>{busy ? stage : '초안 만들기'}</button>
+        {!busy && prompt.trim().length < 10 && <span className="small muted">설명을 10자 이상 적어 주세요.</span>}
+      </div>
+      {error && <p className="status">❌ {error}</p>}
+    </section>
+  );
+}

@@ -34,6 +34,7 @@ src/
 │   ├── relationship.ts #  NPC 관계 4축, 단계, 비밀 공개·동행 기준
 │   ├── canon.ts       #   즉흥 설정(Canon L2) 검증, 보호 주제, NPC→플레이어 지식 전달 규칙
 │   └── state/         #   이벤트 소싱: 이벤트 로그 → 상태 재구성 (되돌리기·리플레이)
+├── gm/worldgen/       # AI 세계관 생성 보조: 초안 스키마, 정리기, 생성 프롬프트
 ├── gm/                # AI GM 턴 파이프라인: Director → Rules → Actor(NPC별) → Narrator → Recorder, 전투 진행
 ├── llm/               # 제공자 독립 LLM 어댑터 (Anthropic SDK / OpenAI 호환 fetch)
 ├── storage/           # IndexedDB(Dexie) 세이브·패키지 라이브러리, .wpk 가져오기/내보내기, 설정

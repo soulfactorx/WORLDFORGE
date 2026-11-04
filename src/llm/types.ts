@@ -15,6 +15,8 @@ export interface LlmRequest {
   system: string;
   user: string;
   maxTokens: number;
+  /** 추론 노력 (지원하는 제공자만). 기본: 구조화 응답은 low */
+  effort?: 'low' | 'medium' | 'high';
 }
 
 export interface LlmClient {

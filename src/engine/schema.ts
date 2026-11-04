@@ -16,6 +16,8 @@ export interface PackageManifest {
   license: string;
   contentRating: 'all' | 'teen' | 'mature';
   locales: string[];
+  /** AI 생성 보조를 써서 만든 패키지인지 (투명성, v0.10) */
+  aiAssisted?: boolean;
 }
 
 export interface Location {

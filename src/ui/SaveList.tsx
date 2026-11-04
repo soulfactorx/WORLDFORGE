@@ -17,7 +17,7 @@ function download(blob: Blob, fileName: string) {
 }
 const safeName = (s: string) => s.replace(/[^\w가-힣.-]+/g, '_');
 
-export function SaveList({ onOpen, onEdit }: { onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void }) {
+export function SaveList({ onOpen, onEdit, onGenerate }: { onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void; onGenerate: () => void }) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
   const packages = useLiveQuery(() => listPackages(), []);
   const [selectedKey, setSelectedKey] = useState<string>('');
@@ -63,14 +63,14 @@ export function SaveList({ onOpen, onEdit }: { onOpen: (saveId: string) => void;
         <select value={selected ? packageKey(selected.world) : ''} onChange={(e) => setSelectedKey(e.target.value)}>
           {packages?.map((p) => (
             <option key={packageKey(p.world)} value={packageKey(p.world)}>
-              {p.world.manifest.name} v{p.world.manifest.version}{p.builtin ? ' (내장)' : ''}
+              {p.world.manifest.name} v{p.world.manifest.version}{p.builtin ? ' (내장)' : ''}{p.world.manifest.aiAssisted ? ' ✦AI' : ''}
             </option>
           ))}
         </select>
       </label>
       {world && (
         <p className="muted small">
-          {world.manifest.author && <>제작: {world.manifest.author} · </>}등급: {{ all: '전체', teen: '청소년', mature: '성인' }[world.manifest.contentRating]} · 라이선스: {world.manifest.license}
+          {world.manifest.author && <>제작: {world.manifest.author} · </>}{world.manifest.aiAssisted && <>✦ AI 생성 보조 사용 · </>}등급: {{ all: '전체', teen: '청소년', mature: '성인' }[world.manifest.contentRating]} · 라이선스: {world.manifest.license}
           {' '}— 당신은 이 세계에 대해 아무것도 모른 채 깨어납니다.
         </p>
       )}
@@ -83,6 +83,7 @@ export function SaveList({ onOpen, onEdit }: { onOpen: (saveId: string) => void;
       <p className="muted small">세계관 패키지(.wpk)를 만들거나 가져와서 플레이할 수 있습니다. 패키지는 이 브라우저에 저장됩니다.</p>
       <div className="row">
         <button onClick={() => onEdit(null)}>＋ 새 세계관 만들기</button>
+        <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
         <label className="file">패키지 가져오기 (.wpk / .json)
           <input type="file" accept=".wpk,.zip,.json,application/zip,application/json" onChange={(e) => { const f = e.target.files?.[0]; if (f) importPackage(f); e.target.value = ''; }} />
         </label>

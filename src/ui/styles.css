@@ -138,3 +138,5 @@ table.beliefs { width: 100%; border-collapse: collapse; font-size: .85rem; }
 table.beliefs td, table.beliefs th { padding: 3px; text-align: left; }
 h3 { margin: 10px 0 0; font-size: 1rem; }
 label.file input[type='file'] { font-size: .8rem; }
+.ai-draft { border: 1px dashed var(--accent); border-radius: 8px; padding: 8px 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ai-draft ul { margin: 6px 0 0; padding-left: 18px; }

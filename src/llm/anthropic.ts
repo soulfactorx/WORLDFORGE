@@ -30,7 +30,7 @@ export function createAnthropicClient(s: LlmSettings): LlmClient {
     },
     async json<T>(req: LlmRequest, schema: Record<string, unknown>, signal?: AbortSignal) {
       const msg = await client.beta.messages.create(
-        { ...base(req), output_config: { effort: 'low', format: { type: 'json_schema', schema } } },
+        { ...base(req), output_config: { effort: req.effort ?? 'low', format: { type: 'json_schema', schema } } },
         { signal },
       );
       if (msg.stop_reason === 'refusal') throw new LlmRefusalError('모델이 이 요청을 거절했습니다.');
