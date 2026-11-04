@@ -21,3 +21,11 @@ describe('replay', () => {
     expect(replay([...a].reverse()).player.locationId).toBe('z');
   });
 });
+
+describe('v0.1 세이브 호환', () => {
+  it('character가 없는 game_started는 기본 시트로 재구성된다', () => {
+    const s = replay([ev(0, 0, { type: 'game_started', packageId: 'p', packageVersion: '0.1.0', seed: 1, locationId: 'x', playerName: '옛 세이브' })]);
+    expect(s.player.sheet.abilities.wis).toBe(10);
+    expect(s.player.sheet.name).toBe('옛 세이브');
+  });
+});

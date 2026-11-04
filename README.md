@@ -25,6 +25,7 @@ npm run build:single   # dist-single/ → 단일 index.html (file:// 실행용)
 src/
 ├── engine/            # 순수 TypeScript 게임 엔진 (UI·네트워크 의존 없음, 테스트 대상)
 │   ├── schema.ts      #   세계관 패키지 스키마 v0 (Fact / Claim / Belief)
+│   ├── character/     #   SRD 5.2.1 캐릭터 규칙: 능력치, 기술, 직업, 생성 검증, 판정 수정치
 │   ├── dice/          #   시드 기반 RNG, 주사위, d20 판정, DC 등급
 │   ├── knowledge/     #   지식 필터 — 모르는 정보는 프롬프트에 넣지 않는다
 │   └── state/         #   이벤트 소싱: 이벤트 로그 → 상태 재구성 (되돌리기·리플레이)
@@ -34,6 +35,11 @@ src/
 ├── data/              # 샘플 세계 (Phase 0 검증용, 수작업 JSON)
 └── ui/                # React 화면
 ```
+
+## 릴리스
+
+`package.json`의 `version`을 올리고 `CHANGELOG.md`에 같은 버전 섹션을 추가해 `main`에 병합하면,
+GitHub Actions가 `vX.Y.Z` 태그와 GitHub Release를 만들고 오프라인 HTML을 첨부한다.
 
 ## GitHub Pages 설정 (최초 1회)
 

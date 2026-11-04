@@ -3,17 +3,19 @@ import { useState } from 'react';
 import { sampleWorld } from '../data/sample-world';
 import { appendEvents, db, deleteSave, exportSave, importSave } from '../storage/db';
 import { startEvents } from '../gm/turn';
+import type { CharacterSheet } from '../engine/character/sheet';
+import { CharacterCreator } from './CharacterCreator';
 
 export function SaveList({ onOpen }: { onOpen: (saveId: string) => void }) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
-  const [name, setName] = useState('');
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  async function newGame() {
+  async function newGame(character: CharacterSheet) {
     const id = crypto.randomUUID();
     const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
-    await db.saves.add({ id, name: `${sampleWorld.manifest.name} — ${new Date().toLocaleString()}`, packageId: sampleWorld.manifest.id, packageVersion: sampleWorld.manifest.version, createdAt: Date.now(), updatedAt: Date.now() });
-    await appendEvents(id, startEvents(sampleWorld, name || '이방인', seed).map((event, seq) => ({ saveId: id, seq, turn: 0, event })));
+    await db.saves.add({ id, name: `${character.name} · ${sampleWorld.manifest.name} — ${new Date().toLocaleString()}`, packageId: sampleWorld.manifest.id, packageVersion: sampleWorld.manifest.version, createdAt: Date.now(), updatedAt: Date.now() });
+    await appendEvents(id, startEvents(sampleWorld, character, seed).map((event, seq) => ({ saveId: id, seq, turn: 0, event })));
     onOpen(id);
   }
 
@@ -28,13 +30,14 @@ export function SaveList({ onOpen }: { onOpen: (saveId: string) => void }) {
     try { await importSave(await file.text()); setError(''); } catch (e) { setError((e as Error).message); }
   }
 
+  if (creating) return <CharacterCreator onCreate={newGame} onCancel={() => setCreating(false)} />;
+
   return (
     <section className="panel">
       <h2>새 게임</h2>
       <p className="muted">세계: {sampleWorld.manifest.name} — 당신은 이 세계에 대해 아무것도 모른 채 깨어납니다.</p>
       <div className="row">
-        <input placeholder="주인공 이름 (선택)" value={name} onChange={(e) => setName(e.target.value)} />
-        <button className="primary" onClick={newGame}>시작</button>
+        <button className="primary" onClick={() => setCreating(true)}>주인공 만들고 시작</button>
       </div>
 
       <h2>세이브</h2>

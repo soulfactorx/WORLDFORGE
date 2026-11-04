@@ -1,5 +1,6 @@
 import type { Belief, EntityId } from '../schema';
 import type { GameEvent, StoredEvent } from './events';
+import { type CharacterSheet, legacyCharacter } from '../character/sheet';
 
 export interface LogEntry {
   turn: number;
@@ -13,7 +14,7 @@ export interface GameState {
   turn: number;
   rngState: number;
   worldMinutes: number;
-  player: { name: string; locationId: EntityId };
+  player: { name: string; locationId: EntityId; sheet: CharacterSheet };
   /** 세이브 중 획득한 지식 (패키지의 초기 Belief 위에 덧씌워짐) */
   beliefs: Belief[];
   log: LogEntry[];
@@ -22,7 +23,7 @@ export interface GameState {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '' }, beliefs: [], log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], log: [],
   };
 }
 
@@ -30,12 +31,18 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
   switch (e.type) {
     case 'game_started':
       return { ...initialState(), packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
-        player: { name: e.playerName, locationId: e.locationId } };
+        player: { name: e.playerName, locationId: e.locationId, sheet: e.character ?? legacyCharacter(e.playerName) } };
     case 'player_input':
       return { ...s, turn, log: [...s.log, { turn, kind: 'player', text: e.text }] };
     case 'check_rolled': {
       const r = e.result;
-      const text = `${e.skill} 판정 — d20(${r.rolls.join(', ')}) ${r.modifier >= 0 ? '+' : ''}${r.modifier} = ${r.total} vs DC ${r.dc} → ${r.success ? '성공' : '실패'}`;
+      const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+      const mods = e.breakdown?.parts.length
+        ? e.breakdown.parts.map((p) => `${sign(p.value)}(${p.label})`).join(' ')
+        : sign(r.modifier);
+      const label = e.breakdown?.label ?? `${e.skill} 판정`;
+      const modeLabel = e.mode === 'advantage' ? ' 이점' : e.mode === 'disadvantage' ? ' 불리점' : '';
+      const text = `${label}${modeLabel} — d20(${r.rolls.join(', ')}) ${mods} = ${r.total} vs DC ${r.dc} → ${r.success ? '성공' : '실패'}`;
       return { ...s, rngState: e.rngState, log: [...s.log, { turn, kind: 'check', text }] };
     }
     case 'narration':

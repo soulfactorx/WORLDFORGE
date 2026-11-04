@@ -1,4 +1,6 @@
-import { DC_TIERS, type DcTier, d20Test } from '../engine/dice/dice';
+import { DC_TIERS, type DcTier, type RollMode, d20Test } from '../engine/dice/dice';
+import { ABILITIES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
+import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/character/sheet';
 import { createRng } from '../engine/dice/rng';
 import type { WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
@@ -15,9 +17,11 @@ import { buildSceneContext } from './context';
 
 interface DirectorOutput {
   action_summary: string;
-  check_needed: boolean;
-  check_skill: string;
+  check_kind: 'none' | 'skill' | 'ability' | 'save';
+  check_skill: SkillId | '';
+  check_ability: Ability;
   check_dc_tier: DcTier;
+  check_mode: RollMode;
   check_reason: string;
   move_to: string; // 이동하지 않으면 ""
 }
@@ -25,12 +29,14 @@ interface DirectorOutput {
 const DIRECTOR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['action_summary', 'check_needed', 'check_skill', 'check_dc_tier', 'check_reason', 'move_to'],
+  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to'],
   properties: {
     action_summary: { type: 'string', description: '플레이어가 하려는 행동 요약' },
-    check_needed: { type: 'boolean', description: '결과가 불확실하고 실패에 의미가 있을 때만 true' },
-    check_skill: { type: 'string', description: '예: 지각, 조사, 설득, 은신, 운동. 판정이 없으면 ""' },
+    check_kind: { type: 'string', enum: ['none', 'skill', 'ability', 'save'], description: '결과가 불확실하고 실패에 의미가 있을 때만 판정. skill=기술 판정, ability=기술 없는 능력 판정, save=내성 굴림' },
+    check_skill: { type: 'string', enum: [...SKILL_IDS, ''], description: `check_kind가 skill일 때 기술 ID. ${SKILL_IDS.map((k) => `${k}=${SKILLS[k].name}`).join(', ')}` },
+    check_ability: { type: 'string', enum: [...ABILITIES], description: 'check_kind가 ability/save일 때 능력치. str=근력 dex=민첩 con=건강 int=지능 wis=지혜 cha=매력' },
     check_dc_tier: { type: 'string', enum: Object.keys(DC_TIERS) },
+    check_mode: { type: 'string', enum: ['normal', 'advantage', 'disadvantage'], description: '상황이 명백히 유리/불리할 때만 이점/불리점' },
     check_reason: { type: 'string' },
     move_to: { type: 'string', description: '"이동 가능한 곳" 목록의 ID 중 하나, 이동하지 않으면 ""' },
   },
@@ -80,12 +86,14 @@ export async function runTurn(
 
   // 2) Validator + Rules Engine
   const outcomes: string[] = [];
-  if (d.check_needed && d.check_dc_tier in DC_TIERS) {
+  const spec = toCheckSpec(d);
+  if (spec && d.check_dc_tier in DC_TIERS) {
     const rng = createRng(s.rngState);
-    // TODO(Phase 1): 캐릭터 시트의 능력치·숙련 보너스로 수정치 계산
-    const result = d20Test(rng, 0, DC_TIERS[d.check_dc_tier]);
-    push({ type: 'check_rolled', skill: d.check_skill || '판정', reason: d.check_reason, result, rngState: rng.state() });
-    outcomes.push(`${d.check_skill} 판정 ${result.success ? '성공' : '실패'}${result.natural20 ? ' (자연 20)' : result.natural1 ? ' (자연 1)' : ''}`);
+    const breakdown = checkModifier(s.player.sheet, spec);
+    const mode: RollMode = ['advantage', 'disadvantage'].includes(d.check_mode) ? d.check_mode : 'normal';
+    const result = d20Test(rng, breakdown.total, DC_TIERS[d.check_dc_tier], mode);
+    push({ type: 'check_rolled', skill: breakdown.label, reason: d.check_reason, result, rngState: rng.state(), breakdown, mode });
+    outcomes.push(`${breakdown.label} ${result.success ? '성공' : '실패'}${result.natural20 ? ' (자연 20)' : result.natural1 ? ' (자연 1)' : ''}${mode !== 'normal' ? ` [${mode === 'advantage' ? '이점' : '불리점'}]` : ''}`);
   }
   const here = world.locations.find((l) => l.id === s.player.locationId);
   if (d.move_to && here?.connections.includes(d.move_to)) {
@@ -110,9 +118,18 @@ export async function runTurn(
   return { events, state: s };
 }
 
-export function startEvents(world: WorldPackage, playerName: string, seed: number): GameEvent[] {
+/** Director 출력 검증: 잘못된 기술/능력치 조합은 판정 없음으로 처리한다. */
+function toCheckSpec(d: DirectorOutput): CheckSpec | null {
+  if (d.check_kind === 'skill' && d.check_skill && d.check_skill in SKILLS) return { kind: 'skill', skill: d.check_skill };
+  if ((d.check_kind === 'ability' || d.check_kind === 'save') && (ABILITIES as readonly string[]).includes(d.check_ability)) {
+    return { kind: d.check_kind, ability: d.check_ability };
+  }
+  return null;
+}
+
+export function startEvents(world: WorldPackage, character: CharacterSheet, seed: number): GameEvent[] {
   return [
-    { type: 'game_started', packageId: world.manifest.id, packageVersion: world.manifest.version, seed, locationId: world.start.locationId, playerName },
+    { type: 'game_started', packageId: world.manifest.id, packageVersion: world.manifest.version, seed, locationId: world.start.locationId, playerName: character.name, character },
     { type: 'narration', text: `${world.start.openingScene}\n\n${world.locations.find((l) => l.id === world.start.locationId)?.description ?? ''}` },
   ];
 }

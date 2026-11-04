@@ -15,7 +15,7 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <button className="brand" onClick={() => setView({ name: 'saves' })}>WORLDFORGE</button>
-        <span className="muted small">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · v0.1</span>
+        <span className="muted small">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · v{__APP_VERSION__}</span>
         {__BUILD_TARGET__ === 'web' && <a className="small" href="./worldforge-offline.html" download>오프라인 HTML 받기</a>}
         <button onClick={() => setView({ name: 'settings' })}>AI 설정</button>
       </header>
