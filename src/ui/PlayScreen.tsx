@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { sampleWorld } from '../data/sample-world';
+import type { WorldPackage } from '../engine/schema';
+import { db } from '../storage/db';
+import { findWorld } from '../storage/packages';
 import { replay, type GameState } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
 import { narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
@@ -31,7 +33,32 @@ function useSaveLock(saveId: string): 'pending' | 'held' | 'busy' {
   return status;
 }
 
-export function PlayScreen({ saveId, settings, onExit }: { saveId: string; settings: LlmSettings; onExit: () => void }) {
+/** 세이브가 쓰는 세계관 패키지를 찾아서 연다 */
+export function PlayScreen(props: { saveId: string; settings: LlmSettings; onExit: () => void }) {
+  const [world, setWorld] = useState<WorldPackage | null | 'missing'>(null);
+  const [need, setNeed] = useState('');
+  useEffect(() => {
+    (async () => {
+      const meta = await db.saves.get(props.saveId);
+      if (!meta) { setWorld('missing'); return; }
+      const w = await findWorld(meta.packageId, meta.packageVersion);
+      setNeed(`${meta.packageId}@${meta.packageVersion}`);
+      setWorld(w ?? 'missing');
+    })();
+  }, [props.saveId]);
+  if (world === null) return <p className="muted">불러오는 중…</p>;
+  if (world === 'missing') {
+    return (
+      <section className="panel">
+        <p>이 세이브가 쓰는 세계관 패키지(<code>{need}</code>)가 없습니다. 패키지 파일을 가져온 뒤 다시 열어 주세요.</p>
+        <button onClick={props.onExit}>돌아가기</button>
+      </section>
+    );
+  }
+  return <PlayWorld {...props} world={world} />;
+}
+
+function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settings: LlmSettings; onExit: () => void; world: WorldPackage }) {
   const lock = useSaveLock(saveId);
   const [state, setState] = useState<GameState | null>(null);
   const [nextSeq, setNextSeq] = useState(0);
@@ -56,7 +83,7 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
     setInput(''); setError(''); setStreaming('');
     abort.current = new AbortController();
     try {
-      const { events } = await runTurn(createLlmClient(settings), sampleWorld, state, text,
+      const { events } = await runTurn(createLlmClient(settings), world, state, text,
         (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
       const turn = state.turn + 1;
       await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));
@@ -87,7 +114,7 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
       abort.current = new AbortController();
       let text: string;
       try {
-        text = await narrateCombat(createLlmClient(settings), sampleWorld, before, after, combatLog, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
+        text = await narrateCombat(createLlmClient(settings), world, before, after, combatLog, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
       } catch (e) {
         setError(`전투 서술 실패: ${(e as Error).message}`);
         text = '전투가 끝났다.';
@@ -105,7 +132,7 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
 
   if (lock === 'busy') return <section className="panel"><p>이 세이브는 다른 탭에서 열려 있습니다.</p><button onClick={onExit}>돌아가기</button></section>;
   if (!state || lock === 'pending') return <p className="muted">불러오는 중…</p>;
-  const loc = sampleWorld.locations.find((l) => l.id === state.player.locationId);
+  const loc = world.locations.find((l) => l.id === state.player.locationId);
 
   return (
     <section className="play">
@@ -121,11 +148,11 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
       </div>
       {state.ending && (
         <div className="ending small">
-          ◆ 결말: <b>{sampleWorld.endings?.find((e) => e.id === state.ending)?.name}</b> — 이야기는 여기서 매듭지어졌다. 원하면 계속 이 세계를 돌아다닐 수 있다.
+          ◆ 결말: <b>{world.endings?.find((e) => e.id === state.ending)?.name}</b> — 이야기는 여기서 매듭지어졌다. 원하면 계속 이 세계를 돌아다닐 수 있다.
         </div>
       )}
       {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} />}
-      {panel === 'journal' && <JournalPanel world={sampleWorld} state={state} />}
+      {panel === 'journal' && <JournalPanel world={world} state={state} />}
       <div className="log">
         {state.log.map((e, i) => <p key={i} className={`entry ${e.kind}`}>{e.text}</p>)}
         {streaming !== null && <p className="entry narration">{streaming || '…'}</p>}
@@ -135,8 +162,8 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
       {state.combat ? (
         <CombatPanel cs={state.combat} busy={streaming !== null} orders={state.partyOrders}
           onOrder={(npcId: string, order: PartyOrder) => commitCombat((s) => setPartyOrder(s, npcId, order))}
-          onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(sampleWorld, s, cardId, target))}
-          onEndTurn={() => commitCombat((s) => playerEndTurn(sampleWorld, s))} />
+          onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}
+          onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
       ) : (
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <textarea

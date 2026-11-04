@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { StoredEvent } from '../engine/state/events';
+import type { StoredPackage } from './packages';
 
 export interface SaveMeta {
   id: string;
@@ -17,11 +18,18 @@ export interface SaveMeta {
 class WorldforgeDB extends Dexie {
   saves!: EntityTable<SaveMeta, 'id'>;
   events!: Dexie.Table<StoredEvent, [string, number]>;
+  packages!: EntityTable<StoredPackage, 'key'>;
   constructor() {
     super('worldforge');
     this.version(1).stores({
       saves: 'id, updatedAt',
       events: '[saveId+seq], saveId',
+    });
+    // v0.9: 세계관 패키지 라이브러리
+    this.version(2).stores({
+      saves: 'id, updatedAt',
+      events: '[saveId+seq], saveId',
+      packages: 'key, id, updatedAt',
     });
   }
 }

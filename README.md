@@ -7,7 +7,7 @@
 - AI: 사용자 본인의 API 키(BYOK) — Claude, OpenAI 호환(OpenAI · OpenRouter · Ollama · LM Studio)
 - 세이브: 브라우저 IndexedDB + 파일 내보내기/가져오기
 
-설계 문서: [`docs/design-review-v2.md`](docs/design-review-v2.md)
+설계 문서: [`docs/design-review-v2.md`](docs/design-review-v2.md) · 패키지 형식: [`docs/package-format.md`](docs/package-format.md)
 
 ## 개발
 
@@ -29,13 +29,14 @@ src/
 │   ├── dice/          #   시드 기반 RNG, 주사위, d20 판정, DC 등급
 │   ├── knowledge/     #   지식 필터 — 모르는 정보는 프롬프트에 넣지 않는다
 │   ├── combat/        #   존 기반 카드 전투: 카드 정의, 몬스터, 규칙 해결, 적 AI
+│   ├── package/       #   패키지 검사기 (참조 무결성, 조건식, 인젝션 의심 경고)
 │   ├── scenario.ts    #   시나리오 엔진: 조건식, 퀘스트 진행, 플래그, 발견, 결말
 │   ├── relationship.ts #  NPC 관계 4축, 단계, 비밀 공개·동행 기준
 │   ├── canon.ts       #   즉흥 설정(Canon L2) 검증, 보호 주제, NPC→플레이어 지식 전달 규칙
 │   └── state/         #   이벤트 소싱: 이벤트 로그 → 상태 재구성 (되돌리기·리플레이)
 ├── gm/                # AI GM 턴 파이프라인: Director → Rules → Actor(NPC별) → Narrator → Recorder, 전투 진행
 ├── llm/               # 제공자 독립 LLM 어댑터 (Anthropic SDK / OpenAI 호환 fetch)
-├── storage/           # IndexedDB(Dexie) 세이브, 파일 내보내기/가져오기, 설정
+├── storage/           # IndexedDB(Dexie) 세이브·패키지 라이브러리, .wpk 가져오기/내보내기, 설정
 ├── data/              # 샘플 세계 (Phase 0 검증용, 수작업 JSON)
 └── ui/                # React 화면
 ```

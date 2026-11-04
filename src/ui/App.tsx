@@ -4,8 +4,10 @@ import { loadSettings } from '../storage/settings';
 import { PlayScreen } from './PlayScreen';
 import { SaveList } from './SaveList';
 import { SettingsPanel } from './SettingsPanel';
+import { WorldEditor } from './WorldEditor';
+import type { WorldPackage } from '../engine/schema';
 
-type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string };
+type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null };
 
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
@@ -23,7 +25,8 @@ export function App() {
         {view.name === 'settings' && (
           <SettingsPanel initial={settings} onSaved={(s) => { setSettings(s); setView({ name: 'saves' }); }} />
         )}
-        {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} />}
+        {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world) => setView({ name: 'editor', world })} />}
+        {view.name === 'editor' && <WorldEditor initial={view.world} onDone={() => setView({ name: 'saves' })} />}
         {view.name === 'play' && (
           settings
             ? <PlayScreen saveId={view.saveId} settings={settings} onExit={() => setView({ name: 'saves' })} />
