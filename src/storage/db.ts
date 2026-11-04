@@ -1,0 +1,85 @@
+import Dexie, { type EntityTable } from 'dexie';
+import type { StoredEvent } from '../engine/state/events';
+
+export interface SaveMeta {
+  id: string;
+  name: string;
+  packageId: string;
+  packageVersion: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * 브라우저 IndexedDB 저장소. GitHub Pages(https)와 file:// 모두에서 동작하지만,
+ * 브라우저가 지울 수 있으므로 반드시 exportSave()로 파일 백업을 제공한다.
+ */
+class WorldforgeDB extends Dexie {
+  saves!: EntityTable<SaveMeta, 'id'>;
+  events!: Dexie.Table<StoredEvent, [string, number]>;
+  constructor() {
+    super('worldforge');
+    this.version(1).stores({
+      saves: 'id, updatedAt',
+      events: '[saveId+seq], saveId',
+    });
+  }
+}
+
+export const db = new WorldforgeDB();
+
+export async function loadEvents(saveId: string): Promise<StoredEvent[]> {
+  return db.events.where('saveId').equals(saveId).sortBy('seq');
+}
+
+export async function appendEvents(saveId: string, events: StoredEvent[]): Promise<void> {
+  await db.transaction('rw', db.events, db.saves, async () => {
+    await db.events.bulkAdd(events);
+    await db.saves.update(saveId, { updatedAt: Date.now() });
+  });
+}
+
+/** 마지막 턴의 이벤트를 모두 지운다 (턴 되돌리기). */
+export async function undoLastTurn(saveId: string): Promise<void> {
+  const events = await loadEvents(saveId);
+  const last = events.at(-1);
+  if (!last || last.turn === 0) return;
+  await db.events.where('saveId').equals(saveId).filter((e) => e.turn === last.turn).delete();
+}
+
+export async function deleteSave(saveId: string): Promise<void> {
+  await db.transaction('rw', db.events, db.saves, async () => {
+    await db.events.where('saveId').equals(saveId).delete();
+    await db.saves.delete(saveId);
+  });
+}
+
+// ---- 파일 내보내기 / 가져오기 ----
+
+interface SaveFile {
+  format: 'worldforge-save';
+  formatVersion: 1;
+  meta: SaveMeta;
+  events: StoredEvent[];
+}
+
+export async function exportSave(saveId: string): Promise<Blob> {
+  const meta = await db.saves.get(saveId);
+  if (!meta) throw new Error('save not found');
+  const file: SaveFile = { format: 'worldforge-save', formatVersion: 1, meta, events: await loadEvents(saveId) };
+  return new Blob([JSON.stringify(file)], { type: 'application/json' });
+}
+
+export async function importSave(text: string): Promise<SaveMeta> {
+  const file = JSON.parse(text) as Partial<SaveFile>;
+  if (file.format !== 'worldforge-save' || file.formatVersion !== 1 || !file.meta || !Array.isArray(file.events)) {
+    throw new Error('WORLDFORGE 세이브 파일이 아닙니다.');
+  }
+  const id = crypto.randomUUID();
+  const meta: SaveMeta = { ...file.meta, id, name: `${file.meta.name} (가져옴)`, updatedAt: Date.now() };
+  await db.transaction('rw', db.events, db.saves, async () => {
+    await db.saves.add(meta);
+    await db.events.bulkAdd(file.events!.map((e) => ({ ...e, saveId: id })));
+  });
+  return meta;
+}

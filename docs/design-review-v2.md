@@ -556,6 +556,11 @@ MVP에 비주얼 지도 편집기는 과하다. 게임 로직이 필요로 하�
 
 ## 6. 개선된 아키텍처 (19장 대체안)
 
+> **결정됨 (D1): 서버 없는 로컬 단독 실행.** 게임은 정적 HTML로 빌드되어 GitHub Pages와 단일 `index.html`(file://) 두 형태로 배포한다.
+> PostgreSQL/Redis → IndexedDB, `game-server` 제거, `library-server` → GitHub 저장소 기반 정적 레지스트리(`registry/index.json` + PR 검수).
+> 아래 구조는 모노레포 기준의 장기 목표이며, 현재 골격은 단일 앱 안의 `src/engine`, `src/gm`, `src/llm`, `src/storage`로 시작한다 (README 참고).
+
+
 ```
 apps/
 ├── client/              # React + TS + Vite. 플레이 + 제작 도구를 한 앱에 (라우트 분리)
