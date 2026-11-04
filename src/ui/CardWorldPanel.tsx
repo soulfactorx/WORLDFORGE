@@ -38,6 +38,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
   const [thumbs, setThumbs] = useState<{ name: string; url: string }[]>([]);
   const abort = useRef<AbortController | null>(null);
   const [translate, setTranslate] = useState(true);
+  const [findChars, setFindChars] = useState(true);
   const [pct, setPct] = useState<{ at: number; next: number; since: number; start: number }>({ at: 0, next: 0, since: 0, start: 0 });
   const [, tick] = useState(0);
   useEffect(() => { if (!stage) return; const t = setInterval(() => tick((n) => n + 1), 500); return () => clearInterval(t); }, [stage !== '']);
@@ -78,7 +79,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
     try {
       const llm = createLlmClient(settings);
       const r = await cardToWorld(llm, bundle, {
-        contentRating: rating, classifyImages: classify, withScenario, choices, translate,
+        contentRating: rating, classifyImages: classify, withScenario, choices, translate, aiFindCharacters: findChars,
         makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),
       }, onStage, signal);
       onStage('이미지 저장 중…', 91, 91);
@@ -122,7 +123,8 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
           </div>
           <ul className="small">
             <li><b>{b.card.name}</b>{b.card.creator && ` · 제작 ${b.card.creator}`}</li>
-            <li>로어북 {analysis.card.lore.length}항목 (모듈에만 있는 항목 {b.extraLore.length}) → 인물 {nChar} · 세계 설정 {nWorld} · 제외 {choices.length - nChar - nWorld}</li>
+            <li>로어북 {analysis.card.lore.length}항목 (모듈에만 있는 항목 {b.extraLore.length}) → 규칙으로 찾은 인물 {nChar} · 세계 설정 {nWorld} · 제외 {choices.length - nChar - nWorld}
+              {findChars && <span className="muted"> — 카드마다 인물 정보 형식이 달라 규칙이 놓친 인물은 <b>세계를 만들 때 AI가 설정 항목을 읽고 더 찾습니다</b>.</span>}</li>
             <li>이미지 {b.assets.length.toLocaleString()}장 ({mb(b.assets.reduce((s, a) => s + a.size, 0))}){b.cover ? ' + 표지' : ''}</li>
             <li>스크립트 데이터 표 {luaKeys.length}개{luaKeys.length > 0 && <span className="muted"> ({luaKeys.slice(0, 8).join(', ')}{luaKeys.length > 8 ? ' …' : ''})</span>}</li>
             {toggles.length > 0 && <li>카드 선택 설정 {toggles.length}개 (시작 방식 참고)</li>}
@@ -149,6 +151,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
             </label>
             <label className="check"><input type="checkbox" checked={classify} disabled={busy} onChange={(e) => setClassify(e.target.checked)} /> 이름 규칙으로 못 찾은 이미지를 AI로 분류 (파일 이름만 보냄)</label>
             <label className="check"><input type="checkbox" checked={withScenario} disabled={busy} onChange={(e) => setWithScenario(e.target.checked)} /> 임무·결말까지 만들기</label>
+            <label className="check"><input type="checkbox" checked={findChars} disabled={busy} onChange={(e) => setFindChars(e.target.checked)} /> 규칙으로 못 찾은 인물을 AI가 로어북에서 더 찾기</label>
             <label className="check"><input type="checkbox" checked={translate} disabled={busy} onChange={(e) => setTranslate(e.target.checked)} /> 외국어(영어 등) 인물·설정 글을 한국어로 번역</label>
           </div>
           <div className="private-banner">
@@ -156,7 +159,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
             <label className="check"><input type="checkbox" checked={agree} disabled={busy} onChange={(e) => setAgree(e.target.checked)} /> 이해했습니다. 개인적으로만 사용합니다.</label>
           </div>
           {!settings && <p className="status">❌ 먼저 AI 설정을 해 주세요.</p>}
-          <p className="muted small">AI 호출: 세계 구조 1회{translate ? ' + 번역(필요할 때, 동시에)' : ''} + 기본 이미지 고르기 1회{withScenario ? ' + 임무 1회' : ''}{classify ? ' + 이미지 분류(필요할 때만)' : ''}. 카드 글이 길면 시간이 걸립니다.</p>
+          <p className="muted small">AI 호출: {findChars ? `인물 찾기 ${Math.max(1, Math.ceil(nWorld / 20))}회 안팎 + ` : ''}세계 구조 1회{translate ? ' + 번역(필요할 때, 동시에)' : ''} + 기본 이미지 고르기 1회{withScenario ? ' + 임무 1회' : ''}{classify ? ' + 이미지 분류(필요할 때만)' : ''}. 카드 글이 길면 시간이 걸립니다.</p>
           {busy && (() => {
             // 긴 AI 호출 중에는 다음 단계 쪽으로 천천히 차오르게 한다 (실제 진행률은 단계가 끝날 때 맞춘다)
             const creep = pct.at + (pct.next - pct.at) * (1 - Math.exp(-(Date.now() - pct.since) / 45000)) * 0.9;

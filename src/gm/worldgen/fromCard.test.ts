@@ -45,6 +45,14 @@ function mockLlm(seen: string[]): LlmClient {
     json: async <T,>(req: { system: string; user: string }) => {
       seen.push(req.user);
       if (req.system.includes('다른 플랫폼용 캐릭터 카드')) return draft as T;
+      if (req.system.includes('게임 세계관 정리 담당')) {
+        const idx = Number(/\[항목 (\d+)\] 세계관/.exec(req.user)?.[1] ?? -1);
+        return { characters: [
+          { entry: idx, whole_entry: false, name: '라우젠트', latin: 'Rauzent', gender: 'M', title: '기사단장', appearance: '은빛 갑옷.', personality: '과묵하다.', speech: '짧게 말한다.', summary: '황궁 기사단장.' },
+          { entry: idx, whole_entry: false, name: '헤드비히', latin: 'Hedwig', gender: 'F', title: '', appearance: '', personality: '', speech: '', summary: '' },
+          { entry: 999, whole_entry: true, name: '유령', latin: '', gender: '', title: '', appearance: '', personality: '', speech: '', summary: '' },
+        ] } as T;
+      }
       if (req.system.includes('이미지 정리')) return { items: [{ index: 0, kind: 'character', character: 'npc/hedwig', location: '', tags: ['Angry!'] }] } as T;
       return { encounters: [], flags: [], quests: [{ key: 'save', name: '멸망 막기', kind: 'main', start: { op: 'all', items: [] }, stages: [{ objective: '진실을 안다', hint: '', complete: { op: 'all', items: [{ type: 'knows', ref: 'ruin', min: '', axis: '', value: 0 }] } }], reward_xp: 100 }],
         endings: [{ key: 'saved', name: '구원', condition: { op: 'all', items: [{ type: 'quest_done', ref: 'save', min: '', axis: '', value: 0 }] }, epilogue: '제국은 살아남았다.' }] } as T;
@@ -67,11 +75,18 @@ describe('cardToWorld', () => {
     expect(hed.locationId).toBe('loc/bedchamber');
     expect(w.characters.find((c) => c.id === 'npc/karenya')!.locationId).toBe(w.start.locationId);
     expect(w.characters.find((c) => c.id === 'npc/karenya')!.gender).toBe('F');
+    // AI가 설정 글 속에서 찾은 인물 (이미 있는 인물·없는 항목은 버린다)
+    const rau = w.characters.find((c) => c.id === 'npc/rauzent')!;
+    expect(rau).toMatchObject({ name: '라우젠트', gender: 'M', appearance: '은빛 갑옷.', speech: '짧게 말한다.' });
+    expect(rau.background).toContain('직함: 기사단장');
+    expect(w.characters.filter((c) => c.name === '헤드비히').length).toBe(1);
+    expect(w.characters.some((c) => c.name === '유령')).toBe(false);
+    expect(r.notes.some((n) => n.includes('인물 1명을 더 찾았습니다'))).toBe(true);
     // 연표 → 비밀 사실 + 아는 인물
     expect(w.facts.some((f) => f.protectedTopic === '멸망의 날')).toBe(true);
     expect(w.beliefs).toContainEqual({ holder: 'npc/hedwig', claim: 'claim/ruin', state: 'secret' });
     // 아는 사람이 없는 지난 공공연한 사건은 모두가 안다
-    expect(w.beliefs.filter((x) => x.claim === 'claim/ball').map((x) => x.state)).toEqual(['confirmed', 'confirmed']);
+    expect(w.beliefs.filter((x) => x.claim === 'claim/ball').map((x) => x.state)).toEqual(['confirmed', 'confirmed', 'confirmed']);
     expect(w.beliefs.some((x) => x.holder === 'npc/ghost')).toBe(false);
     // 시작 방식
     expect(w.starts!.map((s) => s.id)).toEqual(['start/karenya', 'start/native']);
@@ -92,8 +107,8 @@ describe('cardToWorld', () => {
     // 임무
     expect(w.quests![0]!.stages[0]!.complete).toEqual({ knows: 'claim/ruin' });
     // AI 지시문 항목은 넣지 않는다
-    expect(seen[0]).not.toContain('Absolute rule');
-    expect(seen[0]).toContain('발크제파스');
+    for (const u of seen) expect(u).not.toContain('Absolute rule');
+    expect(seen.find((u) => u.startsWith('<card_data>'))).toContain('발크제파스');
     // 시작 방식으로 게임 시작: 장소·첫 장면·처음부터 아는 것
     const ev = startEvents(w, legacyCharacter('나'), 1, 'start/native');
     expect(ev[0]).toMatchObject({ type: 'game_started', locationId: 'loc/garden', startId: 'start/native' });

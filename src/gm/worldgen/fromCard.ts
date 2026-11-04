@@ -26,6 +26,7 @@ import { worldFromDraft, type WorldDraft } from './draft';
 import { generateScenario } from './generate';
 import { assignStockImages } from './stock';
 import { translateToKorean } from './translate';
+import { type FoundCharacter, findCharactersAI } from './findChars';
 
 // ---------------------------------------------------------------- AI 초안
 
@@ -107,6 +108,8 @@ export interface CardWorldOptions {
   withScenario: boolean;
   /** 인물 대표 이미지 → 작은 초상화 data URL (브라우저에서만) */
   makePortrait?: (blob: Blob) => Promise<string | undefined>;
+  /** 규칙이 놓친 인물을 AI가 로어북에서 찾기 (기본 켬) */
+  aiFindCharacters?: boolean;
   /** 외국어 인물·설정 글을 한국어로 번역 (기본 켬) */
   translate?: boolean;
   /** 이미지 없는 인물·장소에 내장 기본 이미지 (기본 켬) */
@@ -160,14 +163,58 @@ export async function cardToWorld(
   const choices = opts.choices ?? analyzed.map((a) => a.choice);
   analyzed.forEach((a, i) => { a.choice = choices[i] ?? a.choice; });
 
+  // 0) AI 인물 찾기: 규칙이 놓친 인물 (카드마다 프로필 형식이 다르다)
+  let found: FoundCharacter[] = [];
+  if (opts.aiFindCharacters !== false) {
+    const known = analyzed.filter((a, i) => choices[i] === 'character').flatMap((a) => [a.displayName, a.latin]).filter(Boolean);
+    // AI 운영 지시문으로 분류된 항목은 보내지 않는다 (지시문 주입 방지)
+    const candidates = analyzed.filter((a, i) => choices[i] !== 'character' && a.kind !== 'instruction' && card.lore[a.index]!.enabled).map((a) => a.index);
+    if (candidates.length) {
+      onStage('AI가 로어북에서 인물을 찾는 중…', 2, 12);
+      try {
+        found = await findCharactersAI(llm, card.lore, candidates, known, mature,
+          (done, total) => total && onStage(`AI가 로어북에서 인물을 찾는 중… (${done}/${total})`, 2 + Math.round((done / total) * 10), 12), signal);
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        notes.push(`AI 인물 찾기에 실패해 규칙으로 찾은 인물만 가져왔습니다: ${(e as Error).message}`);
+      }
+      // 항목 전체가 한 인물의 프로필이면 그 항목은 세계 지식에서 뺀다 (인물의 배경으로 옮긴다)
+      for (const f of found) if (f.whole_entry) { const k = analyzed.findIndex((a) => a.index === f.entry); if (k >= 0) choices[k] = 'skip'; }
+    }
+  }
+
   // 1) 인물·세계 지식 (결정적 변환, 원문 재사용)
-  onStage('인물·설정 정리 중…', 3, 6);
+  onStage('인물·설정 정리 중…', 12, 14);
   const tmp: WorldPackage = { manifest: { id: 'tmp', type: 'world', name: '', version: '0.1.0', schemaVersion: '0', author: '', license: '', contentRating: opts.contentRating, locales: ['ko'] },
     locations: [{ id: 'loc/start', name: '', description: '', connections: [] }], characters: [], facts: [], claims: [], beliefs: [], start: { locationId: 'loc/start', openingScene: '' } };
   const ents = worldCardToEntities(card, tmp, analyzed, { choices, locationId: 'loc/start', mature });
   const charEntries = analyzed.filter((_, i) => choices[i] === 'character');
   ents.characters.forEach((c, i) => { const g = charEntries[i]?.gender; if (g) c.gender = g; });
-  const charInfo = ents.characters.map((c, i) => ({ id: c.id, name: c.name, title: charEntries[i]?.title ?? '', brief: cut(c.personality.replace(/\s+/g, ' '), 160), latin: charEntries[i]?.latin ?? '' }));
+  const meta = ents.characters.map((_, i) => ({ title: charEntries[i]?.title ?? '', latin: charEntries[i]?.latin ?? '' }));
+  // AI가 찾은 인물 추가
+  if (found.length) {
+    const taken = new Set(ents.characters.map((c) => c.id));
+    const unique = (base: string) => { let id = base; for (let n = 2; taken.has(id); n++) id = `${base}-${n}`; taken.add(id); return id; };
+    const common = ents.claims.length <= 200;
+    for (const f of found) {
+      const e = card.lore[f.entry]!;
+      let raw = replaceMacros(e.content, f.name);
+      if (!mature) raw = dropExplicit(raw);
+      const id = unique(`npc/${slug(f.latin) !== 'x' ? slug(f.latin) : `c${f.entry}`}`);
+      const background = [f.title && `직함: ${f.title}`, f.whole_entry ? cut(raw, 2400) : f.summary].filter(Boolean).join('\n');
+      ents.characters.push({
+        id, name: cut(f.name.trim(), 40), appearance: cut(f.appearance || '(외형 정보 없음)', 500), personality: cut(f.personality || f.summary || '(성격 정보 없음)', 900),
+        speech: cut(f.speech || '(말투 정보 없음 — 배경을 참고)', 800), background, locationId: 'loc/start', improvisation: 'minor',
+        ...(f.gender ? { gender: f.gender } : {}),
+        source: { format: card.format, name: `${card.name} / ${e.name}`, ...(card.creator ? { creator: card.creator } : {}), importedAt: new Date().toISOString() },
+      });
+      meta.push({ title: f.title, latin: f.latin });
+      // 세계 지식: 설정이 적으면 모두, 많으면 이름이 나오는 것만
+      for (const cl of ents.claims) if (common || cl.statement.includes(f.name) || (f.latin && cl.statement.toLowerCase().includes(f.latin.toLowerCase()))) ents.beliefs.push({ holder: id, claim: cl.id, state: 'confirmed' });
+    }
+    notes.push(`AI가 로어북에서 인물 ${found.length}명을 더 찾았습니다${found.some((f) => f.whole_entry) ? ` (프로필 항목 ${found.filter((f) => f.whole_entry).length}개는 인물로 옮김)` : ''}: ${found.map((f) => f.name).slice(0, 12).join(', ')}${found.length > 12 ? ' …' : ''}`);
+  }
+  const charInfo = ents.characters.map((c, i) => ({ id: c.id, name: c.name, title: meta[i]!.title, brief: cut(c.personality.replace(/\s+/g, ' '), 160), latin: meta[i]!.latin }));
   if (!ents.characters.length) notes.push('인물로 보이는 로어북 항목이 없습니다. 편집기에서 인물을 추가해 주세요.');
 
   // 2) AI: 장소·배치·연표·시작 방식·문체
