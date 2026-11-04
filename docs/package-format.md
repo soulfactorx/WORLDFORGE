@@ -10,7 +10,7 @@
 |---|---|---|
 | `manifest` | ✓ | `id`(작가.세계, 소문자), `type: "world"`, `name`, `version`(1.0.0), `schemaVersion: "0"`, `author`, `license`, `contentRating`(all/teen/mature), `locales` |
 | `locations` | ✓ | 장소. `id`, `name`, `description`(플레이어가 감각으로 아는 것), `connections`(장소 ID), `improvisation`, `discoveries` |
-| `characters` | ✓ | 인물. `id`, `name`, `appearance`, `personality`, `speech`, `locationId`, `improvisation`, `relationship`, `secretTrust`, `secretFear`, `companion` |
+| `characters` | ✓ | 인물. `id`, `name`, `appearance`, `personality`, `speech`, `locationId`, `improvisation`, `relationship`, `secretTrust`, `secretFear`, `companion`, `background`(이 인물만 아는 과거), `greeting`(첫 만남의 말), `portrait`(data URL, 300KB 이하), `source`(가져온 카드의 출처) |
 | `facts` | ✓ | 세계의 진실. AI 프롬프트에 직접 들어가지 않는다. `secrecy` 0~5, `subjects`, `protectedTopic` |
 | `claims` | ✓ | 누군가 믿을 수 있는 명제. `truth`: true/false/partial |
 | `beliefs` | ✓ | `holder`(인물 ID)가 `claim`을 `state`(rumor/partial/confirmed/mistaken/secret)로 안다 |
@@ -54,3 +54,21 @@
 - **경고**는 알림만 한다: 일방통행 연결, 시작 장소에서 갈 수 없는 장소, 알 방법이 없는 명제, AI 지시로 보이는 문장이나 링크(프롬프트 인젝션 의심).
 
 예시는 내장 샘플 "안개골짜기"를 **복제해서 편집**으로 열어 보면 된다.
+
+## 외부 캐릭터 카드 가져오기
+
+편집기 **인물** 탭의 **CHARX · 캐릭터 카드 가져오기**로 RisuAI CHARX(.charx), Character Card V3/V2(.png·.json), V1(.json)을 인물로 바꿀 수 있다.
+
+| 카드 필드 | 세계관 |
+|---|---|
+| `name` / `nickname` | 이름 |
+| `description` | 외형(추정) + 배경 |
+| `personality` | 성격 |
+| `mes_example` | 말투 |
+| `first_mes` | 첫 만남의 말 |
+| `character_book` 항목 | 명제 + 믿음 (아는 사실 / 비밀 / 소문 / 버림 중 선택) |
+| 아이콘 에셋 | 초상화 (256px로 축소) |
+| `scenario`, `system_prompt`, `post_history_instructions` | 사용하지 않음 (AI에게 넘기지 않음) |
+| RisuAI 스크립트·정규식·Lua | 미지원 (실행하지 않음) |
+
+`{{char}}`·`{{user}}` 매크로는 이름과 "당신"으로 바뀌고 조사도 맞춰진다. 원본 파일은 브라우저에 보존된다. 원작자의 권리와 배포 조건을 지켜야 한다.

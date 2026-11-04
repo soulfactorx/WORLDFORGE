@@ -5,6 +5,8 @@ import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { Belief, Character, Claim, Fact, Location, WorldPackage } from '../engine/schema';
 import { blankWorld, exportWpk, savePackage } from '../storage/packages';
 import { IssueList } from './IssueList';
+import { CardImportDialog } from './CardImportDialog';
+import { josa } from '../engine/text/josa';
 import { generateScenario } from '../gm/worldgen/generate';
 import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
@@ -111,6 +113,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes }: {
   const [approved, setApproved] = useState(!draftNotes);
   const [genStage, setGenStage] = useState('');
   const [genRequest, setGenRequest] = useState('');
+  const [importing, setImporting] = useState(false);
 
   async function aiScenario() {
     if (!settings) return;
@@ -210,6 +213,18 @@ export function WorldEditor({ initial, onDone, settings, draftNotes }: {
       )}
 
       {tab === 'characters' && (
+        <div className="row">
+          <button type="button" onClick={() => setImporting((v) => !v)}>⇩ CHARX · 캐릭터 카드 가져오기</button>
+        </div>
+      )}
+      {tab === 'characters' && importing && (
+        <CardImportDialog world={w} settings={settings} onClose={() => setImporting(false)} onAdd={(r) => {
+          set({ characters: [...w.characters, r.character], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs] });
+          setImporting(false);
+          setStatus(`${josa(r.character.name, '을/를')} 추가했습니다 — 지식 ${r.claims.length}개. 인물 목록 맨 아래에서 확인하세요.`);
+        }} />
+      )}
+      {tab === 'characters' && (
         <ItemList<Character> title="인물" items={w.characters} onChange={(characters) => set({ characters })}
           make={(n) => ({ id: `npc/new-${n}`, name: '새 인물', appearance: '', personality: '', speech: '', locationId: w.start.locationId, improvisation: 'minor' })}
           render={(c, up) => (
@@ -219,6 +234,10 @@ export function WorldEditor({ initial, onDone, settings, draftNotes }: {
               <Area label="외형" value={c.appearance} onChange={(appearance) => up({ appearance })} rows={2} />
               <Area label="성격" value={c.personality} onChange={(personality) => up({ personality })} rows={2} />
               <Area label="말투" value={c.speech} onChange={(speech) => up({ speech })} rows={2} />
+              <Area label="배경 (이 인물만 아는 과거)" value={c.background} onChange={(background) => up({ background: background || undefined })} rows={3} />
+              <Area label="첫 만남의 말 (참고)" value={c.greeting} onChange={(greeting) => up({ greeting: greeting || undefined })} rows={2} />
+              {c.portrait && <div className="row"><img className="portrait" src={c.portrait} alt="" /><button type="button" onClick={() => up({ portrait: undefined })}>초상화 지우기</button></div>}
+              {c.source && <p className="muted small">출처: {c.source.format.toUpperCase()} "{c.source.name}"{c.source.creator && ` · 제작 ${c.source.creator}`} · 가져온 날 {c.source.importedAt.slice(0, 10)}</p>}
               <Select label="있는 곳" value={c.locationId} options={locOptions} onChange={(locationId) => up({ locationId })} />
               <Select label="AI 즉흥 설정" value={c.improvisation} options={IMPROV} onChange={(improvisation) => up({ improvisation })} />
               <fieldset><legend>플레이어에 대한 초기 관계 (-100~100)</legend>

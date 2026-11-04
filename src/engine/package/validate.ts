@@ -126,6 +126,12 @@ export function validateWorld(input: unknown): Issue[] {
       }
       text(c.companion.joinCondition, `${p}.companion.joinCondition`);
     }
+    text(c.background, `${p}.background`, false);
+    text(c.greeting, `${p}.greeting`, false);
+    if (c.portrait !== undefined) {
+      if (!isStr(c.portrait) || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(c.portrait)) err(`${p}.portrait`, '초상화는 png·jpeg·webp data URL이어야 합니다.');
+      else if (c.portrait.length > 400_000) err(`${p}.portrait`, '초상화가 너무 큽니다 (최대 약 300KB).');
+    }
     if (c.relationship) for (const [k, v] of Object.entries(c.relationship)) {
       if (!AXES.includes(k) || typeof v !== 'number' || v < -100 || v > 100) err(`${p}.relationship.${k}`, '관계 축은 affinity/trust/respect/fear, 값은 -100~100입니다.');
     }

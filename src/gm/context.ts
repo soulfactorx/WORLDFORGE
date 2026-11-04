@@ -103,6 +103,8 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     `외형: ${npc.appearance}`,
     `성격: ${npc.personality}`,
     `말투: ${npc.speech}`,
+    ...(npc.background ? [`배경: ${npc.background}`] : []),
+    ...(npc.greeting && !state.npcMemory[npc.id]?.length ? [`처음 만났을 때 하는 말 (참고): ${npc.greeting}`] : []),
     ...canonBlock(world, state, npc.id, ''), '',
     `## 지금 있는 곳: ${loc?.name}`, '',
     '## 네가 아는 것 (이 목록 밖의 세계 사실은 모른다)', ...(claimLines.length ? claimLines : ['(특별히 아는 것 없음)']), '',

@@ -19,6 +19,8 @@ class WorldforgeDB extends Dexie {
   saves!: EntityTable<SaveMeta, 'id'>;
   events!: Dexie.Table<StoredEvent, [string, number]>;
   packages!: EntityTable<StoredPackage, 'key'>;
+  /** 가져온 외부 파일 원본 보존 (설계서 6.4: 원본 CHARX 파일 보존) */
+  imports!: EntityTable<{ id: string; fileName: string; format: string; bytes: Uint8Array; importedAt: number }, 'id'>;
   constructor() {
     super('worldforge');
     this.version(1).stores({
@@ -30,6 +32,13 @@ class WorldforgeDB extends Dexie {
       saves: 'id, updatedAt',
       events: '[saveId+seq], saveId',
       packages: 'key, id, updatedAt',
+    });
+    // v0.12: 가져온 캐릭터 카드 원본
+    this.version(3).stores({
+      saves: 'id, updatedAt',
+      events: '[saveId+seq], saveId',
+      packages: 'key, id, updatedAt',
+      imports: 'id, importedAt',
     });
   }
 }

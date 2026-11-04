@@ -67,6 +67,14 @@ export interface Character {
   secretTrust?: number;
   /** 두려움이 이 값 이상이면 신뢰가 부족해도 비밀을 털어놓는다 (v0.8, 기본 없음) */
   secretFear?: number;
+  /** 배경 이야기 — 이 인물 자신이 아는 과거 (NPC 연기에만 쓰임, v0.12) */
+  background?: string;
+  /** 처음 만났을 때의 말 (참고용, v0.12) */
+  greeting?: string;
+  /** 초상화 data URL (png/jpeg/webp, 최대 300KB, v0.12) */
+  portrait?: string;
+  /** 외부에서 가져온 인물의 출처 (v0.12) */
+  source?: { format: 'charx' | 'ccv3' | 'ccv2' | 'ccv1'; name: string; creator?: string; version?: string; importedAt: string };
 }
 
 export interface CompanionSpec {

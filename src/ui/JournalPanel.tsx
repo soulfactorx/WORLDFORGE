@@ -50,6 +50,7 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
             return (
               <li key={c.id}>
                 <div className="row">
+                  {c.portrait && <img className="portrait small-portrait" src={c.portrait} alt="" />}
                   <b>{c.name}</b>
                   <span className={`tag stage-${stageOf(r)}`}>{stageOf(r)}</span>
                   {state.party[c.id] && <span className="tag confirmed">동료</span>}
