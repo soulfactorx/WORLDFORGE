@@ -309,7 +309,7 @@ export async function cardToWorld(
     ...world,
     manifest: {
       ...world.manifest, name: d.name || card.name, license: '원작자 소유 — 개인 플레이 전용', aiAssisted: true,
-      private: { source: `${card.name}${card.creator ? ` / ${card.creator}` : ''} (${b.fileName})`, note: PRIVATE_NOTE },
+      private: { source: `${card.name}${card.creator ? ` / ${card.creator}` : ''} (${b.fileName})`, note: PRIVATE_NOTE, cardHash: b.fingerprint },
     },
     characters: ents.characters,
     claims: [...world.claims, ...ents.claims],

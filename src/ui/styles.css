@@ -222,3 +222,4 @@ ul.needs li { display: flex; gap: 10px; align-items: center; border-bottom: 1px 
 .need-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ul.needs label.file { flex: none; }
 .need-badge { font-size: .75rem; color: var(--accent); margin-left: 6px; }
+.move-panel { border: 1px solid var(--check); border-radius: 8px; padding: 10px; margin: 8px 0; display: flex; flex-direction: column; gap: 8px; }

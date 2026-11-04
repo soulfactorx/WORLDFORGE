@@ -32,6 +32,13 @@ export interface CharxBundle {
   assets: BundleAsset[];
   cover?: Blob;
   warnings: string[];
+  /** 카드 지문 (card.json 또는 카드 파일의 SHA-256) — 같은 카드인지 확인하고, 기기 간 이동 파일의 열쇠로 쓴다 */
+  fingerprint: string;
+}
+
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif' };
@@ -45,9 +52,12 @@ export async function readCharxBundle(file: Blob, fileName = 'card.charx', onPro
   if (!zip) {
     // zip이 아니면 PNG·JSON 카드 (작은 파일)
     if (file.size > 50 * 1024 * 1024) throw new Error('CHARX(zip)가 아닌 50MB 이상 파일은 읽지 않습니다.');
-    const r = parseCardFile(fileName, new Uint8Array(await file.arrayBuffer()));
+    const all = new Uint8Array(await file.arrayBuffer());
+    const r = parseCardFile(fileName, all);
     if (!r.card) throw new Error(r.error ?? '카드를 읽을 수 없습니다.');
+    const fingerprint = await sha256Hex(all);
     return {
+      fingerprint,
       fileName, fileSize: file.size, card: r.card, rawCard: {}, extraLore: [], lua: { code: '', data: {} }, regexComments: [], toggles: '',
       assets: r.card.images.map((i) => ({ name: i.name, ext: i.mime.split('/')[1]!, mime: i.mime, size: i.bytes.byteLength, source: 'card' as const, read: async () => new Blob([new Uint8Array(i.bytes)], { type: i.mime }) })),
       warnings,
@@ -56,7 +66,9 @@ export async function readCharxBundle(file: Blob, fileName = 'card.charx', onPro
   onProgress?.('card.json 읽는 중…');
   const cardEntry = zip.get('card.json');
   if (!cardEntry) throw new Error('CHARX 안에 card.json이 없습니다.');
-  const rawCard = JSON.parse(new TextDecoder().decode(await zip.readBytes(cardEntry, 200 * 1024 * 1024))) as Record<string, unknown>;
+  const cardBytes = await zip.readBytes(cardEntry, 200 * 1024 * 1024);
+  const fingerprint = await sha256Hex(cardBytes);
+  const rawCard = JSON.parse(new TextDecoder().decode(cardBytes)) as Record<string, unknown>;
   const card = normalize(rawCard, 'charx');
   const data = (isObj(rawCard.data) ? rawCard.data : rawCard) as Record<string, unknown>;
 
@@ -112,7 +124,7 @@ export async function readCharxBundle(file: Blob, fileName = 'card.charx', onPro
   const cover = zip.prefixBytes > 0 ? file.slice(0, zip.prefixBytes, 'image/jpeg') : undefined;
 
   return {
-    fileName, fileSize: file.size, card, rawCard, module, extraLore, lua: { code, data: luaData },
+    fingerprint, fileName, fileSize: file.size, card, rawCard, module, extraLore, lua: { code, data: luaData },
     regexComments: (module?.regex ?? []).map((r) => r.comment ?? '').filter(Boolean),
     toggles: typeof risu.toggles === 'string' ? risu.toggles : '', assets, cover, warnings,
   };

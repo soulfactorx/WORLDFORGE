@@ -1,0 +1,46 @@
+import 'fake-indexeddb/auto';
+import { describe, expect, it } from 'vitest';
+import { makeCharx } from '../test/charx';
+import { readCharxBundle } from '../importers/bundle';
+import { blankWorld } from './packages';
+import { db } from './db';
+import { assetBlob, storeAssets } from './assets';
+import { exportMove, importMove, readMoveHeader } from './move';
+import type { WorldPackage } from '../engine/schema';
+
+describe('개인 세계 기기 간 이동 (.wfmove)', () => {
+  it('같은 카드가 있어야 열리고, 세계·카드 이미지·세이브·내 이미지를 옮긴다', async () => {
+    const card = makeCharx(300, 6);
+    const b = await readCharxBundle(card, 'w.charx');
+    const world: WorldPackage = {
+      ...blankWorld(),
+      manifest: { ...blankWorld().manifest, id: 'card.move', private: { source: '세계 / 작가 (w.charx)', note: 'x', cardHash: b.fingerprint } },
+      assets: [
+        { id: 'a1', name: b.assets[1]!.name, kind: 'character', tags: ['default'], mime: b.assets[1]!.mime, size: b.assets[1]!.size },
+        { id: 'a9', name: 'cover', kind: 'cover', tags: [], mime: 'image/jpeg', size: 300 },
+        { id: 'stock.knight-m--0', name: 's', kind: 'character', tags: ['default'], mime: 'image/svg+xml', size: 0 },
+        { id: 'user.me1--1', name: 'm', kind: 'scene', tags: [], mime: 'image/webp', size: 0 },
+      ],
+    };
+    await db.userArt.put({ id: 'me1', kind: 'scene', label: '내 정원', tags: ['정원'], blob: new Blob([new Uint8Array([5, 5])], { type: 'image/webp' }), createdAt: 1 });
+    await db.saves.put({ id: 's1', name: '세이브', packageId: 'card.move', packageVersion: '0.1.0', createdAt: 1, updatedAt: 2 });
+    await db.events.bulkPut([{ saveId: 's1', seq: 0, turn: 0, event: { type: 'narration', text: '시작' } }, { saveId: 's1', seq: 1, turn: 1, event: { type: 'narration', text: '다음' } }]);
+    await storeAssets('card.move', [{ id: 'a1', read: () => b.assets[1]!.read() }]);
+
+    const file = await exportMove(world);
+    expect((await readMoveHeader(file)).worldName).toBe(world.manifest.name);
+    // 다른 기기라고 치고 비운다
+    await Promise.all([db.packages.clear(), db.saves.clear(), db.events.clear(), db.assets.clear(), db.userArt.clear()]);
+
+    await expect(importMove(file, makeCharx(0, 2, { lore: [{ comment: '다른', content: '다른 카드' }] }), 'other.charx')).rejects.toThrow('다른 카드');
+    const r = await importMove(file, card, 'w.charx');
+    expect(r).toMatchObject({ saves: 1, images: 2 });
+    expect((await db.packages.get('card.move@0.1.0'))!.world.manifest.private!.cardHash).toBe(b.fingerprint);
+    expect((await assetBlob('card.move', 'a1'))!.size).toBe(b.assets[1]!.size);
+    expect((await assetBlob('card.move', 'a9'))!.size).toBe(300);
+    expect((await db.events.where('saveId').equals('s1').count())).toBe(2);
+    expect((await db.userArt.get('me1'))!.label).toBe('내 정원');
+    // 일반 세계는 이 방식으로 옮기지 않는다
+    await expect(exportMove(blankWorld())).rejects.toThrow('개인용');
+  });
+});

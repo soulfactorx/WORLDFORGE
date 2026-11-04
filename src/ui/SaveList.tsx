@@ -8,6 +8,7 @@ import { appendEvents, db, deleteSave, exportSave, importSave } from '../storage
 import { deletePackage, exportWpk, listPackages, MAX_FILE_BYTES, packageKey, parsePackageFile, PRIVATE_NOTE, savePackage } from '../storage/packages';
 import { BlobZip } from '../importers/blobzip';
 import { imageNeeds } from '../gm/worldgen/imageNeeds';
+import { MoveInPanel, MoveOutButton } from './MovePanel';
 import { CharacterCreator } from './CharacterCreator';
 import { IssueList } from './IssueList';
 
@@ -27,6 +28,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
   const [selectedKey, setSelectedKey] = useState<string>('');
   const [creating, setCreating] = useState(false);
   const [startId, setStartId] = useState('');
+  const [receiving, setReceiving] = useState(false);
   const [message, setMessage] = useState<{ text: string; issues?: ReturnType<typeof validateWorld> } | null>(null);
 
   const privateIds = new Set((packages ?? []).filter((p) => p.world.manifest.private).map((p) => p.world.manifest.id));
@@ -109,6 +111,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
         <button onClick={() => onEdit(null)}>＋ 새 세계관 만들기</button>
         <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
         <button onClick={onUserArt}>🖼 내 기본 이미지 관리</button>
+        <button onClick={() => setReceiving(true)} title="다른 기기에서 만든 개인용 세계를 AI 없이 이어받기">📲 옮겨 온 세계 받기</button>
         <label className="file">✦ 캐릭터 카드로 새 세계관 만들기 (.charx · .png · .json, 100MB 이상도 가능)
           <input type="file" accept=".charx,.png,.json,application/json,image/png,application/zip" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCard(f); e.target.value = ''; }} />
         </label>
@@ -116,6 +119,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
           <input type="file" accept=".wpk,.zip,.json,.charx,.png,application/zip,application/json" onChange={(e) => { const f = e.target.files?.[0]; if (f) importPackage(f); e.target.value = ''; }} />
         </label>
       </div>
+      {receiving && <MoveInPanel onClose={() => setReceiving(false)} onDone={(w) => setSelectedKey(packageKey(w))} />}
       {message && (
         <div className="status">
           <p>{message.text}</p>
@@ -129,7 +133,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
               {!p.builtin && (() => { const n = imageNeeds(p.world).length; return n > 0 && <span className="need-badge" title="진짜 이미지가 없는 인물·장소 — 편집 → 이미지 탭, 또는 내 기본 이미지에 추천 파일 이름으로 올리면 자동으로 붙습니다">🖼 이미지 부족 {n}</span>; })()}</span>
             <span className="row">
               {p.world.manifest.private
-                ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용</span>
+                ? <><span className="small muted" title={PRIVATE_NOTE}>🔒 개인용</span><MoveOutButton world={p.world} onMessage={(text) => setMessage({ text })} /></>
                 : <button onClick={() => download(exportWpk(p.world), `${safeName(p.world.manifest.id)}-${p.world.manifest.version}.wpk`)}>내보내기</button>}
               <button onClick={() => {
                 if (!p.builtin) { onEdit(p.world); return; }
@@ -156,7 +160,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
             <span className="row">
               <button className="primary" onClick={() => onOpen(s.id)}>이어하기</button>
               {privateIds.has(s.packageId)
-                ? <span className="small muted" title="개인용 세계의 세이브는 내보낼 수 없습니다">🔒</span>
+                ? <span className="small muted" title="개인용 세계의 세이브는 파일로 내보낼 수 없습니다. 세계 줄의 📱 다른 기기로에 함께 담깁니다">🔒</span>
                 : <button onClick={async () => { try { download(await exportSave(s.id), `${safeName(s.name)}.wfsave.json`); } catch (e) { setMessage({ text: (e as Error).message }); } }}>내보내기</button>}
               <button onClick={() => confirm('이 세이브를 삭제할까요?') && deleteSave(s.id)}>삭제</button>
             </span>

@@ -22,7 +22,7 @@ export interface PackageManifest {
    * 개인용 세계 (v0.13): 다른 사람의 작품(캐릭터 카드 등)으로 만든 세계.
    * 이 브라우저에서 혼자 플레이할 수만 있고 패키지·세이브 내보내기가 막힌다.
    */
-  private?: { source: string; note: string };
+  private?: { source: string; note: string; /** 원본 카드 지문 (기기 간 이동용, v0.19) */ cardHash?: string };
 }
 
 export interface Location {
