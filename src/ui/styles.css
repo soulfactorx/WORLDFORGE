@@ -96,3 +96,16 @@ legend { font-weight: 600; padding: 0 4px; }
 .chip.party.targetable { border-color: #4f9a5a; box-shadow: 0 0 0 2px #4f9a5a; }
 .row input[type='checkbox'], .row input[type='radio'] { flex: none; min-width: 0; width: auto; }
 .orders label.check { flex-direction: row; }
+.entry.relation { font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+.entry.relation::before { content: '♡ '; }
+.people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.rel-bars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+@media (max-width: 560px) { .rel-bars { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rel { display: flex; flex-direction: column; gap: 2px; }
+.bar { position: relative; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.bar::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--muted); }
+.bar span { position: absolute; top: 0; bottom: 0; }
+.bar .pos { background: #4f9a5a; }
+.bar .neg { background: #b3412c; }
+.tag.stage-적대, .tag.stage-경계 { color: #b3412c; border-color: #b3412c; }
+.tag.stage-신뢰, .tag.stage-깊은.유대, .tag.stage-호의 { color: #4f9a5a; border-color: #4f9a5a; }

@@ -1,5 +1,6 @@
 import { establishedFactsOf, improvisationOf, protectedTopicsOf } from '../engine/canon';
 import { knowledgeOf } from '../engine/knowledge/knowledge';
+import { AXES, AXIS_NAMES, canShareSecret, joinBlocker, relationshipOf, secretTrustOf, stageOf } from '../engine/relationship';
 import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 
@@ -85,12 +86,16 @@ export function buildDirectorContext(world: WorldPackage, state: GameState): str
 }
 
 export function buildActorContext(world: WorldPackage, state: GameState, npc: Character): string {
+  const rel = relationshipOf(world, state.relationships, npc.id);
   const knows = knowledgeOf(world, state.beliefs, npc.id);
   const claimIds = [...world.beliefs, ...state.beliefs].filter((b) => b.holder === npc.id).map((b) => b.claim);
   const claimLines = [...new Set(claimIds)].map((id) => {
     const c = world.claims.find((x) => x.id === id);
     const st = knows.find((k) => k.statement === c?.statement)?.state;
-    return c ? `- [${id}] (${st}) ${c.statement}${st === 'secret' ? '  ← 비밀: 쉽게 말하지 않는다' : ''}` : '';
+    const secretNote = st !== 'secret' ? '' : canShareSecret(world, npc.id, rel)
+      ? '  ← 비밀: 이제 털어놓을 수는 있지만, 꼭 필요할 때만'
+      : '  ← 비밀: 지금 신뢰로는 절대 말하지 않는다';
+    return c ? `- [${id}] (${st}) ${c.statement}${secretNote}` : '';
   }).filter(Boolean);
   const loc = world.locations.find((l) => l.id === state.player.locationId);
   return [
@@ -101,18 +106,24 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     ...canonBlock(world, state, npc.id, ''), '',
     `## 지금 있는 곳: ${loc?.name}`, '',
     '## 네가 아는 것 (이 목록 밖의 세계 사실은 모른다)', ...(claimLines.length ? claimLines : ['(특별히 아는 것 없음)']), '',
+    `## 이 낯선 이에 대한 너의 감정: ${stageOf(rel)}`,
+    AXES.map((a) => `${AXIS_NAMES[a]} ${rel[a]}`).join(' · ') + '  (-100 ~ 100)',
+    `비밀을 털어놓으려면 신뢰 ${secretTrustOf(world, npc.id)} 이상이 필요하다.`, '',
     '## 이 낯선 이와의 지난 대화', ...(state.npcMemory[npc.id]?.length ? state.npcMemory[npc.id]! : ['(처음 만난다)']), '',
     '## 동행', ...(state.party[npc.id]
       ? ['너는 지금 이 낯선 이와 함께 다니는 동료다. 크게 실망하거나 위험이 지나치면 떠날 수 있다.']
       : npc.companion
-        ? [`너는 아직 동료가 아니다. 함께 가자는 제안을 받으면 다음 기준으로 스스로 판단한다: ${npc.companion.joinCondition}`]
+        ? [
+          `너는 아직 동료가 아니다. 함께 가자는 제안을 받으면 다음 기준으로 스스로 판단한다: ${npc.companion.joinCondition}`,
+          ...(joinBlocker(npc.companion, rel) ? [`지금은 동행할 수 없다 (${joinBlocker(npc.companion, rel)}). 제안을 받으면 거절한다.`] : []),
+        ]
         : ['너는 누구와도 동행하지 않는다. 동행 제안은 거절한다.']),
   ].join('\n');
 }
 
 export function buildNarratorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => [
-    `- ${c.name} [${c.id}] — 외형: ${c.appearance}`,
+    `- ${c.name} [${c.id}] — 외형: ${c.appearance} — 플레이어를 대하는 태도: ${stageOf(relationshipOf(world, state.relationships, c.id))}`,
     ...canonBlock(world, state, c.id),
   ].join('\n'));
   return [

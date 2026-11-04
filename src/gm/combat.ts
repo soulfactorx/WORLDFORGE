@@ -6,6 +6,7 @@ import type { WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
 import type { LlmClient } from '../llm/types';
+import { relationshipEvent } from './relationship';
 
 /**
  * 전투 진행 — 엔진 결과를 이벤트로 만든다. 전투 중에는 LLM을 호출하지 않는다 (비용·속도·결정성).
@@ -19,7 +20,7 @@ export function availableEncounters(world: WorldPackage, state: GameState) {
 
 class Builder {
   events: GameEvent[] = [];
-  constructor(public state: GameState, private turn: number) {}
+  constructor(public world: WorldPackage, public state: GameState, private turn: number) {}
   push(e: GameEvent) { this.events.push(e); this.state = applyEvent(this.state, e, this.turn); }
 }
 
@@ -35,6 +36,15 @@ function finishIfOver(b: Builder) {
     if (c) party[id] = { hp: after(c.hp), resources: c.resources };
   }
   b.push({ type: 'combat_ended', outcome: cs.outcome, hp: after(p.hp), resources: p.resources, party });
+  // 함께 싸워 이긴 동료는 신뢰와 존경이 오르고, 버려두고 도망치면 실망한다
+  for (const id of Object.keys(party)) {
+    const npc = b.world.characters.find((c) => c.id === id);
+    if (!npc) continue;
+    const ev = cs.outcome === 'victory' ? relationshipEvent(b.world, b.state, npc, { trust: 5, respect: 3 }, '함께 싸워 이겼다')
+      : cs.outcome === 'fled' && cs.combatants[id] && cs.combatants[id]!.hp > 0 ? relationshipEvent(b.world, b.state, npc, { respect: -3 }, '함께 물러났다')
+      : null;
+    if (ev) b.push(ev);
+  }
   if (cs.outcome === 'defeat') b.push({ type: 'time_advanced', minutes: 60 });
 }
 
@@ -56,28 +66,28 @@ export function beginEncounter(world: WorldPackage, state: GameState, encounterI
   const rng = createRng(state.rngState);
   const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id] }));
   const combat = startCombat(enc, state.player.sheet, rng, companions);
-  const b = new Builder(state, turn);
+  const b = new Builder(world, state, turn);
   b.push({ type: 'combat_started', combat, rngState: rng.state() });
   runEnemies(b, rng);
   return b.events;
 }
 
-export function playerCombatAction(state: GameState, cardId: string, target: Target): GameEvent[] {
+export function playerCombatAction(world: WorldPackage, state: GameState, cardId: string, target: Target): GameEvent[] {
   const cs = state.combat;
   if (!cs || currentActorId(cs) !== 'player') throw new Error('지금은 행동할 수 없다');
   const rng = createRng(state.rngState);
   const r = resolveCard(cs, 'player', cardId, target, rng);
-  const b = new Builder(state, state.turn);
+  const b = new Builder(world, state, state.turn);
   b.push({ type: 'combat_action', actorId: 'player', cardId, target, effects: r.effects, log: r.log, rngState: rng.state() });
   finishIfOver(b);
   return b.events;
 }
 
-export function playerEndTurn(state: GameState): GameEvent[] {
+export function playerEndTurn(world: WorldPackage, state: GameState): GameEvent[] {
   const cs = state.combat;
   if (!cs || currentActorId(cs) !== 'player') throw new Error('내 차례가 아니다');
   const rng = createRng(state.rngState);
-  const b = new Builder(state, state.turn);
+  const b = new Builder(world, state, state.turn);
   b.push({ type: 'combat_turn_ended' });
   runEnemies(b, rng);
   return b.events;

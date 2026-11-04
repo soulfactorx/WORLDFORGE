@@ -130,8 +130,8 @@ export function PlayScreen({ saveId, settings, onExit }: { saveId: string; setti
       {state.combat ? (
         <CombatPanel cs={state.combat} busy={streaming !== null} orders={state.partyOrders}
           onOrder={(npcId: string, order: PartyOrder) => commitCombat((s) => setPartyOrder(s, npcId, order))}
-          onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(s, cardId, target))}
-          onEndTurn={() => commitCombat((s) => playerEndTurn(s))} />
+          onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(sampleWorld, s, cardId, target))}
+          onEndTurn={() => commitCombat((s) => playerEndTurn(sampleWorld, s))} />
       ) : (
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <textarea

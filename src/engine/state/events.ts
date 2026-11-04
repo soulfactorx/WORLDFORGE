@@ -1,6 +1,7 @@
 import type { Belief, EntityId } from '../schema';
 import type { D20Test, RollMode } from '../dice/dice';
 import type { CharacterSheet, ModifierBreakdown } from '../character/sheet';
+import type { Relationship } from '../relationship';
 import type { CombatEffect, CombatState, Outcome, PartyOrder, Target } from '../combat/combat';
 
 /**
@@ -31,6 +32,11 @@ export type GameEvent =
   | { type: 'companion_joined'; npcId: EntityId; sheet: CharacterSheet }
   | { type: 'companion_left'; npcId: EntityId; locationId: EntityId }
   | { type: 'party_order'; npcId: EntityId; order: PartyOrder }
+  /**
+   * 관계 변화 (v0.6). delta는 엔진이 한도로 자른 값.
+   * base: 이 NPC의 첫 관계 변화일 때의 패키지 초기값 (리듀서는 세계 패키지를 모르므로 이벤트에 싣는다)
+   */
+  | { type: 'relationship_changed'; npcId: EntityId; delta: Partial<Relationship>; reason: string; name?: string; base?: Relationship }
   /** 휴식 (v0.4). 짧은 휴식 1시간, 긴 휴식 8시간 */
   | { type: 'rested'; kind: 'short' | 'long' }
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */

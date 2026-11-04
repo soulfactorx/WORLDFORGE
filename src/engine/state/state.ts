@@ -3,12 +3,13 @@ import type { GameEvent, StoredEvent } from './events';
 import { type CharacterSheet, legacyCharacter } from '../character/sheet';
 import type { ImprovisedFact } from '../canon';
 import { josa } from '../text/josa';
+import { applyDelta, describeDelta, type Relationship } from '../relationship';
 import { applyEffects, type CombatState, endTurn, type PartyOrder, ZONE_NAMES } from '../combat/combat';
 import { classResources, resourcesOf } from '../character/sheet';
 
 export interface LogEntry {
   turn: number;
-  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat';
+  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation';
   text: string;
 }
 
@@ -34,6 +35,8 @@ export interface GameState {
   partyOrders: Record<EntityId, PartyOrder>;
   /** 패키지 기본값과 다른 NPC 위치 (동료에서 빠진 NPC 등) */
   npcLocations: Record<EntityId, EntityId>;
+  /** NPC → 플레이어 관계 (바뀐 NPC만 저장. 없으면 패키지 초기값) */
+  relationships: Record<EntityId, Relationship>;
   log: LogEntry[];
 }
 
@@ -48,7 +51,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, log: [],
   };
 }
 
@@ -122,6 +125,11 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const { [e.npcId]: _o, ...partyOrders } = s.partyOrders;
       return { ...s, party, partyOrders, npcLocations: { ...s.npcLocations, [e.npcId]: e.locationId },
         log: [...s.log, { turn, kind: 'knowledge', text: `${josa(left?.name ?? e.npcId, '이/가')} 일행을 떠났다.` }] };
+    }
+    case 'relationship_changed': {
+      const base = s.relationships[e.npcId] ?? e.base ?? { affinity: 0, trust: 0, respect: 0, fear: 0 };
+      return { ...s, relationships: { ...s.relationships, [e.npcId]: applyDelta(base, e.delta) },
+        log: [...s.log, { turn, kind: 'relation', text: `${e.name ?? e.npcId}: ${describeDelta(e.delta)} — ${e.reason}` }] };
     }
     case 'party_order':
       return { ...s, partyOrders: { ...s.partyOrders, [e.npcId]: e.order } };

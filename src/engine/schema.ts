@@ -46,6 +46,10 @@ export interface Character {
   improvisation: Improvisation;
   /** 동료로 영입할 수 있는 NPC의 전투 능력과 영입 조건 (v0.5) */
   companion?: CompanionSpec;
+  /** 플레이어에 대한 초기 관계 (v0.6, 기본 모두 0) */
+  relationship?: Partial<{ affinity: number; trust: number; respect: number; fear: number }>;
+  /** 비밀 상태의 지식을 털어놓는 데 필요한 신뢰 (v0.6, 기본 40) */
+  secretTrust?: number;
 }
 
 export interface CompanionSpec {
@@ -53,6 +57,9 @@ export interface CompanionSpec {
   abilities: { str: number; dex: number; con: number; int: number; wis: number; cha: number };
   /** Actor(해당 NPC)에게만 주는 동행 조건. NPC가 대화 중 스스로 판단한다. */
   joinCondition: string;
+  /** 엔진이 강제하는 최소 관계 (v0.6) */
+  minTrust?: number;
+  minAffinity?: number;
 }
 
 /** 세계의 실제 진실 (L0 Canon). 프롬프트에는 해당 Belief를 가진 주체에게만 들어간다. */
