@@ -55,7 +55,9 @@ export type GameEvent =
   | { type: 'rested'; kind: 'short' | 'long' }
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
-  | { type: 'time_advanced'; minutes: number };
+  | { type: 'time_advanced'; minutes: number }
+  /** GM 안내 (v0.14): 이번 턴 상황 요약 + 진행 제안 + 선택지 */
+  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[] };
 
 export interface StoredEvent {
   saveId: string;

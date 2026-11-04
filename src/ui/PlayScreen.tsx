@@ -15,6 +15,7 @@ import { CharacterPanel } from './CharacterPanel';
 import { JournalPanel } from './JournalPanel';
 import { AssetImage } from './AssetImage';
 import { RichText } from './RichText';
+import { basicGuide } from '../gm/guide';
 import { pickSceneImage } from '../engine/assets';
 
 /**
@@ -80,10 +81,10 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   useEffect(() => { reload(); return () => abort.current?.abort(); }, [saveId]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }); }, [state?.log.length, streaming]);
 
-  async function submit() {
-    if (!state || !input.trim() || streaming !== null) return;
-    const text = input.trim();
-    setInput(''); setError(''); setStreaming('');
+  async function submit(choice?: string) {
+    const text = (choice ?? input).trim();
+    if (!state || !text || streaming !== null) return;
+    if (choice === undefined) setInput(''); setError(''); setStreaming('');
     abort.current = new AbortController();
     try {
       const { events } = await runTurn(createLlmClient(settings), world, state, text,
@@ -93,7 +94,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       await reload();
     } catch (e) {
       setError((e as Error).message);
-      setInput(text); // 실패한 턴은 저장하지 않는다
+      if (choice === undefined) setInput(text); // 실패한 턴은 저장하지 않는다
     } finally {
       setStreaming(null);
     }
@@ -122,7 +123,10 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         setError(`전투 서술 실패: ${(e as Error).message}`);
         text = '전투가 끝났다.';
       }
-      await appendEvents(saveId, [{ saveId, seq: seq++, turn: after.turn, event: { type: 'narration', text } }]);
+      await appendEvents(saveId, [
+        { saveId, seq: seq++, turn: after.turn, event: { type: 'narration', text } },
+        { saveId, seq: seq++, turn: after.turn, event: basicGuide(world, after) },
+      ]);
       setStreaming(null);
     }
     await reload();
@@ -137,9 +141,12 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   if (!state || lock === 'pending') return <p className="muted">불러오는 중…</p>;
   const loc = world.locations.find((l) => l.id === state.player.locationId);
   const locImage = loc ? pickSceneImage(world, loc.id, '', 'bar') : undefined;
+  const lastGuide = state.log.findLastIndex((l) => l.kind === 'guide');
+  const canAct = streaming === null && !state.combat && !state.playerDead;
 
   return (
     <section className="play">
+      <div className="play-head">
       <div className="scene-bar">
         {locImage && <AssetImage pkg={world.manifest.id} id={locImage.id} alt={loc?.name ?? ''} className="loc-thumb" />}
         <b>{loc?.name}</b>
@@ -161,17 +168,32 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           ◆ 결말: <b>{world.endings?.find((e) => e.id === state.ending)?.name}</b> — 이야기는 여기서 매듭지어졌다. 원하면 계속 이 세계를 돌아다닐 수 있다.
         </div>
       )}
-      {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} />}
-      {panel === 'journal' && <JournalPanel world={world} state={state} />}
+      {panel !== 'none' && (
+        <div className="head-panel">
+          {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} />}
+          {panel === 'journal' && <JournalPanel world={world} state={state} />}
+        </div>
+      )}
+      </div>
       <div className="log">
         {state.log.map((e, i) => (
-          <div key={i} className={`entry-wrap ${e.kind}`}>
+          <div key={i} className={`entry-wrap k-${e.kind}`}>
             {e.images && e.images.length > 0 && (
               <div className="scene-images">
                 {e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} /><figcaption>{im.caption}</figcaption></figure>)}
               </div>
             )}
-            <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : e.text}</p>
+            {e.kind === 'guide' ? (
+              <div className={`guide ${i === lastGuide ? 'current' : 'past'}`}>
+                <p><b>🎲 GM</b> {e.text}</p>
+                {e.suggestion && i === lastGuide && <p className="suggestion">💡 {e.suggestion}</p>}
+                {i === lastGuide && canAct && e.choices && e.choices.length > 0 && (
+                  <div className="choices">
+                    {e.choices.map((c, k) => <button key={k} type="button" onClick={() => submit(c)}>{k + 1}. {c}</button>)}
+                  </div>
+                )}
+              </div>
+            ) : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : e.text}</p>}
           </div>
         ))}
         {streaming !== null && <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>}
@@ -186,7 +208,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       ) : (
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <textarea
-          value={input} rows={2} placeholder="무엇을 하시겠습니까? (예: 주변을 자세히 살펴본다)"
+          value={input} rows={2} placeholder="선택지를 누르거나 직접 행동을 적으세요 (예: 주변을 자세히 살펴본다)"
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
         />

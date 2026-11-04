@@ -9,9 +9,12 @@ import { classResources, resourcesOf } from '../character/sheet';
 
 export interface LogEntry {
   turn: number;
-  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest';
+  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide';
   text: string;
   images?: { id: string; caption: string }[];
+  /** guide: 진행 제안과 선택지 */
+  suggestion?: string;
+  choices?: string[];
 }
 
 export interface GameState {
@@ -211,6 +214,8 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     }
     case 'time_advanced':
       return { ...s, worldMinutes: s.worldMinutes + e.minutes };
+    case 'gm_guide':
+      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices }] };
   }
 }
 

@@ -17,6 +17,7 @@ import type { LlmClient } from '../llm/types';
 import { playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
 import { availableEncounters, beginEncounter } from './combat';
 import { expressionTags, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
+import { basicGuide, gmGuide } from './guide';
 import { buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects } from './context';
 
 /**
@@ -332,6 +333,10 @@ export async function runTurn(
     push({ type: 'narration', text: epilogue });
   }
 
+  // 6) GM 안내 — 기록관과 동시에. 실패하면 기본 안내
+  const guideState = s;
+  const guideP = gmGuide(llm, world, guideState, narration, signal).catch((e) => { if (signal?.aborted) throw e; return basicGuide(world, guideState); });
+
   // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략)
   try {
     const subjects = sceneSubjects(world, s);
@@ -350,6 +355,7 @@ export async function runTurn(
   } catch (e) {
     if (signal?.aborted) throw e;
   }
+  push(await guideP);
 
   return { events, state: s };
 }
@@ -393,7 +399,9 @@ export function startEvents(world: WorldPackage, character: CharacterSheet, seed
     if (c) events.push({ type: 'knowledge_revealed', belief: { holder: 'player', claim, state: 'confirmed', source: 'start' } });
   }
   const state = events.reduce((st, e) => applyEvent(st, e, 0), initialState());
-  return [...events, ...scenarioEvents(world, state).events];
+  const sc = scenarioEvents(world, state).events;
+  const final = sc.reduce((st, e) => applyEvent(st, e, 0), state);
+  return [...events, ...sc, basicGuide(world, final)];
 }
 
 /** 서술 문체 지침 (패키지 데이터 — 지시가 아니라 참고) */
