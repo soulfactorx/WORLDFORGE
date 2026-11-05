@@ -46,6 +46,8 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   }
   if ('choice' in c) { const ch = state.choices?.[c.choice]?.chosen; return c.is === undefined ? !!ch : ch === c.is; }
   if ('day' in c) return Math.floor(state.worldMinutes / 1440) >= c.day;
+  if ('hasItem' in c) return (state.inventory?.[c.hasItem] ?? 0) >= (c.n ?? 1);
+  if ('money' in c) return (state.money ?? 0) >= c.money;
   if ('flag' in c) return state.flags.includes(c.flag);
   if ('questDone' in c) return !!state.quests[c.questDone]?.done;
   if ('level' in c) return state.player.sheet.level >= c.level;

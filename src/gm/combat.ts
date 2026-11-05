@@ -13,6 +13,11 @@ import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
 import { MONSTERS } from '../engine/combat/monsters';
+import { CLASS_KITS } from '../engine/combat/cards';
+import type { Gear } from '../engine/combat/combat';
+import { abilityModifier } from '../engine/dice/dice';
+import { equippedAc, itemCards, itemDef } from '../engine/items';
+import { currencyName } from './economy';
 
 /**
  * 전투 진행 — 엔진 결과를 이벤트로 만든다. 전투 중에는 LLM을 호출하지 않는다 (비용·속도·결정성).
@@ -44,7 +49,11 @@ function finishIfOver(b: Builder) {
     if (c.dead) fallen.push(id);
     else party[id] = { hp: after(c.hp), resources: c.resources };
   }
-  b.push({ type: 'combat_ended', outcome: p.dead ? 'defeat' : cs.outcome, playerDead: !!p.dead, hp: p.dead ? 0 : after(p.hp), resources: p.resources, party });
+  // 전투 중 쓴 소모품: 자원("item:…")에서 빼서 소지품에서 줄인다
+  const resources = Object.fromEntries(Object.entries(p.resources).filter(([k]) => !k.startsWith('item:')));
+  const used = Object.entries(p.resources).filter(([k, r]) => k.startsWith('item:') && r.max > r.cur).map(([k, r]) => ({ itemId: k.slice(5), n: r.max - r.cur }));
+  b.push({ type: 'combat_ended', outcome: p.dead ? 'defeat' : cs.outcome, playerDead: !!p.dead, hp: p.dead ? 0 : after(p.hp), resources, party });
+  for (const u of used) b.push({ type: 'item_lost', itemId: u.itemId, name: itemDef(b.world, u.itemId)?.name ?? u.itemId, n: u.n, reason: '전투 중 사용' });
   for (const id of fallen) b.push({ type: 'companion_died', npcId: id, name: cs.combatants[id]!.name });
   if (p.dead) return;
   // 경험치: 승리하면 쓰러뜨린 적의 경험치를 아군 참가자에게 똑같이 나눈다 (SRD 5.2.1)
@@ -55,6 +64,15 @@ function finishIfOver(b: Builder) {
     const members = Object.values(cs.combatants).filter((c) => c.side === 'party').map((c) => c.id);
     const share = Math.floor(total / Math.max(1, members.length));
     progressEvents(b.state, members.map((who) => ({ who, amount: share })), `전투 승리 · 총 ${total} XP를 ${members.length}명이 나눔`, levelCapOf(b.world)).forEach((e) => b.push(e));
+    // 전리품: 조우에 정해진 것, 없으면 적 경험치에 비례한 돈 (도망친 적은 빼고)
+    const enc = b.world.encounters?.find((x) => x.id === cs.encounterId);
+    const beaten = Object.values(cs.combatants).filter((c) => c.side === 'enemy' && c.hp <= 0 && !c.escaped).reduce((sum, c) => sum + (MONSTERS[c.monsterId ?? '']?.xp ?? 0), 0);
+    const money = enc?.loot ? enc.loot.money ?? 0 : Math.round(beaten / 10);
+    if (money > 0) b.push({ type: 'money_changed', delta: money, reason: '전리품', currency: currencyName(b.world) });
+    for (const it of enc?.loot?.items ?? []) {
+      const def = itemDef(b.world, it.itemId);
+      if (def) b.push({ type: 'item_gained', itemId: def.id, name: def.name, n: it.n ?? 1, reason: '전리품' });
+    }
   }
   // 함께 싸워 이긴 동료는 신뢰와 존경이 오르고, 버려두고 도망치면 실망한다
   for (const id of Object.keys(party)) {
@@ -86,13 +104,25 @@ function runEnemies(b: Builder, rng: Rng) {
   finishIfOver(b);
 }
 
+/** 플레이어의 장비·소지품 → 전투 (AC·무기 카드·물약 카드) */
+export function playerGear(world: WorldPackage, state: GameState): Gear {
+  const sheet = state.player.sheet;
+  const kit = CLASS_KITS[sheet.classId] ?? CLASS_KITS.none!;
+  const weapon = state.equipped?.weapon ? itemDef(world, state.equipped.weapon)?.card : undefined;
+  return {
+    ac: equippedAc(world, state, abilityModifier(sheet.abilities.dex), kit.ac, !!kit.shield),
+    ...(weapon ? { cards: [weapon] } : {}),
+    items: itemCards(world, state),
+  };
+}
+
 /** 조우 시작 + (적이 우선권이 빠르면) 플레이어 차례까지 적 행동 진행 */
 export function beginEncounter(world: WorldPackage, state: GameState, encounterId: string, turn: number): GameEvent[] {
   const enc = availableEncounters(world, state).find((e) => e.id === encounterId);
   if (!enc) throw new Error('이 장소에서 시작할 수 없는 조우');
   const rng = createRng(state.rngState);
   const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id] }));
-  const combat = startCombat(enc, state.player.sheet, rng, companions);
+  const combat = startCombat(enc, state.player.sheet, rng, companions, playerGear(world, state));
   const b = new Builder(world, state, turn);
   b.push({ type: 'combat_started', combat, rngState: rng.state() });
   runEnemies(b, rng);

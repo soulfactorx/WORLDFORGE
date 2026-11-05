@@ -7,6 +7,7 @@ import { progressEvents } from './progression';
 import { relationshipEvents, reputationEvent } from './relationship';
 import { arcTransitions, choiceToOffer, clockUpdates, dueWorldEvents } from '../engine/story';
 import { effectEvents } from './story';
+import { gainEvent, moneyEvent } from './economy';
 
 /** resolveFlag가 없는 관계 사건은 이 턴 수가 지나면 닫힌다 */
 export const BEAT_TURNS = 4;
@@ -55,6 +56,8 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
         const npc = world.characters.find((c) => c.id === r.npcId);
         if (npc) relationshipEvents(world, s, npc, r, `임무 완료: ${q.name}`).forEach(push);
       }
+      if (q.rewards?.money) { const ev = moneyEvent(world, s, q.rewards.money, `임무 완료: ${q.name}`); if (ev) push(ev); }
+      for (const it of q.rewards?.items ?? []) { const ev = gainEvent(world, it, `임무 완료: ${q.name}`); if (ev) push(ev); }
       for (const r of q.rewards?.reputation ?? []) {
         const ev = reputationEvent(world, s, r.factionId, r.delta, `임무 완료: ${q.name}`);
         if (ev) push(ev);

@@ -33,6 +33,7 @@ const WORLD_SYSTEM = `너는 1인칭 AI TRPG의 세계관 설계자다. 제작�
 - 동료로 영입할 만한 인물 1~2명에게 companion_class와 join_condition을 준다.
 - 세력(factions) 1~3개를 만들고 인물의 faction에 소속을 단다 (소속 없는 인물도 있다).
 - 인물 사이의 관계(relations)를 3개 이상 둔다: 가족·동지·라이벌·연인·스승·원수. 한 사람과 가까워지면 다른 사람이 등을 돌리는 긴장을 만든다.
+- 사람이 사는 곳에는 상점(shops) 1~2개: 잡화점(물약·밧줄·횃불)이나 대장간(무기·갑옷) 등. 표준 아이템만 판다.
 - 연애 상대가 될 수 있는 성인 인물에게만 romanceable: true. 미성년자(또는 그렇게 보이는 인물)는 절대 romanceable이 아니다.
 - key는 영문 소문자 슬러그(예: old-mill), 이름과 내용은 한국어.
 - 핵심 플롯 인물·장소는 improvisation을 none으로, 평범한 인물은 minor로.

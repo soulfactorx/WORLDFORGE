@@ -4,6 +4,7 @@ import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { Belief, Character, Claim, Fact, Faction, Location, NpcRelationKind, WorldPackage } from '../engine/schema';
 import { RELATION_KIND_LABEL, STAGES } from '../engine/relationship';
+import { STD_ITEMS } from '../data/items';
 import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
 import { MATURE_NOTE, shareBlocked } from '../engine/rating';
 import { confirmAdult } from './adult';
@@ -24,9 +25,9 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'encounters' | 'quests' | 'story' | 'images' | 'json';
+type Tab = 'basic' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
-  ['basic', '기본'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'],
+  ['basic', '기본'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
   ['encounters', '조우'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
@@ -39,6 +40,7 @@ function tabForPath(path: string): Tab {
   if (path.startsWith('characters')) return 'characters';
   if (path.startsWith('facts') || path.startsWith('claims') || path.startsWith('beliefs')) return 'knowledge';
   if (path.startsWith('factions') || path.startsWith('relations') || path.startsWith('relationBeats')) return 'relations';
+  if (path.startsWith('items') || /^locations\[\d+\]\.(shop|pickups)/.test(path) || /^characters\[\d+\]\.gives/.test(path) || path.startsWith('start.items')) return 'items';
   if (path.startsWith('encounters')) return 'encounters';
   if (path.startsWith('arcs') || path.startsWith('choices') || path.startsWith('clocks') || path.startsWith('events')) return 'story';
   if (path.startsWith('quests') || path.startsWith('flags') || path.startsWith('endings')) return 'quests';
@@ -465,6 +467,36 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <JsonField label="결말" value={w.endings ?? []} onChange={(endings) => set({ endings })} rows={8} />
         </>
       )}
+
+      {tab === 'items' && (() => {
+        const byId = <T,>(list: { id: string }[], pick: (x: never) => T | undefined) => Object.fromEntries(list.flatMap((x) => { const v = pick(x as never); return v === undefined ? [] : [[x.id, v]]; }));
+        const applyMap = <K extends 'shop' | 'pickups' | 'gives'>(list: 'locations' | 'characters', key: K, map: Record<string, unknown>) => {
+          if (!map || typeof map !== 'object') return;
+          set({ [list]: (w[list] as { id: string }[]).map((x) => { const { [key]: _old, ...rest } = x as Record<string, unknown>; return map[x.id] === undefined ? rest : { ...rest, [key]: map[x.id] }; }) } as Partial<WorldPackage>);
+        };
+        return (
+          <>
+            <p className="muted small">
+              표준 아이템(모든 세계에서 쓸 수 있음): {STD_ITEMS.map((i) => `${i.id}(${i.name}·${i.price ?? 0})`).join(', ')}.
+              가격은 화폐 단위({w.genre?.currency ?? genreOf(w.genre?.id).currency})로, 팔 때는 절반. 상점에 세력(factionId)을 달면 평판이 좋을수록 싸고 아주 나쁘면 거래를 거절한다.
+              전리품은 조우 탭의 <code>{'"loot": { "money": 30, "items": [{ "itemId": "std/gem" }] }'}</code> (없으면 적 경험치에 비례한 돈). 임무 보상은 <code>{'"rewards": { "money": 50, "items": [...] }'}</code>.
+            </p>
+            <div className="form-grid">
+              <Num label="처음 소지금 (비우면 15)" value={w.start.money} onChange={(money) => set({ start: { ...w.start, money } })} />
+            </div>
+            <JsonField label="처음 소지품 (비우면 치유 물약 1개)" value={w.start.items ?? null} onChange={(items) => set({ start: { ...w.start, items: Array.isArray(items) ? items : undefined } })} rows={3}
+              help='예: [{ "itemId": "std/potion-healing", "n": 2 }, { "itemId": "std/rope" }]' />
+            <JsonField label="이 세계만의 아이템" value={w.items ?? []} onChange={(items) => set({ items })} rows={10}
+              help='예: { "id": "item/silver-key", "name": "은 열쇠", "description": "…", "kind": "key" } · 종류: consumable(heal: "2d4+2", cures: ["poisoned"]) · weapon(card: "weapon/longsword") · armor(armor: { "base": 14, "dexMax": 2 }) · shield(acBonus: 2) · key · treasure · misc' />
+            <JsonField label="상점 (장소 ID → 상점)" value={byId(w.locations, (l: Location) => l.shop)} onChange={(m) => applyMap('locations', 'shop', m)} rows={8}
+              help='예: { "loc/market": { "name": "잡화점", "items": ["std/potion-healing", "std/rope"], "factionId": "fac/…" } }' />
+            <JsonField label="주울 수 있는 것 (장소 ID → 목록, hint는 GM에게만)" value={byId(w.locations, (l: Location) => l.pickups)} onChange={(m) => applyMap('locations', 'pickups', m)} rows={6}
+              help='예: { "loc/cellar": [{ "itemId": "std/potion-healing", "hint": "선반 뒤에 먼지 쌓인 물약병" }] }' />
+            <JsonField label="인물이 건넬 수 있는 것 (인물 ID → 목록, 조건이 맞을 때 한 번씩)" value={byId(w.characters, (c: Character) => c.gives)} onChange={(m) => applyMap('characters', 'gives', m)} rows={6}
+              help='예: { "npc/elder": [{ "itemId": "item/silver-key", "condition": { "relationship": "npc/elder", "axis": "trust", "gte": 30 } }] }' />
+          </>
+        );
+      })()}
 
       {tab === 'story' && (
         <>

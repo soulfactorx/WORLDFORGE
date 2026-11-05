@@ -3,6 +3,8 @@
  * 오류(error)가 하나라도 있으면 플레이할 수 없다. 경고(warning)는 제작자에게 알리기만 한다.
  */
 import { CLASSES, SKILL_IDS } from '../character/rules';
+import { STD_ITEMS } from '../../data/items';
+import { ALL_CARDS } from '../combat/combat';
 import { STAGES } from '../relationship';
 import { encounterDifficulty, MONSTERS } from '../combat/monsters';
 import type { Condition, WorldPackage } from '../schema';
@@ -19,6 +21,7 @@ const KNOWLEDGE_STATES = ['rumor', 'partial', 'confirmed', 'mistaken', 'secret']
 const IMPROV = ['none', 'minor', 'free'];
 const AXES = ['affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge'];
 const STAGE_NAMES: readonly string[] = STAGES;
+const CARD_IDS = new Set(Object.keys(ALL_CARDS));
 const RELATION_KINDS = ['family', 'ally', 'rival', 'lover', 'master', 'enemy'];
 /** 패키지 텍스트에 숨은 AI 지시(프롬프트 인젝션) 의심 패턴 */
 const INJECTION = [
@@ -101,6 +104,10 @@ export function validateWorld(input: unknown): Issue[] {
   const clockIds = new Set(clocks.map((c) => c?.id));
   const choiceIds = new Set(choices.map((c) => c?.id));
   const factionIds = new Set(factions.map((f) => f?.id));
+  const ownItems = arr<NonNullable<WorldPackage['items']>[number]>('items', false);
+  ownItems.forEach((it, i) => register(it?.id, `items[${i}]`));
+  const itemIds = new Set([...ownItems.map((x) => x?.id), ...STD_ITEMS.map((x) => x.id)]);
+  const ITEM_KINDS = ['consumable', 'weapon', 'armor', 'shield', 'key', 'treasure', 'misc'];
 
   const locIds = new Set(locations.map((l) => l?.id));
   const charIds = new Set(characters.map((c) => c?.id));
@@ -234,11 +241,13 @@ export function validateWorld(input: unknown): Issue[] {
       else if (cond.is !== undefined && !choices.find((c) => c.id === cond.choice)!.options?.some((o) => o.id === cond.is)) err(path, `선택 "${cond.choice}"에 없는 선택지 "${cond.is}"`);
       return;
     }
+    if ('hasItem' in cond) { if (!itemIds.has(cond.hasItem)) err(path, `없는 아이템 "${cond.hasItem}"`); return; }
+    if ('money' in cond) { if (typeof cond.money !== 'number') err(path, 'money는 숫자입니다.'); return; }
     if ('day' in cond) { if (typeof cond.day !== 'number' || cond.day < 0) err(path, 'day는 0 이상의 숫자입니다.'); return; }
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('level' in cond) { if (typeof cond.level !== 'number') err(path, 'level은 숫자입니다.'); return; }
-    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·chapter·arcDone·clock·choice·day·flag·questDone·level 중 하나를 쓰세요.`);
+    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·chapter·arcDone·clock·choice·day·hasItem·money·flag·questDone·level 중 하나를 쓰세요.`);
   };
   quests.forEach((q, i) => {
     const p = `quests[${i}]`;
@@ -285,9 +294,43 @@ export function validateWorld(input: unknown): Issue[] {
       if ('relationship' in fx) { if (!charIds.has(fx.relationship as string)) err(p, `없는 인물 "${String(fx.relationship)}"`); if (!isObj(fx.delta)) err(p, 'delta가 필요합니다 (예: { "trust": 5 }).'); return; }
       if ('reputation' in fx) { if (!factionIds.has(fx.reputation as string)) err(p, `없는 세력 "${String(fx.reputation)}"`); return; }
       if ('clock' in fx) { if (!clockIds.has(fx.clock as string)) err(p, `없는 시계 "${String(fx.clock)}"`); return; }
-      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock 중 하나를 쓰세요.');
+      if ('giveItem' in fx) { if (!itemIds.has(fx.giveItem as string)) err(p, `없는 아이템 "${String(fx.giveItem)}"`); return; }
+      if ('takeItem' in fx) { if (!itemIds.has(fx.takeItem as string)) err(p, `없는 아이템 "${String(fx.takeItem)}"`); return; }
+      if ('money' in fx) { if (typeof fx.money !== 'number') err(p, 'money는 숫자입니다.'); return; }
+      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money 중 하나를 쓰세요.');
     });
   };
+  // ---- 아이템·상점·전리품 (설계 v3 6.4)
+  const checkStacks = (list: unknown, path: string) => {
+    if (list === undefined) return;
+    if (!Array.isArray(list)) { err(path, '목록이어야 합니다.'); return; }
+    list.forEach((st, j) => { if (!isObj(st) || !itemIds.has(st.itemId as string)) err(`${path}[${j}]`, `없는 아이템 "${isObj(st) ? String(st.itemId) : ''}"`); });
+  };
+  ownItems.forEach((it, i) => {
+    const p = `items[${i}]`;
+    text(it.name, `${p}.name`);
+    if (!ITEM_KINDS.includes(it.kind)) err(`${p}.kind`, `종류는 ${ITEM_KINDS.join('/')} 중 하나입니다.`);
+    if (it.price !== undefined && (typeof it.price !== 'number' || it.price < 0)) err(`${p}.price`, '가격은 0 이상의 숫자입니다.');
+    if (it.heal && !/^\d*d\d+([+-]\d+)?$/.test(it.heal)) err(`${p}.heal`, '회복은 주사위 식입니다 (예: 2d4+2).');
+    if (it.card && !CARD_IDS.has(it.card)) err(`${p}.card`, `없는 카드 "${it.card}"`);
+    if (it.kind === 'armor' && !it.armor) warn(`${p}.armor`, '갑옷이면 armor: { base, dexMax }를 정하세요.');
+  });
+  locations.forEach((l, i) => {
+    checkStacks(l.pickups, `locations[${i}].pickups`);
+    if (l.shop) {
+      text(l.shop.name, `locations[${i}].shop.name`);
+      (l.shop.items ?? []).forEach((id, j) => { if (!itemIds.has(id)) err(`locations[${i}].shop.items[${j}]`, `없는 아이템 "${id}"`); });
+      if (l.shop.factionId && !factionIds.has(l.shop.factionId)) err(`locations[${i}].shop.factionId`, `없는 세력 "${l.shop.factionId}"`);
+    }
+  });
+  characters.forEach((c, i) => {
+    checkStacks(c.gives, `characters[${i}].gives`);
+    (c.gives ?? []).forEach((g, j) => { if (g.condition) checkCond(g.condition, `characters[${i}].gives[${j}].condition`); });
+  });
+  encounters.forEach((e, i) => checkStacks(e.loot?.items, `encounters[${i}].loot.items`));
+  quests.forEach((q, i) => checkStacks(q.rewards?.items, `quests[${i}].rewards.items`));
+  if (isObj(w.start)) checkStacks(w.start.items, 'start.items');
+
   arcs.forEach((a, i) => {
     const p = `arcs[${i}]`;
     text(a.name, `${p}.name`);

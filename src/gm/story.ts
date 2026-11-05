@@ -2,6 +2,7 @@ import type { StoryEffect, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
 import { relationshipEvents, reputationEvent } from './relationship';
+import { gainEvent, loseEvent, moneyEvent } from './economy';
 
 /**
  * 이야기 효과 → 이벤트 (설계 v3 5장). 참조가 깨진 효과는 조용히 건너뛴다 (검사기가 미리 알린다).
@@ -37,6 +38,9 @@ export function effectEvents(world: WorldPackage, state: GameState, effects: Sto
       continue;
     }
     if ('reputation' in fx) { push(reputationEvent(world, s, fx.reputation, fx.delta, reason)); continue; }
+    if ('giveItem' in fx) { push(gainEvent(world, { itemId: fx.giveItem, n: fx.n }, reason)); continue; }
+    if ('takeItem' in fx) { push(loseEvent(world, s, { itemId: fx.takeItem, n: fx.n }, reason)); continue; }
+    if ('money' in fx) { push(moneyEvent(world, s, fx.money, reason)); continue; }
     if ('clock' in fx) {
       const clock = world.clocks?.find((c) => c.id === fx.clock);
       if (!clock) continue;

@@ -35,6 +35,9 @@ export interface Location {
   improvisation?: Improvisation;
   /** 이 장소를 조사해 알아낼 수 있는 것 (v0.8) */
   discoveries?: Discovery[];
+  /** 이 장소에서 주울 수 있는 것 (hint: Director에게만) */
+  pickups?: (ItemStack & { hint: string })[];
+  shop?: Shop;
 }
 
 /** 탐험으로 얻는 지식. check가 있으면 같은 턴에 그 판정에 성공해야 한다. */
@@ -72,6 +75,8 @@ export interface Character {
   romanceable?: boolean;
   /** 소속 세력 ID (설계 v3 4.4) */
   faction?: EntityId;
+  /** 이 인물이 플레이어에게 줄 수 있는 것 (condition이 참일 때만, 한 번씩) */
+  gives?: (ItemStack & { condition?: Condition })[];
   /** 비밀 상태의 지식을 털어놓는 데 필요한 신뢰 (v0.6, 기본 40) */
   secretTrust?: number;
   /** 두려움이 이 값 이상이면 신뢰가 부족해도 비밀을 털어놓는다 (v0.8, 기본 없음) */
@@ -123,6 +128,38 @@ export interface RelationBeat {
   /** GM·인물에게 주는 장면 방향 (예: "그가 과거의 비밀을 털어놓는다") */
   hint: string;
   resolveFlag?: string;
+}
+
+/** 아이템 (설계 v3 6.4). 표준 아이템(std/…)은 모든 세계에서 쓸 수 있다 */
+export interface ItemDef {
+  id: EntityId;
+  name: string;
+  description: string;
+  kind: 'consumable' | 'weapon' | 'armor' | 'shield' | 'key' | 'treasure' | 'misc';
+  /** 기본 가격 (상점은 평판으로 보정, 팔 때는 절반) */
+  price?: number;
+  /** 소모품: 사용하면 HP 회복 (주사위 식, 예: 2d4+2) */
+  heal?: string;
+  /** 소모품: 사용하면 푸는 상태 이상 */
+  cures?: ('poisoned' | 'frightened' | 'restrained' | 'stunned' | 'blinded')[];
+  /** 무기: 장비하면 손패에 들어오는 전투 카드 */
+  card?: string;
+  /** 갑옷: AC = base + 민첩 수정치 (dexMax까지) */
+  armor?: { base: number; dexMax?: number };
+  /** 방패 등: AC 보너스 */
+  acBonus?: number;
+}
+
+/** 아이템 묶음 */
+export interface ItemStack { itemId: EntityId; n?: number }
+
+/** 상점 (장소에 둔다). 세력이 있으면 그 세력 평판으로 값이 바뀌고, 평판이 아주 나쁘면 거래를 거절한다 */
+export interface Shop {
+  name: string;
+  items: EntityId[];
+  factionId?: EntityId;
+  /** 플레이어의 물건을 사 주는가 (기본 예) */
+  buys?: boolean;
 }
 
 export interface CompanionSpec {
@@ -177,6 +214,8 @@ export interface Encounter {
   enemies: { monsterId: string; zone: 2 | 3 }[];
   /** Director에게만 주는 발동 조건 힌트 (플레이어에게 직접 보이지 않음) */
   trigger: string;
+  /** 이기면 얻는 것 (없으면 적 경험치에 비례한 돈) */
+  loot?: { money?: number; items?: ItemStack[] };
 }
 
 // ------------------------------------------------------------ 시나리오 (v0.8)
@@ -207,6 +246,9 @@ export type Condition =
   | { choice: EntityId; is?: string }
   /** 게임 시작 후 지난 날 수 */
   | { day: number }
+  /** 소지품·소지금 (설계 v3 6.1) */
+  | { hasItem: EntityId; n?: number }
+  | { money: number }
   | { flag: string }
   | { questDone: EntityId }
   | { level: number };
@@ -226,7 +268,7 @@ export interface Quest {
   /** 시작 조건 */
   start: Condition;
   stages: QuestStage[];
-  rewards?: { xp?: number; relationship?: ({ npcId: EntityId } & Partial<Record<RelationAxis, number>>)[]; reputation?: { factionId: EntityId; delta: number }[] };
+  rewards?: { xp?: number; money?: number; items?: ItemStack[]; relationship?: ({ npcId: EntityId } & Partial<Record<RelationAxis, number>>)[]; reputation?: { factionId: EntityId; delta: number }[] };
 }
 
 /** Director가 이야기 속 사건을 기록하는 플래그. 선언된 것만, 지정 장소에서만 세울 수 있다. */
@@ -250,7 +292,10 @@ export type StoryEffect =
   | { reveal: EntityId; state?: 'rumor' | 'partial' | 'confirmed' }
   | { relationship: EntityId; delta: Partial<Record<RelationAxis, number>> }
   | { reputation: EntityId; delta: number }
-  | { clock: EntityId; by: number };
+  | { clock: EntityId; by: number }
+  | { giveItem: EntityId; n?: number }
+  | { takeItem: EntityId; n?: number }
+  | { money: number };
 
 /** 장 (설계 v3 5.1): 줄기의 큰 단계 */
 export interface Chapter {
@@ -383,7 +428,12 @@ export interface WorldPackage {
     locationId: EntityId;
     /** 플레이어가 깨어났을 때의 첫 장면 */
     openingScene: string;
+    /** 처음 소지금·소지품 (없으면 15와 치유 물약 1개) */
+    money?: number;
+    items?: ItemStack[];
   };
+  /** 이 세계만의 아이템 (설계 v3 6.4) */
+  items?: ItemDef[];
   /** 시작 방식 선택지 (v0.13) */
   starts?: StartOption[];
   /** 장르 (설계 v3 2장): 프로필 ID와 세계별 설정 */

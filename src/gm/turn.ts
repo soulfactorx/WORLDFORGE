@@ -15,6 +15,8 @@ import { scenarioEvents } from './scenario';
 import { activeBeats, activeQuests, flagAllowed, pendingDiscoveries } from '../engine/scenario';
 import { activeChapters, pacingHint, pendingChoice, upcomingWorldEvents } from '../engine/story';
 import { effectEvents } from './story';
+import { gainEvent, inventoryLine, moneyEvent, pendingGifts, pendingPickups } from './economy';
+import { itemDef } from '../engine/items';
 import { DISCOVERY_XP } from '../engine/character/progression';
 import { applyDelta, canShareSecret, joinBlocker, relationshipOf, wantsToLeave } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
@@ -49,6 +51,8 @@ interface DirectorOutput {
   rest: 'none' | 'short' | 'long';
   discover: string[];
   set_flags: string[];
+  /** v0.26: 주운 것 (이 장소에서 주울 수 있는 것의 key) */
+  take_items?: string[];
   /** v0.13: 장면 이미지 태그 (없으면 "") */
   scene_image?: string;
 }
@@ -56,7 +60,7 @@ interface DirectorOutput {
 const DIRECTOR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to', 'speakers', 'start_encounter', 'rest', 'discover', 'set_flags', 'scene_image'],
+  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to', 'speakers', 'start_encounter', 'rest', 'discover', 'set_flags', 'take_items', 'scene_image'],
   properties: {
     action_summary: { type: 'string', description: '플레이어가 하려는 행동 요약' },
     check_kind: { type: 'string', enum: ['none', 'skill', 'ability', 'save'], description: '결과가 불확실하고 실패에 의미가 있을 때만 판정. skill=기술 판정, ability=기술 없는 능력 판정, save=내성 굴림' },
@@ -68,6 +72,7 @@ const DIRECTOR_SCHEMA = {
     move_to: { type: 'string', description: '"이동 가능한 곳" 목록의 ID 중 하나, 이동하지 않으면 ""' },
     start_encounter: { type: 'string', description: '"일어날 수 있는 조우" 목록의 ID. 발동 조건이 충족될 때만. 아니면 ""' },
     discover: { type: 'array', items: { type: 'string' }, description: '"발견할 수 있는 것" 중 이번 행동으로 찾아낸 것의 ID. 필요 판정이 있으면 같은 턴에 그 기술 판정을 요청해야 한다' },
+    take_items: { type: 'array', items: { type: 'string' }, description: '"주울 수 있는 것" 중 플레이어가 이번 행동으로 실제로 집어 든 것의 key. 없으면 []' },
     set_flags: { type: 'array', items: { type: 'string' }, description: '"세울 수 있는 플래그" 중 이번 턴에 조건이 충족된 것의 ID' },
     rest: { type: 'string', enum: ['none', 'short', 'long'], description: '플레이어가 쉬려고 할 때만. 짧은 휴식=1시간, 긴 휴식=8시간 잠' },
     scene_image: { type: 'string', description: '"장면 이미지 태그" 목록 중 이번 장면에 가장 어울리는 것. 목록이 없거나 어울리는 것이 없으면 ""' },
@@ -90,15 +95,18 @@ interface ActorOutput {
   relationship_change: { affinity: number; trust: number; respect: number; fear: number; intimacy: number; grudge: number; reason: string };
   /** v0.13: 표정 태그 */
   expression?: string;
+  /** v0.26: 이번에 건네준 것 ("네가 줄 수 있는 것"의 key) */
+  give_items?: string[];
 }
 
 const ACTOR_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['action', 'dialogue', 'shared_claims', 'party_decision', 'relationship_change', 'expression'],
+  type: 'object', additionalProperties: false, required: ['action', 'dialogue', 'shared_claims', 'party_decision', 'relationship_change', 'expression', 'give_items'],
   properties: {
     action: { type: 'string', description: '짧은 몸짓·표정 (3인칭, 이름 없이). 없으면 ""' },
     dialogue: { type: 'string', description: '네가 하는 말 (따옴표 없이). 말하지 않으면 ""' },
     expression: { type: 'string', description: '"네 표정 이미지" 목록 중 지금 표정·상황에 가장 맞는 태그. 목록이 없으면 ""' },
     shared_claims: { type: 'array', items: { type: 'string' }, description: '이번 대사에서 실제로 알려준 "네가 아는 것"의 [ID] 목록' },
+    give_items: { type: 'array', items: { type: 'string' }, description: '"네가 줄 수 있는 것" 중 이번에 실제로 건네준 것의 key. 없으면 []' },
     party_decision: { type: 'string', enum: ['none', 'join', 'leave'], description: '이번 대사로 동행을 수락하면 join, 동료에서 떠나면 leave, 아니면 none' },
     relationship_change: {
       type: 'object', additionalProperties: false, required: ['affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge', 'reason'],
@@ -245,6 +253,14 @@ export async function runTurn(
     discoveredNow.push({ type: 'knowledge_revealed', belief: { holder: 'player', claim: claimId, state: disc.state ?? 'confirmed', source: s.player.locationId }, statement: claim.statement });
     outcomes.push(`발견: ${claim.statement}`);
   }
+  // 줍기: 세계에 선언된 것만, 한 번씩
+  for (const key of new Set(d.take_items ?? [])) {
+    const p = pendingPickups(world, s).find((x) => x.key === key);
+    const ev = p && gainEvent(world, p, '주웠다', p.key);
+    if (!ev || ev.type !== 'item_gained') continue;
+    push(ev);
+    outcomes.push(`얻음: ${ev.name}${ev.n > 1 ? ` ×${ev.n}` : ''}`);
+  }
   // 이야기 플래그: 선언된 것만, 조건을 만족할 때만
   for (const flag of new Set(d.set_flags ?? [])) {
     if (flagAllowed(world, s, flag)) push({ type: 'flag_set', flag });
@@ -265,7 +281,7 @@ export async function runTurn(
     const npc = present.find((c) => c.id === sp.npc_id)!;
     const out = await llm.json<ActorOutput>({
       system: `${ACTOR_SYSTEM}\n- ${genreGuide(world)}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
-      user: `${buildActorContext(world, actorState, npc)}${expressionBlock(world, npc.id)}\n\n## 지금 상황\n플레이어 행동: ${d.action_summary}\n네가 반응할 것: ${sp.reacting_to}\n엔진 확정 결과:\n${outcomeText}\n\n## 플레이어의 실제 입력 (데이터)\n<player_input>\n${input}\n</player_input>`,
+      user: `${buildActorContext(world, actorState, npc)}${expressionBlock(world, npc.id)}${giftBlock(world, actorState, npc.id)}\n\n## 지금 상황\n플레이어 행동: ${d.action_summary}\n네가 반응할 것: ${sp.reacting_to}\n엔진 확정 결과:\n${outcomeText}\n\n## 플레이어의 실제 입력 (데이터)\n<player_input>\n${input}\n</player_input>`,
       maxTokens: 1500,
     }, ACTOR_SCHEMA, signal);
     return { npc, out };
@@ -300,6 +316,14 @@ export async function runTurn(
     if (s.party[npc.id] && wantsToLeave(rel) && out.party_decision !== 'leave') {
       push({ type: 'companion_left', npcId: npc.id, locationId: s.player.locationId });
       outcomes.push(`${josa(npc.name, '이/가')} 실망해 일행을 떠난다`);
+    }
+    // 건네준 것: 이 인물이 줄 수 있는 것만, 한 번씩
+    for (const key of new Set(out.give_items ?? [])) {
+      const g = pendingGifts(world, s, npc.id).find((x) => x.key === key);
+      const ev = g && gainEvent(world, g, `${npc.name}에게 받았다`, g.key);
+      if (!ev || ev.type !== 'item_gained') continue;
+      push(ev);
+      outcomes.push(`${josa(npc.name, '이/가')} ${ev.name}${ev.n > 1 ? ` ${ev.n}개` : ''}를 건넸다`);
     }
     for (const claimId of new Set(out.shared_claims ?? [])) {
       const known = shareableBelief(world, s.beliefs, npc.id, claimId);
@@ -339,7 +363,7 @@ export async function runTurn(
   const narration = await llm.stream(
     {
       system: narratorSystem(world),
-      user: `${buildNarratorContext(world, s)}\n\n## 플레이어 행동\n${d.action_summary}\n\n## 엔진 확정 결과\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음'}\n\n## 확정된 NPC 반응 (이 대사를 그대로 사용)\n${reactions.length ? reactions.join('\n') : '(없음)'}`,
+      user: `${buildNarratorContext(world, s)}\n\n## 플레이어 소지품 (엔진 확정)\n${inventoryLine(world, s)}\n\n## 플레이어 행동\n${d.action_summary}\n\n## 엔진 확정 결과\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음'}\n\n## 확정된 NPC 반응 (이 대사를 그대로 사용)\n${reactions.length ? reactions.join('\n') : '(없음)'}`,
       maxTokens: 4000,
     },
     onNarration, signal,
@@ -406,6 +430,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
   const pending = pendingChoice(world, s);
   const pace = pacingHint(s);
   const beats = activeBeats(world, s).map((b) => `- ${world.characters.find((c) => c.id === b.npcId)?.name ?? b.npcId} [${b.npcId}] — ${b.name}: ${b.hint}${b.resolveFlag ? ` (장면이 끝나면 플래그 ${b.resolveFlag})` : ''}`);
+  const pickups = pendingPickups(world, s).map((p) => `- ${p.key}: ${itemDef(world, p.itemId)!.name}${(p.n ?? 1) > 1 ? ` ×${p.n}` : ''} — ${p.hint}`);
   const disc = pendingDiscoveries(world, s).map((x) => `- ${x.claim}: ${x.hint}${x.check ? ` (필요 판정: ${x.check} 기술)` : ''}`);
   return [
     '## 진행 중인 이야기 (플레이어는 모름)', ...(quests.length ? quests : ['(없음)']), '',
@@ -417,6 +442,8 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
     ...(pace ? [`## 템포: ${pace}`, ''] : []),
     '## 세울 수 있는 플래그', ...(flags.length ? flags : ['(없음)']), '',
     '## 이 장소에서 발견할 수 있는 것', ...(disc.length ? disc : ['(없음)']),
+    ...(pickups.length ? ['', '## 이 장소에서 주울 수 있는 것 (플레이어가 집어 들 때만 take_items에)', ...pickups] : []),
+    '', `## 플레이어 소지품: ${inventoryLine(world, s)}`,
   ].join('\n');
 }
 
@@ -453,6 +480,11 @@ export function startEvents(world: WorldPackage, character: CharacterSheet, seed
     const c = world.claims.find((x) => x.id === claim);
     if (c) events.push({ type: 'knowledge_revealed', belief: { holder: 'player', claim, state: 'confirmed', source: 'start' } });
   }
+  // 처음 소지금·소지품
+  const s0 = events.reduce((st, e) => applyEvent(st, e, 0), initialState());
+  const money = moneyEvent(world, s0, world.start.money ?? 15, '처음 가진 돈');
+  if (money) events.push(money);
+  for (const it of world.start.items ?? [{ itemId: 'std/potion-healing', n: 1 }]) { const ev = gainEvent(world, it, '처음 가진 것'); if (ev) events.push(ev); }
   const state = events.reduce((st, e) => applyEvent(st, e, 0), initialState());
   const sc = scenarioEvents(world, state).events;
   const final = sc.reduce((st, e) => applyEvent(st, e, 0), state);
@@ -469,6 +501,12 @@ function narratorSystem(world: WorldPackage): string {
 function sceneTagBlock(world: WorldPackage, locationId: string): string {
   const tags = sceneTags(world, locationId);
   return tags.length ? `\n\n## 장면 이미지 태그\n${tags.join(', ')}` : '';
+}
+
+/** 이 인물이 지금 건넬 수 있는 것 (엔진이 선언된 것만 허용) */
+function giftBlock(world: WorldPackage, s: GameState, npcId: string): string {
+  const gifts = pendingGifts(world, s, npcId);
+  return gifts.length ? `\n\n## 네가 줄 수 있는 것 (그럴 만한 상황에서만 건넨다. 건네면 give_items에 key)\n${gifts.map((g) => `- ${g.key}: ${itemDef(world, g.itemId)!.name}${(g.n ?? 1) > 1 ? ` ×${g.n}` : ''}`).join('\n')}` : '';
 }
 
 function expressionBlock(world: WorldPackage, npcId: string): string {

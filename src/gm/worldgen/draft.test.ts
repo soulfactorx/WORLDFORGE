@@ -102,3 +102,16 @@ describe('초안: 세력·인물 관계·관계 사건 (설계 v3 R5)', () => {
     expect(validateWorld(r.world).filter((i) => i.level === 'error')).toEqual([]);
   });
 });
+
+describe('초안: 상점·보상 돈 (설계 v3 R4a)', () => {
+  it('표준 아이템만 파는 상점을 장소에 달고, 없는 장소·아이템은 뺀다', () => {
+    const d: WorldDraft = { ...messy, shops: [
+      { location: 'market', name: '잡화점', items: ['std/potion-healing', 'std/rope', 'std/nope', 'std/rope'], faction: '' },
+      { location: 'void', name: '유령 상점', items: ['std/rope'], faction: '' },
+    ] };
+    const { world, notes } = worldFromDraft(d, { id: 'test.shop', contentRating: 'teen' });
+    expect(world.locations.find((l) => l.id === 'loc/market')!.shop).toEqual({ name: '잡화점', items: ['std/potion-healing', 'std/rope'] });
+    expect(notes.some((n) => n.includes('유령 상점'))).toBe(true);
+    expect(validateWorld(world).filter((i) => i.level === 'error')).toEqual([]);
+  });
+});

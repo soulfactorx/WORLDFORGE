@@ -53,6 +53,12 @@ export interface GameState {
   clocks: Record<EntityId, { value: number; minutes: number; onFired: number[]; reached: number[] }>;
   /** 일어난(또는 막힌) 연표 사건 */
   worldEvents: Record<EntityId, { turn: number; skipped: boolean }>;
+  /** 소지품·소지금·장비 (설계 v3 6.4) */
+  inventory: Record<EntityId, number>;
+  money: number;
+  equipped: { weapon?: EntityId; armor?: EntityId; shield?: EntityId };
+  /** 이미 주운 것·받은 것 ("loc/…#0", "npc/…#1") */
+  taken: string[];
   /** 결정적 선택: 나타난 턴과 고른 선택지 */
   choices: Record<EntityId, { turn: number; chosen?: string }>;
   /** 퀘스트 진행 (v0.8) */
@@ -87,7 +93,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, reputation: {}, beats: {}, arcs: {}, clocks: {}, worldEvents: {}, choices: {}, quests: {}, flags: [], deadNpcs: [], log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, reputation: {}, beats: {}, arcs: {}, clocks: {}, worldEvents: {}, choices: {}, inventory: {}, money: 0, equipped: {}, taken: [], quests: {}, flags: [], deadNpcs: [], log: [],
   };
 }
 
@@ -243,6 +249,35 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'choice_made':
       return { ...s, choices: { ...(s.choices ?? {}), [e.choiceId]: { turn: s.choices?.[e.choiceId]?.turn ?? turn, chosen: e.optionId } },
         log: [...s.log, { turn, kind: 'quest', text: `◆ 결정 — ${e.text}` }] };
+    case 'item_gained': {
+      const inv = { ...(s.inventory ?? {}) };
+      inv[e.itemId] = (inv[e.itemId] ?? 0) + e.n;
+      return { ...s, inventory: inv, taken: e.key ? [...(s.taken ?? []), e.key] : s.taken ?? [],
+        log: [...s.log, { turn, kind: 'progress', text: `얻음: ${e.name}${e.n > 1 ? ` ×${e.n}` : ''} (${e.reason})` }] };
+    }
+    case 'item_lost': {
+      const inv = { ...(s.inventory ?? {}) };
+      const left = Math.max(0, (inv[e.itemId] ?? 0) - e.n);
+      if (left) inv[e.itemId] = left; else delete inv[e.itemId];
+      // 다 잃은 장비는 벗겨진다
+      const eq = { ...(s.equipped ?? {}) };
+      if (!left) for (const k of ['weapon', 'armor', 'shield'] as const) if (eq[k] === e.itemId) delete eq[k];
+      return { ...s, inventory: inv, equipped: eq,
+        log: e.reason ? [...s.log, { turn, kind: 'progress', text: `잃음: ${e.name}${e.n > 1 ? ` ×${e.n}` : ''} (${e.reason})` }] : s.log };
+    }
+    case 'money_changed':
+      return { ...s, money: Math.max(0, (s.money ?? 0) + e.delta),
+        log: [...s.log, { turn, kind: 'progress', text: `${e.currency ?? '소지금'} ${e.delta > 0 ? '+' : ''}${e.delta} (${e.reason})` }] };
+    case 'item_equipped': {
+      const eq = { ...(s.equipped ?? {}) };
+      if (e.itemId) eq[e.slot] = e.itemId; else delete eq[e.slot];
+      return { ...s, equipped: eq };
+    }
+    case 'item_used': {
+      const sheet = s.player.sheet;
+      return { ...s, rngState: e.rngState, player: { ...s.player, sheet: { ...sheet, hp: Math.min(sheet.maxHp, sheet.hp + e.heal) } },
+        log: [...s.log, { turn, kind: 'check', text: `${e.name} 사용 — HP ${e.heal} 회복 (${sheet.hp} → ${Math.min(sheet.maxHp, sheet.hp + e.heal)})` }] };
+    }
     case 'beat_closed':
       return { ...s, beats: { ...(s.beats ?? {}), [e.beatId]: { turn: s.beats?.[e.beatId]?.turn ?? turn, done: true } } };
     case 'companion_died': {

@@ -82,6 +82,8 @@ export interface Combatant {
   uncannyDodge?: boolean;
   /** 소마법 강화: 소마법 피해 주사위 배수 (5레벨부터 2) */
   cantripTier?: number;
+  /** 이 전투원만 가진 카드 정의 (소지품 물약 등, 설계 v3 6.4) */
+  extraCards?: CardDef[];
 }
 
 export interface Economy {
@@ -146,29 +148,45 @@ export function cardById(id: string): CardDef {
   return c;
 }
 
-/** 손패: 기본 행동 + 캐릭터 카드. 몬스터는 기본 행동 중 이동·질주만 쓴다. */
+/** 이 전투원이 쓰는 카드 정의 (전투원 전용 카드 → 공용 카드) */
+export function cardOf(c: Combatant | undefined, id: string): CardDef {
+  return c?.extraCards?.find((x) => x.id === id) ?? cardById(id);
+}
+
+/** 손패: 기본 행동 + 캐릭터 카드 (+ 소모품). 몬스터는 기본 행동 중 이동·질주만 쓴다. 다 쓴 소모품은 빠진다. */
 export function handOf(c: Combatant): CardDef[] {
   const basics = c.side === 'party' ? BASIC_CARDS.map((b) => b.id) : ['basic/move', 'basic/dash', 'basic/stand', ...(c.fleeAt ? [ESCAPE_CARD.id] : [])];
-  return [...c.cards, ...basics].map(cardById);
+  const extra = (c.extraCards ?? []).filter((x) => !x.resource || (c.resources[x.resource]?.cur ?? 0) > 0);
+  return [...[...c.cards, ...basics].map(cardById), ...extra];
 }
 
 // ---------------------------------------------------------------- 시작
 
-export function playerCombatant(sheet: CharacterSheet): Combatant {
-  return sheetCombatant(sheet, 'player', sheet.name || '당신', true, 1);
+export function playerCombatant(sheet: CharacterSheet, gear: Gear = {}): Combatant {
+  return sheetCombatant(sheet, 'player', sheet.name || '당신', true, 1, gear);
 }
 
 /** 캐릭터 시트(플레이어·동료)로 전투원 생성 */
-export function sheetCombatant(sheet: CharacterSheet, id: string, name: string, isPlayer: boolean, zone: number): Combatant {
+/** 장비·소지품 (플레이어): AC를 정하고, 무기 카드·소모품 카드를 더한다 */
+export interface Gear {
+  ac?: number;
+  cards?: string[];
+  items?: { card: CardDef; n: number }[];
+}
+
+export function sheetCombatant(sheet: CharacterSheet, id: string, name: string, isPlayer: boolean, zone: number, gear: Gear = {}): Combatant {
   const kit = CLASS_KITS[sheet.classId] ?? CLASS_KITS.none!;
   const dex = abilityModifier(sheet.abilities.dex);
   const pb = proficiencyBonus(sheet.level);
+  const resources = structuredClone(resourcesOf(sheet));
+  for (const it of gear.items ?? []) resources[it.card.resource!] = { cur: it.n, max: it.n };
+  const cards = [...new Set([...kitCards(kit, sheet.level), ...(gear.cards ?? []).filter((c) => ALL_CARDS[c])])];
   return {
     id, name, side: 'party', isPlayer, zone,
-    hp: sheet.hp, maxHp: sheet.maxHp, ac: kit.ac(dex), level: sheet.level, abilities: { ...sheet.abilities },
+    hp: sheet.hp, maxHp: sheet.maxHp, ac: gear.ac ?? (kit.ac(dex) + (kit.shield ? 2 : 0)), level: sheet.level, abilities: { ...sheet.abilities },
     profBonus: pb, saveProfs: [...sheet.saveProficiencies],
     stealthBonus: abilityModifier(sheet.abilities[SKILLS.stealth.ability]) + (sheet.skillProficiencies.includes('stealth') ? pb : 0),
-    spellAbility: kit.spellAbility, cards: kitCards(kit, sheet.level), resources: structuredClone(resourcesOf(sheet)),
+    spellAbility: kit.spellAbility, cards, resources, ...(gear.items?.length ? { extraCards: gear.items.map((x) => x.card) } : {}),
     dodging: false, hidden: false, initiative: 0,
     sneakAttack: kit.sneakAttack ? `${Math.ceil(sheet.level / 2)}d6` : undefined, // 암습 1d6(1~2레벨), 2d6(3~4레벨)
     critRange: sheet.classId === 'fighter' && sheet.level >= 3 ? 19 : 20, // 투사: 향상된 치명타
@@ -215,8 +233,8 @@ function companionStartZone(c: CompanionEntry): number {
   return c.order?.mode === 'hold_back' || c.sheet.classId === 'wizard' ? 0 : 1;
 }
 
-export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng, companions: CompanionEntry[] = []): CombatState {
-  const list: Combatant[] = [playerCombatant(sheet)];
+export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng, companions: CompanionEntry[] = [], gear: Gear = {}): CombatState {
+  const list: Combatant[] = [playerCombatant(sheet, gear)];
   for (const c of companions) {
     if (c.sheet.hp > 0) list.push(sheetCombatant(c.sheet, c.id, c.name, false, companionStartZone(c)));
   }
@@ -462,7 +480,7 @@ function rollSave(a: Combatant, t: Combatant, cardName: string, save: Ability, d
 
 /** 카드 사용을 해결한다. 규칙 위반이면 예외. 상태는 바꾸지 않고 effects만 반환한다. */
 export function resolveCard(cs: CombatState, actorId: string, cardId: string, target: Target, rng: Rng): Resolution {
-  const card = cardById(cardId);
+  const card = cardOf(cs.combatants[actorId], cardId);
   if (!handOf(cs.combatants[actorId]!).some((c) => c.id === cardId)) throw new Error('손패에 없는 카드');
   const reason = unusableReason(cs, actorId, card);
   if (reason) throw new Error(reason);
@@ -541,10 +559,12 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
     }
     case 'heal': {
       const t = cs.combatants[(target as string) ?? a.id]!;
-      const h = rollDamage(rng, scaleDice(e.dice, card.upcast?.dice, up)).total + (e.add === 'spell' ? spellMod(a) : a.level);
+      const h = rollDamage(rng, scaleDice(e.dice, card.upcast?.dice, up)).total + (e.add === 'spell' ? spellMod(a) : e.add === 'level' ? a.level : 0);
       const healed = Math.min(t.maxHp - t.hp, Math.max(0, h));
       effects.push({ kind: 'hp', target: t.id, delta: healed });
-      log.push(`${a.name}의 ${name}${t.id === a.id ? '' : ` → ${t.name}`}: HP ${healed} 회복 (${t.hp} → ${t.hp + healed})`);
+      const cured = (e.cures ?? []).filter((k) => hasCondition(t, k));
+      for (const k of cured) effects.push({ kind: 'condition', target: t.id, condition: k, rounds: 0 });
+      log.push(`${a.name}의 ${name}${t.id === a.id ? '' : ` → ${t.name}`}: HP ${healed} 회복 (${t.hp} → ${t.hp + healed})${cured.length ? `, ${cured.map((k) => CONDITION_LABEL[k]).join('·')} 풀림` : ''}`);
       break;
     }
     case 'move': {

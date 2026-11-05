@@ -244,3 +244,7 @@ ul.needs label.file { flex: none; }
 .decisive p { margin: 4px 0; }
 .arcs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .arcs li.done b { color: var(--muted); }
+
+.items-list { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.items-list li p { margin: 2px 0 0; }
+.items-list .row { gap: 6px; flex-wrap: wrap; align-items: center; }

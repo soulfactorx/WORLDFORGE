@@ -59,7 +59,7 @@ export type Effect =
   | { type: 'escape' }
   | { type: 'auto_damage'; count: number; damage: string; damageType: string; range: number }
   /** range: 아군 대상 존 거리 (기본 0 = 같은 존) */
-  | { type: 'heal'; dice: string; add: 'spell' | 'level'; range?: number }
+  | { type: 'heal'; dice: string; add: 'spell' | 'level' | 'none'; range?: number; cures?: Condition[] }
   | { type: 'move' }
   | { type: 'dodge' }
   | { type: 'hide' }
@@ -81,7 +81,7 @@ export interface CardDef {
   id: string;
   name: string;
   desc: string;
-  kind: 'basic' | 'weapon' | 'class' | 'spell' | 'monster';
+  kind: 'basic' | 'weapon' | 'class' | 'spell' | 'monster' | 'item';
   cost: Cost;
   /** ally = 사거리 안 아군(자신 포함) 중 다친 대상, area = 적이 있는 존 */
   target: 'enemy' | 'self' | 'ally' | 'zone' | 'area';
@@ -149,6 +149,8 @@ export interface ClassKit {
   progression?: Record<number, string[]>;
   /** 레벨별 새 능력 이름 (레벨업 안내용) */
   features?: Record<number, string[]>;
+  /** 기본 장비에 방패가 있다 (방패 아이템과 겹쳐 세지 않는다) */
+  shield?: boolean;
 }
 
 /** 이 레벨까지 가진 카드 */
@@ -169,7 +171,7 @@ export const CLASS_KITS: Record<string, ClassKit> = {
     features: { 2: ['교활한 행동 (질주·후퇴·숨기)'], 3: ['암습 2d6', '정밀 조준'], 4: ['능력치 향상'], 5: ['암습 3d6', '초감각 회피 (반응으로 받은 공격 피해 절반)', '숙련 보너스 +3'] },
   },
   cleric: {
-    cards: ['weapon/mace', 'spell/sacred_flame', 'spell/cure_wounds'], ac: (d) => 13 + Math.min(d, 2) + 2, spellAbility: 'wis', // 체인 셔츠 + 방패
+    cards: ['weapon/mace', 'spell/sacred_flame', 'spell/cure_wounds'], ac: (d) => 13 + Math.min(d, 2), shield: true, spellAbility: 'wis', // 체인 셔츠 + 방패
     progression: { 2: ['cleric/divine_spark_heal', 'cleric/divine_spark_harm', 'spell/healing_word'], 3: ['spell/guiding_bolt', 'spell/hold_person'], 5: ['spell/spirit_guardians'] },
     features: { 2: ['신성 변환: 신성 불꽃', '치유의 말', '1레벨 슬롯 +1'], 3: ['인도의 화살', '인간 속박', '1레벨 슬롯 +1', '2레벨 슬롯 2개'], 4: ['능력치 향상', '2레벨 슬롯 +1'], 5: ['수호 영령', '3레벨 슬롯 2개', '소마법 강화', '숙련 보너스 +3'] },
   },

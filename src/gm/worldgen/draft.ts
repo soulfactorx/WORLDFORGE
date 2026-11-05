@@ -8,6 +8,7 @@
 import { ABILITIES, CLASSES, SKILL_IDS } from '../../engine/character/rules';
 import { suggestedStandardArray } from '../../engine/character/sheet';
 import { MONSTERS } from '../../engine/combat/monsters';
+import { STD_ITEM_MAP, STD_ITEMS } from '../../data/items';
 import type { Clock, Condition, DecisiveChoice, Encounter, Ending, KnowledgeState, NpcRelationKind, Quest, RelationBeat, StoryEffect, StoryFlag, WorldPackage } from '../../engine/schema';
 
 // ---------------------------------------------------------------- 초안 타입 (LLM 출력)
@@ -36,6 +37,8 @@ export interface WorldDraft {
     romanceable?: boolean; faction?: string;
   }[];
   factions?: { key: string; name: string; description: string; reputation: number }[];
+  /** 상점 (설계 v3 6.4): 장소 key + 표준 아이템 ID */
+  shops?: { location: string; name: string; items: string[]; faction: string }[];
   relations?: { a: string; b: string; kind: NpcRelationKind; note: string }[];
   truths: { key: string; statement: string; secrecy: number; subjects: string[]; protected_topic: string }[];
   claims: { key: string; statement: string; truth: 'true' | 'false' | 'partial'; relates_to: string }[];
@@ -46,7 +49,7 @@ export interface WorldDraft {
 export interface ScenarioDraft {
   encounters: { key: string; name: string; location: string; enemies: { monster: string; zone: number }[]; trigger: string }[];
   flags: { key: string; when: string; location: string; requires: DraftCond }[];
-  quests: { key: string; name: string; kind: 'main' | 'side'; start: DraftCond; stages: { objective: string; hint: string; complete: DraftCond }[]; reward_xp: number }[];
+  quests: { key: string; name: string; kind: 'main' | 'side'; start: DraftCond; stages: { objective: string; hint: string; complete: DraftCond }[]; reward_xp: number; reward_money?: number }[];
   endings: { key: string; name: string; condition: DraftCond; epilogue: string }[];
   relation_beats?: { key: string; npc: string; name: string; condition: DraftCond; hint: string; resolve_flag: string }[];
   /** 이야기 엔진 (설계 v3 5장): 이번에 덧붙이는 줄기 하나와 시계·결정적 선택 */
@@ -95,6 +98,11 @@ export const WORLD_DRAFT_SCHEMA = obj({
     faction: { type: 'string', description: '소속 세력 key 또는 ""' },
   })),
   factions: arr(obj({ key: str, name: str, description: str, reputation: { type: 'integer', description: '플레이어에 대한 처음 평판 (-30~30, 보통 0)' } })),
+  shops: arr(obj({
+    location: { type: 'string', description: '상점이 있는 장소 key' }, name: { type: 'string', description: '상점 이름 (예: 잡화점, 대장간)' },
+    items: { type: 'array', items: { type: 'string', enum: STD_ITEMS.map((i) => i.id) }, description: '파는 표준 아이템 3~8개' },
+    faction: { type: 'string', description: '상점이 속한 세력 key 또는 ""' },
+  })),
   relations: arr(obj({ a: { type: 'string', description: '인물 key' }, b: { type: 'string', description: '인물 key' }, kind: { type: 'string', enum: ['family', 'ally', 'rival', 'lover', 'master', 'enemy'] }, note: str })),
   truths: arr(obj({ key: str, statement: str, secrecy: { type: 'integer', description: '0 상식 ~ 5 극비' }, subjects: arr(str), protected_topic: { type: 'string', description: '비밀이면 내용을 드러내지 않는 짧은 이름표, 아니면 ""' } })),
   claims: arr(obj({ key: str, statement: str, truth: { type: 'string', enum: ['true', 'false', 'partial'] }, relates_to: { type: 'string', description: '관련 truth key 또는 ""' } })),
@@ -108,6 +116,7 @@ export const SCENARIO_DRAFT_SCHEMA = obj({
   quests: arr(obj({
     key: str, name: str, kind: { type: 'string', enum: ['main', 'side'] }, start: COND_SCHEMA,
     stages: arr(obj({ objective: str, hint: str, complete: COND_SCHEMA })), reward_xp: int,
+    reward_money: { type: 'integer', description: '보상 돈 (사이드 20~100, 메인 100~300)' },
   })),
   endings: arr(obj({ key: str, name: str, condition: COND_SCHEMA, epilogue: str })),
   arc: obj({
@@ -305,6 +314,12 @@ export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating:
     (l.discoveries ??= []).push({ claim: cl, hint: disc.hint, ...(SKILL_IDS.includes(disc.check as never) ? { check: disc.check } : {}) });
   }
 
+  for (const sh of d.shops ?? []) {
+    const l = locations.find((x) => x.id === loc(sh.location));
+    const items = [...new Set(sh.items)].filter((i) => STD_ITEM_MAP[i]);
+    if (!l || !items.length) { notes.push(`상점 "${sh.name}": 없는 장소이거나 파는 물건이 없어 뺐습니다.`); continue; }
+    l.shop = { name: sh.name || '상점', items, ...(sh.faction && fac(sh.faction) ? { factionId: fac(sh.faction)! } : {}) };
+  }
   const relations: NonNullable<WorldPackage['relations']> = [];
   for (const r of d.relations ?? []) {
     const a = npc(r.a), b = npc(r.b);
@@ -370,7 +385,7 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
     if (!stages.length) { notes.push(`임무 "${q.name}": 단계가 없어 뺐습니다.`); continue; }
     quests.push({
       id: questMap.get(q.key)!, name: q.name, kind: q.kind, start: convertCond(q.start, refs, `임무 "${q.name}" 시작`, notes), stages,
-      ...(q.reward_xp > 0 ? { rewards: { xp: clamp(q.reward_xp, 0, 1000) } } : {}),
+      ...(q.reward_xp > 0 || (q.reward_money ?? 0) > 0 ? { rewards: { ...(q.reward_xp > 0 ? { xp: clamp(q.reward_xp, 0, 1000) } : {}), ...((q.reward_money ?? 0) > 0 ? { money: clamp(q.reward_money!, 0, 5000) } : {}) } } : {}),
     });
   }
   const endings: Ending[] = d.endings.map((e) => ({ id: endMap.get(e.key)!, name: e.name, condition: convertCond(e.condition, refs, `결말 "${e.name}"`, notes), epilogue: e.epilogue }));

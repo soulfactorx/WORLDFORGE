@@ -13,7 +13,7 @@ export const wuxiaSample: WorldPackage = {
   genre: { id: 'wuxia' },
   locations: [
     { id: 'loc/inn', name: '청운객잔', description: '현성 어귀의 이층 객잔. 붉은 등롱이 흔들리고, 술 냄새와 볶은 땅콩 냄새가 섞여 있다. 구석 탁자에 칼을 찬 손님 몇이 낮게 이야기한다.', connections: ['loc/town'], improvisation: 'minor' },
-    { id: 'loc/town', name: '현성 저잣거리', description: '나루와 맞닿은 장터. 생선 비린내와 호객 소리, 강 건너로 푸른 산봉우리가 보인다. 관아 앞 방(榜)에 새 공고가 붙어 있다.', connections: ['loc/inn', 'loc/bamboo'],
+    { id: 'loc/town', name: '현성 저잣거리', description: '나루와 맞닿은 장터. 생선 비린내와 호객 소리, 강 건너로 푸른 산봉우리가 보인다. 관아 앞 방(榜)에 새 공고가 붙어 있다.', connections: ['loc/inn', 'loc/bamboo'], shop: { name: '저잣거리 약방', items: ['std/potion-healing', 'std/potion-greater', 'std/antitoxin', 'std/rations', 'std/dagger', 'std/javelin'], factionId: 'fac/cheongun' },
       discoveries: [{ claim: 'claim/notice', check: 'investigation', hint: '방을 자세히 읽으면 죽림 산길 통행을 막는다는 관아 공고와, 청운검문 제자가 실종됐다는 소식을 찾는다.' }] },
     { id: 'loc/bamboo', name: '죽림 산길', description: '대나무가 하늘을 가린 좁은 산길. 바람에 댓잎이 쓸리는 소리 사이로, 누군가 발소리를 죽이는 기척이 있다.', connections: ['loc/town', 'loc/sect'], improvisation: 'minor' },
     { id: 'loc/sect', name: '청운검문 연무장', description: '산 중턱의 문파. 붉은 전각 앞 연무장에 검을 든 제자들이 서 있지만, 다들 얼굴이 어둡다. 전각 안쪽에서 약 달이는 냄새가 난다.', connections: ['loc/bamboo'], improvisation: 'none',

@@ -21,6 +21,7 @@ export const sampleWorld: WorldPackage = {
       id: 'loc/forest-clearing',
       name: '숲속 공터',
       description: '이끼 낀 돌 원형 제단이 있는 작은 공터. 짙은 안개가 나무 사이로 흐르고, 멀리 개 짖는 소리가 들린다.',
+      pickups: [{ itemId: 'std/potion-healing', hint: '제단 옆 풀숲에 누군가 떨어뜨린 작은 물약병이 있다. 공터를 살피면 찾는다.' }],
       connections: ['loc/village-gate'],
       improvisation: 'none',
       discoveries: [
@@ -52,6 +53,7 @@ export const sampleWorld: WorldPackage = {
       id: 'loc/inn',
       name: '젖은 장화 여관',
       description: '난롯불 냄새와 묽은 수프 냄새가 섞인 좁은 여관. 손님은 몇 되지 않는다.',
+      shop: { name: '여관 주인의 잡화', items: ['std/potion-healing', 'std/antitoxin', 'std/rations', 'std/torch', 'std/rope', 'std/dagger', 'std/shortbow', 'std/leather', 'std/shield'] },
       connections: ['loc/village-gate'],
     },
   ],
@@ -148,6 +150,7 @@ export const sampleWorld: WorldPackage = {
     {
       id: 'enc/road-goblins', name: '고블린 매복', locationId: 'loc/old-road',
       enemies: [{ monsterId: 'goblin_warrior', zone: 2 }, { monsterId: 'goblin_warrior', zone: 3 }],
+      loot: { money: 12, items: [{ itemId: 'std/shortsword' }] },
       trigger: '고블린 둘이 덤불 뒤에 숨어 있다. 플레이어가 길을 따라 더 들어가거나 부러진 화살을 조사하면 습격한다. 플레이어가 은신에 성공하면 먼저 발견할 수도 있다.',
     },
   ],
@@ -170,7 +173,7 @@ export const sampleWorld: WorldPackage = {
       stages: [
         { objective: '낡은 숲길의 고블린을 처치한다.', hint: '고블린 둘이 낡은 숲길 덤불에 숨어 있다. 브란은 이 일이라면 함께 간다.', complete: { cleared: 'enc/road-goblins' } },
       ],
-      rewards: { xp: 100, relationship: [{ npcId: 'npc/bran', trust: 8, respect: 5 }] },
+      rewards: { xp: 100, money: 30, relationship: [{ npcId: 'npc/bran', trust: 8, respect: 5 }] },
     },
     {
       id: 'quest/ilse-scar', name: '일제의 화상', kind: 'side',
