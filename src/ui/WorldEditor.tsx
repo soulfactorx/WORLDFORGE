@@ -317,6 +317,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               {c.portrait && <div className="row"><img className="portrait" src={c.portrait} alt="" /><button type="button" onClick={() => up({ portrait: undefined })}>초상화 지우기</button></div>}
               {c.source && <p className="muted small">출처: {c.source.format.toUpperCase()} "{c.source.name}"{c.source.creator && ` · 제작 ${c.source.creator}`} · 가져온 날 {c.source.importedAt.slice(0, 10)}</p>}
               <Select label="있는 곳" value={c.locationId} options={locOptions} onChange={(locationId) => up({ locationId })} />
+              <JsonField label="일정 (시각에 따라 있는 곳 — 비우면 늘 위의 장소)" value={c.schedule ?? []} onChange={(schedule) => up({ schedule: Array.isArray(schedule) && schedule.length ? schedule : undefined })} rows={3}
+                help='예: [{ "from": 8, "to": 18, "locationId": "loc/market" }, { "from": 20, "to": 6, "locationId": "loc/inn" }] · 0~24시, from이 to보다 크면 자정을 넘긴다' />
               <Select label="AI 즉흥 설정" value={c.improvisation} options={IMPROV} onChange={(improvisation) => up({ improvisation })} />
               <Select label="소속 세력" value={c.faction ?? ''} options={[['', '없음'], ...(w.factions ?? []).map((f) => [f.id, f.name] as const)] as const} onChange={(faction) => up({ faction: faction || undefined })} />
               <label className="check"><input type="checkbox" checked={!!c.romanceable} onChange={(e) => up({ romanceable: e.target.checked || undefined })} /> 연인이 될 수 있는 인물 (친밀·호감이 쌓이면 "연인" 단계)</label>
@@ -362,6 +364,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
                 <Text label="이름" value={f.name} onChange={(name) => up({ name })} />
                 <Area label="설명 (소속 인물 연기에 쓰임)" value={f.description} onChange={(description) => up({ description })} rows={2} />
                 <Num label="처음 평판 (-100~100, 기본 0)" value={f.reputation} onChange={(reputation) => up({ reputation })} />
+                <JsonField label="세력 행동 (며칠마다 일어나는 일 — 시간이 흐르면 세계가 움직인다)" value={f.actions ?? []} onChange={(actions) => up({ actions: Array.isArray(actions) && actions.length ? actions : undefined })} rows={6}
+                  help='예: [{ "name": "통행세 인상", "every": 3, "condition": { "not": { "flag": "guild_broken" } }, "effects": [{ "reputation": "fac/…", "delta": -2 }, { "clock": "clock/…", "by": 1 }], "news": "📜 상인 조합이 또 통행세를 올렸다는 소문" }] · 효과는 이야기 흐름 탭과 같다' />
               </div>
             )} />
           <b>인물 사이의 관계</b>

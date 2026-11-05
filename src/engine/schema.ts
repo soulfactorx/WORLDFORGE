@@ -77,6 +77,8 @@ export interface Character {
   romanceable?: boolean;
   /** 소속 세력 ID (설계 v3 4.4) */
   faction?: EntityId;
+  /** 일정 (설계 v3 7장): 시각(0~23시)에 따라 있는 곳. from > to면 자정을 넘긴다 (예: 20~6시). 맞는 칸이 없으면 locationId */
+  schedule?: { from: number; to: number; locationId: EntityId }[];
   /** 이 인물이 플레이어에게 줄 수 있는 것 (condition이 참일 때만, 한 번씩) */
   gives?: (ItemStack & { condition?: Condition })[];
   /** 비밀 상태의 지식을 털어놓는 데 필요한 신뢰 (v0.6, 기본 40) */
@@ -105,6 +107,18 @@ export interface Faction {
   description: string;
   /** 처음 평판 (기본 0) */
   reputation?: number;
+  /** 세력 행동 (설계 v3 7장): 며칠마다 조건이 맞으면 효과가 일어나고 소식이 돈다 */
+  actions?: FactionAction[];
+}
+
+export interface FactionAction {
+  name: string;
+  /** 며칠마다 (1 = 매일) */
+  every: number;
+  condition?: Condition;
+  effects: StoryEffect[];
+  /** 플레이어에게 들리는 소식 (없으면 조용히) */
+  news?: string;
 }
 
 export type NpcRelationKind = 'family' | 'ally' | 'rival' | 'lover' | 'master' | 'enemy';
@@ -481,6 +495,8 @@ export interface WorldPackage {
   factions?: Faction[];
   relations?: NpcRelation[];
   relationBeats?: RelationBeat[];
+  /** 지속되는 세계 (설계 v3 7장): 소문 전파 (기본 켜짐) */
+  simulation?: { rumors?: boolean };
   /** 이야기 엔진 (설계 v3 5장) */
   arcs?: Arc[];
   choices?: DecisiveChoice[];

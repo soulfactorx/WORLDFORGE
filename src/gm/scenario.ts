@@ -9,6 +9,7 @@ import { progressEvents } from './progression';
 import { relationshipEvents, reputationEvent } from './relationship';
 import { arcTransitions, choiceToOffer, clockUpdates, dueWorldEvents } from '../engine/story';
 import { effectEvents } from './story';
+import { currentDay, factionActionsOn, rumorSpreadOn } from '../engine/world';
 import { gainEvent, moneyEvent } from './economy';
 
 /** resolveFlag가 없는 관계 사건은 이 턴 수가 지나면 닫힌다 */
@@ -44,6 +45,20 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
   const events: GameEvent[] = [];
   let s = state;
   const push = (e: GameEvent) => { events.push(e); s = applyEvent(s, e, state.turn); };
+  // 지속되는 세계 (설계 v3 7장): 지난 날마다 세력 행동·소문 전파 (한 번에 최대 30일)
+  const today = currentDay(s);
+  if (s.simDay === undefined) push({ type: 'sim_day', day: today });
+  else if (today > s.simDay) {
+    for (let d = Math.max(s.simDay + 1, today - 29); d <= today; d++) {
+      for (const fa of factionActionsOn(world, s, d)) {
+        push({ type: 'faction_acted', factionId: fa.factionId, name: fa.action.name, ...(fa.action.news ? { news: fa.action.news } : {}) });
+        effectEvents(world, s, fa.action.effects, `${fa.factionName}: ${fa.action.name}`).forEach(push);
+      }
+      const rumors = rumorSpreadOn(world, s, d);
+      if (rumors.length) push({ type: 'rumor_spread', beliefs: rumors });
+    }
+    push({ type: 'sim_day', day: today });
+  }
   // 이야기 엔진: 시계 → 연표 사건 → 줄기·장 → 결정적 선택 (이 결과로 임무가 진행될 수 있으므로 먼저)
   for (const u of clockUpdates(world, s)) {
     push({ type: 'clock_changed', clockId: u.clock.id, value: u.value, minutes: u.minutes, ...(u.onFired.length ? { onFired: u.onFired } : {}) });

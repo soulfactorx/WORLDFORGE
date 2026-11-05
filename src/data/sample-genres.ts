@@ -59,7 +59,9 @@ export const wuxiaSample: WorldPackage = {
         { objective: '장문인의 병의 진실을 알아낸다.', hint: '설하연이나 장문인의 신뢰를 얻으면 독장 이야기를 털어놓는다. 약 냄새도 단서다.', complete: { knows: 'claim/poison', min: 'partial' } },
       ], rewards: { xp: 200, relationship: [{ npcId: 'npc/yeon', trust: 10, respect: 10 }] } },
   ],
-  factions: [{ id: 'fac/cheongun', name: '청운문', description: '산 위의 정파 문파. 협의를 중시하지만 요즘 장문인의 병으로 기세가 꺾였다.' }],
+  factions: [{ id: 'fac/cheongun', name: '청운문', description: '산 위의 정파 문파. 협의를 중시하지만 요즘 장문인의 병으로 기세가 꺾였다.',
+    actions: [{ name: '흑풍채의 행패', every: 2, condition: { not: { cleared: 'enc/bamboo-bandits' } }, effects: [{ reputation: 'fac/cheongun', delta: -1 }],
+      news: '📜 흑풍채 졸개들이 저잣거리에서 행패를 부렸는데 청운문은 손을 놓고 있다는 수군거림이 돈다.' }] }],
   relations: [{ a: 'npc/unhak', b: 'npc/yeon', kind: 'master', note: '설하연을 어려서부터 거둬 키운 사부' }],
   events: [
     { id: 'event/elder-worse', name: '장문인의 병세', when: { day: 3 }, unless: { questDone: 'quest/blocked-road' }, effects: [{ reveal: 'claim/elder-sick', state: 'rumor' }],
@@ -87,7 +89,7 @@ export const romanceSample: WorldPackage = {
       discoveries: [{ claim: 'claim/letter', check: 'perception', hint: '서재를 살피면 책상 위 편지의 문장(紋章)이 몇 해 전 파혼한 백작가의 것임을 알아챈다.' }] },
   ],
   characters: [
-    { id: 'npc/cassian', name: '카시안', appearance: '검은 연미복의 키 큰 청년 공작. 회색 눈, 웃지 않는 입매.', personality: '차갑고 예의 바르다. 사람을 밀어내지만, 진심을 보이는 상대에게는 서툴게 다정해진다.', speech: '격식 있는 존댓말. 짧고 건조하다. "용건이 있으십니까."', locationId: 'loc/ballroom', improvisation: 'none', gender: 'M',
+    { id: 'npc/cassian', name: '카시안', appearance: '검은 연미복의 키 큰 청년 공작. 회색 눈, 웃지 않는 입매.', personality: '차갑고 예의 바르다. 사람을 밀어내지만, 진심을 보이는 상대에게는 서툴게 다정해진다.', speech: '격식 있는 존댓말. 짧고 건조하다. "용건이 있으십니까."', locationId: 'loc/ballroom', schedule: [{ from: 21, to: 24, locationId: 'loc/garden' }], improvisation: 'none', gender: 'M',
       background: '직함: 젊은 공작 · 무도회의 주인', relationship: { affinity: -5, trust: -10, respect: 0, fear: 0 }, secretTrust: 55, romanceable: true, faction: 'fac/society' },
     { id: 'npc/eleanor', name: '엘레노어', appearance: '금발에 푸른 드레스, 부채로 입가를 가린 영애.', personality: '사교계의 꽃. 웃는 얼굴로 상대를 시험한다. 카시안에게 관심이 있다.', speech: '우아하고 가시 돋친 존댓말. "어머, 처음 뵙는 얼굴이네요."', locationId: 'loc/ballroom', improvisation: 'minor', gender: 'F',
       background: '직함: 후작 영애 · 사교계의 중심', relationship: { affinity: -10, trust: -5, respect: 0, fear: 0 }, faction: 'fac/society' },

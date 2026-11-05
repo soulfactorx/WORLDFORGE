@@ -1,4 +1,5 @@
 import { relationshipOf, reputationOf, stageFor } from './relationship';
+import { npcLocationOf } from './world';
 import type { Condition, Ending, EntityId, KnowledgeState, Quest, QuestType, WorldPackage } from './schema';
 
 export const QUEST_TYPE_LABEL: Record<QuestType, string> = {
@@ -35,8 +36,8 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('knows' in c) return playerKnows(state, c.knows, c.min);
   if ('npcAt' in c) {
     if (state.deadNpcs.includes(c.npcAt)) return false;
-    const at = state.party[c.npcAt] ? state.player.locationId : state.npcLocations[c.npcAt] ?? world.characters.find((x) => x.id === c.npcAt)?.locationId;
-    return at === c.at;
+    const ch = world.characters.find((x) => x.id === c.npcAt);
+    return !!ch && npcLocationOf(state, ch) === c.at;
   }
   if ('at' in c) return state.player.locationId === c.at;
   if ('cleared' in c) return state.clearedEncounters.includes(c.cleared);

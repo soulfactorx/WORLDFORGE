@@ -67,6 +67,8 @@ export interface GameState {
   kills: Record<string, number>;
   /** 의뢰 (설계 v3 6.3): 끝낸 수·실패 수·진행 중인 것 */
   jobs: Record<EntityId, { done: number; failed: number; active?: { instance: number; acceptedAt: number } }>;
+  /** 지속되는 세계: 마지막으로 계산한 날 (게임 시작 후 날 수) */
+  simDay?: number;
   /** 보상으로 얻은 전용 카드 ('player' 또는 동료 ID → 카드) */
   grantedCards: Record<string, string[]>;
   /** 이야기 플래그 (v0.8) */
@@ -281,6 +283,14 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       g[e.who] = [...new Set([...(g[e.who] ?? []), e.cardId])];
       return { ...s, grantedCards: g, log: [...s.log, { turn, kind: 'progress', text: `★ 새 기술 — ${e.whoName}: ${e.name}` }] };
     }
+    case 'sim_day':
+      return { ...s, simDay: e.day };
+    case 'rumor_spread': {
+      const keys = new Set(e.beliefs.map((b) => `${b.holder}|${b.claim}`));
+      return { ...s, beliefs: [...s.beliefs.filter((b) => !keys.has(`${b.holder}|${b.claim}`)), ...e.beliefs] };
+    }
+    case 'faction_acted':
+      return e.news ? { ...s, log: [...s.log, { turn, kind: 'omen', text: e.news }] } : s;
     case 'item_gained': {
       const inv = { ...(s.inventory ?? {}) };
       inv[e.itemId] = (inv[e.itemId] ?? 0) + e.n;

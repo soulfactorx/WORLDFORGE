@@ -22,7 +22,7 @@ const world = (): WorldPackage => ({
       { name: '제단의 비밀', goal: '제단과 장로의 관계를 알아낸다', complete: { knows: 'claim/altar-summoning' }, fail: { flag: 'raid_happened' }, effects: [{ reputation: 'fac/village', delta: 5 }] },
     ],
   }],
-  factions: [{ id: 'fac/village', name: '미스트베일', description: '안개 골짜기 마을' }],
+  factions: [...(sampleWorld.factions ?? []), { id: 'fac/village', name: '미스트베일', description: '안개 골짜기 마을' }],
   clocks: [{
     id: 'clock/raid', name: '도적의 습격 준비', segments: 4,
     tick: [{ every: 'day', by: 1 }, { on: { flag: 'warned_village' }, by: -2 }],

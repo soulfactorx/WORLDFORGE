@@ -36,8 +36,9 @@ export interface WorldDraft {
     improvisation: 'none' | 'minor' | 'free'; companion_class: string; join_condition: string;
     initial_affinity: number; initial_trust: number; secret_trust: number;
     romanceable?: boolean; faction?: string;
+    schedule?: { from: number; to: number; location: string }[];
   }[];
-  factions?: { key: string; name: string; description: string; reputation: number }[];
+  factions?: { key: string; name: string; description: string; reputation: number; activity?: string; every_days?: number }[];
   /** 상점 (설계 v3 6.4): 장소 key + 표준 아이템 ID */
   shops?: { location: string; name: string; items: string[]; faction: string }[];
   relations?: { a: string; b: string; kind: NpcRelationKind; note: string }[];
@@ -100,8 +101,13 @@ export const WORLD_DRAFT_SCHEMA = obj({
     initial_affinity: int, initial_trust: int, secret_trust: { type: 'integer', description: '비밀을 털어놓는 신뢰 기준 (20~70)' },
     romanceable: { type: 'boolean', description: '플레이어와 연인이 될 수 있는 인물인가 (성인으로 설정된 인물만)' },
     faction: { type: 'string', description: '소속 세력 key 또는 ""' },
+    schedule: { type: 'array', description: '시각에 따라 다른 곳에 있으면 (예: 밤에는 여관). 늘 같은 곳이면 []', items: obj({ from: { type: 'integer', description: '0~23시' }, to: { type: 'integer', description: '0~24시 (from보다 작으면 자정을 넘김)' }, location: { type: 'string', description: '장소 key' } }) },
   })),
-  factions: arr(obj({ key: str, name: str, description: str, reputation: { type: 'integer', description: '플레이어에 대한 처음 평판 (-30~30, 보통 0)' } })),
+  factions: arr(obj({
+    key: str, name: str, description: str, reputation: { type: 'integer', description: '플레이어에 대한 처음 평판 (-30~30, 보통 0)' },
+    activity: { type: 'string', description: '이 세력이 며칠마다 벌이는 일이 플레이어에게 소문으로 들리는 한 줄 (예: "📜 상인 조합이 통행세를 또 올렸다는 소문"). 없으면 ""' },
+    every_days: { type: 'integer', description: 'activity가 며칠마다인지 (2~7, 없으면 0)' },
+  })),
   shops: arr(obj({
     location: { type: 'string', description: '상점이 있는 장소 key' }, name: { type: 'string', description: '상점 이름 (예: 잡화점, 대장간)' },
     items: { type: 'array', items: { type: 'string', enum: STD_ITEMS.map((i) => i.id) }, description: '파는 표준 아이템 3~8개' },
@@ -251,7 +257,10 @@ export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating:
   const factions: NonNullable<WorldPackage['factions']> = [];
   for (const f of d.factions ?? []) {
     const id = fac(f.key)!;
-    if (!factions.some((x) => x.id === id)) factions.push({ id, name: f.name, description: f.description, ...(f.reputation ? { reputation: clamp(f.reputation, -100, 100) } : {}) });
+    if (!factions.some((x) => x.id === id)) factions.push({
+      id, name: f.name, description: f.description, ...(f.reputation ? { reputation: clamp(f.reputation, -100, 100) } : {}),
+      ...(f.activity && (f.every_days ?? 0) > 0 ? { actions: [{ name: f.activity.slice(0, 40), every: clamp(f.every_days!, 1, 30), effects: [], news: f.activity }] } : {}),
+    });
   }
 
   const locations: WorldPackage['locations'] = [];
@@ -298,6 +307,10 @@ export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating:
       relationship: { affinity: clamp(c.initial_affinity, -100, 100), trust: clamp(c.initial_trust, -100, 100) },
       secretTrust: clamp(c.secret_trust || 40, 0, 100),
       ...(c.romanceable ? { romanceable: true } : {}),
+      ...(() => {
+        const schedule = (c.schedule ?? []).flatMap((x) => { const l = loc(x.location); const from = clamp(x.from, 0, 23), to = clamp(x.to, 0, 24); return l && from !== to ? [{ from, to, locationId: l }] : []; });
+        return schedule.length ? { schedule } : {};
+      })(),
       ...(c.faction && fac(c.faction) ? { faction: fac(c.faction)! } : {}),
       ...(cls ? {
         companion: {

@@ -14,7 +14,7 @@ import { startEvents } from './turn';
 
 const world = (): WorldPackage => {
   const w = structuredClone(sampleWorld);
-  w.factions = [{ id: 'fac/village', name: '마을', description: '' }];
+  w.factions = [...(w.factions ?? []), { id: 'fac/village', name: '마을', description: '' }];
   w.quests = [
     ...(w.quests ?? []),
     { id: 'quest/escort-ilse', name: '일제 호위', kind: 'side', type: 'escort', giver: 'npc/bran', target: 'npc/ilse', start: { flag: 'escort_on' }, timeLimit: { days: 2 },

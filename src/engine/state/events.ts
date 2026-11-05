@@ -43,6 +43,10 @@ export type GameEvent =
   | { type: 'job_completed'; jobId: EntityId; name: string }
   | { type: 'job_failed'; jobId: EntityId; name: string; reason: string }
   | { type: 'card_granted'; who: string; whoName: string; cardId: string; name: string }
+  /** 지속되는 세계 (설계 v3 7장) */
+  | { type: 'sim_day'; day: number }
+  | { type: 'rumor_spread'; beliefs: Belief[] }
+  | { type: 'faction_acted'; factionId: EntityId; name: string; news?: string }
   | { type: 'flag_set'; flag: string }
   | { type: 'ending_reached'; endingId: EntityId; name: string }
   /** 경험치·레벨업 (v0.7). who = 'player' 또는 동료 NPC ID */

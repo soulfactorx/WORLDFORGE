@@ -65,6 +65,9 @@ export const sampleWorld: WorldPackage = {
     {
       id: 'npc/bran',
       name: '브란',
+      faction: 'fac/mistvale',
+      // 밤에는 여관에서 한잔한다 (설계 v3 7장 일정)
+      schedule: [{ from: 20, to: 24, locationId: 'loc/inn' }],
       appearance: '턱수염이 희끗한 중년 경비병. 녹슨 창을 들고 있다.',
       personality: '의심이 많지만 정이 있다. 외지인을 경계한다.',
       speech: '짧고 퉁명스러운 반말. "흠", "어디서 왔나" 같은 말을 자주 쓴다.',
@@ -192,6 +195,11 @@ export const sampleWorld: WorldPackage = {
     { id: 'chose_return', when: '진실을 안 플레이어가 소환진으로 원래 세계에 돌아가겠다고 결심하고 제단에서 의식을 치를 때', locationId: 'loc/forest-clearing', requires: { knows: 'claim/way-home', min: 'partial' } },
     { id: 'chose_stay', when: '진실을 안 플레이어가 이 세계에 남아 마을을 지키겠다고 장로나 마을 사람에게 분명히 선언할 때', requires: { knows: 'claim/altar-summoning', min: 'partial' } },
   ],
+  factions: [{
+    id: 'fac/mistvale', name: '안개골짜기 마을', description: '안개 낀 골짜기의 작은 마을. 외지인을 경계하지만 도움을 받으면 잊지 않는다.',
+    actions: [{ name: '숲길 습격 소문', every: 2, condition: { not: { questDone: 'quest/road-goblins' } }, effects: [],
+      news: '📜 낡은 숲길에서 또 짐수레가 털렸다는 이야기가 마을에 돈다.' }],
+  }],
   // 이야기 엔진 (설계 v3 5장): 결정의 순간과 시간이 흐르면 깨어나는 제단
   choices: [{
     id: 'choice/go-home', name: '돌아갈 것인가', prompt: '제단의 문양을 거꾸로 그리면 원래 세계로 돌아갈 수 있다. 이곳에 남을 것인가, 돌아갈 것인가?', locationId: 'loc/forest-clearing',

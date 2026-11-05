@@ -2,6 +2,7 @@ import { establishedFactsOf, improvisationOf, protectedTopicsOf } from '../engin
 import { knowledgeOf } from '../engine/knowledge/knowledge';
 import { AXES, AXIS_NAMES, canShareSecret, joinBlocker, loyaltyOf, OBEY_LOYALTY, relationsOf, relationshipOf, reputationLabel, reputationOf, secretTrustOf, stageFor, stageOf } from '../engine/relationship';
 import { activeBeats } from '../engine/scenario';
+import { npcLocationOf } from '../engine/world';
 import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
@@ -17,9 +18,9 @@ const dateLabel = (world: WorldPackage, minutes: number) => { const d = calendar
  */
 
 /** NPC의 현재 위치: 동료면 플레이어 곁, 아니면 세이브의 위치 변경 또는 패키지 기본값 */
+/** NPC의 현재 위치 (동료 → 옮긴 곳 → 일정 → 기본, engine/world) */
 export function npcLocation(state: GameState, c: Character): EntityId {
-  if (state.party[c.id]) return state.player.locationId;
-  return state.npcLocations[c.id] ?? c.locationId;
+  return npcLocationOf(state, c);
 }
 
 export function presentCharacters(world: WorldPackage, state: GameState): Character[] {

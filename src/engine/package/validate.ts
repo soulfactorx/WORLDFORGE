@@ -371,6 +371,20 @@ export function validateWorld(input: unknown): Issue[] {
   });
   if (isObj(w.start)) checkStacks(w.start.items, 'start.items');
 
+  // ---- 지속되는 세계 (설계 v3 7장)
+  characters.forEach((c, i) => (c.schedule ?? []).forEach((sc, j) => {
+    const p = `characters[${i}].schedule[${j}]`;
+    if (!locIds.has(sc.locationId)) err(`${p}.locationId`, `없는 장소 "${sc.locationId}"`);
+    if (![sc.from, sc.to].every((h) => Number.isInteger(h) && h >= 0 && h <= 24) || sc.from === sc.to) err(p, '시각은 0~24 사이 정수이고 from과 to가 달라야 합니다 (예: 20~6 = 밤).');
+  }));
+  factions.forEach((f, i) => (f.actions ?? []).forEach((a, j) => {
+    const p = `factions[${i}].actions[${j}]`;
+    text(a.name, `${p}.name`);
+    if (!Number.isInteger(a.every) || a.every < 1) err(`${p}.every`, '며칠마다(1 이상 정수)입니다.');
+    if (a.condition) checkCond(a.condition, `${p}.condition`);
+    checkEffects(a.effects, `${p}.effects`);
+  }));
+
   arcs.forEach((a, i) => {
     const p = `arcs[${i}]`;
     text(a.name, `${p}.name`);
