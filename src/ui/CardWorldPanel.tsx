@@ -88,7 +88,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
       if (!reuse) await clearGenCache(bundle.fingerprint);
       let hits = 0;
       // 재시도·잘린 응답 처리 + 단계별 결과 저장(같은 카드로 다시 하면 끝난 단계는 건너뜀)
-      const llm = cached(createLlmClient(settings, { onRetry: (n, why) => setStage(`AI 응답 문제로 다시 시도하는 중 (${n}번째)… ${why.slice(0, 60)}`) }), genCache(bundle.fingerprint), () => { hits++; setStage(`저장된 결과를 다시 쓰는 중… (${hits}개)`); });
+      const llm = cached(createLlmClient(settings, { onRetry: (n, why, label) => setStage(`${label ? `${label}: ` : ''}AI 응답 문제로 다시 시도하는 중 (${n}번째)… ${why.includes('길이 제한') ? '응답이 길어 잘림 — 한도를 늘려 다시 요청' : why.slice(0, 60)}`) }), genCache(bundle.fingerprint), () => { hits++; setStage(`저장된 결과를 다시 쓰는 중… (${hits}개)`); });
       const r = await cardToWorld(llm, bundle, {
         contentRating: rating, classifyImages: classify, withScenario, choices, translate, aiFindCharacters: findChars,
         makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),

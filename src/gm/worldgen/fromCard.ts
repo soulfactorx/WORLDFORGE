@@ -241,7 +241,7 @@ export async function cardToWorld(
     llm.json<CardWorldDraft>({
       system: `${SYSTEM}\n- ${RATING_GUIDE[opts.contentRating]}`,
       user: `<card_data>\n${cardDataPrompt(b, card, analyzed, charInfo, mature)}\n</card_data>`,
-      maxTokens: 32000, effort: 'medium',
+      maxTokens: 32000, effort: 'medium', label: '세계 구조 (장소·연표·시작 방식)',
     }, CARD_WORLD_SCHEMA, signal),
     opts.translate !== false
       ? translateToKorean(llm, textItems, charInfo.map((c) => ({ latin: c.latin, korean: c.name })), (done, total) => total && onStage(`AI가 세계 구조를 만들고 한국어로 옮기는 중… (번역 ${done}/${total})`, 6 + Math.round((done / total) * 40), 55), signal)

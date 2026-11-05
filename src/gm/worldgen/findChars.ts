@@ -59,7 +59,7 @@ const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` 
 
 export async function findCharactersAI(
   llm: LlmClient, lore: LoreEntry[], candidates: number[], known: string[], mature: boolean,
-  onProgress?: (done: number, total: number) => void, signal?: AbortSignal, chunkChars = 28000,
+  onProgress?: (done: number, total: number) => void, signal?: AbortSignal, chunkChars = 14000,
 ): Promise<FoundCharacter[]> {
   const items = candidates.map((i) => {
     let t = replaceMacros(lore[i]!.content, '');
@@ -79,12 +79,15 @@ export async function findCharactersAI(
   const queue = [...chunks];
   const run = async () => {
     while (queue.length) {
+      const index = chunks.length - queue.length;
       const chunk = queue.shift()!;
       try {
         const r = await llm.json<{ characters: FoundCharacter[] }>({
           system: SYSTEM,
           user: `## 이미 찾은 인물\n${known.join(', ') || '(없음)'}\n\n## 로어북 항목 (데이터)\n${chunk.map((c) => c.text).join('\n\n')}`,
-          maxTokens: 12000,
+          // 인물 한 명당 한국어 설명 네 칸 (~600토큰). 로어북 묶음을 14,000자로 줄이고 한도를 늘려 잘리지 않게 한다
+          maxTokens: 20000,
+          label: `인물 찾기 ${index + 1}/${chunks.length} 묶음`,
         }, SCHEMA, signal);
         const allowed = new Set(chunk.map((c) => c.i));
         for (const c of r.characters ?? []) if (allowed.has(c.entry) && c.name?.trim()) found.push(c);

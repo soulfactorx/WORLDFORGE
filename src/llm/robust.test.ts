@@ -43,3 +43,14 @@ describe('AI 호출 안정화', () => {
     expect([calls.length, hits]).toEqual([2, 1]);
   });
 });
+
+describe('재시도 안내에 단계 이름 (v0.37.10)', () => {
+  it('잘린 응답의 재시도는 어느 단계인지 함께 알리고, 기다리지 않고 바로 다시 요청한다', async () => {
+    const { c } = seq([() => { throw new LlmTruncatedError('{"a":['); }, () => ({ a: [] })]);
+    const seen: (string | undefined)[] = [];
+    const t0 = Date.now();
+    await robust(c, { baseDelayMs: 5000, onRetry: (_n, _w, label) => seen.push(label) }).json({ system: '', user: '', maxTokens: 100, label: '번역 3/8 묶음' }, {});
+    expect(seen).toEqual(['번역 3/8 묶음']);
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+});

@@ -28,6 +28,8 @@ export interface LlmRequest {
   maxTokens: number;
   /** 추론 노력 (지원하는 제공자만). 기본: 구조화 응답은 low */
   effort?: 'low' | 'medium' | 'high';
+  /** 진행 표시용 이름 (예: "번역 3/8") — 재시도 안내에 어느 단계인지 보여 준다 */
+  label?: string;
   /** 사용량 기록 (계측 래퍼가 넣고, 어댑터가 채운다. 재시도한 호출도 모두 더한다) */
   meter?: Meter;
 }

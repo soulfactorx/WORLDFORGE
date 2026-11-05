@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LlmClient } from '../../llm/types';
-import { needsKorean, translateToKorean } from './translate';
+import { needsKorean, translateBudget, translateToKorean } from './translate';
 
 describe('한국어 번역', () => {
   it('외국어 글만 골라 묶음으로 번역하고, 실패한 묶음은 원문을 둔다', async () => {
@@ -21,5 +21,14 @@ describe('한국어 번역', () => {
     expect(r.has('c')).toBe(false);
     expect(calls).toBe(2);
     expect(sent).toContain('Hedwig → 헤드비히');
+  });
+});
+
+
+describe('번역 출력 한도 (v0.37.10)', () => {
+  it('영어 원문은 글자×1.5+3000, 한자·가나 원문은 더 넉넉하게, 최대 24000', () => {
+    expect(translateBudget('a'.repeat(6000))).toBe(12000);
+    expect(translateBudget('漢'.repeat(6000))).toBe(16200);
+    expect(translateBudget('a'.repeat(40000))).toBe(24000);
   });
 });

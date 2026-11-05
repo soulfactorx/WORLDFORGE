@@ -38,7 +38,7 @@ export function repairJson(text: string): unknown {
 const retryable = (e: unknown) => e instanceof LlmJsonError || e instanceof LlmTruncatedError || (e instanceof LlmHttpError && (e.status === 0 || e.status === 408 || e.status === 429 || e.status >= 500))
   || (e instanceof TypeError) /* fetch 네트워크 오류 */ || /overloaded|rate.?limit|timeout|network|ECONN|529|503|502/i.test(String((e as Error)?.message ?? ''));
 
-export interface RobustOptions { attempts?: number; baseDelayMs?: number; maxTokensCap?: number; onRetry?: (attempt: number, reason: string) => void }
+export interface RobustOptions { attempts?: number; baseDelayMs?: number; maxTokensCap?: number; onRetry?: (attempt: number, reason: string, label?: string) => void }
 
 export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
   const attempts = o.attempts ?? 3, base = o.baseDelayMs ?? 2000, cap = o.maxTokensCap ?? 32000;
@@ -49,7 +49,7 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
         try { return await llm.stream(req, (d) => { sent = true; onText(d); }, signal); } catch (e) {
           // 글이 이미 나가기 시작했으면 다시 하지 않는다 (화면에 중복이 생긴다)
           if (signal?.aborted || sent || e instanceof LlmRefusalError || i >= attempts || !retryable(e)) throw e;
-          o.onRetry?.(i, (e as Error).message);
+          o.onRetry?.(i, (e as Error).message, req.label);
           await sleep(base * i, signal);
         }
       }
@@ -70,8 +70,9 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
             if (partial) { try { return repairJson(partial) as T; } catch { /* 원래 오류를 알린다 */ } }
             throw e;
           }
-          o.onRetry?.(i, (e as Error).message);
-          await sleep(base * i, signal);
+          o.onRetry?.(i, (e as Error).message, req.label);
+          // 길이 제한으로 잘린 것은 서버 문제가 아니므로 기다리지 않고 바로 다시 요청한다
+          if (!(e instanceof LlmTruncatedError)) await sleep(base * i, signal);
         }
       }
     },
