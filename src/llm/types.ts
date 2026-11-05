@@ -9,7 +9,18 @@ export interface LlmSettings {
   model: string;
   /** openai-compatible 전용: OpenAI, OpenRouter, Ollama(http://localhost:11434/v1), LM Studio 등 */
   baseUrl?: string;
+  /** 역할별 모델 (설계 v3 R9): 비우면 model. 같은 제공자·키를 쓴다 */
+  roleModels?: Partial<Record<RoleGroup, string>>;
 }
+
+/** 모델을 따로 고를 수 있는 역할 묶음 */
+export type RoleGroup = 'judge' | 'actor' | 'narrator' | 'build';
+export const ROLE_GROUP_LABEL: Record<RoleGroup, string> = {
+  judge: 'GM 판단·안내·기록 (구조화 응답, 매 턴 3번)',
+  actor: 'NPC 연기 (말하는 인물마다)',
+  narrator: '서술·전투 서술 (플레이어가 읽는 글)',
+  build: '세계·카드 만들기·번역·이미지 고르기',
+};
 
 export interface LlmRequest {
   system: string;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ANTHROPIC_MODELS, createLlmClient } from '../llm';
-import type { LlmSettings, ProviderKind } from '../llm/types';
+import { type LlmSettings, type ProviderKind, ROLE_GROUP_LABEL, type RoleGroup } from '../llm/types';
 import { saveSettings } from '../storage/settings';
 
 const PRESETS: Record<string, { baseUrl: string; model: string }> = {
@@ -36,7 +36,7 @@ export function SettingsPanel({ initial, onSaved }: { initial: LlmSettings | nul
       <label>제공자
         <select value={s.provider} onChange={(e) => {
           const provider = e.target.value as ProviderKind;
-          set(provider === 'anthropic' ? { provider, model: ANTHROPIC_MODELS[0], baseUrl: undefined } : { provider, model: '', baseUrl: PRESETS.OpenAI!.baseUrl });
+          set(provider === 'anthropic' ? { provider, model: ANTHROPIC_MODELS[0], baseUrl: undefined, roleModels: undefined } : { provider, model: '', baseUrl: PRESETS.OpenAI!.baseUrl, roleModels: undefined });
         }}>
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai-compatible">OpenAI 호환 (OpenAI · OpenRouter · Ollama · LM Studio)</option>
@@ -65,6 +65,22 @@ export function SettingsPanel({ initial, onSaved }: { initial: LlmSettings | nul
           <input value={s.model} placeholder="예: gpt-4o-mini, llama3.1:8b" onChange={(e) => set({ model: e.target.value })} />
         )}
       </label>
+      <details className="role-models" open={!!s.roleModels && Object.values(s.roleModels).some(Boolean)}>
+        <summary>역할별 모델 (선택) — 비용 줄이기</summary>
+        <p className="muted small">비워 두면 위의 모델을 씁니다. 예: 서술만 큰 모델, 판단·기록은 작고 빠른 모델. 같은 제공자·키를 씁니다. 바꾼 뒤 아래 "품질 점검"으로 규칙을 잘 지키는지 확인하세요.</p>
+        {(Object.keys(ROLE_GROUP_LABEL) as RoleGroup[]).map((g) => (
+          <label key={g}>{ROLE_GROUP_LABEL[g]}
+            {s.provider === 'anthropic' ? (
+              <select value={s.roleModels?.[g] ?? ''} onChange={(e) => set({ roleModels: { ...s.roleModels, [g]: e.target.value || undefined } })}>
+                <option value="">(기본: {s.model})</option>
+                {ANTHROPIC_MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            ) : (
+              <input value={s.roleModels?.[g] ?? ''} placeholder={`(기본: ${s.model || '위의 모델'})`} onChange={(e) => set({ roleModels: { ...s.roleModels, [g]: e.target.value || undefined } })} />
+            )}
+          </label>
+        ))}
+      </details>
       <label className="check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> 이 브라우저에 키 기억하기 (끄면 탭을 닫을 때 삭제)</label>
       <div className="row">
         <button type="button" onClick={test} disabled={!s.model}>연결 테스트</button>

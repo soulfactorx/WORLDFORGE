@@ -29,14 +29,23 @@ export function QualityPanel({ settings }: { settings: LlmSettings | null }) {
   useEffect(() => metrics.subscribe(() => tick((n) => n + 1)), []);
   const { calls, turns } = metrics.get();
   const model = settings?.model ?? '';
-  const [price, setPrice] = useState<Price | null>(() => (model ? loadPrice(model) : null));
+  const models = [...new Set([model, ...Object.values(settings?.roleModels ?? {}).filter((m): m is string => !!m)])].filter(Boolean);
+  const [prices, setPrices] = useState<Record<string, Price | null>>(() => Object.fromEntries(models.map((m) => [m, loadPrice(m)])));
+  const priceOf = (m: string) => prices[m] ?? loadPrice(m);
+  const setPriceOf = (m: string, p: Price) => { setPrices((x) => ({ ...x, [m]: p })); savePrice(m, p); };
+  /** 기록마다 그 모델의 단가로. 단가가 없는 모델이 있으면 null */
+  const costCalls = (cs: { model: string; input: number; output: number }[]) => {
+    let sum = 0;
+    for (const c of cs) { const p = priceOf(c.model); if (!p || (!p.input && !p.output)) return null; sum += costOf(c.input, c.output, p); }
+    return sum;
+  };
   const [report, setReport] = useState<EvalReport | null>(null);
   const [running, setRunning] = useState('');
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
-  const mine = calls.filter((c) => !model || c.model === model);
+  const mine = calls.filter((c) => !models.length || models.includes(c.model));
   const rows = summarize(mine);
-  const totalIn = mine.reduce((s, c) => s + c.input, 0), totalOut = mine.reduce((s, c) => s + c.output, 0);
+  const totalCost = costCalls(mine);
   const recentTurns = turns.slice(-50);
   const rejected = recentTurns.reduce((s, t) => s + t.rejected.length, 0);
   const reasons = new Map<string, number>();
@@ -48,7 +57,9 @@ export function QualityPanel({ settings }: { settings: LlmSettings | null }) {
     setError(''); setReport(null);
     abort.current = new AbortController();
     try {
-      const r = await runEval((sink) => createLlmClient(settings, { sink: (rec) => { sink(rec); metrics.addCall(rec); } }), settings.model,
+      const label = settings.roleModels && Object.values(settings.roleModels).some(Boolean)
+        ? `${settings.model} (+${Object.entries(settings.roleModels).filter(([, m]) => m).map(([g, m]) => `${g}:${m}`).join(', ')})` : settings.model;
+      const r = await runEval((sink) => createLlmClient(settings, { sink: (rec) => { sink(rec); metrics.addCall(rec); } }), label,
         (done, total, name) => setRunning(name ? `${done + 1}/${total} ${name} 점검 중…` : ''), abort.current.signal);
       setReport(r);
     } catch (e) {
@@ -81,14 +92,20 @@ export function QualityPanel({ settings }: { settings: LlmSettings | null }) {
           </tbody>
         </table>
       )}
-      {model && (
-        <div className="row small">
-          <span>단가 ({model}, 100만 토큰당 $)</span>
-          <label>입력 <input type="number" className="num" step="0.01" value={price?.input ?? ''} onChange={(e) => { const p = { input: Number(e.target.value) || 0, output: price?.output ?? 0 }; setPrice(p); savePrice(model, p); }} /></label>
-          <label>출력 <input type="number" className="num" step="0.01" value={price?.output ?? ''} onChange={(e) => { const p = { input: price?.input ?? 0, output: Number(e.target.value) || 0 }; setPrice(p); savePrice(model, p); }} /></label>
-          {price && (price.input || price.output) ? <b>≈ ${costOf(totalIn, totalOut, price).toFixed(3)}{recentTurns.length ? ` · 턴당 ≈ $${(costOf(totalIn, totalOut, price) / Math.max(1, turns.length)).toFixed(4)}` : ''}</b> : <span className="muted">제공자 요금표의 값을 넣으면 비용을 계산합니다</span>}
-        </div>
-      )}
+      {models.map((m) => {
+        const p = priceOf(m);
+        const used = mine.filter((c) => c.model === m);
+        return (
+          <div key={m} className="row small">
+            <span>단가 <b>{m}</b> (100만 토큰당 $)</span>
+            <label>입력 <input type="number" className="num" step="0.01" value={p?.input ?? ''} onChange={(e) => setPriceOf(m, { input: Number(e.target.value) || 0, output: p?.output ?? 0 })} /></label>
+            <label>출력 <input type="number" className="num" step="0.01" value={p?.output ?? ''} onChange={(e) => setPriceOf(m, { input: p?.input ?? 0, output: Number(e.target.value) || 0 })} /></label>
+            <span className="muted">요청 {used.length} · 토큰 {tok(used.reduce((x, c) => x + c.input, 0))}/{tok(used.reduce((x, c) => x + c.output, 0))}</span>
+          </div>
+        );
+      })}
+      {models.length > 0 && <p className="small">{totalCost === null ? <span className="muted">모든 모델의 단가를 넣으면(제공자 요금표의 값) 비용을 계산합니다</span>
+        : <b>≈ ${totalCost.toFixed(3)}{turns.length ? ` · 턴당 ≈ $${(totalCost / Math.max(1, turns.length)).toFixed(4)}` : ''}</b>}</p>}
       {recentTurns.length > 0 && (
         <p className="small">
           최근 {recentTurns.length}턴: 턴당 평균 {sec(recentTurns.reduce((s, t) => s + t.ms, 0) / recentTurns.length)} · 엔진이 거부한 AI 제안 {rejected}건 (턴당 {(rejected / recentTurns.length).toFixed(2)})
@@ -111,7 +128,7 @@ export function QualityPanel({ settings }: { settings: LlmSettings | null }) {
         <>
           <p><b>{report.probes.filter((p) => p.pass).length} / {report.probes.length} 통과</b> · {report.model} · 엔진 거부 턴당 {report.rejectRate.toFixed(2)} · 총 {sec(report.probes.reduce((s, p) => s + p.ms, 0))}
             {' '}· 토큰 {tok(report.calls.reduce((s, c) => s + c.input, 0))} / {tok(report.calls.reduce((s, c) => s + c.output, 0))}
-            {price && (price.input || price.output) ? ` · ≈ $${costOf(report.calls.reduce((s, c) => s + c.input, 0), report.calls.reduce((s, c) => s + c.output, 0), price).toFixed(3)}` : ''}</p>
+            {costCalls(report.calls) !== null ? ` · ≈ $${costCalls(report.calls)!.toFixed(3)}` : ''}</p>
           <ul className="eval-list">
             {report.probes.map((p) => (
               <li key={p.id} className={p.pass ? 'pass' : 'fail'}>
