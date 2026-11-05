@@ -1,3 +1,4 @@
+import { levelCapOf } from '../engine/genre';
 import { questTransitions, reachedEnding } from '../engine/scenario';
 import type { WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
@@ -19,7 +20,7 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
     if (t.kind === 'advanced') push({ type: 'quest_advanced', questId: q.id, name: q.name, stage: t.stage, objective: q.stages[t.stage]!.objective });
     if (t.kind === 'completed') {
       push({ type: 'quest_completed', questId: q.id, name: q.name, stages: q.stages.length });
-      if (q.rewards?.xp) progressEvents(s, [{ who: 'player', amount: q.rewards.xp }], `임무 완료: ${q.name}`).forEach(push);
+      if (q.rewards?.xp) progressEvents(s, [{ who: 'player', amount: q.rewards.xp }], `임무 완료: ${q.name}`, levelCapOf(world)).forEach(push);
       for (const r of q.rewards?.relationship ?? []) {
         const npc = world.characters.find((c) => c.id === r.npcId);
         const ev = npc && relationshipEvent(world, s, npc, r, `임무 완료: ${q.name}`);

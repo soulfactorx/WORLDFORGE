@@ -8,8 +8,11 @@ import type { LlmClient } from '../../llm/types';
 import { applyUserArt } from './imageNeeds';
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const CHAR_ART = STOCK_ART.filter((a) => a.kind === 'character');
-const SCENE_ART = STOCK_ART.filter((a) => a.kind === 'scene');
+/** 장르에 맞는 내장 그림 (무협은 무협 그림, 그 밖에는 서양풍 기본 그림) */
+const forGenre = (a: StockArt, genre?: string) => (genre === 'wuxia' ? !!a.genres?.includes('wuxia') : !a.genres?.length);
+const charArt = (genre?: string) => STOCK_ART.filter((a) => a.kind === 'character' && forGenre(a, genre));
+const sceneArt = (genre?: string) => STOCK_ART.filter((a) => a.kind === 'scene' && forGenre(a, genre));
+const CHAR_ART = charArt();
 
 const FEMALE = /(여성|여자|그녀|소녀|부인|영애|공주|황녀|황후|여왕|왕비|성녀|수녀|시녀|하녀|메이드|마녀|여제|어머니|딸|언니|누나|\bshe\b|\bher\b|woman|female|lady|girl|queen|princess|empress|maid|witch|♀)/i;
 const MALE = /(남성|남자|그는|소년|영식|왕자|황자|황제|국왕|성자|집사|아버지|아들|형|오빠|\bhe\b|\bhis\b|\bman\b|male|lord|boy|king|prince|emperor|butler|♂)/i;
@@ -24,22 +27,22 @@ export function guessGender(c: Pick<Character, 'gender' | 'name' | 'appearance' 
 const score = (art: StockArt, text: string) => art.tags.reduce((s, t) => s + (text.includes(t.toLowerCase()) ? (t.length >= 3 ? 3 : 2) : 0), 0);
 
 /** 낱말 규칙으로 고르기 (결정적). extra = 내 기본 이미지 (맞는 낱말이 있으면 우선) */
-export function ruleArtForCharacter(c: Character, extra: StockArt[] = []): StockArt {
+export function ruleArtForCharacter(c: Character, extra: StockArt[] = [], genre?: string): StockArt {
   const g = guessGender(c);
   const text = `${c.name} ${(c.background ?? '').slice(0, 300)} ${c.appearance} ${c.personality.slice(0, 300)}`.toLowerCase();
-  const pool = [...extra.filter((a) => a.kind === 'character' && (!a.gender || a.gender === g)), ...CHAR_ART.filter((a) => a.gender === g)];
+  const pool = [...extra.filter((a) => a.kind === 'character' && (!a.gender || a.gender === g)), ...charArt(genre).filter((a) => a.gender === g)];
   const best = pool.map((a) => ({ a, s: score(a, text) + (a.id.startsWith('u:') && score(a, text) > 0 ? 100 : 0) })).sort((x, y) => y.s - x.s)[0]!;
-  return best.s > 0 ? best.a : CHAR_ART.find((a) => a.gender === g && a.id.startsWith('villager'))!;
+  return best.s > 0 ? best.a : charArt(genre).find((a) => a.gender === g && /villager|wx-commoner/.test(a.id)) ?? CHAR_ART.find((a) => a.gender === g && a.id.startsWith('villager'))!;
 }
 
-export function ruleArtForLocation(l: Location, extra: StockArt[] = []): StockArt {
+export function ruleArtForLocation(l: Location, extra: StockArt[] = [], genre?: string): StockArt {
   const text = `${l.name} ${l.description}`.toLowerCase();
-  const pool = [...extra.filter((a) => a.kind === 'scene'), ...SCENE_ART];
+  const pool = [...extra.filter((a) => a.kind === 'scene'), ...sceneArt(genre)];
   const best = pool.map((a) => {
     const base = score(a, text) * (a.tags.some((t) => l.name.toLowerCase().includes(t.toLowerCase())) ? 2 : 1);
     return { a, s: base + (a.id.startsWith('u:') && base > 0 ? 100 : 0) };
   }).sort((x, y) => y.s - x.s)[0]!;
-  return best.s > 0 ? best.a : SCENE_ART.find((a) => a.id === 'town')!;
+  return best.s > 0 ? best.a : sceneArt(genre).find((a) => /^(town|wx-town)$/.test(a.id)) ?? sceneArt().find((a) => a.id === 'town')!;
 }
 
 interface PickOut { characters: { id: string; art: string }[]; locations: { id: string; art: string }[] }
@@ -91,8 +94,9 @@ export async function assignStockImages(world: WorldPackage, llm?: LlmClient, si
   const assets = [...(world.assets ?? [])];
   if (!characters.length && !locations.length) return { assets, added: 0, byAi: false };
   const mine = extra ?? mineRaw.map((a) => ({ id: `u:${a.id}`, kind: a.kind, label: `내 이미지: ${a.label}`, tags: a.tags.filter((t) => !t.startsWith('for:')), ...(a.gender ? { gender: a.gender } : {}) }));
-  const chars = [...mine.filter((a) => a.kind === 'character'), ...CHAR_ART];
-  const scenes = [...mine.filter((a) => a.kind === 'scene'), ...SCENE_ART];
+  const genre = world.genre?.id;
+  const chars = [...mine.filter((a) => a.kind === 'character'), ...charArt(genre)];
+  const scenes = [...mine.filter((a) => a.kind === 'scene'), ...sceneArt(genre)];
   const line = (a: StockArt) => `- ${a.id}: ${a.label}${a.gender ? ` (${a.gender === 'F' ? '여' : '남'})` : ''}${a.id.startsWith('u:') && a.tags.length ? ` [${a.tags.join(', ')}]` : ''}`;
   const pick = new Map<string, string>();
   let byAi = false;
@@ -114,12 +118,12 @@ export async function assignStockImages(world: WorldPackage, llm?: LlmClient, si
     let art = chars.find((a) => a.id === pick.get(c.id));
     // AI가 성별을 틀리게 골랐으면 같은 원형의 다른 성별로 바꾼다 (내 이미지는 성별이 정해진 경우 규칙으로)
     if (art && c.gender && art.gender && art.gender !== c.gender) {
-      art = art.id.startsWith('u:') ? undefined : CHAR_ART.find((a) => a.id === art!.id.replace(/-(m|f)$/, `-${c.gender!.toLowerCase()}`)) ?? art;
+      art = art.id.startsWith('u:') ? undefined : STOCK_ART.find((a) => a.id === art!.id.replace(/-(m|f)$/, `-${c.gender!.toLowerCase()}`)) ?? art;
     }
-    assets.push(stockAsset(art ?? ruleArtForCharacter(c, mine), n++, { characterId: c.id }));
+    assets.push(stockAsset(art ?? ruleArtForCharacter(c, mine, genre), n++, { characterId: c.id }));
   }
   for (const l of locations) {
-    const art = scenes.find((a) => a.id === pick.get(l.id)) ?? ruleArtForLocation(l, mine);
+    const art = scenes.find((a) => a.id === pick.get(l.id)) ?? ruleArtForLocation(l, mine, genre);
     assets.push(stockAsset(art, n++, { locationId: l.id }));
   }
   return { assets, added: characters.length + locations.length, byAi };

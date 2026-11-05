@@ -1,3 +1,4 @@
+import { useRs } from './reskin';
 import { ABILITIES, ABILITY_NAMES, CLASSES, SKILL_IDS, SKILLS, proficiencyBonus } from '../engine/character/rules';
 import { type CharacterSheet, checkModifier } from '../engine/character/sheet';
 import { abilityModifier } from '../engine/dice/dice';
@@ -24,18 +25,19 @@ function XpBar({ sheet }: { sheet: CharacterSheet }) {
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
 export function CharacterPanel({ sheet, party = {} }: { sheet: CharacterSheet; party?: Record<string, CharacterSheet> }) {
+  const rs = useRs();
   return (
     <aside className="sheet">
       <div className="row">
         <b>{sheet.name}</b>
-        <span className="muted small">{CLASSES[sheet.classId]?.name ?? '직업 없음'} {sheet.level}레벨 · 숙련 보너스 {sign(proficiencyBonus(sheet.level))}</span>
+        <span className="muted small">{rs(CLASSES[sheet.classId]?.name ?? '직업 없음')} {sheet.level}레벨 · 숙련 보너스 {sign(proficiencyBonus(sheet.level))}</span>
         <span className="spacer" />
         <span>HP {sheet.hp}/{sheet.maxHp}</span>
       </div>
       <div className="row small">
         <XpBar sheet={sheet} />
         <span className="spacer" />
-        {Object.entries(resourcesOf(sheet)).map(([k, r]) => <span key={k} className="muted">{RESOURCE_LABEL[k] ?? k} {r.cur}/{r.max}</span>)}
+        {Object.entries(resourcesOf(sheet)).map(([k, r]) => <span key={k} className="muted">{rs(RESOURCE_LABEL[k] ?? k)} {r.cur}/{r.max}</span>)}
       </div>
       {Object.entries(CLASS_KITS[sheet.classId]?.features ?? {}).some(([lv]) => Number(lv) <= sheet.level) && (
         <p className="small muted">능력: {Object.entries(CLASS_KITS[sheet.classId]!.features!).filter(([lv]) => Number(lv) <= sheet.level).flatMap(([, f]) => f).join(' · ')}</p>
@@ -63,9 +65,9 @@ export function CharacterPanel({ sheet, party = {} }: { sheet: CharacterSheet; p
           {Object.entries(party).map(([id, c]) => (
             <div key={id} className="row small">
               <b>{c.name}</b>
-              <span className="muted">{CLASSES[c.classId]?.name} {c.level}레벨</span>
+              <span className="muted">{rs(CLASSES[c.classId]?.name ?? '')} {c.level}레벨</span>
               <span className="spacer" />
-              {Object.entries(c.resources ?? {}).map(([k, r]) => <span key={k} className="muted">{RESOURCE_LABEL[k] ?? k} {r.cur}/{r.max}</span>)}
+              {Object.entries(c.resources ?? {}).map(([k, r]) => <span key={k} className="muted">{rs(RESOURCE_LABEL[k] ?? k)} {r.cur}/{r.max}</span>)}
               <span>HP {c.hp}/{c.maxHp}</span>
             </div>
           ))}

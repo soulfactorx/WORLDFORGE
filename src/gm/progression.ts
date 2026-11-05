@@ -9,7 +9,7 @@ export interface XpAward {
 }
 
 /** 경험치 지급 → xp_gained + (필요하면) level_up 이벤트. 한 번에 여러 레벨이 오를 수도 있다. */
-export function progressEvents(state: GameState, awards: XpAward[], reason: string): GameEvent[] {
+export function progressEvents(state: GameState, awards: XpAward[], reason: string, levelCap = MAX_LEVEL): GameEvent[] {
   const events: GameEvent[] = [];
   for (const { who, amount } of awards) {
     if (amount <= 0) continue;
@@ -18,7 +18,7 @@ export function progressEvents(state: GameState, awards: XpAward[], reason: stri
     events.push({ type: 'xp_gained', who, amount, reason });
     const xp = (sheet.xp ?? 0) + amount;
     sheet = { ...sheet, xp };
-    while (sheet.level < Math.min(MAX_LEVEL, levelForXp(xp))) {
+    while (sheet.level < Math.min(MAX_LEVEL, levelCap, levelForXp(xp))) {
       const r = levelUp(sheet);
       sheet = r.sheet;
       events.push({ type: 'level_up', who, sheet, hpGain: r.hpGain, features: r.features });

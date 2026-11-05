@@ -1,3 +1,4 @@
+import { useRs } from './reskin';
 import { useState } from 'react';
 import type { CardDef } from '../engine/combat/cards';
 import {
@@ -18,6 +19,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
   onEndTurn: () => void;
   onOrder: (npcId: string, order: PartyOrder) => void;
 }) {
+  const rs = useRs();
   const companions = Object.values(cs.combatants).filter((c) => c.side === 'party' && !c.isPlayer);
   const enemies = Object.values(cs.combatants).filter((c) => c.side === 'enemy' && alive(c));
   const [selected, setSelected] = useState<CardDef | null>(null);
@@ -42,7 +44,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
     <section className="combat-panel">
       <div className="row">
         <b>⚔ {cs.round}라운드</b>
-        <span className="muted small">{myTurn ? '당신의 차례' : `${cs.combatants[currentActorId(cs)]?.name}의 차례`}</span>
+        <span className="muted small">{myTurn ? '당신의 차례' : `${rs(cs.combatants[currentActorId(cs)]?.name ?? '')}의 차례`}</span>
         <span className="spacer" />
         <span className="small">
           행동 {cs.economy.action ? '●' : '○'} · 보너스 {cs.economy.bonus ? '●' : '○'} · 이동 {cs.economy.move ? '●' : '○'}
@@ -61,7 +63,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
                   <button key={c.id} type="button" disabled={!targetable && !!selected}
                     className={`chip ${c.side} ${c.hp <= 0 ? (c.side === 'party' && !c.dead ? 'downed' : 'down') : ''} ${targetable ? 'targetable' : ''} ${currentActorId(cs) === c.id ? 'active' : ''}`}
                     onClick={(e) => { e.stopPropagation(); if (targetable) pick(c.id); }}>
-                    <span className="chip-name">{c.isPlayer ? '당신' : c.name}{c.side === 'party' && !c.isPlayer ? ' (동료)' : ''}</span>
+                    <span className="chip-name">{c.isPlayer ? '당신' : rs(c.name)}{c.side === 'party' && !c.isPlayer ? ' (동료)' : ''}</span>
                     <span className="hpbar"><span style={{ width: `${(100 * c.hp) / c.maxHp}%` }} /></span>
                     <span className="small">HP {c.hp}/{c.maxHp} · AC {c.ac}{c.dodging ? ' · 회피' : ''}{c.hidden ? ' · 숨음' : ''}{c.disengaged ? ' · 후퇴' : ''}</span>
                     {(c.prone || c.dead || c.stable || (c.hp <= 0 && c.side === 'party')) && (
@@ -80,7 +82,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
 
       {selected && (
         <p className="small status">
-          <b>{selected.name}</b>: {selected.target === 'zone' ? '이동할 존을 고르세요.' : selected.target === 'area' ? '주문을 펼칠 존을 고르세요.' : '대상을 고르세요.'}{' '}
+          <b>{rs(selected.name)}</b>: {selected.target === 'zone' ? '이동할 존을 고르세요.' : selected.target === 'area' ? '주문을 펼칠 존을 고르세요.' : '대상을 고르세요.'}{' '}
           <button type="button" onClick={() => setSelected(null)}>취소</button>
         </p>
       )}
@@ -92,7 +94,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
             const set = (patch: Partial<PartyOrder>) => onOrder(c.id, { ...o, ...patch });
             return (
               <div key={c.id} className="row small">
-                <b>{c.name}</b>
+                <b>{rs(c.name)}</b>
                 <select value={o.mode} disabled={busy || !alive(c)} onChange={(e) => {
                   const mode = e.target.value as PartyOrder['mode'];
                   set({ mode, focus: mode === 'focus' ? (o.focus && cs.combatants[o.focus] && alive(cs.combatants[o.focus]!) ? o.focus : enemies[0]?.id) : undefined });
@@ -101,7 +103,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
                 </select>
                 {o.mode === 'focus' && (
                   <select value={o.focus ?? ''} disabled={busy} onChange={(e) => set({ focus: e.target.value })}>
-                    {enemies.map((en) => <option key={en.id} value={en.id}>{en.name}</option>)}
+                    {enemies.map((en) => <option key={en.id} value={en.id}>{rs(en.name)}</option>)}
                   </select>
                 )}
                 <label className="check"><input type="checkbox" checked={o.conserve} disabled={busy} onChange={(e) => set({ conserve: e.target.checked })} /> 자원 아끼기</label>
@@ -117,9 +119,9 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
           const res = card.resource ? me.resources[card.resource] : undefined;
           return (
             <button key={card.id} type="button" className={`card ${selected?.id === card.id ? 'selected' : ''}`}
-              disabled={busy || !!reason} title={reason ?? card.desc} onClick={() => choose(card)}>
-              <span className="card-head"><b>{card.name}</b><span className={`cost ${card.cost}`}>{COST_LABEL[card.cost]}</span></span>
-              <span className="small muted card-desc">{card.desc}</span>
+              disabled={busy || !!reason} title={rs(reason ?? card.desc)} onClick={() => choose(card)}>
+              <span className="card-head"><b>{rs(card.name)}</b><span className={`cost ${card.cost}`}>{COST_LABEL[card.cost]}</span></span>
+              <span className="small muted card-desc">{rs(card.desc)}</span>
               {res && <span className="small">남은 횟수 {res.cur}/{res.max}</span>}
               {card.spellLevel && <span className="small">슬롯 {SLOT_LABEL(me.resources)}</span>}
               {reason && myTurn && <span className="small reason">{reason}</span>}

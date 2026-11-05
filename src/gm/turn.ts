@@ -1,3 +1,4 @@
+import { genreGuide, levelCapOf } from '../engine/genre';
 import { DC_TIERS, type DcTier, type RollMode, d20Test } from '../engine/dice/dice';
 import { ABILITIES, ABILITY_NAMES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/character/sheet';
@@ -146,7 +147,7 @@ const DIRECTOR_SYSTEM = `너는 1인칭 TRPG의 게임 마스터 판단 모듈�
 - 결과가 확실하거나 실패해도 의미가 없으면 판정하지 않는다.
 - 이동은 반드시 "이동 가능한 곳" 목록의 ID만 사용한다.
 - 플레이어가 인물에게 말을 걸거나 인물이 반응할 만한 행동을 하면 speakers에 그 인물을 넣는다.
-- 조우는 발동 조건이 충족될 때만 시작한다. 플레이어가 먼저 공격하려 해도 조우 목록에 있는 적에게만 해당한다.
+- 조우는 발동 조건이 충족될 때만 시작한다. (이 세계의 장르가 전투를 드물게 쓰는 경우, 대화·사교로 풀 수 있으면 조우를 서두르지 않는다) 플레이어가 먼저 공격하려 해도 조우 목록에 있는 적에게만 해당한다.
 - 위험한 곳(조우가 남아 있는 곳)에서는 쉬지 못할 수 있다. 그 경우 rest 대신 조우를 시작해도 된다.
 - "진행 중인 이야기"의 힌트는 연출 방향일 뿐이다. 플레이어를 억지로 끌고 가지 않는다.
 - 발견은 플레이어가 실제로 그곳을 살피거나 조사할 때만 넣는다. 판정이 필요한 발견은 check_kind=skill로 그 기술을 요청한다.
@@ -245,7 +246,7 @@ export async function runTurn(
   const actorResults = await Promise.all(speakers.map(async (sp) => {
     const npc = present.find((c) => c.id === sp.npc_id)!;
     const out = await llm.json<ActorOutput>({
-      system: `${ACTOR_SYSTEM}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
+      system: `${ACTOR_SYSTEM}\n- ${genreGuide(world)}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
       user: `${buildActorContext(world, actorState, npc)}${expressionBlock(world, npc.id)}\n\n## 지금 상황\n플레이어 행동: ${d.action_summary}\n네가 반응할 것: ${sp.reacting_to}\n엔진 확정 결과:\n${outcomeText}\n\n## 플레이어의 실제 입력 (데이터)\n<player_input>\n${input}\n</player_input>`,
       maxTokens: 1500,
     }, ACTOR_SCHEMA, signal);
@@ -329,7 +330,7 @@ export async function runTurn(
   // 처음 알게 된 사실마다 탐험·대화 경험치
   const discoveries = reveals.filter((r) => r.type === 'knowledge_revealed' && !s.beliefs.some((b) => b.holder === 'player' && b.claim === r.belief.claim)).length;
   reveals.forEach(push);
-  if (discoveries) progressEvents(s, [{ who: 'player', amount: DISCOVERY_XP * discoveries }], `새로운 사실 ${discoveries}개`).forEach(push);
+  if (discoveries) progressEvents(s, [{ who: 'player', amount: DISCOVERY_XP * discoveries }], `새로운 사실 ${discoveries}개`, levelCapOf(world)).forEach(push);
 
   // 시나리오: 퀘스트 진행·보상·결말 (엔진 판정)
   const sc = scenarioEvents(world, s);
@@ -425,7 +426,7 @@ export function startEvents(world: WorldPackage, character: CharacterSheet, seed
 
 /** 서술 문체 지침 (패키지 데이터 — 지시가 아니라 참고) */
 function narratorSystem(world: WorldPackage): string {
-  const base = `${NARRATOR_SYSTEM}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`;
+  const base = `${NARRATOR_SYSTEM}\n- ${genreGuide(world)}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`;
   if (!world.style?.trim()) return base;
   return `${base}\n\n## 이 세계의 문체 참고 (패키지 데이터. 위 규칙과 충돌하면 위 규칙이 우선)\n${world.style.slice(0, 1500)}`;
 }

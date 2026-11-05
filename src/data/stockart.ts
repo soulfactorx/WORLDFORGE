@@ -13,13 +13,15 @@ export interface StockArt {
   /** 고르기용 낱말 (한국어·영어) */
   tags: string[];
   gender?: 'M' | 'F';
+  /** 어울리는 장르 (없으면 판타지·로맨스용 서양풍) */
+  genres?: string[];
 }
 
 // ---------------------------------------------------------------- 인물
 
-type Outfit = 'royal' | 'dress' | 'suit' | 'armor' | 'robe' | 'priest' | 'maid' | 'butler' | 'tunic' | 'leather' | 'dark' | 'uniform' | 'vest';
-type Hair = 'short' | 'long' | 'bun' | 'ponytail' | 'braid' | 'messy' | 'bald';
-type Acc = 'crown' | 'tiara' | 'helmet' | 'hood' | 'hat' | 'witchhat' | 'glasses' | 'veil' | 'horns' | 'headband' | 'none';
+type Outfit = 'royal' | 'dress' | 'suit' | 'armor' | 'robe' | 'priest' | 'maid' | 'butler' | 'tunic' | 'leather' | 'dark' | 'uniform' | 'vest' | 'hanfu' | 'monkrobe';
+type Hair = 'short' | 'long' | 'bun' | 'ponytail' | 'braid' | 'messy' | 'bald' | 'topknot';
+type Acc = 'crown' | 'tiara' | 'helmet' | 'hood' | 'hat' | 'witchhat' | 'glasses' | 'veil' | 'horns' | 'headband' | 'hairpin' | 'guan' | 'mask' | 'none';
 
 interface CharSpec { outfit: Outfit; hair: Hair; acc: Acc; hairColor: string; cloth: string; trim: string; bg: [string, string]; skin?: string; old?: boolean }
 
@@ -71,6 +73,28 @@ const ARCHETYPES: { id: string; label: string; tags: string[]; m: CharSpec; f: C
   { id: 'villain', label: '흑막·악당', tags: ['흑막', '악당', '마왕', '흑마법사', '반역자', '악역', 'villain', 'dark lord', 'traitor', 'demon'],
     m: { outfit: 'dark', hair: 'long', acc: 'horns', hairColor: '#e8e4f0', cloth: '#1a0f14', trim: '#b02a3a', bg: ['#3a0f18', '#0d0306'] },
     f: { outfit: 'dress', hair: 'long', acc: 'none', hairColor: '#120c12', cloth: '#1c0c14', trim: '#b02a3a', bg: ['#3a0f18', '#0d0306'] } },
+  // ---- 무협 (genres: wuxia)
+  { id: 'wx-swordsman', label: '무협 · 검객·협객', tags: ['검객', '협객', '무인', '대협', '소협', '검수', '협녀', '여협', '표사', 'swordsman', 'wuxia'],
+    m: { outfit: 'hanfu', hair: 'topknot', acc: 'none', hairColor: '#1b1714', cloth: '#dfe6ee', trim: '#3b5f8f', bg: ['#2c3e4c', '#10181f'] },
+    f: { outfit: 'hanfu', hair: 'long', acc: 'hairpin', hairColor: '#15110f', cloth: '#f1e9ee', trim: '#b04a6a', bg: ['#3a2c3a', '#140f16'] } },
+  { id: 'wx-monk', label: '무협 · 무승·비구니', tags: ['무승', '승려', '소림', '비구니', '스님', '아미', '대사', '방장', 'monk'],
+    m: { outfit: 'monkrobe', hair: 'bald', acc: 'none', hairColor: '#3a2a20', cloth: '#d98a2b', trim: '#8a3a1e', bg: ['#4a3420', '#1a120b'] },
+    f: { outfit: 'monkrobe', hair: 'bald', acc: 'hood', hairColor: '#3a2a20', cloth: '#8a8a7a', trim: '#4a4a3a', bg: ['#3a3a30', '#141410'] } },
+  { id: 'wx-master', label: '무협 · 장문인·장로', tags: ['장문인', '문주', '장로', '맹주', '사부', '스승', '태상장로', '가주', '세가', 'master', 'elder'],
+    m: { outfit: 'hanfu', hair: 'topknot', acc: 'guan', hairColor: '#d8d8d8', cloth: '#4a2a5a', trim: '#d4a640', bg: ['#2a1d3a', '#0f0a16'], old: true },
+    f: { outfit: 'hanfu', hair: 'bun', acc: 'hairpin', hairColor: '#cfcfcf', cloth: '#2a4a5a', trim: '#d4a640', bg: ['#1d2a3a', '#0a0f16'], old: true } },
+  { id: 'wx-assassin', label: '무협 · 자객·살수', tags: ['자객', '살수', '암기', '하오문', '흑의', '복면', 'assassin'],
+    m: { outfit: 'hanfu', hair: 'topknot', acc: 'mask', hairColor: '#111', cloth: '#22242a', trim: '#5a5a66', bg: ['#1a1c22', '#08090b'] },
+    f: { outfit: 'hanfu', hair: 'ponytail', acc: 'mask', hairColor: '#111', cloth: '#2a2228', trim: '#7a3b4a', bg: ['#1f1a1f', '#0a080a'] } },
+  { id: 'wx-demon', label: '무협 · 마두·마교', tags: ['마교', '마두', '교주', '사파', '흑도', '마인', '혈교', 'demonic cult'],
+    m: { outfit: 'hanfu', hair: 'long', acc: 'guan', hairColor: '#0d0b0d', cloth: '#1a0c10', trim: '#b02a3a', bg: ['#3a0c14', '#0d0306'] },
+    f: { outfit: 'hanfu', hair: 'long', acc: 'hairpin', hairColor: '#0d0b0d', cloth: '#2a0a14', trim: '#d03a4a', bg: ['#3a0c14', '#0d0306'] } },
+  { id: 'wx-physician', label: '무협 · 의원·신의', tags: ['의원', '신의', '약선', '의녀', '약방', '당가', 'physician', 'healer'],
+    m: { outfit: 'hanfu', hair: 'topknot', acc: 'none', hairColor: '#2a2420', cloth: '#3f6b55', trim: '#e0d6b0', bg: ['#2a3d33', '#0f1712'] },
+    f: { outfit: 'hanfu', hair: 'bun', acc: 'hairpin', hairColor: '#2a1e1a', cloth: '#6a8a6a', trim: '#f0e6c8', bg: ['#2a3d33', '#0f1712'] } },
+  { id: 'wx-commoner', label: '무협 · 점소이·백성', tags: ['점소이', '주모', '객잔', '백성', '농민', '장사꾼', '상인', '아이', 'commoner'],
+    m: { outfit: 'tunic', hair: 'topknot', acc: 'headband', hairColor: '#2a201a', cloth: '#7a6a4a', trim: '#c8b088', bg: ['#4a4030', '#1a1610'] },
+    f: { outfit: 'tunic', hair: 'braid', acc: 'headband', hairColor: '#2a1a14', cloth: '#9a5a4a', trim: '#e8d0a8', bg: ['#4a4030', '#1a1610'] } },
 ];
 
 function characterSvg(s: CharSpec, gender: 'M' | 'F', variant: number): string {
@@ -111,7 +135,9 @@ function hairFront(s: CharSpec, F: boolean): string {
   const c = s.hairColor;
   if (s.acc === 'helmet' || s.acc === 'hood') return '';
   switch (s.hair) {
-    case 'bald': return `<path d="M142 236 Q140 200 156 186 L150 240 Z M258 236 Q260 200 244 186 L250 240 Z" fill="${c}"/>`;
+    case 'topknot': return `<path d="M136 246 Q130 170 200 162 Q272 168 264 246 Q256 206 232 196 Q200 210 168 196 Q146 206 136 246 Z" fill="${c}"/><ellipse cx="200" cy="150" rx="22" ry="18" fill="${c}"/><rect x="186" y="160" width="28" height="7" rx="3" fill="${shade(s.trim, -0.1)}"/>`;
+    case 'bald': if (s.outfit === 'monkrobe') return `<circle cx="183" cy="196" r="3" fill="${shade(c, 0.3)}" opacity=".5"/><circle cx="200" cy="190" r="3" fill="${shade(c, 0.3)}" opacity=".5"/><circle cx="217" cy="196" r="3" fill="${shade(c, 0.3)}" opacity=".5"/>`;
+      return `<path d="M142 236 Q140 200 156 186 L150 240 Z M258 236 Q260 200 244 186 L250 240 Z" fill="${c}"/>`;
     case 'short': return `<path d="M136 246 Q130 168 200 160 Q272 166 264 246 Q258 206 236 196 Q214 214 170 204 Q150 214 136 246 Z" fill="${c}"/>`;
     case 'messy': return `<path d="M134 250 Q126 170 196 156 Q276 160 268 250 L256 214 L246 232 L238 200 L218 222 L206 196 L188 220 L176 198 L162 226 L150 210 Z" fill="${c}"/>`;
     case 'bun': return `<circle cx="200" cy="158" r="30" fill="${c}"/><path d="M140 250 Q132 174 200 166 Q268 174 260 250 Q252 200 200 196 Q150 200 140 250 Z" fill="${c}"/>`;
@@ -134,6 +160,9 @@ function accessory(s: CharSpec, F: boolean): string {
     case 'glasses': return `<circle cx="178" cy="252" r="15" fill="none" stroke="#3a3a3a" stroke-width="3"/><circle cx="222" cy="252" r="15" fill="none" stroke="#3a3a3a" stroke-width="3"/><path d="M193 252 h14" stroke="#3a3a3a" stroke-width="3"/>`;
     case 'veil': return `<path d="M128 340 Q116 160 200 150 Q284 160 272 340 L256 340 Q262 220 200 200 Q138 220 144 340 Z" fill="#f6f4ee" opacity=".92"/><rect x="150" y="190" width="100" height="8" fill="${t}"/>`;
     case 'horns': return `<path d="M154 190 Q120 150 132 110 Q140 150 170 176 Z M246 190 Q280 150 268 110 Q260 150 230 176 Z" fill="#2a2228" stroke="${t}" stroke-width="2"/>`;
+    case 'hairpin': return `<ellipse cx="200" cy="158" rx="26" ry="20" fill="${s.hairColor}"/><path d="M160 150 L246 140" stroke="${t}" stroke-width="5" stroke-linecap="round"/><circle cx="160" cy="150" r="6" fill="${t}"/><path d="M160 156 l-6 22 M166 156 l-2 18" stroke="${t}" stroke-width="2"/>`;
+    case 'guan': return `<path d="M178 166 L180 136 L220 136 L222 166 Z" fill="#1e1a18" stroke="${t}" stroke-width="3"/><path d="M168 150 L232 150" stroke="${t}" stroke-width="4"/>`;
+    case 'mask': return `<path d="M144 262 Q200 250 256 262 L250 318 Q200 340 150 318 Z" fill="${shade(s.cloth, -0.1)}"/>`;
     case 'headband': return F ? `<path d="M148 196 Q200 172 252 196" stroke="${t}" stroke-width="10" fill="none"/>` : '';
     default: return '';
   }
@@ -154,6 +183,8 @@ function outfitDetail(s: CharSpec, sh: number, skin: string): string {
     case 'leather': return `<path d="M${200 - sh} 470 Q200 404 ${200 + sh} 470" stroke="${t}" stroke-width="26" fill="none" opacity=".9"/><path d="M150 400 L250 500" stroke="#3a2a1a" stroke-width="10"/>`;
     case 'dark': return `<path d="M${200 - sh - 20} 520 Q200 380 ${200 + sh + 20} 520" fill="${shade(c, -0.1)}"/><path d="M170 398 Q200 420 230 398" stroke="${t}" stroke-width="4" fill="none"/>`;
     case 'uniform': return `<path d="M${200 - sh + 4} 404 h34 M${200 + sh - 38} 404 h34" stroke="${t}" stroke-width="10"/><path d="M200 400 L200 520" stroke="${shade(c, -0.2)}" stroke-width="3"/><circle cx="212" cy="430" r="4" fill="${t}"/><circle cx="212" cy="456" r="4" fill="${t}"/><circle cx="212" cy="482" r="4" fill="${t}"/><path d="M150 420 Q170 470 160 510" stroke="${t}" stroke-width="4" fill="none"/>`;
+    case 'hanfu': return `<path d="M${200 - sh + 8} 404 Q200 396 ${200 + sh - 8} 404 L${200 + sh + 10} 520 L${200 - sh - 10} 520 Z" fill="${shade(c, 0.06)}"/><path d="M166 394 L222 470" stroke="${t}" stroke-width="12" stroke-linecap="round"/><path d="M234 394 L200 446" stroke="${shade(t, -0.2)}" stroke-width="10" stroke-linecap="round"/><rect x="${200 - sh + 20}" y="474" width="${2 * sh - 40}" height="18" fill="${t}"/><path d="M200 492 l-8 28 M206 492 l8 28" stroke="${shade(t, -0.25)}" stroke-width="5"/>`;
+    case 'monkrobe': return `<path d="M${200 - sh} 430 L${200 + sh - 10} 520" stroke="${t}" stroke-width="34" opacity=".85"/>${Array.from({ length: 11 }, (_, i) => `<circle cx="${160 + i * 8}" cy="${410 + Math.sin(i / 10 * Math.PI) * 26}" r="5" fill="#5a2a14"/>`).join('')}`;
     case 'vest': return `<path d="M176 392 L200 440 L224 392 Z" fill="#efe6d2"/><path d="M164 396 L196 520 L150 520 Z M236 396 L204 520 L250 520 Z" fill="${shade(c, 0.12)}"/><circle cx="212" cy="470" r="4" fill="${t}"/>`;
   }
 }
@@ -225,6 +256,17 @@ const SCENES: SceneSpec[] = [
     draw: (r) => `<circle cx="480" cy="110" r="44" fill="#fff4c8"/>${hills(260, 50, '#d8a860', r, 5)}${hills(320, 40, '#c89048', r, 4)}<rect x="0" y="360" width="640" height="40" fill="#b88040"/>` },
   { id: 'snow', label: '설원·겨울', tags: ['설원', '눈', '겨울', '얼음', '북부', '빙하', 'snow', 'winter', 'ice', 'north', 'tundra'], sky: ['#c8d8e8', '#f4f8fc'],
     draw: (r) => `${hills(250, 50, '#e8eef4', r)}${trees(300, '#4a6a7a', r, 12, 80)}<rect x="0" y="310" width="640" height="90" fill="#f4f8fc"/>${Array.from({ length: 60 }, () => `<circle cx="${(r() * 640).toFixed(0)}" cy="${(r() * 400).toFixed(0)}" r="${(1 + r() * 2).toFixed(1)}" fill="#fff" opacity=".8"/>`).join('')}` },
+  // ---- 무협 장소
+  { id: 'wx-inn', label: '무협 · 객잔', tags: ['객잔', '주루', '주점', '반점', '여각', 'inn'], sky: ['#3a2010', '#120804'],
+    draw: () => `<rect x="0" y="0" width="640" height="60" fill="#2a1408"/>${[60, 200, 340, 480, 600].map((x) => `<rect x="${x - 7}" y="0" width="14" height="400" fill="#3a1e0c"/>`).join('')}${[130, 270, 410, 540].map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="70" stroke="#2a1408" stroke-width="2"/><ellipse cx="${x}" cy="92" rx="18" ry="24" fill="#c8302a"/><ellipse cx="${x}" cy="92" rx="10" ry="18" fill="#f0a040" opacity=".6"/>`).join('')}<rect x="80" y="280" width="200" height="16" fill="#6a3a18"/><rect x="100" y="296" width="12" height="70" fill="#4a2810"/><rect x="250" y="296" width="12" height="70" fill="#4a2810"/><rect x="380" y="290" width="200" height="16" fill="#6a3a18"/>${[130, 170, 210].map((x) => `<ellipse cx="${x}" cy="270" rx="12" ry="14" fill="#8a6a40"/><rect x="${x - 5}" y="252" width="10" height="6" fill="#3a2a1a"/>`).join('')}<rect x="0" y="360" width="640" height="40" fill="#1e0e04"/>` },
+  { id: 'wx-bamboo', label: '무협 · 대나무 숲', tags: ['죽림', '대나무', '숲', '산길', 'bamboo', 'forest'], sky: ['#cfe0c0', '#5a7a4a'],
+    draw: (r) => `${Array.from({ length: 26 }, () => { const x = r() * 640, w = 6 + r() * 10, c = ['#4a7a3a', '#3a6a2e', '#5a8a44', '#2e5a26'][Math.floor(r() * 4)]; return `<rect x="${x}" y="0" width="${w}" height="400" fill="${c}"/>${Array.from({ length: 6 }, (_, k) => `<rect x="${x - 1}" y="${40 + k * 60 + r() * 20}" width="${w + 2}" height="3" fill="#2a4a1e"/>`).join('')}<path d="M${x + w} ${80 + r() * 200} q30 -10 46 6 q-26 2 -46 -6 Z" fill="#6a9a4a"/>`; }).join('')}<rect x="0" y="0" width="640" height="400" fill="#e8f0e0" opacity=".18"/><path d="M220 400 Q320 300 420 400 Z" fill="#8a7a5a" opacity=".6"/>` },
+  { id: 'wx-sect', label: '무협 · 문파 연무장', tags: ['문파', '연무장', '전각', '본산', '무관', '도관', '사원', '세가', 'sect', 'martial hall'], sky: ['#e8d0a0', '#a07040'],
+    draw: () => `<path d="M60 150 Q320 110 580 150 L540 160 L100 160 Z" fill="#2a2a2e"/><path d="M40 150 Q50 140 70 138 M600 150 Q590 140 570 138" stroke="#2a2a2e" stroke-width="8"/><rect x="120" y="160" width="400" height="120" fill="#8a2a1e"/>${[150, 230, 310, 390, 470].map((x) => `<rect x="${x}" y="170" width="40" height="110" fill="#5a1a12"/><rect x="${x + 6}" y="180" width="28" height="70" fill="#d8b070" opacity=".5"/>`).join('')}<rect x="280" y="128" width="80" height="22" fill="#1a1410" stroke="#d4a640" stroke-width="2"/><rect x="0" y="280" width="640" height="120" fill="#b8a888"/>${Array.from({ length: 8 }, (_, i) => `<line x1="${i * 90}" y1="280" x2="${i * 90 - 60}" y2="400" stroke="#9a8a6a" stroke-width="2"/>`).join('')}<rect x="40" y="250" width="8" height="70" fill="#4a2a14"/><path d="M30 250 h28 M34 262 h20" stroke="#aaa" stroke-width="3"/>` },
+  { id: 'wx-pavilion', label: '무협 · 산중 정자·절벽', tags: ['정자', '절벽', '산', '봉우리', '은거', '폭포', '화산', '무당', '아미', 'mountain', 'pavilion'], sky: ['#f0e8e0', '#a8b8c8'],
+    draw: (r) => `<path d="M0 260 L80 120 L140 200 L220 60 L300 200 L380 110 L460 220 L540 90 L640 210 L640 400 L0 400 Z" fill="#7a8a98" opacity=".7"/><path d="M0 300 L120 200 L200 260 L320 170 L420 270 L520 210 L640 280 L640 400 L0 400 Z" fill="#5a6a72"/>${Array.from({ length: 5 }, () => `<ellipse cx="${r() * 640}" cy="${220 + r() * 120}" rx="${80 + r() * 80}" ry="14" fill="#fff" opacity=".45"/>`).join('')}<path d="M420 400 L440 250 L520 250 L560 400 Z" fill="#3a4248"/><rect x="450" y="200" width="6" height="50" fill="#5a1a12"/><rect x="504" y="200" width="6" height="50" fill="#5a1a12"/><path d="M430 202 Q480 170 530 202 L520 208 L440 208 Z" fill="#2a2a2e"/><path d="M426 204 l-8 -10 M534 204 l8 -10" stroke="#2a2a2e" stroke-width="5"/>${Array.from({ length: 4 }, (_, i) => `<path d="M${40 + i * 30} 400 q-10 -60 6 -110" stroke="#2a3a24" stroke-width="5" fill="none"/>`).join('')}` },
+  { id: 'wx-town', label: '무협 · 저잣거리·나루', tags: ['저잣거리', '시장', '마을', '나루', '강', '포구', '현성', '성시', 'town', 'river'], sky: ['#f0d8b0', '#a0b8c8'],
+    draw: (r) => `<rect x="0" y="250" width="640" height="150" fill="#6a8aa0"/>${Array.from({ length: 10 }, () => `<path d="M${r() * 640} ${270 + r() * 120} q20 -5 40 0" stroke="#a8c0d0" stroke-width="2" fill="none"/>`).join('')}<path d="M380 330 Q440 350 500 330 L490 345 Q440 360 390 345 Z" fill="#4a2a14"/><path d="M440 330 L440 270" stroke="#4a2a14" stroke-width="3"/><path d="M440 272 L470 300 L440 300 Z" fill="#d8c8a0"/>${Array.from({ length: 6 }, (_, i) => { const x = i * 110 - 10, h = 60 + r() * 40; return `<rect x="${x}" y="${250 - h}" width="96" height="${h}" fill="#c8a878"/><path d="M${x - 12} ${250 - h} Q${x + 48} ${232 - h} ${x + 108} ${250 - h} L${x + 98} ${258 - h} L${x - 2} ${258 - h} Z" fill="#2a2a2e"/><rect x="${x + 36}" y="${250 - h * 0.6}" width="24" height="${h * 0.6}" fill="#5a3a1e"/><rect x="${x + 10}" y="${250 - h * 0.8}" width="16" height="22" fill="#c8302a"/>`; }).join('')}` },
 ];
 
 function sceneSvg(s: SceneSpec): string {
@@ -244,8 +286,8 @@ function shade(hex: string, amt: number): string {
 
 /** 기본 이미지 목록 (인물 = 원형 × 성별, 장소) */
 export const STOCK_ART: StockArt[] = [
-  ...ARCHETYPES.flatMap((a) => (['M', 'F'] as const).map((g) => ({ id: `${a.id}-${g.toLowerCase()}`, kind: 'character' as const, label: `${a.label} · ${g === 'M' ? '남' : '여'}`, tags: a.tags, gender: g }))),
-  ...SCENES.map((s) => ({ id: s.id, kind: 'scene' as const, label: s.label, tags: s.tags })),
+  ...ARCHETYPES.flatMap((a) => (['M', 'F'] as const).map((g) => ({ id: `${a.id}-${g.toLowerCase()}`, kind: 'character' as const, label: `${a.label} · ${g === 'M' ? '남' : '여'}`, tags: a.tags, gender: g, ...(a.id.startsWith('wx-') ? { genres: ['wuxia'] } : {}) }))),
+  ...SCENES.map((s) => ({ id: s.id, kind: 'scene' as const, label: s.label, tags: s.tags, ...(s.id.startsWith('wx-') ? { genres: ['wuxia'] } : {}) })),
 ];
 
 const svgCache = new Map<string, string>();

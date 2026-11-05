@@ -253,6 +253,8 @@ export interface WorldPackage {
   };
   /** 시작 방식 선택지 (v0.13) */
   starts?: StartOption[];
+  /** 장르 (설계 v3 2장): 프로필 ID와 세계별 설정 */
+  genre?: { id: string; levelCap?: number; currency?: string; terms?: Record<string, string> };
   /** 달력 (v0.15): 게임 시작일과 카운트다운. 하루가 지나면 날짜가 넘어간다 (월 길이는 양력 기준) */
   calendar?: Calendar;
   /** 서술 문체 지침 (v0.13). 서술 AI에게 참고로 준다 */

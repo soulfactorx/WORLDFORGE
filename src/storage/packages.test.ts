@@ -63,3 +63,14 @@ describe('개인용 세계', () => {
     expect((await assetBlob('card.test', 'a0'))?.size).toBe(2);
   });
 });
+
+describe('성인 등급 고정', () => {
+  it('한 번 성인 등급으로 저장된 세계는 낮춰서 저장해도 성인 등급으로 남는다', async () => {
+    const { savePackage: save } = await import('./packages');
+    const { db } = await import('./db');
+    const w = { ...blankWorld(), manifest: { ...blankWorld().manifest, id: 'me.lock', contentRating: 'mature' as const } };
+    await save(w, 'created');
+    await save({ ...w, manifest: { ...w.manifest, contentRating: 'teen', version: '0.2.0' } }, 'created');
+    expect((await db.packages.get('me.lock@0.2.0'))!.world.manifest.contentRating).toBe('mature');
+  });
+});

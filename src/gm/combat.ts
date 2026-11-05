@@ -1,3 +1,5 @@
+import { genreGuide, levelCapOf, reskinner } from '../engine/genre';
+import { RATING_GUIDE } from '../engine/rating';
 import { createRng, type Rng } from '../engine/dice/rng';
 import {
   type CombatState, currentActorId, resolveCard, runAutoTurns, startCombat, type Target, type PartyOrder, type CompanionEntry,
@@ -51,7 +53,7 @@ function finishIfOver(b: Builder) {
       .reduce((sum, c) => sum + (MONSTERS[c.id.split('#')[0]!]?.xp ?? 0), 0);
     const members = Object.values(cs.combatants).filter((c) => c.side === 'party').map((c) => c.id);
     const share = Math.floor(total / Math.max(1, members.length));
-    progressEvents(b.state, members.map((who) => ({ who, amount: share })), `전투 승리 · 총 ${total} XP를 ${members.length}명이 나눔`).forEach((e) => b.push(e));
+    progressEvents(b.state, members.map((who) => ({ who, amount: share })), `전투 승리 · 총 ${total} XP를 ${members.length}명이 나눔`, levelCapOf(b.world)).forEach((e) => b.push(e));
   }
   // 함께 싸워 이긴 동료는 신뢰와 존경이 오르고, 버려두고 도망치면 실망한다
   for (const id of Object.keys(party)) {
@@ -125,6 +127,7 @@ export async function narrateCombat(
 ): Promise<string> {
   const loc = world.locations.find((l) => l.id === after.player.locationId);
   const outcome = after.log.at(-1)?.text ?? '';
+  const rs = reskinner(world);
   return llm.stream({
     system: `너는 1인칭 TRPG의 서술자다. 한국어 2인칭("당신은 …")으로, 방금 끝난 전투를 3~5문단으로 생생하게 요약한다.
 - 전투 기록의 결과(명중·빗나감·피해·쓰러짐·승패)를 그대로 따른다. 결과를 바꾸거나 새 사건을 만들지 않는다.
@@ -132,8 +135,10 @@ export async function narrateCombat(
 - 패배(쓰러짐)했다면 정신을 잃었다가 한참 뒤 깨어나는 것으로 마무리한다. 누가 구해 줬는지는 지어내지 않는다.
 - 기록에 "숨을 거두었다"가 있는 동료는 정말로 죽었다. 그 죽음을 무게 있게 다룬다.
 - 결과가 "사망"이면 플레이어가 죽은 것이다. 되살리지 말고, 이야기가 여기서 끝나는 장면으로 조용히 마무리한다.
-- 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.`,
-    user: `## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${c.name} (${c.side === 'party' ? '아군' : '적'})`).join('\n')}\n\n## 전투 기록\n${combatLog.join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
+- 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
+- ${genreGuide(world)}
+- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
+    user: `## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
     maxTokens: 3000,
   }, onText, signal);
 }

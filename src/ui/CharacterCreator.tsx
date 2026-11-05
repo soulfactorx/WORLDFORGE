@@ -1,3 +1,4 @@
+import { useRs } from './reskin';
 import { useMemo, useState } from 'react';
 import { abilityModifier } from '../engine/dice/dice';
 import { ABILITIES, ABILITY_NAMES, CLASSES, POINT_BUY_BUDGET, POINT_BUY_COST, SKILLS, STANDARD_ARRAY, type SkillId } from '../engine/character/rules';
@@ -10,6 +11,7 @@ const POINT_VALUES = Object.keys(POINT_BUY_COST).map(Number);
 
 export function CharacterCreator({ onCreate, onCancel }: { onCreate: (c: CharacterSheet) => void; onCancel: () => void }) {
   const [name, setName] = useState('');
+  const rs = useRs();
   const [classId, setClassId] = useState('fighter');
   const [method, setMethod] = useState<AbilityMethod>('standard');
   const [abilities, setAbilities] = useState<Abilities>(() => suggestedStandardArray('fighter'));
@@ -49,7 +51,7 @@ export function CharacterCreator({ onCreate, onCancel }: { onCreate: (c: Charact
         <legend>직업</legend>
         <div className="row">
           {Object.values(CLASSES).map((c) => (
-            <button key={c.id} type="button" className={c.id === classId ? 'primary' : ''} onClick={() => changeClass(c.id)}>{c.name}</button>
+            <button key={c.id} type="button" className={c.id === classId ? 'primary' : ''} onClick={() => changeClass(c.id)}>{rs(c.name)}</button>
           ))}
         </div>
         <p className="muted small">생명 주사위 d{cls.hitDie} · 내성 숙련: {cls.saves.map((a) => ABILITY_NAMES[a]).join(', ')}</p>

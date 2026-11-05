@@ -1,5 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { sampleWorld } from '../data/sample-world';
+import { romanceSample, wuxiaSample } from '../data/sample-genres';
 import type { WorldPackage } from '../engine/schema';
 import { hasErrors, type Issue, validateWorld } from '../engine/package/validate';
 import { findZipStart, looksLikeCardFile } from '../importers/charx';
@@ -21,7 +22,7 @@ export interface StoredPackage {
   updatedAt: number;
 }
 
-export const BUILTIN: WorldPackage[] = [sampleWorld];
+export const BUILTIN: WorldPackage[] = [sampleWorld, wuxiaSample, romanceSample];
 export const packageKey = (w: Pick<WorldPackage, 'manifest'>) => `${w.manifest.id}@${w.manifest.version}`;
 
 export async function listPackages(): Promise<{ world: WorldPackage; builtin: boolean; stored?: StoredPackage }[]> {
@@ -41,10 +42,14 @@ export async function findWorld(id: string, version: string): Promise<WorldPacka
 export async function savePackage(world: WorldPackage, source: StoredPackage['source']): Promise<void> {
   if (BUILTIN.some((b) => packageKey(b) === packageKey(world))) throw new Error('내장 패키지와 같은 ID·버전으로는 저장할 수 없습니다. ID나 버전을 바꿔 주세요.');
   // 개인용 세계의 표시는 지울 수 없다: 같은 ID의 패키지가 개인용이면 계속 개인용
+  const prev = await db.packages.where('id').equals(world.manifest.id).toArray();
   if (!world.manifest.private) {
-    const prev = await db.packages.where('id').equals(world.manifest.id).toArray();
     const priv = prev.find((p) => p.world.manifest.private)?.world.manifest.private;
     if (priv) world = { ...world, manifest: { ...world.manifest, private: priv } };
+  }
+  // 성인 등급은 한 번 정하면 바꿀 수 없다 (설계 v3 15.1)
+  if (world.manifest.contentRating !== 'mature' && prev.some((p) => p.world.manifest.contentRating === 'mature')) {
+    world = { ...world, manifest: { ...world.manifest, contentRating: 'mature' } };
   }
   await db.packages.put({ key: packageKey(world), id: world.manifest.id, version: world.manifest.version, name: world.manifest.name, world, source, updatedAt: Date.now() });
 }

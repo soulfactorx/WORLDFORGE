@@ -11,6 +11,8 @@ import { imageNeeds } from '../gm/worldgen/imageNeeds';
 import { MoveInPanel, MoveOutButton } from './MovePanel';
 import { MATURE_NOTE, shareBlocked } from '../engine/rating';
 import { confirmAdult } from './adult';
+import { ReskinContext } from './reskin';
+import { reskinner } from '../engine/genre';
 import { CharacterCreator } from './CharacterCreator';
 import { IssueList } from './IssueList';
 
@@ -74,7 +76,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
     try { await importSave(await file.text()); setMessage({ text: '세이브를 가져왔습니다.' }); } catch (e) { setMessage({ text: (e as Error).message }); }
   }
 
-  if (creating && world) return <CharacterCreator onCreate={newGame} onCancel={() => setCreating(false)} />;
+  if (creating && world) return <ReskinContext.Provider value={reskinner(world)}><CharacterCreator onCreate={newGame} onCancel={() => setCreating(false)} /></ReskinContext.Provider>;
 
   return (
     <section className="panel">

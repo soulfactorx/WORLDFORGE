@@ -1,3 +1,4 @@
+import { GENRES } from '../../data/genres';
 /**
  * 캐릭터 카드(CHARX) 전체 → 세계관 패키지 (v0.13).
  *
@@ -43,6 +44,7 @@ export interface CardWorldDraft {
   timeline: { key: string; when: string; title: string; statement: string; status: 'past' | 'ongoing' | 'future'; secrecy: number; protected_topic: string; known_by: string[]; rumor_by: string[] }[];
   starts: { key: string; name: string; description: string; location: string; opening_scene: string; knows: string[] }[];
   plot_request: string;
+  genre?: string;
   calendar: { era: string; start_year: number; start_month: number; start_day: number; countdown_label: string; countdown_year: number; countdown_month: number; countdown_day: number };
 }
 
@@ -79,6 +81,7 @@ export const CARD_WORLD_SCHEMA = obj({
     knows: { type: 'array', items: str, description: '이 방식으로 시작하면 플레이어가 처음부터 아는 timeline key (예: 원작을 읽은 빙의자라면 앞으로의 사건)' },
   })),
   plot_request: { type: 'string', description: '임무·결말 설계자에게 줄 원작 줄거리·갈등·결말 방향 요약 (10줄 이내)' },
+  genre: { type: 'string', enum: GENRES.map((g) => g.id), description: `원작에 가장 가까운 장르: ${GENRES.map((g) => `${g.id}=${g.label}(${g.description})`).join(', ')}` },
   calendar: obj({
     era: { type: 'string', description: '연호 (예: 제국력). 없으면 ""' },
     start_year: { type: 'integer', description: '이야기가 시작되는 날의 연도. 날짜 정보가 없으면 0' }, start_month: int, start_day: int,
@@ -319,6 +322,7 @@ export async function cardToWorld(
     beliefs,
     ...(starts.length ? { starts } : {}),
     ...(d.style?.trim() ? { style: cut(d.style.trim(), 1500) } : {}),
+    genre: { id: GENRES.some((g) => g.id === d.genre) ? d.genre! : 'high_fantasy' },
     ...(d.calendar?.start_year > 0 ? { calendar: {
       era: d.calendar.era ?? '', year: d.calendar.start_year, month: clamp(d.calendar.start_month, 1, 12), day: clamp(d.calendar.start_day, 1, 31),
       ...(d.calendar.countdown_year > 0 && d.calendar.countdown_label ? { countdown: { label: cut(d.calendar.countdown_label, 20), year: d.calendar.countdown_year, month: clamp(d.calendar.countdown_month, 1, 12), day: clamp(d.calendar.countdown_day, 1, 31) } } : {}),

@@ -168,7 +168,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
           <div className="row">
             <label>콘텐츠 등급
               <select value={rating} disabled={busy} onChange={(e) => { const v = e.target.value as typeof rating; if (v !== 'mature' || confirmAdult()) setRating(v); }}>
-                <option value="all">전체</option><option value="teen">청소년</option><option value="mature">성인</option>
+                <option value="all">전체</option><option value="teen">청소년</option><option value="mature">성인 (공유 불가 · 이후 변경 불가)</option>
               </select>
             </label>
             <label className="check"><input type="checkbox" checked={classify} disabled={busy} onChange={(e) => setClassify(e.target.checked)} /> 이름 규칙으로 못 찾은 이미지를 AI로 분류 (파일 이름만 보냄)</label>

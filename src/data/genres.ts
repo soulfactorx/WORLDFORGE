@@ -1,0 +1,49 @@
+/**
+ * 장르 프로필 (설계 v3 2장, D1·D2). 규칙(d20 코어)은 하나, 장르는 이름·말투·분위기만 바꾼다.
+ * terms: 화면·AI에 보이는 용어 바꾸기 (엔진 데이터와 세이브는 그대로)
+ */
+export interface GenreProfile {
+  id: string;
+  label: string;
+  description: string;
+  /** 서술·NPC·안내 AI에게 주는 장르 지침 */
+  tone: string;
+  /** 화면·AI 글의 용어 바꾸기 (긴 것부터 적용) */
+  terms: Record<string, string>;
+  currency: string;
+  /** 기본 최대 레벨 (세계에서 바꿀 수 있다) */
+  levelCap: number;
+  /** 조우(전투)를 얼마나 자주 쓰는가: 세계 생성·Director 참고 */
+  combat: 'often' | 'sometimes' | 'rare';
+  /** 기본 이미지 고르기 선호 태그 */
+  artTags: string[];
+}
+
+export const GENRES: GenreProfile[] = [
+  {
+    id: 'high_fantasy', label: '하이 판타지', description: '검과 마법, 왕국과 던전. D&D 기본 그대로.',
+    tone: '장르: 하이 판타지. 검과 마법, 왕국·기사·마법사·괴물이 있는 서사적 모험. 경이로움과 위험을 함께 묘사한다.',
+    terms: {}, currency: '골드', levelCap: 5, combat: 'often', artTags: ['fantasy'],
+  },
+  {
+    id: 'wuxia', label: '무협', description: '강호와 문파, 무공과 내공, 은원과 협의.',
+    tone: '장르: 무협. 강호·문파·무림맹·마교, 무공 초식과 내공, 협(俠)과 의리·은원·복수의 세계. 서술은 무협 소설 문체로, 인물은 하오체·하게체·합쇼체 등 고풍스러운 말투를 쓴다. 무공 동작은 초식 이름과 기세로 묘사한다. 서양식 용어(마법·기사 등)는 쓰지 않는다.',
+    terms: {
+      파이터: '검객', 로그: '자객', 클레릭: '도사', 위저드: '술사',
+      롱소드: '장검', 숏소드: '단검', 대거: '비수', 숏보우: '단궁', '재블린 투척': '표창 던지기', 메이스: '철편', 시미터: '환도',
+      '재기의 바람': '운기조식', '행동 연쇄': '연환초', '교활한 행동': '신법', '정밀 조준': '관조',
+      '신성 불꽃': '도력', '성스러운 불꽃': '뇌정부', '상처 치료': '금창술', '치유의 말': '회춘결', '인도의 화살': '청광탄',
+      '화염 화살': '열양장', '마법 화살': '비도술', '타오르는 손길': '화룡장', '작열 광선': '삼양신권',
+      '1레벨 슬롯': '내공 1성', '2레벨 슬롯': '내공 2성', '주문 슬롯': '내공', 슬롯: '내공', 주문: '술법', 소마법: '기공',
+      '고블린 전사': '산적 졸개', 고블린: '산적',
+    },
+    currency: '냥', levelCap: 5, combat: 'often', artTags: ['wuxia'],
+  },
+  {
+    id: 'romance', label: '로맨스', description: '인물과의 관계가 이야기의 중심. 전투보다 대화·사교·선택.',
+    tone: '장르: 로맨스. 인물들과의 감정과 관계 변화가 이야기의 중심이다. 시선·말끝·거리감·망설임 같은 작은 변화를 섬세하게 묘사하고, 설렘·긴장·질투·화해의 순간을 놓치지 않는다. 전투는 드물게, 사교·대화·선택에 무게를 둔다.',
+    terms: {}, currency: '골드', levelCap: 3, combat: 'rare', artTags: ['romance'],
+  },
+];
+
+export const genreOf = (id?: string): GenreProfile => GENRES.find((g) => g.id === id) ?? GENRES[0]!;

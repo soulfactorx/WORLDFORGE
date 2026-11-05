@@ -9,6 +9,8 @@ import { confirmAdult } from './adult';
 import { AssetGallery } from './AssetGallery';
 import { fillOrphanKnowledge } from '../gm/worldgen/fromCard';
 import { imageNeeds } from '../gm/worldgen/imageNeeds';
+import { GENRES, genreOf } from '../data/genres';
+import { MAX_LEVEL } from '../engine/character/progression';
 import { IssueList } from './IssueList';
 import { CardImportDialog } from './CardImportDialog';
 import { josa } from '../engine/text/josa';
@@ -205,7 +207,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         </p>
       )}
       <div className="tabs">
-        {TABS.filter(([id]) => !(id === 'json' && w.manifest.private)).map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
+        {TABS.filter(([id]) => !(id === 'json' && shareBlocked(w))).map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
       </div>
 
       {tab === 'basic' && (
@@ -214,10 +216,16 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             ? <p className="small muted">패키지 ID: <code>{w.manifest.id}</code> (이미지가 연결되어 있어 바꿀 수 없습니다)</p>
             : <Text label="패키지 ID (작가.세계 형식, 소문자)" value={w.manifest.id} onChange={(id) => set({ manifest: { ...w.manifest, id } })} />}
           <Text label="이름" value={w.manifest.name} onChange={(name) => set({ manifest: { ...w.manifest, name } })} />
+          <Select label="장르" value={w.genre?.id ?? 'high_fantasy'} options={GENRES.map((g) => [g.id, `${g.label} — ${g.description}`] as const)} onChange={(id) => set({ genre: { ...w.genre, id } })} />
+          <Num label={`최대 레벨 (1~${MAX_LEVEL}, 비우면 장르 기본 ${genreOf(w.genre?.id).levelCap})`} value={w.genre?.levelCap} onChange={(levelCap) => set({ genre: { id: w.genre?.id ?? 'high_fantasy', ...w.genre, levelCap: levelCap ? Math.max(1, Math.min(MAX_LEVEL, levelCap)) : undefined } })} />
+          <Text label={`화폐 이름 (비우면 ${genreOf(w.genre?.id).currency})`} value={w.genre?.currency} onChange={(currency) => set({ genre: { id: w.genre?.id ?? 'high_fantasy', ...w.genre, currency: currency || undefined } })} />
           <Text label="버전" value={w.manifest.version} onChange={(version) => set({ manifest: { ...w.manifest, version } })} placeholder="0.1.0" />
           <Text label="제작자" value={w.manifest.author} onChange={(author) => set({ manifest: { ...w.manifest, author } })} />
           <Text label="라이선스" value={w.manifest.license} onChange={(license) => set({ manifest: { ...w.manifest, license } })} placeholder="CC-BY-4.0" />
-          <Select label="콘텐츠 등급" value={w.manifest.contentRating} options={[['all', '전체'], ['teen', '청소년'], ['mature', '성인 (공유 불가)']] as const} onChange={(contentRating) => { if (contentRating !== 'mature' || confirmAdult()) set({ manifest: { ...w.manifest, contentRating } }); }} />
+          {w.manifest.contentRating === 'mature'
+            ? <p className="small">콘텐츠 등급: <b>🔞 성인</b> <span className="muted">— 한 번 정하면 바꿀 수 없습니다 (공유 불가)</span></p>
+            : <Select label="콘텐츠 등급" value={w.manifest.contentRating} options={[['all', '전체'], ['teen', '청소년'], ['mature', '성인 (공유 불가 · 이후 변경 불가)']] as const}
+                onChange={(contentRating) => { if (contentRating !== 'mature' || (confirmAdult() && confirm('성인 등급은 한 번 정하면 다시 바꿀 수 없습니다. 이 세계를 성인 등급으로 정할까요?'))) set({ manifest: { ...w.manifest, contentRating } }); }} />}
           <Select label="시작 장소" value={w.start.locationId} options={locOptions} onChange={(locationId) => set({ start: { ...w.start, locationId } })} />
           <Area label="첫 장면 (플레이어가 깨어났을 때)" value={w.start.openingScene} onChange={(openingScene) => set({ start: { ...w.start, openingScene } })} />
           <fieldset><legend>달력 (선택) — 게임 속 날짜와 카운트다운</legend>
@@ -409,7 +417,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
 
       {tab === 'images' && <AssetGallery world={w} settings={settings} onChange={(assets) => set({ assets })} />}
-      {tab === 'json' && !w.manifest.private && <JsonField label="패키지 전체 (world.json)" value={w} onChange={(v) => setW(v)} rows={30} />}
+      {tab === 'json' && !shareBlocked(w) && <JsonField label="패키지 전체 (world.json)" value={w} onChange={(v) => setW(v)} rows={30} />}
     </section>
   );
 }

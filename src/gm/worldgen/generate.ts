@@ -1,3 +1,5 @@
+import { genreGuide } from '../../engine/genre';
+import { genreOf } from '../../data/genres';
 import { CLASSES } from '../../engine/character/rules';
 import { MONSTERS } from '../../engine/combat/monsters';
 import { validateWorld, type Issue } from '../../engine/package/validate';
@@ -50,6 +52,8 @@ export interface GenerateOptions {
   contentRating: WorldPackage['manifest']['contentRating'];
   withScenario: boolean;
   author?: string;
+  /** 장르 프로필 ID (설계 v3 2장) */
+  genre?: string;
 }
 
 export interface GenerateResult {
@@ -76,12 +80,13 @@ export async function generateWorld(
 ): Promise<GenerateResult> {
   onStage('세계 만드는 중 (장소·인물·비밀)…');
   const draft = await llm.json<WorldDraft>({
-    system: WORLD_SYSTEM,
-    user: `## 제작자 요청\n${opts.prompt}\n\n## 규모\n${SIZE_TEXT[opts.size]}\n\n## 콘텐츠 등급\n${RATING_TEXT[opts.contentRating]}`,
+    system: `${WORLD_SYSTEM}\n- ${genreGuide({ genre: { id: opts.genre ?? 'high_fantasy' } })}${genreOf(opts.genre).combat === 'rare' ? '\n- 이 장르는 전투보다 관계·사교가 중심이다. 동료 후보보다 관계가 깊어질 수 있는 인물을 늘린다.' : ''}`,
+    user: `## 제작자 요청\n${opts.prompt}\n\n## 장르\n${genreOf(opts.genre).label}\n\n## 규모\n${SIZE_TEXT[opts.size]}\n\n## 콘텐츠 등급\n${RATING_TEXT[opts.contentRating]}`,
     maxTokens: 16000, effort: 'medium',
   }, WORLD_DRAFT_SCHEMA, signal);
   const id = `ai.${Date.now().toString(36)}`;
   let { world, notes } = worldFromDraft(draft, { id, contentRating: opts.contentRating, author: opts.author });
+  world = { ...world, genre: { id: genreOf(opts.genre).id } };
   if (opts.withScenario) {
     const r = await generateScenario(llm, world, onStage, signal);
     world = r.world;
@@ -101,7 +106,7 @@ export async function generateScenario(
 ): Promise<{ world: WorldPackage; notes: string[] }> {
   onStage('이야기 만드는 중 (임무·조우·결말)…');
   const draft = await llm.json<ScenarioDraft>({
-    system: SCENARIO_SYSTEM,
+    system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${genreOf(world.genre?.id).combat === 'rare' ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : ''}`,
     user: `${worldSummary(world)}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 12000, effort: 'medium',
   }, SCENARIO_DRAFT_SCHEMA, signal);

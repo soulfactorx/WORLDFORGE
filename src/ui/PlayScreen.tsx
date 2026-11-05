@@ -15,6 +15,8 @@ import { CharacterPanel } from './CharacterPanel';
 import { JournalPanel } from './JournalPanel';
 import { AssetImage } from './AssetImage';
 import { RichText } from './RichText';
+import { ReskinContext } from './reskin';
+import { reskinner } from '../engine/genre';
 import { basicGuide } from '../gm/guide';
 import { calendarDate } from '../engine/calendar';
 import { ABILITIES, ABILITY_NAMES, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
@@ -154,10 +156,12 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const loc = world.locations.find((l) => l.id === state.player.locationId);
   const locImage = loc ? pickSceneImage(world, loc.id, '', 'bar') : undefined;
   const date = calendarDate(world, state.worldMinutes);
+  const rs = reskinner(world);
   const lastGuide = state.log.findLastIndex((l) => l.kind === 'guide');
   const canAct = streaming === null && !state.combat && !state.playerDead;
 
   return (
+    <ReskinContext.Provider value={rs}>
     <section className="play">
       <div className="play-head">
       <div className="scene-bar">
@@ -217,7 +221,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                   </div>
                 )}
               </div>
-            ) : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : e.text}</p>}
+            ) : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : rs(e.text)}</p>}
           </div>
         ))}
         {streaming !== null && <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>}
@@ -258,5 +262,6 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       </form>
       )}
     </section>
+    </ReskinContext.Provider>
   );
 }

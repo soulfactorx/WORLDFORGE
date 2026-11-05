@@ -4,6 +4,7 @@ import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import type { WorldPackage } from '../engine/schema';
 import { confirmAdult } from './adult';
+import { GENRES } from '../data/genres';
 
 const EXAMPLE = '안개가 걷히지 않는 산골 수도원. 수도사들은 매일 밤 종을 치는데, 종소리가 멈추면 무언가가 깨어난다고 믿는다. 수도원장은 무언가를 숨기고 있고, 젊은 견습 수도사는 바깥세상을 동경한다.';
 
@@ -17,6 +18,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
   const [size, setSize] = useState<Size>('small');
   const [rating, setRating] = useState<WorldPackage['manifest']['contentRating']>('teen');
   const [withScenario, setWithScenario] = useState(true);
+  const [genre, setGenre] = useState('high_fantasy');
   const [stage, setStage] = useState('');
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
@@ -26,7 +28,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
     setError('');
     abort.current = new AbortController();
     try {
-      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario }, setStage, abort.current.signal);
+      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, genre }, setStage, abort.current.signal);
       onDraft(r.world, r.notes);
     } catch (e) {
       if (!abort.current.signal.aborted) setError((e as Error).message);
@@ -48,6 +50,11 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
         <textarea rows={6} value={prompt} placeholder={EXAMPLE} disabled={busy} onChange={(e) => setPrompt(e.target.value)} />
       </label>
       <div className="row">
+        <label>장르
+          <select value={genre} disabled={busy} onChange={(e) => setGenre(e.target.value)}>
+            {GENRES.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          </select>
+        </label>
         <label>규모
           <select value={size} disabled={busy} onChange={(e) => setSize(e.target.value as Size)}>
             <option value="small">작게 (장소 3~4, 인물 3~4)</option>
@@ -56,7 +63,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
         </label>
         <label>콘텐츠 등급
           <select value={rating} disabled={busy} onChange={(e) => { const v = e.target.value as typeof rating; if (v !== 'mature' || confirmAdult()) setRating(v); }}>
-            <option value="all">전체</option><option value="teen">청소년</option><option value="mature">성인</option>
+            <option value="all">전체</option><option value="teen">청소년</option><option value="mature">성인 (공유 불가 · 이후 변경 불가)</option>
           </select>
         </label>
         <label className="check"><input type="checkbox" checked={withScenario} disabled={busy} onChange={(e) => setWithScenario(e.target.checked)} /> 임무·결말까지 만들기</label>

@@ -5,6 +5,8 @@
 import { CLASSES, SKILL_IDS } from '../character/rules';
 import { MONSTERS } from '../combat/monsters';
 import type { Condition, WorldPackage } from '../schema';
+import { GENRES } from '../../data/genres';
+import { MAX_LEVEL } from '../character/progression';
 
 export interface Issue {
   level: 'error' | 'warning';
@@ -250,6 +252,14 @@ export function validateWorld(input: unknown): Issue[] {
     text(st.openingScene, `${p}.openingScene`);
     (st.knows ?? []).forEach((c, j) => { if (!claims.some((x) => x.id === c)) err(`${p}.knows[${j}]`, `없는 명제 "${c}"`); });
   });
+  if (w.genre !== undefined) {
+    const g = w.genre as unknown;
+    if (!isObj(g) || !isStr(g.id)) err('genre', '장르 ID가 필요합니다.');
+    else {
+      if (!GENRES.some((x) => x.id === g.id)) warn('genre.id', `알 수 없는 장르 "${g.id}" — 하이 판타지로 다룹니다.`);
+      if (g.levelCap !== undefined && (!Number.isInteger(g.levelCap) || (g.levelCap as number) < 1 || (g.levelCap as number) > MAX_LEVEL)) err('genre.levelCap', `최대 레벨은 1~${MAX_LEVEL}입니다.`);
+    }
+  }
   if (w.calendar !== undefined) {
     const c = w.calendar as unknown;
     const okDate = (x: unknown) => isObj(x) && Number.isInteger(x.year) && Number.isInteger(x.month) && (x.month as number) >= 1 && (x.month as number) <= 12 && Number.isInteger(x.day) && (x.day as number) >= 1 && (x.day as number) <= 31;
