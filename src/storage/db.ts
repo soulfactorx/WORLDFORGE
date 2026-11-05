@@ -128,6 +128,7 @@ export async function exportSave(saveId: string): Promise<Blob> {
   if (!meta) throw new Error('save not found');
   const pkg = await db.packages.where('id').equals(meta.packageId).first();
   if (pkg?.world.manifest.private) throw new Error('개인용 세계의 세이브는 내보낼 수 없습니다.');
+  if (pkg?.world.manifest.contentRating === 'mature') throw new Error('성인 등급 세계의 세이브는 내보낼 수 없습니다.');
   const file: SaveFile = { format: 'worldforge-save', formatVersion: 1, meta, events: await loadEvents(saveId) };
   return new Blob([JSON.stringify(file)], { type: 'application/json' });
 }

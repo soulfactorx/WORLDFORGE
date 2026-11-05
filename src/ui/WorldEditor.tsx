@@ -4,6 +4,8 @@ import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { Belief, Character, Claim, Fact, Location, WorldPackage } from '../engine/schema';
 import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
+import { MATURE_NOTE, shareBlocked } from '../engine/rating';
+import { confirmAdult } from './adult';
 import { AssetGallery } from './AssetGallery';
 import { fillOrphanKnowledge } from '../gm/worldgen/fromCard';
 import { imageNeeds } from '../gm/worldgen/imageNeeds';
@@ -164,7 +166,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         <h2>세계관 제작 — {w.manifest.name}</h2>
         <span className="spacer" />
         <button onClick={onDone}>닫기</button>
-        {w.manifest.private ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용 (내보내기 불가)</span> : <button onClick={exportFile}>.wpk 내보내기</button>}
+        {w.manifest.private ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용 (내보내기 불가)</span>
+          : shareBlocked(w) ? <span className="small muted" title={MATURE_NOTE}>🔞 성인 등급 (내보내기 불가)</span> : <button onClick={exportFile}>.wpk 내보내기</button>}
         <button className="primary" onClick={save}>저장</button>
       </div>
       {status && <p className="status small">{status}</p>}
@@ -214,7 +217,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <Text label="버전" value={w.manifest.version} onChange={(version) => set({ manifest: { ...w.manifest, version } })} placeholder="0.1.0" />
           <Text label="제작자" value={w.manifest.author} onChange={(author) => set({ manifest: { ...w.manifest, author } })} />
           <Text label="라이선스" value={w.manifest.license} onChange={(license) => set({ manifest: { ...w.manifest, license } })} placeholder="CC-BY-4.0" />
-          <Select label="콘텐츠 등급" value={w.manifest.contentRating} options={[['all', '전체'], ['teen', '청소년'], ['mature', '성인']] as const} onChange={(contentRating) => set({ manifest: { ...w.manifest, contentRating } })} />
+          <Select label="콘텐츠 등급" value={w.manifest.contentRating} options={[['all', '전체'], ['teen', '청소년'], ['mature', '성인 (공유 불가)']] as const} onChange={(contentRating) => { if (contentRating !== 'mature' || confirmAdult()) set({ manifest: { ...w.manifest, contentRating } }); }} />
           <Select label="시작 장소" value={w.start.locationId} options={locOptions} onChange={(locationId) => set({ start: { ...w.start, locationId } })} />
           <Area label="첫 장면 (플레이어가 깨어났을 때)" value={w.start.openingScene} onChange={(openingScene) => set({ start: { ...w.start, openingScene } })} />
           <fieldset><legend>달력 (선택) — 게임 속 날짜와 카운트다운</legend>

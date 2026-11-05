@@ -22,6 +22,7 @@ import { replaceMacros } from '../../importers/charx';
 import { analyzeEntries, type AnalyzedEntry, dropExplicit, type EntryChoice, worldCardToEntities } from '../../importers/worldcard';
 import type { LlmClient } from '../../llm/types';
 import { PRIVATE_NOTE } from '../../storage/packages';
+import { RATING_GUIDE } from '../../engine/rating';
 import { worldFromDraft, type WorldDraft } from './draft';
 import { generateScenario } from './generate';
 import { assignStockImages } from './stock';
@@ -229,7 +230,7 @@ export async function cardToWorld(
   let translated = 0;
   const [d, tr] = await Promise.all([
     llm.json<CardWorldDraft>({
-      system: SYSTEM,
+      system: `${SYSTEM}\n- ${RATING_GUIDE[opts.contentRating]}`,
       user: `<card_data>\n${cardDataPrompt(b, card, analyzed, charInfo, mature)}\n</card_data>`,
       maxTokens: 32000, effort: 'medium',
     }, CARD_WORLD_SCHEMA, signal),

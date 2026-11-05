@@ -4,6 +4,7 @@ import type { WorldPackage } from '../engine/schema';
 import { hasErrors, type Issue, validateWorld } from '../engine/package/validate';
 import { findZipStart, looksLikeCardFile } from '../importers/charx';
 import { db } from './db';
+import { MATURE_NOTE, shareBlocked } from '../engine/rating';
 
 /**
  * 세계관 패키지 라이브러리. 내장 샘플 + 사용자가 만들거나 가져온 패키지(IndexedDB).
@@ -67,6 +68,7 @@ const MAX_UNZIPPED_BYTES = 50 * 1024 * 1024;
 
 export function exportWpk(world: WorldPackage): Blob {
   if (isPrivate(world)) throw new Error(PRIVATE_NOTE);
+  if (shareBlocked(world)) throw new Error(MATURE_NOTE);
   const files = {
     'manifest.json': strToU8(JSON.stringify(world.manifest, null, 2)),
     'world.json': strToU8(JSON.stringify(world, null, 2)),

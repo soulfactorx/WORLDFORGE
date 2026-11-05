@@ -9,6 +9,8 @@ import { deletePackage, exportWpk, listPackages, MAX_FILE_BYTES, packageKey, par
 import { BlobZip } from '../importers/blobzip';
 import { imageNeeds } from '../gm/worldgen/imageNeeds';
 import { MoveInPanel, MoveOutButton } from './MovePanel';
+import { MATURE_NOTE, shareBlocked } from '../engine/rating';
+import { confirmAdult } from './adult';
 import { CharacterCreator } from './CharacterCreator';
 import { IssueList } from './IssueList';
 
@@ -31,7 +33,8 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
   const [receiving, setReceiving] = useState(false);
   const [message, setMessage] = useState<{ text: string; issues?: ReturnType<typeof validateWorld> } | null>(null);
 
-  const privateIds = new Set((packages ?? []).filter((p) => p.world.manifest.private).map((p) => p.world.manifest.id));
+  const privateIds = new Set((packages ?? []).filter((p) => shareBlocked(p.world)).map((p) => p.world.manifest.id));
+  const matureIds = new Set((packages ?? []).filter((p) => p.world.manifest.contentRating === 'mature').map((p) => p.world.manifest.id));
   const selected = packages?.find((p) => packageKey(p.world) === selectedKey) ?? packages?.[0];
   const world = selected?.world;
   const worldIssues = world ? validateWorld(world) : [];
@@ -102,7 +105,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
       )}
       {!playable && world && <p className="status">❌ 이 패키지에는 오류가 있어 플레이할 수 없습니다. 편집에서 고쳐 주세요.</p>}
       <div className="row">
-        <button className="primary" disabled={!playable} onClick={() => setCreating(true)}>주인공 만들고 시작</button>
+        <button className="primary" disabled={!playable} onClick={() => { if (world?.manifest.contentRating !== 'mature' || confirmAdult()) setCreating(true); }}>주인공 만들고 시작</button>
       </div>
 
       <h2>세계관 라이브러리</h2>
@@ -134,6 +137,8 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
             <span className="row">
               {p.world.manifest.private
                 ? <><span className="small muted" title={PRIVATE_NOTE}>🔒 개인용</span><MoveOutButton world={p.world} onMessage={(text) => setMessage({ text })} /></>
+                : shareBlocked(p.world)
+                ? <><span className="small muted" title={MATURE_NOTE}>🔞 성인</span><MoveOutButton world={p.world} onMessage={(text) => setMessage({ text })} /></>
                 : <button onClick={() => download(exportWpk(p.world), `${safeName(p.world.manifest.id)}-${p.world.manifest.version}.wpk`)}>내보내기</button>}
               <button onClick={() => {
                 if (!p.builtin) { onEdit(p.world); return; }
@@ -158,7 +163,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
           <li key={s.id}>
             <span>{s.name}<br /><span className="muted small">{new Date(s.updatedAt).toLocaleString()}</span></span>
             <span className="row">
-              <button className="primary" onClick={() => onOpen(s.id)}>이어하기</button>
+              <button className="primary" onClick={() => { if (!matureIds.has(s.packageId) || confirmAdult()) onOpen(s.id); }}>이어하기</button>
               {privateIds.has(s.packageId)
                 ? <span className="small muted" title="개인용 세계의 세이브는 파일로 내보낼 수 없습니다. 세계 줄의 📱 다른 기기로에 함께 담깁니다">🔒</span>
                 : <button onClick={async () => { try { download(await exportSave(s.id), `${safeName(s.name)}.wfsave.json`); } catch (e) { setMessage({ text: (e as Error).message }); } }}>내보내기</button>}

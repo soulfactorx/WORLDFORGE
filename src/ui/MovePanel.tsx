@@ -13,14 +13,22 @@ function download(blob: Blob, name: string) {
 /** 라이브러리의 개인용 세계 줄에 붙는 "다른 기기로" 버튼 */
 export function MoveOutButton({ world, onMessage }: { world: WorldPackage; onMessage: (m: string) => void }) {
   const [busy, setBusy] = useState(false);
-  const needsCard = !world.manifest.private?.cardHash;
+  const byPass = !world.manifest.private;
+  const needsCard = !byPass && !world.manifest.private?.cardHash;
   async function run(cardFile?: File) {
+    let pass: string | undefined;
+    if (byPass) {
+      // 직접 만든 성인 등급 세계: 암호로 잠근다
+      pass = prompt('옮기기 암호를 정하세요 (4자 이상). 받는 기기에서 이 암호가 필요합니다.') ?? undefined;
+      if (!pass) return;
+      if (prompt('암호를 한 번 더 입력하세요.') !== pass) { onMessage('❌ 암호가 서로 다릅니다.'); return; }
+    }
     setBusy(true);
     try {
       const card = cardFile ? await readCharxBundle(cardFile, cardFile.name) : undefined;
-      const blob = await exportMove(world, card);
+      const blob = await exportMove(world, card, pass);
       download(blob, `worldforge-${world.manifest.id.replace(/[^\w.-]+/g, "_")}.wfmove`);
-      onMessage(`"${world.manifest.name}" 옮기기 파일을 만들었습니다 (${(blob.size / 1048576).toFixed(1)}MB). 다른 기기의 WORLDFORGE에서 "옮겨 온 세계 받기"로 이 파일과 원본 카드 파일을 함께 고르세요.`);
+      onMessage(`"${world.manifest.name}" 옮기기 파일을 만들었습니다 (${(blob.size / 1048576).toFixed(1)}MB). 다른 기기의 WORLDFORGE에서 "옮겨 온 세계 받기"로 이 파일과 ${byPass ? '정한 암호' : '원본 카드 파일'}를 함께 쓰세요.`);
     } catch (e) { onMessage(`❌ ${(e as Error).message}`); } finally { setBusy(false); }
   }
   if (needsCard) {
@@ -36,20 +44,21 @@ export function MoveOutButton({ world, onMessage }: { world: WorldPackage; onMes
 /** 받기: 옮기기 파일 + 원본 카드 */
 export function MoveInPanel({ onDone, onClose }: { onDone: (world: WorldPackage) => void; onClose: () => void }) {
   const [move, setMove] = useState<File | null>(null);
-  const [info, setInfo] = useState<{ worldName: string; cardName: string } | null>(null);
+  const [info, setInfo] = useState<{ worldName: string; cardName: string; lock?: 'card' | 'pass' } | null>(null);
+  const [pass, setPass] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function pickMove(f: File) {
     setStatus('');
-    try { const h = await readMoveHeader(f); setMove(f); setInfo({ worldName: h.worldName, cardName: h.cardName }); }
+    try { const h = await readMoveHeader(f); setMove(f); setInfo({ worldName: h.worldName, cardName: h.cardName, lock: h.lock }); }
     catch (e) { setStatus(`❌ ${(e as Error).message}`); }
   }
-  async function pickCard(card: File) {
+  async function pickCard(card: File | null) {
     if (!move) return;
     setBusy(true);
     try {
-      const r = await importMove(move, card, card.name, (m, d, t) => setStatus(`${m}${d !== undefined ? ` ${d}/${t}` : ''}`));
+      const r = await importMove(move, card, card?.name ?? '', (m, d, t) => setStatus(`${m}${d !== undefined ? ` ${d}/${t}` : ''}`), pass || undefined);
       setStatus(`✓ "${r.world.manifest.name}"을(를) 받았습니다 — 이미지 ${r.images}장, 세이브 ${r.saves}개. 세이브 목록에서 이어하기를 누르세요.`);
       onDone(r.world);
     } catch (e) { setStatus(`❌ ${(e as Error).message}`); } finally { setBusy(false); }
@@ -62,7 +71,16 @@ export function MoveInPanel({ onDone, onClose }: { onDone: (world: WorldPackage)
       <label className="file">① 옮기기 파일 (.wfmove)
         <input type="file" accept=".wfmove,application/octet-stream,application/zip" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) pickMove(f); e.target.value = ''; }} />
       </label>
-      {info && (
+      {info?.lock === 'pass' && (
+        <>
+          <p className="small">세계: <b>{info.worldName}</b> · 암호로 잠긴 파일</p>
+          <div className="row">
+            <label>② 옮기기 암호<input type="password" value={pass} disabled={busy} onChange={(e) => setPass(e.target.value)} /></label>
+            <button className="primary" disabled={busy || pass.length < 4} onClick={() => pickCard(null)}>받기</button>
+          </div>
+        </>
+      )}
+      {info && info.lock !== 'pass' && (
         <>
           <p className="small">세계: <b>{info.worldName}</b> · 필요한 카드: <b>{info.cardName}</b></p>
           <label className="file">② 원본 카드 파일

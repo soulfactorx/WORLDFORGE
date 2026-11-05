@@ -5,6 +5,7 @@ import { type CharxBundle, parseToggles, readCharxBundle } from '../importers/bu
 import { portraitDataUrl } from '../importers/portrait';
 import type { EntryChoice } from '../importers/worldcard';
 import { createLlmClient } from '../llm';
+import { confirmAdult, isAdultConfirmed } from './adult';
 import { cached } from '../llm/robust';
 import { clearGenCache, genCache, genCacheCount } from '../storage/gencache';
 import type { LlmSettings } from '../llm/types';
@@ -61,7 +62,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
         setBundle(b);
         setStored(await genCacheCount(b.fingerprint));
         setChoices(analyzeBundle(b).analyzed.map((a) => a.choice));
-        if (/nsfw|성인|19금|adult/i.test(b.card.tags.join(' '))) setRating('mature');
+        if (/nsfw|성인|19금|adult/i.test(b.card.tags.join(' ')) && isAdultConfirmed()) setRating('mature');
         const t: { name: string; url: string }[] = [];
         for (const a of b.assets.slice(0, 12)) { const u = URL.createObjectURL(await a.read()); urls.push(u); t.push({ name: a.name, url: u }); }
         if (live) setThumbs(t);
@@ -166,7 +167,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
           </details>
           <div className="row">
             <label>콘텐츠 등급
-              <select value={rating} disabled={busy} onChange={(e) => setRating(e.target.value as typeof rating)}>
+              <select value={rating} disabled={busy} onChange={(e) => { const v = e.target.value as typeof rating; if (v !== 'mature' || confirmAdult()) setRating(v); }}>
                 <option value="all">전체</option><option value="teen">청소년</option><option value="mature">성인</option>
               </select>
             </label>

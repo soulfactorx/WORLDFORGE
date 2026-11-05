@@ -63,3 +63,25 @@ describe('여러 인물 이미지', () => {
     expect(n && n.type === 'narration' && n.images!.length).toBe(3);
   });
 });
+
+describe('콘텐츠 등급 안내', () => {
+  it('서술·NPC AI에게 세계의 등급 안내를 준다 (성인: 노골적 묘사 허용 + 항상 금지 조항)', async () => {
+    const systems: string[] = [];
+    const llm: LlmClient = {
+      stream: async (r: { system: string }, onText) => { systems.push(r.system); onText('.'); return '.'; },
+      json: async <T,>(r: { system: string }) => {
+        systems.push(r.system);
+        if (r.system.includes('판단 모듈')) return { action_summary: '', check_kind: 'none', check_skill: '', check_ability: 'wis', check_dc_tier: 'easy', check_mode: 'normal', check_reason: '', move_to: '', speakers: [], start_encounter: '', rest: 'none', discover: [], set_flags: [], scene_image: '' } as T;
+        return { facts: [] } as T;
+      },
+    };
+    const w = { ...sampleWorld, manifest: { ...sampleWorld.manifest, contentRating: 'mature' as const } };
+    await runTurn(llm, w, start(w), '둘러본다', () => {});
+    const narr = systems.find((s) => s.includes('서술자'))!;
+    expect(narr).toContain('노골적인 묘사를 허용');
+    expect(narr).toContain('미성년자');
+    systems.length = 0;
+    await runTurn(llm, sampleWorld, start(), '둘러본다', () => {});
+    expect(systems.find((s) => s.includes('서술자'))).toContain('청소년 이용가');
+  });
+});

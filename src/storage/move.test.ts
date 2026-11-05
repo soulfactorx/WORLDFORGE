@@ -44,3 +44,22 @@ describe('개인 세계 기기 간 이동 (.wfmove)', () => {
     await expect(exportMove(blankWorld())).rejects.toThrow('개인용');
   });
 });
+
+describe('직접 만든 성인 등급 세계 (암호로 옮기기)', () => {
+  it('암호로 잠그고, 저장된 이미지도 담아 옮긴다. 공유(.wpk)는 막힌다', async () => {
+    const { exportWpk } = await import('./packages');
+    const world: WorldPackage = { ...blankWorld(), manifest: { ...blankWorld().manifest, id: 'me.adult', contentRating: 'mature' },
+      assets: [{ id: 'img1', name: 'x', kind: 'scene', tags: [], mime: 'image/png', size: 3 }] };
+    expect(() => exportWpk(world)).toThrow('성인 등급');
+    await expect(exportMove({ ...world, manifest: { ...world.manifest, contentRating: 'teen' } }, undefined, 'abcd')).rejects.toThrow('개인용·성인');
+    await expect(exportMove(world)).rejects.toThrow('암호');
+    await storeAssets('me.adult', [{ id: 'img1', read: async () => new Blob([new Uint8Array([7, 7, 7])], { type: 'image/png' }) }]);
+    const file = await exportMove(world, undefined, 'secret-1');
+    expect((await readMoveHeader(file)).lock).toBe('pass');
+    await db.assets.clear(); await db.packages.clear();
+    await expect(importMove(file, null, '', undefined, 'wrong')).rejects.toThrow('암호가 맞지 않습니다');
+    const r = await importMove(file, null, '', undefined, 'secret-1');
+    expect(r.images).toBe(1);
+    expect((await assetBlob('me.adult', 'img1'))!.size).toBe(3);
+  });
+});

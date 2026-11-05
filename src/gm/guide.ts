@@ -11,6 +11,7 @@ import { josa } from '../engine/text/josa';
 import type { LlmClient } from '../llm/types';
 import { buildNarratorContext, presentCharacters } from './context';
 import { mentionedImages } from '../engine/assets';
+import { RATING_GUIDE } from '../engine/rating';
 import { SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { checkModifier } from '../engine/character/sheet';
 
@@ -76,7 +77,7 @@ export async function gmGuide(llm: LlmClient, world: WorldPackage, s: GameState,
   const strong = SKILL_IDS.map((k) => ({ k, m: checkModifier(sheet, { kind: 'skill', skill: k }).total })).sort((a, b) => b.m - a.m).slice(0, 5)
     .map((x) => `${x.k}(${SKILLS[x.k].name}) ${x.m >= 0 ? '+' : ''}${x.m}${sheet.skillProficiencies.includes(x.k) ? ' 숙련' : ''}`);
   const out = await llm.json<GuideOutput>({
-    system: GUIDE_SYSTEM,
+    system: `${GUIDE_SYSTEM}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
     user: `${buildNarratorContext(world, s)}\n\n## 플레이어 캐릭터의 강한 기술\n${strong.join(', ')}\n\n## 수첩의 임무 목표 (플레이어가 아는 것)\n${quests.join('\n') || '(없음)'}\n\n## 방금 서술 (데이터)\n<narration>\n${cut(narration, 4000)}\n</narration>`,
     maxTokens: 1200,
   }, GUIDE_SCHEMA, signal);

@@ -3,6 +3,7 @@ import { generateWorld, type Size } from '../gm/worldgen/generate';
 import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import type { WorldPackage } from '../engine/schema';
+import { confirmAdult } from './adult';
 
 const EXAMPLE = '안개가 걷히지 않는 산골 수도원. 수도사들은 매일 밤 종을 치는데, 종소리가 멈추면 무언가가 깨어난다고 믿는다. 수도원장은 무언가를 숨기고 있고, 젊은 견습 수도사는 바깥세상을 동경한다.';
 
@@ -54,7 +55,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
           </select>
         </label>
         <label>콘텐츠 등급
-          <select value={rating} disabled={busy} onChange={(e) => setRating(e.target.value as typeof rating)}>
+          <select value={rating} disabled={busy} onChange={(e) => { const v = e.target.value as typeof rating; if (v !== 'mature' || confirmAdult()) setRating(v); }}>
             <option value="all">전체</option><option value="teen">청소년</option><option value="mature">성인</option>
           </select>
         </label>
