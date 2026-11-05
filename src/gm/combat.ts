@@ -138,7 +138,7 @@ export async function narrateCombat(
 - 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
 - ${genreGuide(world)}
 - ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
-    user: `## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
+    user: `## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'}${c.monsterId && MONSTERS[c.monsterId] ? ` — ${MONSTERS[c.monsterId]!.look}` : ''})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
     maxTokens: 3000,
   }, onText, signal);
 }

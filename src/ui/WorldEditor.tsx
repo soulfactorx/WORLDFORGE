@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { MONSTERS } from '../engine/combat/monsters';
+import { DIFFICULTY_LABEL, encounterDifficulty, monstersFor } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { Belief, Character, Claim, Fact, Location, WorldPackage } from '../engine/schema';
@@ -394,7 +394,13 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
 
       {tab === 'encounters' && (
         <JsonField label="조우" value={w.encounters ?? []} onChange={(encounters) => set({ encounters })} rows={18}
-          help={`몬스터: ${Object.values(MONSTERS).map((m) => `${m.id}(${m.name})`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건`} />
+          help={`이 장르의 적: ${monstersFor(w.genre?.id).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건`} />
+      )}
+      {tab === 'encounters' && (w.encounters ?? []).length > 0 && (
+        <ul className="small">
+          {(w.encounters ?? []).map((e) => { const d = encounterDifficulty(e.enemies.map((x) => x.monsterId), [1, 1]); const d3 = encounterDifficulty(e.enemies.map((x) => x.monsterId), [3, 3]);
+            return <li key={e.id}><b>{e.name}</b> — 적 경험치 {d.xp} · 1레벨 2인: <b>{DIFFICULTY_LABEL[d.difficulty]}</b> · 3레벨 2인: {DIFFICULTY_LABEL[d3.difficulty]}</li>; })}
+        </ul>
       )}
 
       {tab === 'quests' && (

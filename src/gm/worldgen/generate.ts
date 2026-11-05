@@ -1,7 +1,7 @@
 import { genreGuide } from '../../engine/genre';
 import { genreOf } from '../../data/genres';
 import { CLASSES } from '../../engine/character/rules';
-import { MONSTERS } from '../../engine/combat/monsters';
+import { monstersFor } from '../../engine/combat/monsters';
 import { validateWorld, type Issue } from '../../engine/package/validate';
 import type { WorldPackage } from '../../engine/schema';
 import type { LlmClient } from '../../llm/types';
@@ -42,7 +42,7 @@ const SCENARIO_SYSTEM = `너는 1인칭 AI TRPG의 시나리오 설계자다. �
 - 단서를 안다(knows)는 조건은 그 명제를 누군가 알거나 발견할 수 있어야 한다.
 - 엔진이 알 수 없는 플레이어의 결정(예: 남겠다고 선언)은 flags로 선언하고 조건에 flag로 쓴다.
 - 결말 1~2개. 결말 조건에는 보통 메인 임무 완료(quest_done)와 결정 플래그를 넣는다. 조건이 비면 즉시 결말이 나므로 절대 비우지 않는다.
-- 조우는 이 몬스터만 쓴다: ${Object.values(MONSTERS).map((m) => `${m.id}(${m.name})`).join(', ')}. 1레벨 일행 기준으로 적 1~3마리. trigger는 GM용 발동 조건.
+- 조우의 적은 아래 "쓸 수 있는 적" 목록에서만 고른다. 1레벨 2인 일행 기준 경험치 합계: 쉬움 ≤100 · 보통 ≤150 · 어려움 ≤200. 초반 조우는 쉬움~보통, 보스(boss·leader)는 메인 임무 후반에. trigger는 GM용 발동 조건.
 - 첫 단계 시작 조건이 없으면 { op: "all", items: [] } (항상 시작).
 - key는 영문 소문자 슬러그, 이름과 내용은 한국어.`;
 
@@ -107,7 +107,7 @@ export async function generateScenario(
   onStage('이야기 만드는 중 (임무·조우·결말)…');
   const draft = await llm.json<ScenarioDraft>({
     system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${genreOf(world.genre?.id).combat === 'rare' ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : ''}`,
-    user: `${worldSummary(world)}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
+    user: `${worldSummary(world)}\n\n## 쓸 수 있는 적 (이 세계의 장르)\n${monstersFor(world.genre?.id).map((m) => `- ${m.id}: ${m.name} · ${m.role} · 경험치 ${m.xp} · ${m.look}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 12000, effort: 'medium',
   }, SCENARIO_DRAFT_SCHEMA, signal);
   return addScenario(world, draft);

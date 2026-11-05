@@ -29,9 +29,11 @@ export type Effect =
   /** count: 여러 번 공격 (예: 불타는 광선). mark: 명중 시 대상에게 '표식' (다음 공격 이점) */
   | { type: 'attack'; attack: AttackSpec; count?: number; mark?: boolean; knockProne?: { save: Ability; dc: number } }
   /** half: 내성 성공 시 절반 피해. bonus: 주문 능력 수정치를 피해에 더함 */
-  | { type: 'save_damage'; save: Ability; damage: string; damageType: string; range: number; half?: boolean; bonus?: 'spell' }
+  | { type: 'save_damage'; save: Ability; damage: string; damageType: string; range: number; half?: boolean; bonus?: 'spell'; dc?: number }
   /** 범위 내성 피해: 대상 존의 모든 적 (range = 존 거리, 0이면 자기 존) */
-  | { type: 'area_save'; save: Ability; damage: string; damageType: string; range: number; half: boolean }
+  | { type: 'area_save'; save: Ability; damage: string; damageType: string; range: number; half: boolean; dc?: number }
+  /** 적이 전장에서 달아난다 */
+  | { type: 'escape' }
   | { type: 'auto_damage'; count: number; damage: string; damageType: string; range: number }
   /** range: 아군 대상 존 거리 (기본 0 = 같은 존) */
   | { type: 'heal'; dice: string; add: 'spell' | 'level'; range?: number }

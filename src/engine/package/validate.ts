@@ -3,7 +3,7 @@
  * 오류(error)가 하나라도 있으면 플레이할 수 없다. 경고(warning)는 제작자에게 알리기만 한다.
  */
 import { CLASSES, SKILL_IDS } from '../character/rules';
-import { MONSTERS } from '../combat/monsters';
+import { encounterDifficulty, MONSTERS } from '../combat/monsters';
 import type { Condition, WorldPackage } from '../schema';
 import { GENRES } from '../../data/genres';
 import { MAX_LEVEL } from '../character/progression';
@@ -178,6 +178,12 @@ export function validateWorld(input: unknown): Issue[] {
       if (en.zone !== 2 && en.zone !== 3) err(`${p}.enemies[${j}].zone`, 'zone은 2(적 전열) 또는 3(적 후열)입니다.');
     });
     text(e.trigger, `${p}.trigger`);
+    // 난이도: 1레벨 혼자 기준으로 치명적이면 알린다 (동료가 있거나 레벨이 오르면 괜찮을 수 있다)
+    const ids = (e.enemies ?? []).map((x) => x.monsterId).filter((id) => MONSTERS[id]);
+    if (ids.length) {
+      const d = encounterDifficulty(ids, [1, 1]);
+      if (d.difficulty === 'deadly') warn(p, `"${e.name}"은(는) 1레벨 2인 일행에게 치명적인 조우입니다 (적 경험치 ${d.xp} > 예산 ${d.budget[2]}). 레벨이 오른 뒤에 일어나도록 조건을 걸거나 적을 줄이세요.`);
+    }
   });
 
   // ---- 조건식 참조 검사

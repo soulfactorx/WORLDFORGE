@@ -63,7 +63,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
                   <button key={c.id} type="button" disabled={!targetable && !!selected}
                     className={`chip ${c.side} ${c.hp <= 0 ? (c.side === 'party' && !c.dead ? 'downed' : 'down') : ''} ${targetable ? 'targetable' : ''} ${currentActorId(cs) === c.id ? 'active' : ''}`}
                     onClick={(e) => { e.stopPropagation(); if (targetable) pick(c.id); }}>
-                    <span className="chip-name">{c.isPlayer ? '당신' : rs(c.name)}{c.side === 'party' && !c.isPlayer ? ' (동료)' : ''}</span>
+                    <span className="chip-name">{c.isPlayer ? '당신' : rs(c.name)}{c.side === 'party' && !c.isPlayer ? ' (동료)' : ''}{c.escaped ? ' (도망침)' : ''}</span>
                     <span className="hpbar"><span style={{ width: `${(100 * c.hp) / c.maxHp}%` }} /></span>
                     <span className="small">HP {c.hp}/{c.maxHp} · AC {c.ac}{c.dodging ? ' · 회피' : ''}{c.hidden ? ' · 숨음' : ''}{c.disengaged ? ' · 후퇴' : ''}</span>
                     {(c.prone || c.dead || c.stable || (c.hp <= 0 && c.side === 'party')) && (

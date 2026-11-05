@@ -46,7 +46,7 @@ export const wuxiaSample: WorldPackage = {
     { holder: 'npc/unhak', claim: 'claim/poison', state: 'secret' },
   ],
   encounters: [
-    { id: 'enc/bamboo-bandits', name: '죽림의 산적', locationId: 'loc/bamboo', enemies: [{ monsterId: 'goblin_warrior', zone: 2 }, { monsterId: 'goblin_warrior', zone: 3 }], trigger: '플레이어가 죽림 산길을 지나가려 하거나 산적을 찾으면 흑풍채 졸개들이 길을 막는다.' },
+    { id: 'enc/bamboo-bandits', name: '죽림의 산적', locationId: 'loc/bamboo', enemies: [{ monsterId: 'wx_bandit', zone: 2 }, { monsterId: 'wx_bandit', zone: 2 }, { monsterId: 'wx_bandit', zone: 3 }], trigger: '플레이어가 죽림 산길을 지나가려 하거나 산적을 찾으면 흑풍채 졸개들이 길을 막는다.' },
   ],
   quests: [
     { id: 'quest/blocked-road', name: '막힌 산길', kind: 'main', start: { all: [] },

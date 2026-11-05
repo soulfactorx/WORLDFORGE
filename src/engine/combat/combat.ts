@@ -19,7 +19,7 @@ import { abilityModifier, d20Test, type RollMode } from '../dice/dice';
 import { type Rng, rollDie } from '../dice/rng';
 import { proficiencyBonus, SKILLS } from '../character/rules';
 import { BASIC_CARDS, type CardDef, CLASS_CARDS, CLASS_KITS, type Cost, kitCards, WEAPON_CARDS } from './cards';
-import { MONSTERS } from './monsters';
+import { ALL_MONSTER_CARDS, MONSTERS } from './monsters';
 
 export const ZONE_NAMES = ['아군 후열', '아군 전열', '적 전열', '적 후열'] as const;
 export const ZONE_COUNT = ZONE_NAMES.length;
@@ -66,6 +66,11 @@ export interface Combatant {
   packTactics?: boolean;
   preferRanged?: boolean;
   initiative: number;
+  /** 적: 몬스터 데이터 ID, 지난 보스 단계 수, 도망치는 HP 비율, 도망쳤는가 */
+  monsterId?: string;
+  phase?: number;
+  fleeAt?: number;
+  escaped?: boolean;
 }
 
 export interface Economy {
@@ -103,7 +108,11 @@ export type CombatEffect =
   | { kind: 'spend'; cost: Cost }
   | { kind: 'resource'; target: string; key: string; delta: number }
   | { kind: 'sneak_used' }
-  | { kind: 'fled' };
+  | { kind: 'fled' }
+  /** 적이 달아났다 */
+  | { kind: 'escaped'; target: string }
+  /** 보스 단계 진입 (index = 지금까지 진입한 단계 수) */
+  | { kind: 'phase'; target: string; index: number };
 
 export interface Resolution {
   effects: CombatEffect[];
@@ -112,9 +121,10 @@ export interface Resolution {
 
 // ---------------------------------------------------------------- 카드 조회
 
-const MONSTER_CARDS = Object.values(MONSTERS).flatMap((m) => m.cards);
+/** 적의 도망 (HP가 일정 비율 아래로 떨어진 적만) */
+export const ESCAPE_CARD: CardDef = { id: 'monster/escape', name: '도망', desc: '', kind: 'monster', cost: 'action', target: 'self', effect: { type: 'escape' } };
 export const ALL_CARDS: Record<string, CardDef> = Object.fromEntries(
-  [...BASIC_CARDS, ...WEAPON_CARDS, ...CLASS_CARDS, ...MONSTER_CARDS].map((c) => [c.id, c]),
+  [...BASIC_CARDS, ...WEAPON_CARDS, ...CLASS_CARDS, ...ALL_MONSTER_CARDS, ESCAPE_CARD].map((c) => [c.id, c]),
 );
 
 export function cardById(id: string): CardDef {
@@ -125,7 +135,7 @@ export function cardById(id: string): CardDef {
 
 /** 손패: 기본 행동 + 캐릭터 카드. 몬스터는 기본 행동 중 이동·질주만 쓴다. */
 export function handOf(c: Combatant): CardDef[] {
-  const basics = c.side === 'party' ? BASIC_CARDS.map((b) => b.id) : ['basic/move', 'basic/dash', 'basic/stand'];
+  const basics = c.side === 'party' ? BASIC_CARDS.map((b) => b.id) : ['basic/move', 'basic/dash', 'basic/stand', ...(c.fleeAt ? [ESCAPE_CARD.id] : [])];
   return [...c.cards, ...basics].map(cardById);
 }
 
@@ -158,14 +168,19 @@ export function slotFor(c: Combatant, minLevel: number): number | null {
   return null;
 }
 
+/** 도전 지수별 숙련 보너스 (SRD: CR 0~4 = +2, 5~8 = +3) */
+const monsterProf = (cr: string) => (Number(cr.includes('/') ? 0 : cr) >= 5 ? 3 : 2);
+
 export function monsterCombatant(monsterId: string, index: number, zone: number): Combatant {
   const m = MONSTERS[monsterId];
   if (!m) throw new Error(`unknown monster: ${monsterId}`);
   return {
     id: `${monsterId}#${index}`, name: `${m.name} ${index}`, side: 'enemy', isPlayer: false, zone,
-    hp: m.hp, maxHp: m.hp, ac: m.ac, level: 1, abilities: { ...m.abilities }, profBonus: 2, saveProfs: [],
-    stealthBonus: abilityModifier(m.abilities.dex), cards: m.cards.map((c) => c.id), resources: {},
+    hp: m.hp, maxHp: m.hp, ac: m.ac, level: 1, abilities: { ...m.abilities }, profBonus: monsterProf(m.cr), saveProfs: [...(m.saves ?? [])],
+    stealthBonus: abilityModifier(m.abilities.dex), cards: m.cards.map((c) => c.id),
+    resources: Object.fromEntries(Object.entries(m.resources ?? {}).map(([k, n]) => [k, { cur: n, max: n }])),
     dodging: false, hidden: false, packTactics: m.packTactics, preferRanged: m.preferRanged, initiative: 0,
+    monsterId, phase: 0, ...(m.fleeAt ? { fleeAt: m.fleeAt } : {}),
   };
 }
 
@@ -354,8 +369,8 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
 }
 
 /** 내성 피해 한 명분 */
-function rollSave(a: Combatant, t: Combatant, cardName: string, save: Ability, damage: string, damageType: string, half: boolean, bonus: number, rng: Rng): { effects: CombatEffect[]; line: string } {
-  const dc = spellSaveDc(a);
+function rollSave(a: Combatant, t: Combatant, cardName: string, save: Ability, damage: string, damageType: string, half: boolean, bonus: number, rng: Rng, fixedDc?: number): { effects: CombatEffect[]; line: string } {
+  const dc = fixedDc ?? spellSaveDc(a);
   const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0);
   const r = d20Test(rng, sb, dc);
   const head = `${a.name}의 ${cardName} → ${t.name}: 내성 d20(${r.kept}) ${sb >= 0 ? '+' : ''}${sb} = ${r.total} vs DC ${dc}`;
@@ -416,7 +431,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
     }
     case 'save_damage': {
       const t = cs.combatants[target as string]!;
-      const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, !!e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng);
+      const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, !!e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc);
       effects.push(...r.effects);
       log.push(r.line);
       break;
@@ -426,7 +441,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       const foes = opponents(cs, a).filter((o) => o.zone === zone);
       log.push(`${a.name}의 ${name}: ${ZONE_NAMES[zone]}의 적 ${foes.length}명`);
       for (const t of foes) {
-        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, 0, rng);
+        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, 0, rng, e.dc);
         effects.push(...r.effects);
         log.push(`  ${r.line}`);
       }
@@ -509,8 +524,32 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       log.push(`${a.name}: 전장에서 벗어났다`);
       break;
     }
+    case 'escape': {
+      effects.push({ kind: 'escaped', target: a.id });
+      log.push(`${a.name}: 꽁무니를 빼고 달아났다`);
+      break;
+    }
   }
+  phaseCheck(cs, effects, log);
   return { effects, log };
+}
+
+/** 보스 단계: 이번 행동으로 적의 HP가 단계 기준선을 넘어 떨어졌으면 다음 단계로 (쓰러진 경우는 제외) */
+function phaseCheck(cs: CombatState, effects: CombatEffect[], log: string[]) {
+  const delta: Record<string, number> = {};
+  for (const e of effects) if (e.kind === 'hp') delta[e.target] = (delta[e.target] ?? 0) + e.delta;
+  for (const [id, d] of Object.entries(delta)) {
+    const c = cs.combatants[id];
+    const phases = c?.monsterId ? MONSTERS[c.monsterId]?.phases : undefined;
+    if (!c || !phases?.length || d >= 0) continue;
+    const after = Math.max(0, c.hp + d);
+    let index = c.phase ?? 0;
+    while (index < phases.length && after > 0 && after <= phases[index]!.below * c.maxHp && c.hp > phases[index]!.below * c.maxHp - 0) {
+      effects.push({ kind: 'phase', target: id, index: index + 1 });
+      log.push(`⚡ ${phases[index]!.line}`);
+      index++;
+    }
+  }
 }
 
 /** effects 적용 후 승패 판정 */
@@ -566,6 +605,17 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
       }
       case 'sneak_used': next.sneakUsed = true; break;
       case 'fled': next.outcome = 'fled'; break;
+      case 'escaped': { const c = next.combatants[e.target]!; c.escaped = true; c.hp = 0; break; }
+      case 'phase': {
+        const c = next.combatants[e.target]!;
+        const ph = c.monsterId ? MONSTERS[c.monsterId]?.phases?.[e.index - 1] : undefined;
+        c.phase = e.index;
+        if (ph) {
+          c.cards = [...c.cards, ...(ph.addCards ?? []).map((x) => x.id)];
+          if (ph.ac) c.ac += ph.ac;
+        }
+        break;
+      }
     }
   }
   if (!next.outcome) {
@@ -625,6 +675,21 @@ export function planEnemyAction(cs: CombatState): PlannedAction | null {
   const isRanged = (c: CardDef) => c.effect.type === 'attack' && c.effect.attack.kind === 'ranged';
   // 넘어졌으면 먼저 일어선다
   if (a.prone && cs.economy.move) return { cardId: 'basic/stand', target: a.id };
+  // 크게 다치면 달아난다 (도망치는 적만)
+  if (a.fleeAt && a.hp <= a.fleeAt * a.maxHp && cs.economy.action && !unusableReason(cs, id, ESCAPE_CARD)) return { cardId: ESCAPE_CARD.id, target: id };
+  // 특수 기술 (내성 피해·범위): 쓸 수 있으면 먼저 — 범위는 상대가 가장 많은 존, 단일은 HP가 가장 낮은 대상
+  for (const c of hand.filter((x) => (x.effect.type === 'save_damage' || x.effect.type === 'area_save') && !unusableReason(cs, id, x))) {
+    const ts = validTargets(cs, id, c);
+    if (!ts.length) continue;
+    if (c.effect.type === 'area_save') {
+      const count = (z: Target) => opponents(cs, a).filter((o) => o.zone === z && alive(o)).length;
+      const best = [...ts].sort((x, y) => count(y) - count(x))[0]!;
+      if (count(best) > 0) return { cardId: c.id, target: best };
+    } else {
+      const best = [...ts].sort((x, y) => cs.combatants[x as string]!.hp - cs.combatants[y as string]!.hp)[0]!;
+      return { cardId: c.id, target: best };
+    }
+  }
   // 원거리형이 붙잡히면: 보너스 행동 후퇴 → 뒤로 빠진 뒤 쏜다 (고블린의 재빠른 도주)
   if (a.preferRanged && hostileInZone(cs, a) && a.zone < ZONE_COUNT - 1) {
     const escape = hand.find((c) => c.effect.type === 'disengage' && c.cost === 'bonus' && !unusableReason(cs, id, c));
