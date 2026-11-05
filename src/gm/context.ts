@@ -82,10 +82,18 @@ function playerKnowledge(world: WorldPackage, state: GameState): string[] {
   return k.length ? k : ['(아무것도 모른다 — 이 세계에 막 소환되었다)'];
 }
 
+/** 이 장소에 머문 시간 — 조우 조건("두 턴 이상 머물면")은 이것으로 판단한다 (엔진 확정) */
+function stayLines(state: GameState): string[] {
+  if (state.arrivedTurn === undefined) return [];
+  const n = Math.max(1, state.turn - state.arrivedTurn);
+  return ['## 이 장소에 머문 시간 (엔진 확정)', n === 1 ? '이번이 이 장소에서의 첫 턴이다 (방금 도착했다).' : `이 장소에서 ${n}번째 턴이다.`, ''];
+}
+
 export function buildDirectorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => `- ${c.id}: ${c.appearance}`);
   return [
     ...sceneHeader(world, state), '',
+    ...stayLines(state),
     '## 이동 가능한 곳', ...exits(world, state), '',
     '## 이 장소에 있는 인물', ...(npcs.length ? npcs : ['(없음)']), '',
     '## 플레이어와 동행 중인 동료', ...partyLines(world, state), '',

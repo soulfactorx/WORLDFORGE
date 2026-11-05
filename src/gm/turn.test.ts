@@ -137,3 +137,16 @@ describe('플레이어가 아는 이름 (실제 모델 평가 반영)', () => {
     expect(narr[0]).toContain('- 브란 [npc/bran]');
   });
 });
+
+describe('조우 판단에 머문 시간 (실제 모델 평가 반영)', () => {
+  it('Director는 이 장소에서 몇 번째 턴인지 엔진 확정 값으로 받는다', async () => {
+    const users: string[] = [];
+    const llm = mock('조용하다.', 'none');
+    const orig = llm.json.bind(llm);
+    llm.json = (async (r: { system: string; user: string }, ...rest: unknown[]) => { if (r.system.includes('판단 모듈')) users.push(r.user); return (orig as (...a: unknown[]) => unknown)(r, ...rest); }) as typeof llm.json;
+    const r1 = await runTurn(llm, sampleWorld, start(), '주변을 본다', () => {});
+    expect(users[0]).toContain('이번이 이 장소에서의 첫 턴이다');
+    await runTurn(llm, sampleWorld, r1.state, '계속 기다린다', () => {});
+    expect(users[1]).toContain('이 장소에서 2번째 턴이다');
+  });
+});

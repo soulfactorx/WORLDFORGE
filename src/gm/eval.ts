@@ -28,6 +28,8 @@ export interface ProbeResult {
   ms: number;
   narration: string;
   rejected: string[];
+  /** 이 턴에 엔진이 확정한 주요 사건 (진단용: 이동·판정·대사·전투 시작 등) */
+  events?: string[];
   error?: string;
 }
 
@@ -40,6 +42,23 @@ export interface EvalReport {
   rejectRate: number;
 }
 
+/** 진단용 사건 요약 — 서술이 엔진 결과와 맞는지 보고서에서 바로 볼 수 있게 */
+function eventSummary(events: GameEvent[]): string[] {
+  return events.flatMap((e): string[] => {
+    switch (e.type) {
+      case 'moved': return [`이동 → ${e.to}`];
+      case 'check_rolled': return [`판정 ${e.skill} ${e.result.success ? '성공' : '실패'}`];
+      case 'npc_spoke': return [`대사 ${e.npcId}`];
+      case 'combat_started': return [`전투 시작 ${e.combat.encounterId}`];
+      case 'flag_set': return [`플래그 ${e.flag}`];
+      case 'knowledge_revealed': return [`알게 됨 ${e.belief.claim}`];
+      case 'names_learned': return [`이름 ${e.ids.join(',')}`];
+      case 'quest_started': case 'quest_completed': return [e.type];
+      default: return [];
+    }
+  });
+}
+
 const norm = (t: string) => t.replace(/[\s"'“”‘’.,!?…·~\-—]/g, '');
 
 interface Probe {
@@ -50,7 +69,7 @@ interface Probe {
   judge: (r: { events: GameEvent[]; state: GameState; narration: string; before: GameState }) => { pass: boolean; detail: string };
 }
 
-const at = (loc: string) => (s: GameState): GameState => ({ ...s, player: { ...s.player, locationId: loc } });
+const at = (loc: string) => (s: GameState): GameState => ({ ...s, player: { ...s.player, locationId: loc }, arrivedTurn: s.turn });
 
 /** 이 세계의 비밀 명제 중 이 인물이 아직 털어놓을 수 없는 것의 핵심 낱말 */
 const SECRET_WORDS = ['소환진', '다시 작동', '소환했'];
@@ -163,7 +182,7 @@ export async function runEval(
       let j = p.judge({ events: r.events, state: r.state, narration: narr, before });
       const common = j.pass ? commonIssue(r.events, narr, world, r.state) : null;
       if (common) j = { pass: false, detail: common };
-      out.push({ id: p.id, name: p.name, ...j, ms: Math.round(performance.now() - t0), narration: narr.slice(0, 1200), rejected: r.rejected });
+      out.push({ id: p.id, name: p.name, ...j, ms: Math.round(performance.now() - t0), narration: narr.slice(0, 1200), rejected: r.rejected, events: eventSummary(r.events) });
     } catch (e) {
       if (signal?.aborted) throw e;
       out.push({ id: p.id, name: p.name, pass: false, detail: '턴 실패', ms: Math.round(performance.now() - t0), narration: '', rejected: [], error: String((e as Error)?.message ?? e).slice(0, 300) });

@@ -82,6 +82,8 @@ export interface GameState {
   deadNpcs: string[];
   /** 플레이어가 이름을 아는 인물 (v0.37.5). 없으면(이전 세이브) 모두 아는 것으로 본다 */
   namesKnown?: EntityId[];
+  /** 지금 장소에 도착한 턴 (v0.37.6). 조우 조건("두 턴 이상 머물면")을 판단할 수 있게 Director에게 보여 준다 */
+  arrivedTurn?: number;
   log: LogEntry[];
 }
 
@@ -111,7 +113,7 @@ export function initialState(): GameState {
 export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState {
   switch (e.type) {
     case 'game_started':
-      return { ...initialState(), namesKnown: [], packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
+      return { ...initialState(), namesKnown: [], arrivedTurn: 0, packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
         player: { name: e.playerName, locationId: e.locationId, sheet: e.character ?? legacyCharacter(e.playerName) } };
     case 'player_input':
       return { ...s, turn, log: [...s.log, { turn, kind: 'player', text: e.use ? `${e.text}  [${useLabel(e.use)}]` : e.text }] };
@@ -129,7 +131,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'narration':
       return { ...s, log: [...s.log, { turn, kind: 'narration', text: e.text, ...(e.images?.length ? { images: e.images } : {}) }] };
     case 'moved':
-      return { ...s, player: { ...s.player, locationId: e.to } };
+      return { ...s, player: { ...s.player, locationId: e.to }, arrivedTurn: turn };
     case 'knowledge_revealed': {
       const rest = s.beliefs.filter((b) => !(b.holder === e.belief.holder && b.claim === e.belief.claim));
       const log = e.statement ? [...s.log, { turn, kind: 'knowledge' as const, text: `알게 된 것 (${KNOWLEDGE_LABEL[e.belief.state]}): ${e.statement}` }] : s.log;
