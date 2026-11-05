@@ -3,6 +3,7 @@
  * 오류(error)가 하나라도 있으면 플레이할 수 없다. 경고(warning)는 제작자에게 알리기만 한다.
  */
 import { CLASSES, SKILL_IDS } from '../character/rules';
+import { STAGES } from '../relationship';
 import { encounterDifficulty, MONSTERS } from '../combat/monsters';
 import type { Condition, WorldPackage } from '../schema';
 import { GENRES } from '../../data/genres';
@@ -16,7 +17,9 @@ export interface Issue {
 
 const KNOWLEDGE_STATES = ['rumor', 'partial', 'confirmed', 'mistaken', 'secret'];
 const IMPROV = ['none', 'minor', 'free'];
-const AXES = ['affinity', 'trust', 'respect', 'fear'];
+const AXES = ['affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge'];
+const STAGE_NAMES: readonly string[] = STAGES;
+const RELATION_KINDS = ['family', 'ally', 'rival', 'lover', 'master', 'enemy'];
 /** 패키지 텍스트에 숨은 AI 지시(프롬프트 인젝션) 의심 패턴 */
 const INJECTION = [
   /ignore (all |the )?(previous|above) (instructions|prompts?)/i,
@@ -66,6 +69,9 @@ export function validateWorld(input: unknown): Issue[] {
   const quests = arr<NonNullable<WorldPackage['quests']>[number]>('quests', false);
   const flags = arr<NonNullable<WorldPackage['flags']>[number]>('flags', false);
   const endings = arr<NonNullable<WorldPackage['endings']>[number]>('endings', false);
+  const factions = arr<NonNullable<WorldPackage['factions']>[number]>('factions', false);
+  const relations = arr<NonNullable<WorldPackage['relations']>[number]>('relations', false);
+  const relationBeats = arr<NonNullable<WorldPackage['relationBeats']>[number]>('relationBeats', false);
 
   // ---- ID 중복
   const ids = new Map<string, string>();
@@ -81,6 +87,9 @@ export function validateWorld(input: unknown): Issue[] {
   encounters.forEach((e, i) => register(e?.id, `encounters[${i}]`));
   quests.forEach((q, i) => register(q?.id, `quests[${i}]`));
   endings.forEach((e, i) => register(e?.id, `endings[${i}]`));
+  factions.forEach((f, i) => register(f?.id, `factions[${i}]`));
+  relationBeats.forEach((b, i) => register(b?.id, `relationBeats[${i}]`));
+  const factionIds = new Set(factions.map((f) => f?.id));
 
   const locIds = new Set(locations.map((l) => l?.id));
   const charIds = new Set(characters.map((c) => c?.id));
@@ -135,7 +144,7 @@ export function validateWorld(input: unknown): Issue[] {
       else if (c.portrait.length > 400_000) err(`${p}.portrait`, '초상화가 너무 큽니다 (최대 약 300KB).');
     }
     if (c.relationship) for (const [k, v] of Object.entries(c.relationship)) {
-      if (!AXES.includes(k) || typeof v !== 'number' || v < -100 || v > 100) err(`${p}.relationship.${k}`, '관계 축은 affinity/trust/respect/fear, 값은 -100~100입니다.');
+      if (!AXES.includes(k) || typeof v !== 'number' || v < -100 || v > 100) err(`${p}.relationship.${k}`, '관계 축은 affinity/trust/respect/fear/intimacy/grudge, 값은 -100~100입니다.');
     }
   });
 
@@ -204,10 +213,12 @@ export function validateWorld(input: unknown): Issue[] {
     if ('cleared' in cond) { if (!encIds.has(cond.cleared)) err(path, `없는 조우 "${cond.cleared}"`); return; }
     if ('inParty' in cond) { if (!charIds.has(cond.inParty)) err(path, `없는 인물 "${cond.inParty}"`); return; }
     if ('relationship' in cond) { if (!charIds.has(cond.relationship)) err(path, `없는 인물 "${cond.relationship}"`); if (!AXES.includes(cond.axis)) err(path, `알 수 없는 관계 축 "${cond.axis}"`); return; }
+    if ('stage' in cond) { if (!charIds.has(cond.stage)) err(path, `없는 인물 "${cond.stage}"`); if (!Array.isArray(cond.in) || !cond.in.length || cond.in.some((x) => !STAGE_NAMES.includes(x))) err(path, `관계 단계는 ${STAGES.join('·')} 중에서 고릅니다.`); return; }
+    if ('reputation' in cond) { if (!factionIds.has(cond.reputation)) err(path, `없는 세력 "${cond.reputation}"`); return; }
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('level' in cond) { if (typeof cond.level !== 'number') err(path, 'level은 숫자입니다.'); return; }
-    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·flag·questDone·level 중 하나를 쓰세요.`);
+    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·flag·questDone·level 중 하나를 쓰세요.`);
   };
   quests.forEach((q, i) => {
     const p = `quests[${i}]`;
@@ -217,6 +228,28 @@ export function validateWorld(input: unknown): Issue[] {
     if (!Array.isArray(q.stages) || !q.stages.length) err(`${p}.stages`, '단계가 하나 이상 필요합니다.');
     else q.stages.forEach((st, j) => { text(st.objective, `${p}.stages[${j}].objective`); text(st.hint, `${p}.stages[${j}].hint`, false); checkCond(st.complete, `${p}.stages[${j}].complete`); });
     (q.rewards?.relationship ?? []).forEach((r, j) => { if (!charIds.has(r.npcId)) err(`${p}.rewards.relationship[${j}]`, `없는 인물 "${r.npcId}"`); });
+    (q.rewards?.reputation ?? []).forEach((r, j) => { if (!factionIds.has(r.factionId)) err(`${p}.rewards.reputation[${j}]`, `없는 세력 "${r.factionId}"`); });
+  });
+  // ---- 세력·NPC 관계·관계 사건 (설계 v3 4.2~4.4)
+  factions.forEach((f, i) => {
+    text(f.name, `factions[${i}].name`);
+    if (f.reputation !== undefined && (typeof f.reputation !== 'number' || f.reputation < -100 || f.reputation > 100)) err(`factions[${i}].reputation`, '평판은 -100~100입니다.');
+  });
+  characters.forEach((c, i) => { if (c.faction && !factionIds.has(c.faction)) err(`characters[${i}].faction`, `없는 세력 "${c.faction}"`); });
+  relations.forEach((r, i) => {
+    const p = `relations[${i}]`;
+    if (!charIds.has(r.a)) err(`${p}.a`, `없는 인물 "${r.a}"`);
+    if (!charIds.has(r.b)) err(`${p}.b`, `없는 인물 "${r.b}"`);
+    if (r.a === r.b) err(p, '자기 자신과의 관계입니다.');
+    if (!RELATION_KINDS.includes(r.kind)) err(`${p}.kind`, `관계 종류는 ${RELATION_KINDS.join('/')} 중 하나입니다.`);
+  });
+  relationBeats.forEach((b, i) => {
+    const p = `relationBeats[${i}]`;
+    if (!charIds.has(b.npcId)) err(`${p}.npcId`, `없는 인물 "${b.npcId}"`);
+    text(b.name, `${p}.name`); text(b.hint, `${p}.hint`);
+    checkCond(b.condition, `${p}.condition`);
+    if (isObj(b.condition) && 'all' in b.condition && Array.isArray(b.condition.all) && !b.condition.all.length) warn(`${p}.condition`, '조건이 비어 게임 시작과 함께 열립니다.');
+    if (b.resolveFlag && !flagIds.has(b.resolveFlag)) err(`${p}.resolveFlag`, `선언되지 않은 플래그 "${b.resolveFlag}" — 플래그 목록에 추가하세요 (GM이 세울 수 있어야 사건이 닫힙니다).`);
   });
   flags.forEach((f, i) => {
     const p = `flags[${i}]`;

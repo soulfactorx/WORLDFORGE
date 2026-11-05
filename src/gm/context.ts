@@ -1,6 +1,7 @@
 import { establishedFactsOf, improvisationOf, protectedTopicsOf } from '../engine/canon';
 import { knowledgeOf } from '../engine/knowledge/knowledge';
-import { AXES, AXIS_NAMES, canShareSecret, joinBlocker, relationshipOf, secretTrustOf, stageOf } from '../engine/relationship';
+import { AXES, AXIS_NAMES, canShareSecret, joinBlocker, loyaltyOf, OBEY_LOYALTY, relationsOf, relationshipOf, reputationLabel, reputationOf, secretTrustOf, stageFor, stageOf } from '../engine/relationship';
+import { activeBeats } from '../engine/scenario';
 import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
@@ -124,9 +125,15 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     ...canonBlock(world, state, npc.id, ''), '',
     `## 지금 있는 곳: ${loc?.name}`, '',
     '## 네가 아는 것 (이 목록 밖의 세계 사실은 모른다)', ...(claimLines.length ? claimLines : ['(특별히 아는 것 없음)']), '',
-    `## 이 낯선 이에 대한 너의 감정: ${stageOf(rel)}`,
+    `## 이 낯선 이에 대한 너의 감정: ${stageOf(rel, !!npc.romanceable)}`,
     AXES.map((a) => `${AXIS_NAMES[a]} ${rel[a]}`).join(' · ') + '  (-100 ~ 100)',
-    `비밀을 털어놓으려면 신뢰 ${secretTrustOf(world, npc.id)} 이상이 필요하다.`, '',
+    `비밀을 털어놓으려면 신뢰 ${secretTrustOf(world, npc.id)} 이상이 필요하다.`,
+    npc.romanceable
+      ? '너는 이 사람과 연인이 될 수도 있다. 감정은 친밀과 호감이 쌓이는 만큼만 천천히 깊어진다. 서두르지 않는다.'
+      : '너는 이 사람에게 연애 감정을 품지 않는다. 가까워져도 우정이나 신뢰로 남는다.',
+    ...(state.party[npc.id] ? [`동료로서의 충성도: ${loyaltyOf(rel)} / 100${loyaltyOf(rel) < OBEY_LOYALTY ? ' — 낮다. 지시를 따르기 싫고, 불만을 드러낸다.' : ''}`] : []),
+    ...relationLines(world, state, npc), '',
+    ...beatLines(world, state, npc),
     '## 이 낯선 이와의 지난 대화', ...(state.npcMemory[npc.id]?.length ? state.npcMemory[npc.id]! : ['(처음 만난다)']), '',
     '## 동행', ...(state.party[npc.id]
       ? ['너는 지금 이 낯선 이와 함께 다니는 동료다. 크게 실망하거나 위험이 지나치면 떠날 수 있다.']
@@ -139,9 +146,29 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
   ].join('\n');
 }
 
+/** 다른 인물과의 관계 + 그 인물과 플레이어의 사이 (파급을 연기에 반영) / 세력 */
+function relationLines(world: WorldPackage, state: GameState, npc: Character): string[] {
+  const rels = relationsOf(world, npc.id).flatMap((r) => {
+    const o = world.characters.find((c) => c.id === r.other);
+    if (!o) return [];
+    const met = state.relationships[o.id] || state.npcMemory[o.id]?.length;
+    return [`- ${o.name}: ${r.label}${r.note ? ` — ${r.note}` : ''}${state.deadNpcs.includes(o.id) ? ' (죽었다)' : met ? ` / 이 낯선 이와 ${o.name}의 사이: ${stageFor(world, state.relationships, o.id)}` : ''}`];
+  });
+  const f = npc.faction ? world.factions?.find((x) => x.id === npc.faction) : undefined;
+  return [
+    ...(rels.length ? ['', '## 너와 다른 인물의 관계', ...rels] : []),
+    ...(f ? ['', `## 너의 소속: ${f.name} — ${f.description}`, `이 낯선 이에 대한 ${f.name}의 평판: ${reputationLabel(reputationOf(world, state.reputation ?? {}, f.id))}`] : []),
+  ];
+}
+
+function beatLines(world: WorldPackage, state: GameState, npc: Character): string[] {
+  const mine = activeBeats(world, state).filter((b) => b.npcId === npc.id);
+  return mine.length ? ['## 지금 너의 마음 (때가 무르익었다)', ...mine.map((b) => `- ${b.name}: ${b.hint}`), ''] : [];
+}
+
 export function buildNarratorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => [
-    `- ${c.name} [${c.id}] — 외형: ${c.appearance} — 플레이어를 대하는 태도: ${stageOf(relationshipOf(world, state.relationships, c.id))}`,
+    `- ${c.name} [${c.id}] — 외형: ${c.appearance} — 플레이어를 대하는 태도: ${stageFor(world, state.relationships, c.id)}`,
     ...canonBlock(world, state, c.id),
   ].join('\n'));
   return [

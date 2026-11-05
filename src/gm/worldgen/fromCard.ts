@@ -16,7 +16,7 @@ import { GENRES } from '../../data/genres';
 import { ABILITIES, CLASSES } from '../../engine/character/rules';
 import { suggestedStandardArray } from '../../engine/character/sheet';
 import { validateWorld, type Issue } from '../../engine/package/validate';
-import type { AssetMeta, StartOption, WorldPackage } from '../../engine/schema';
+import type { AssetMeta, NpcRelationKind, StartOption, WorldPackage } from '../../engine/schema';
 import { type AssetInput, classifyAssetsAI, matchAssets } from '../../importers/assetmatch';
 import type { BundleAsset, CharxBundle } from '../../importers/bundle';
 import { replaceMacros } from '../../importers/charx';
@@ -40,7 +40,9 @@ export interface CardWorldDraft {
   start_location: string;
   opening_scene: string;
   locations: { key: string; name: string; description: string; connections: string[]; improvisation: 'none' | 'minor' | 'free' }[];
-  character_places: { character: string; location: string; improvisation: 'none' | 'minor' | 'free'; initial_affinity: number; initial_trust: number; companion_class: string; join_condition: string }[];
+  character_places: { character: string; location: string; improvisation: 'none' | 'minor' | 'free'; initial_affinity: number; initial_trust: number; companion_class: string; join_condition: string; romanceable?: boolean; faction?: string }[];
+  factions?: { key: string; name: string; description: string }[];
+  relations?: { a: string; b: string; kind: NpcRelationKind; note: string }[];
   timeline: { key: string; when: string; title: string; statement: string; status: 'past' | 'ongoing' | 'future'; secrecy: number; protected_topic: string; known_by: string[]; rumor_by: string[] }[];
   starts: { key: string; name: string; description: string; location: string; opening_scene: string; knows: string[] }[];
   plot_request: string;
@@ -66,7 +68,11 @@ export const CARD_WORLD_SCHEMA = obj({
     initial_affinity: { type: 'integer', description: '플레이어(시작 방식 기본값 기준)에 대한 초기 호감 -100~100' }, initial_trust: int,
     companion_class: { type: 'string', enum: ['', ...Object.keys(CLASSES)], description: '함께 다닐 수 있는 인물이면 직업, 아니면 ""' },
     join_condition: { type: 'string', description: '동료라면 동행 수락 기준, 아니면 ""' },
+    romanceable: { type: 'boolean', description: '원작에서 주인공의 연애 상대가 될 수 있는 성인 인물이면 true (미성년자는 절대 false)' },
+    faction: { type: 'string', description: '소속 세력 key 또는 ""' },
   })),
+  factions: arr(obj({ key: str, name: str, description: { type: 'string', description: '세력의 성격·목표 한두 문장' } })),
+  relations: arr(obj({ a: { type: 'string', description: '인물 ID' }, b: { type: 'string', description: '인물 ID' }, kind: { type: 'string', enum: ['family', 'ally', 'rival', 'lover', 'master', 'enemy'] }, note: { type: 'string', description: '원작 속 두 사람의 관계 한 줄' } })),
   timeline: arr(obj({
     key: str, when: { type: 'string', description: '원작 속 날짜·시점 (예: 제국력 429년 9월 21일, D-100)' }, title: str,
     statement: { type: 'string', description: '그 사건의 내용 한두 문장' },
@@ -277,6 +283,9 @@ export async function cardToWorld(
     if (at) c.locationId = at; else notes.push(`인물 "${c.name}": 없는 장소 "${p.location}" 대신 시작 장소에 두었습니다.`);
     c.improvisation = p.improvisation;
     c.relationship = { affinity: clamp(p.initial_affinity, -100, 100), trust: clamp(p.initial_trust, -100, 100) };
+    if (p.romanceable) c.romanceable = true;
+    const fid = p.faction ? `fac/${slug(p.faction)}` : '';
+    if (fid && (d.factions ?? []).some((f) => `fac/${slug(f.key)}` === fid)) c.faction = fid;
     const cls = CLASSES[p.companion_class];
     if (cls) c.companion = { classId: cls.id, abilities: Object.fromEntries(ABILITIES.map((a) => [a, suggestedStandardArray(cls.id)[a]])) as never, joinCondition: p.join_condition || '함께 갈 이유가 있으면 동행한다.' };
   }
@@ -310,8 +319,13 @@ export async function cardToWorld(
     starts.push({ id: sid, name: cut(st.name, 60), description: cut(st.description, 400), locationId, openingScene: st.opening_scene || world.start.openingScene, ...(knows.length ? { knows } : {}) });
   }
 
+  const factions = (d.factions ?? []).map((f) => ({ id: `fac/${slug(f.key)}`, name: cut(f.name, 40), description: cut(f.description, 300) })).filter((f, i, all) => all.findIndex((x) => x.id === f.id) === i);
+  const relations = (d.relations ?? []).filter((r) => charIds.has(r.a) && charIds.has(r.b) && r.a !== r.b)
+    .map((r) => ({ a: r.a, b: r.b, kind: r.kind, ...(r.note ? { note: cut(r.note, 200) } : {}) }));
   world = {
     ...world,
+    ...(factions.length ? { factions } : {}),
+    ...(relations.length ? { relations } : {}),
     manifest: {
       ...world.manifest, name: d.name || card.name, license: '원작자 소유 — 개인 플레이 전용', aiAssisted: true,
       private: { source: `${card.name}${card.creator ? ` / ${card.creator}` : ''} (${b.fileName})`, note: PRIVATE_NOTE, cardHash: b.fingerprint },

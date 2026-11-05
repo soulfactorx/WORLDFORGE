@@ -21,11 +21,11 @@ export const wuxiaSample: WorldPackage = {
   ],
   characters: [
     { id: 'npc/wang', name: '왕 주모', appearance: '소매를 걷어붙인 중년 여인. 손이 크고 웃음소리가 시원하다.', personality: '수다스럽고 정이 많다. 손님 사정을 훤히 꿰고 있지만 강호 일에는 끼고 싶어 하지 않는다.', speech: '시원시원한 반말 섞인 하오체. "어서 오시오, 손님!"', locationId: 'loc/inn', improvisation: 'minor', gender: 'F', background: '직함: 청운객잔 주모' },
-    { id: 'npc/yeon', name: '설하연', appearance: '흰 무복에 장검을 멘 젊은 여인. 머리를 비녀 하나로 틀어 올렸다.', personality: '말수가 적고 곧다. 사문에 대한 충성이 깊고, 낯선 이를 쉽게 믿지 않는다.', speech: '짧고 단정한 하오체. "용건만 말씀하시오."', locationId: 'loc/inn', improvisation: 'minor', gender: 'F',
+    { id: 'npc/yeon', faction: 'fac/cheongun', name: '설하연', appearance: '흰 무복에 장검을 멘 젊은 여인. 머리를 비녀 하나로 틀어 올렸다.', personality: '말수가 적고 곧다. 사문에 대한 충성이 깊고, 낯선 이를 쉽게 믿지 않는다.', speech: '짧고 단정한 하오체. "용건만 말씀하시오."', locationId: 'loc/inn', improvisation: 'minor', gender: 'F',
       background: '직함: 청운검문 삼대 제자 · 협녀\n사부의 병을 고칠 약재를 구하러 내려왔다가 죽림의 산적 때문에 발이 묶였다.',
       relationship: { affinity: 0, trust: -5, respect: 0, fear: 0 }, secretTrust: 40,
       companion: { classId: 'fighter', abilities: { str: 14, dex: 15, con: 13, int: 10, wis: 12, cha: 8 }, joinCondition: '산적을 함께 치우고 약재를 문파에 가져가는 일이라면 동행한다. 강호의 의리를 지키지 않는 자와는 가지 않는다.' } },
-    { id: 'npc/unhak', name: '운학 진인', appearance: '흰 수염이 가슴까지 내려온 노도인. 얼굴빛이 잿빛이고 손이 가늘게 떨린다.', personality: '온화하고 깊다. 문파의 체면을 걱정해 자신의 상태를 숨긴다.', speech: '느리고 무게 있는 하게체. "허허, 젊은이."', locationId: 'loc/sect', improvisation: 'none', gender: 'M',
+    { id: 'npc/unhak', faction: 'fac/cheongun', name: '운학 진인', appearance: '흰 수염이 가슴까지 내려온 노도인. 얼굴빛이 잿빛이고 손이 가늘게 떨린다.', personality: '온화하고 깊다. 문파의 체면을 걱정해 자신의 상태를 숨긴다.', speech: '느리고 무게 있는 하게체. "허허, 젊은이."', locationId: 'loc/sect', improvisation: 'none', gender: 'M',
       background: '직함: 청운검문 장문인', relationship: { affinity: 5, trust: 0, respect: 5, fear: 0 }, secretTrust: 45 },
   ],
   facts: [
@@ -57,6 +57,8 @@ export const wuxiaSample: WorldPackage = {
         { objective: '장문인의 병의 진실을 알아낸다.', hint: '설하연이나 장문인의 신뢰를 얻으면 독장 이야기를 털어놓는다. 약 냄새도 단서다.', complete: { knows: 'claim/poison', min: 'partial' } },
       ], rewards: { xp: 200, relationship: [{ npcId: 'npc/yeon', trust: 10, respect: 10 }] } },
   ],
+  factions: [{ id: 'fac/cheongun', name: '청운문', description: '산 위의 정파 문파. 협의를 중시하지만 요즘 장문인의 병으로 기세가 꺾였다.' }],
+  relations: [{ a: 'npc/unhak', b: 'npc/yeon', kind: 'master', note: '설하연을 어려서부터 거둬 키운 사부' }],
   flags: [{ id: 'swore_revenge', when: '진실을 안 플레이어가 흑풍채 채주를 응징하겠다고 문파 앞에서 맹세할 때', locationId: 'loc/sect', requires: { knows: 'claim/poison', min: 'partial' } }],
   endings: [{ id: 'ending/oath', name: '협객의 맹세', condition: { all: [{ questDone: 'quest/blocked-road' }, { flag: 'swore_revenge' }] }, epilogue: '청사초로 장문인의 독이 가라앉고, 주인공은 흑풍채를 향한 맹세와 함께 강호에 이름을 남기기 시작한다.' }],
   start: { locationId: 'loc/inn', openingScene: '삐걱이는 의자, 낯선 술 냄새. 정신을 차려 보니 객잔 구석 탁자에 앉아 있다. 소매 끝이 넓은 낯선 옷을 입고 있고, 허리에는 손에 익지 않은 칼이 걸려 있다.' },
@@ -78,9 +80,9 @@ export const romanceSample: WorldPackage = {
   ],
   characters: [
     { id: 'npc/cassian', name: '카시안', appearance: '검은 연미복의 키 큰 청년 공작. 회색 눈, 웃지 않는 입매.', personality: '차갑고 예의 바르다. 사람을 밀어내지만, 진심을 보이는 상대에게는 서툴게 다정해진다.', speech: '격식 있는 존댓말. 짧고 건조하다. "용건이 있으십니까."', locationId: 'loc/ballroom', improvisation: 'none', gender: 'M',
-      background: '직함: 젊은 공작 · 무도회의 주인', relationship: { affinity: -5, trust: -10, respect: 0, fear: 0 }, secretTrust: 55 },
+      background: '직함: 젊은 공작 · 무도회의 주인', relationship: { affinity: -5, trust: -10, respect: 0, fear: 0 }, secretTrust: 55, romanceable: true, faction: 'fac/society' },
     { id: 'npc/eleanor', name: '엘레노어', appearance: '금발에 푸른 드레스, 부채로 입가를 가린 영애.', personality: '사교계의 꽃. 웃는 얼굴로 상대를 시험한다. 카시안에게 관심이 있다.', speech: '우아하고 가시 돋친 존댓말. "어머, 처음 뵙는 얼굴이네요."', locationId: 'loc/ballroom', improvisation: 'minor', gender: 'F',
-      background: '직함: 후작 영애 · 사교계의 중심', relationship: { affinity: -10, trust: -5, respect: 0, fear: 0 } },
+      background: '직함: 후작 영애 · 사교계의 중심', relationship: { affinity: -10, trust: -5, respect: 0, fear: 0 }, faction: 'fac/society' },
     { id: 'npc/rina', name: '리나', appearance: '앞치마를 단정히 맨 젊은 시녀. 주근깨가 있다.', personality: '밝고 눈치가 빠르다. 저택의 소문을 잘 알고, 주인공 편이 되어 준다.', speech: '조심스러운 해요체. "아가씨, 이쪽으로 오세요!"', locationId: 'loc/ballroom', improvisation: 'minor', gender: 'F',
       background: '직함: 공작저 시녀', relationship: { affinity: 15, trust: 10, respect: 0, fear: 0 } },
   ],
@@ -113,6 +115,18 @@ export const romanceSample: WorldPackage = {
   flags: [
     { id: 'confessed', when: '장미 정원에서 플레이어가 카시안에게 마음을 분명히 고백할 때', locationId: 'loc/garden', requires: { relationship: 'npc/cassian', axis: 'affinity', gte: 30 } },
     { id: 'kept_secret', when: '진실을 안 플레이어가 카시안의 비밀을 누구에게도 말하지 않겠다고 약속할 때', requires: { knows: 'claim/truth', min: 'partial' } },
+    { id: 'garden_walk', when: '카시안과 단둘이 장미 정원을 거닐며 이야기를 나눴을 때', locationId: 'loc/garden' },
+  ],
+  factions: [{ id: 'fac/society', name: '사교계', description: '수도 귀족들의 사교 모임. 소문이 무엇보다 빠르게 퍼진다.' }],
+  relations: [
+    { a: 'npc/eleanor', b: 'npc/cassian', kind: 'lover', note: '엘레노어의 오랜 연심 (카시안은 모른 척한다)' },
+    { a: 'npc/rina', b: 'npc/cassian', kind: 'ally', note: '어릴 적부터 공작저에서 일한 시녀 — 주인을 걱정한다' },
+  ],
+  relationBeats: [
+    { id: 'beat/cassian-walk', npcId: 'npc/cassian', name: '정원 산책 제안', condition: { any: [{ stage: 'npc/cassian', in: ['친구', '절친', '연인'] }, { relationship: 'npc/cassian', axis: 'intimacy', gte: 20 }] },
+      hint: '카시안이 무도회장의 소란을 피해 정원으로 잠시 걷자고 서툴게 청한다. 단둘이 되면 평소보다 말이 조금 길어진다.', resolveFlag: 'garden_walk' },
+    { id: 'beat/eleanor-jealous', npcId: 'npc/eleanor', name: '엘레노어의 견제', condition: { relationship: 'npc/eleanor', axis: 'grudge', gte: 6 },
+      hint: '엘레노어가 사람들 앞에서 웃으며 플레이어의 출신을 캐묻고 곤란하게 만들려 한다. 질투를 감추지만 부채 끝이 떨린다.' },
   ],
   endings: [
     { id: 'ending/rose', name: '장미 정원의 약속', condition: { all: [{ questDone: 'quest/first-dance' }, { flag: 'confessed' }] }, epilogue: '정원의 장미 아래에서 두 사람의 계절이 시작된다. 소문은 남았지만, 그 진실을 아는 사람이 한 명 늘었다.' },

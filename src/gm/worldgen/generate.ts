@@ -31,6 +31,9 @@ const WORLD_SYSTEM = `너는 1인칭 AI TRPG의 세계관 설계자다. 제작�
 - 플레이어가 단서를 모을 수 있도록 discoveries(장소를 조사해 알아내는 명제)를 2개 이상 둔다.
 - 모든 장소는 서로 이어져 있어야 하고, 시작 장소에서 갈 수 있어야 한다. connections는 장소 key만 쓴다.
 - 동료로 영입할 만한 인물 1~2명에게 companion_class와 join_condition을 준다.
+- 세력(factions) 1~3개를 만들고 인물의 faction에 소속을 단다 (소속 없는 인물도 있다).
+- 인물 사이의 관계(relations)를 3개 이상 둔다: 가족·동지·라이벌·연인·스승·원수. 한 사람과 가까워지면 다른 사람이 등을 돌리는 긴장을 만든다.
+- 연애 상대가 될 수 있는 성인 인물에게만 romanceable: true. 미성년자(또는 그렇게 보이는 인물)는 절대 romanceable이 아니다.
 - key는 영문 소문자 슬러그(예: old-mill), 이름과 내용은 한국어.
 - 핵심 플롯 인물·장소는 improvisation을 none으로, 평범한 인물은 minor로.
 - 실존 인물·실존 작품의 캐릭터나 고유 설정을 그대로 쓰지 않는다. 독창적으로 만든다.`;
@@ -44,6 +47,8 @@ const SCENARIO_SYSTEM = `너는 1인칭 AI TRPG의 시나리오 설계자다. �
 - 결말 1~2개. 결말 조건에는 보통 메인 임무 완료(quest_done)와 결정 플래그를 넣는다. 조건이 비면 즉시 결말이 나므로 절대 비우지 않는다.
 - 조우의 적은 아래 "쓸 수 있는 적" 목록에서만 고른다. 1레벨 2인 일행 기준 경험치 합계: 쉬움 ≤100 · 보통 ≤150 · 어려움 ≤200. 초반 조우는 쉬움~보통, 보스(boss·leader)는 메인 임무 후반에. trigger는 GM용 발동 조건.
 - 첫 단계 시작 조건이 없으면 { op: "all", items: [] } (항상 시작).
+- 관계 사건(relation_beats) 1~3개: 인물과의 관계가 일정 단계에 이르면 열리는 그 인물의 결정적 장면 (비밀 고백·부탁·질투·배신 등). 조건은 보통 stage(인물 key + 단계)나 relationship(친밀 intimacy·원한 grudge 등). 장면이 끝났음을 나타내는 플래그를 flags에 선언하고 resolve_flag에 쓴다.
+- 세력 평판 조건은 reputation(세력 key, 최소값).
 - key는 영문 소문자 슬러그, 이름과 내용은 한국어.`;
 
 export interface GenerateOptions {
@@ -68,7 +73,9 @@ export function worldSummary(w: WorldPackage): string {
   return [
     `# ${w.manifest.name}`,
     '## 장소', ...w.locations.map((l) => `- ${short(l.id)}: ${l.name} — ${l.description.slice(0, 80)} (연결: ${l.connections.map(short).join(', ')})${l.discoveries?.length ? ` [발견 가능: ${l.discoveries.map((d) => short(d.claim)).join(', ')}]` : ''}`),
-    '## 인물', ...w.characters.map((c) => `- ${short(c.id)}: ${c.name} @${short(c.locationId)} — ${c.personality.slice(0, 60)}${c.companion ? ` [동료 후보: ${CLASSES[c.companion.classId]?.name}]` : ''}`),
+    '## 인물', ...w.characters.map((c) => `- ${short(c.id)}: ${c.name} @${short(c.locationId)} — ${c.personality.slice(0, 60)}${c.companion ? ` [동료 후보: ${CLASSES[c.companion.classId]?.name}]` : ''}${c.romanceable ? ' [연인 가능]' : ''}${c.faction ? ` [소속: ${short(c.faction)}]` : ''}`),
+    ...(w.factions?.length ? ['## 세력', ...w.factions.map((f) => `- ${short(f.id)}: ${f.name} — ${f.description.slice(0, 60)}`)] : []),
+    ...(w.relations?.length ? ['## 인물 사이 관계', ...w.relations.map((r) => `- ${short(r.a)} ↔ ${short(r.b)}: ${r.kind}${r.note ? ` (${r.note})` : ''}`)] : []),
     '## 진실', ...w.facts.map((f) => `- ${short(f.id)} (비밀 ${f.secrecy}): ${f.statement}`),
     '## 명제', ...w.claims.map((c) => `- ${short(c.id)} (${c.truth}): ${c.statement} — 아는 사람: ${w.beliefs.filter((b) => b.claim === c.id).map((b) => `${short(b.holder)}(${b.state})`).join(', ') || '없음'}`),
     ...(w.quests?.length ? ['## 이미 있는 임무', ...w.quests.map((q) => `- ${short(q.id)}: ${q.name}`)] : []),

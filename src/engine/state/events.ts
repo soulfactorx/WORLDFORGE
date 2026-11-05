@@ -52,6 +52,13 @@ export type GameEvent =
    * base: 이 NPC의 첫 관계 변화일 때의 패키지 초기값 (리듀서는 세계 패키지를 모르므로 이벤트에 싣는다)
    */
   | { type: 'relationship_changed'; npcId: EntityId; delta: Partial<Relationship>; reason: string; name?: string; base?: Relationship }
+  /** 관계 단계가 바뀌었다 (설계 v3 4.2, 기록용) */
+  | { type: 'relation_stage'; npcId: EntityId; name: string; from: string; to: string }
+  /** 세력 평판 변화 (설계 v3 4.4). base: 첫 변화일 때의 패키지 초기값 */
+  | { type: 'reputation_changed'; factionId: EntityId; name: string; delta: number; reason: string; base?: number }
+  /** 관계 사건이 열리고 닫힌다 (설계 v3 4.2) */
+  | { type: 'beat_opened'; beatId: EntityId; npcId: EntityId; name: string }
+  | { type: 'beat_closed'; beatId: EntityId }
   /** 휴식 (v0.4). 짧은 휴식 1시간, 긴 휴식 8시간 */
   | { type: 'rested'; kind: 'short' | 'long' }
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */

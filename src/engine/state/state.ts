@@ -44,6 +44,10 @@ export interface GameState {
   npcLocations: Record<EntityId, EntityId>;
   /** NPC → 플레이어 관계 (바뀐 NPC만 저장. 없으면 패키지 초기값) */
   relationships: Record<EntityId, Relationship>;
+  /** 세력 평판 (바뀐 세력만, 설계 v3 4.4) */
+  reputation: Record<EntityId, number>;
+  /** 관계 사건: 열린 턴과 닫혔는지 */
+  beats: Record<EntityId, { turn: number; done: boolean }>;
   /** 퀘스트 진행 (v0.8) */
   quests: Record<EntityId, { stage: number; done: boolean }>;
   /** 이야기 플래그 (v0.8) */
@@ -76,7 +80,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, quests: {}, flags: [], deadNpcs: [], log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, reputation: {}, beats: {}, quests: {}, flags: [], deadNpcs: [], log: [],
   };
 }
 
@@ -180,10 +184,22 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...next, log: [...next.log, { turn, kind: 'progress', text }] };
     }
     case 'relationship_changed': {
-      const base = s.relationships[e.npcId] ?? e.base ?? { affinity: 0, trust: 0, respect: 0, fear: 0 };
+      const base = s.relationships[e.npcId] ?? e.base ?? {};
       return { ...s, relationships: { ...s.relationships, [e.npcId]: applyDelta(base, e.delta) },
         log: [...s.log, { turn, kind: 'relation', text: `${e.name ?? e.npcId}: ${describeDelta(e.delta)} — ${e.reason}` }] };
     }
+    case 'relation_stage':
+      return { ...s, log: [...s.log, { turn, kind: 'relation', text: `♡ ${e.name}와(과)의 사이: ${e.from} → ${e.to}` }] };
+    case 'reputation_changed': {
+      const rep = s.reputation ?? {};
+      const cur = rep[e.factionId] ?? e.base ?? 0;
+      return { ...s, reputation: { ...rep, [e.factionId]: Math.max(-100, Math.min(100, cur + e.delta)) },
+        log: [...s.log, { turn, kind: 'relation', text: `${e.name} 평판 ${e.delta > 0 ? '+' : ''}${e.delta} — ${e.reason}` }] };
+    }
+    case 'beat_opened':
+      return { ...s, beats: { ...(s.beats ?? {}), [e.beatId]: { turn, done: false } } };
+    case 'beat_closed':
+      return { ...s, beats: { ...(s.beats ?? {}), [e.beatId]: { turn: s.beats?.[e.beatId]?.turn ?? turn, done: true } } };
     case 'companion_died': {
       const { [e.npcId]: _p, ...party } = s.party;
       const { [e.npcId]: _o, ...partyOrders } = s.partyOrders;

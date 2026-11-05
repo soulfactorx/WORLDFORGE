@@ -24,7 +24,7 @@ const draft: CardWorldDraft = {
     { key: 'garden', name: '장미 정원', description: '장미 향.', connections: [], improvisation: 'minor' },
   ],
   character_places: [
-    { character: 'npc/hedwig', location: 'bedchamber', improvisation: 'none', initial_affinity: 10, initial_trust: 20, companion_class: '', join_condition: '' },
+    { character: 'npc/hedwig', location: 'bedchamber', improvisation: 'none', initial_affinity: 10, initial_trust: 20, companion_class: '', join_condition: '', romanceable: true, faction: 'court' },
     { character: 'npc/karenya', location: 'nowhere', improvisation: 'none', initial_affinity: 0, initial_trust: 0, companion_class: '', join_condition: '' },
   ],
   timeline: [
@@ -36,6 +36,8 @@ const draft: CardWorldDraft = {
     { key: 'native', name: '이 세계 사람', description: '시녀로 시작한다.', location: 'garden', opening_scene: '정원을 쓸고 있다.', knows: [] },
   ],
   plot_request: '멸망을 막는다.',
+  factions: [{ key: 'court', name: '황궁', description: '황제의 조정' }],
+  relations: [{ a: 'npc/hedwig', b: 'npc/karenya', kind: 'ally', note: '충직한 기사' }, { a: 'npc/hedwig', b: 'npc/ghost', kind: 'enemy', note: '' }],
   calendar: { era: '제국력', start_year: 429, start_month: 6, start_day: 13, countdown_label: '파멸', countdown_year: 429, countdown_month: 9, countdown_day: 21 },
 };
 
@@ -75,6 +77,9 @@ describe('cardToWorld', () => {
     expect(hed.locationId).toBe('loc/bedchamber');
     expect(w.characters.find((c) => c.id === 'npc/karenya')!.locationId).toBe(w.start.locationId);
     expect(w.characters.find((c) => c.id === 'npc/karenya')!.gender).toBe('F');
+    expect(w.characters.find((c) => c.id === 'npc/hedwig')).toMatchObject({ romanceable: true, faction: 'fac/court' });
+    expect(w.factions).toEqual([{ id: 'fac/court', name: '황궁', description: '황제의 조정' }]);
+    expect(w.relations).toEqual([{ a: 'npc/hedwig', b: 'npc/karenya', kind: 'ally', note: '충직한 기사' }]);
     // AI가 설정 글 속에서 찾은 인물 (이미 있는 인물·없는 항목은 버린다)
     const rau = w.characters.find((c) => c.id === 'npc/rauzent')!;
     expect(rau).toMatchObject({ name: '라우젠트', gender: 'M', appearance: '은빛 갑옷.', speech: '짧게 말한다.' });

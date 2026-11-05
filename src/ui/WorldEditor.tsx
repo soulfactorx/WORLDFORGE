@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { DIFFICULTY_LABEL, encounterDifficulty, monstersFor } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
-import type { Belief, Character, Claim, Fact, Location, WorldPackage } from '../engine/schema';
+import type { Belief, Character, Claim, Fact, Faction, Location, NpcRelationKind, WorldPackage } from '../engine/schema';
+import { RELATION_KIND_LABEL, STAGES } from '../engine/relationship';
 import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
 import { MATURE_NOTE, shareBlocked } from '../engine/rating';
 import { confirmAdult } from './adult';
@@ -23,9 +24,9 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'locations' | 'characters' | 'knowledge' | 'encounters' | 'quests' | 'images' | 'json';
+type Tab = 'basic' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'encounters' | 'quests' | 'images' | 'json';
 const TABS: [Tab, string][] = [
-  ['basic', '기본'], ['locations', '장소'], ['characters', '인물'], ['knowledge', '지식'],
+  ['basic', '기본'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'],
   ['encounters', '조우'], ['quests', '임무·플래그·결말'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
@@ -37,6 +38,7 @@ function tabForPath(path: string): Tab {
   if (path.startsWith('locations')) return 'locations';
   if (path.startsWith('characters')) return 'characters';
   if (path.startsWith('facts') || path.startsWith('claims') || path.startsWith('beliefs')) return 'knowledge';
+  if (path.startsWith('factions') || path.startsWith('relations') || path.startsWith('relationBeats')) return 'relations';
   if (path.startsWith('encounters')) return 'encounters';
   if (path.startsWith('quests') || path.startsWith('flags') || path.startsWith('endings')) return 'quests';
   return 'json';
@@ -309,10 +311,12 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               {c.source && <p className="muted small">출처: {c.source.format.toUpperCase()} "{c.source.name}"{c.source.creator && ` · 제작 ${c.source.creator}`} · 가져온 날 {c.source.importedAt.slice(0, 10)}</p>}
               <Select label="있는 곳" value={c.locationId} options={locOptions} onChange={(locationId) => up({ locationId })} />
               <Select label="AI 즉흥 설정" value={c.improvisation} options={IMPROV} onChange={(improvisation) => up({ improvisation })} />
+              <Select label="소속 세력" value={c.faction ?? ''} options={[['', '없음'], ...(w.factions ?? []).map((f) => [f.id, f.name] as const)] as const} onChange={(faction) => up({ faction: faction || undefined })} />
+              <label className="check"><input type="checkbox" checked={!!c.romanceable} onChange={(e) => up({ romanceable: e.target.checked || undefined })} /> 연인이 될 수 있는 인물 (친밀·호감이 쌓이면 "연인" 단계)</label>
               <fieldset><legend>플레이어에 대한 초기 관계 (-100~100)</legend>
                 <div className="ability-grid">
-                  {(['affinity', 'trust', 'respect', 'fear'] as const).map((k) => (
-                    <Num key={k} label={{ affinity: '호감', trust: '신뢰', respect: '존경', fear: '두려움' }[k]} value={c.relationship?.[k]}
+                  {(['affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge'] as const).map((k) => (
+                    <Num key={k} label={{ affinity: '호감', trust: '신뢰', respect: '존경', fear: '두려움', intimacy: '친밀', grudge: '원한' }[k]} value={c.relationship?.[k]}
                       onChange={(v) => up({ relationship: { ...c.relationship, [k]: v ?? 0 } })} />
                   ))}
                 </div>
@@ -338,6 +342,44 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               )}
             </div>
           )} />
+      )}
+
+      {tab === 'relations' && (
+        <>
+          <p className="muted small">세력 평판은 -100~100. 소속 인물과 가까워지면 오르고, 원한을 사면 떨어진다. 인물의 소속은 인물 탭에서 고른다.</p>
+          <ItemList<Faction> title="세력" items={w.factions ?? []} onChange={(factions) => set({ factions })}
+            make={(n) => ({ id: `fac/new-${n}`, name: '새 세력', description: '' })}
+            render={(f, up) => (
+              <div className="form-grid">
+                <Text label="ID" value={f.id} onChange={(id) => up({ id })} />
+                <Text label="이름" value={f.name} onChange={(name) => up({ name })} />
+                <Area label="설명 (소속 인물 연기에 쓰임)" value={f.description} onChange={(description) => up({ description })} rows={2} />
+                <Num label="처음 평판 (-100~100, 기본 0)" value={f.reputation} onChange={(reputation) => up({ reputation })} />
+              </div>
+            )} />
+          <b>인물 사이의 관계</b>
+          <p className="muted small">플레이어가 한 사람과 가까워지면 그의 라이벌·원수는 원한이 쌓이고, 가족·동지·연인·스승은 호감이 오른다. 인물 연기에도 쓰인다.</p>
+          <table className="rel-table small">
+            <tbody>
+              {(w.relations ?? []).map((r, i) => {
+                const upd = (patch: Partial<typeof r>) => set({ relations: (w.relations ?? []).map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+                const chars = w.characters.map((c) => [c.id, c.name] as const);
+                return (
+                  <tr key={i}>
+                    <td><Select label="" value={r.a} options={chars} onChange={(a) => upd({ a })} /></td>
+                    <td><Select label="" value={r.kind} options={Object.entries(RELATION_KIND_LABEL) as [NpcRelationKind, string][]} onChange={(kind) => upd({ kind })} /></td>
+                    <td><Select label="" value={r.b} options={chars} onChange={(b) => upd({ b })} /></td>
+                    <td><Text label="" value={r.note} placeholder="한 줄 설명" onChange={(note) => upd({ note: note || undefined })} /></td>
+                    <td><button type="button" onClick={() => set({ relations: (w.relations ?? []).filter((_, j) => j !== i) })}>삭제</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {w.characters.length >= 2 && <button type="button" onClick={() => set({ relations: [...(w.relations ?? []), { a: w.characters[0]!.id, b: w.characters[1]!.id, kind: 'ally' }] })}>＋ 관계 추가</button>}
+          <JsonField label="관계 사건 (조건이 맞으면 열리는 인물의 결정적 장면)" value={w.relationBeats ?? []} onChange={(relationBeats) => set({ relationBeats })} rows={10}
+            help={`예: { "id": "beat/…", "npcId": "npc/…", "name": "비밀 고백", "condition": { "stage": "npc/…", "in": ["친구", "절친", "연인"] }, "hint": "그가 과거를 털어놓는다", "resolveFlag": "…" } · 단계: ${STAGES.join(', ')} · resolveFlag는 임무 탭의 플래그에 선언해야 한다 (없으면 4턴 뒤 닫힘)`} />
+        </>
       )}
 
       {tab === 'knowledge' && (
@@ -408,7 +450,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <p className="muted small">
             조건식: <code>{'{ "all": [...] }'}</code> <code>{'{ "any": [...] }'}</code> <code>{'{ "not": ... }'}</code> <code>{'{ "knows": "claim/…", "min": "partial" }'}</code>{' '}
             <code>{'{ "at": "loc/…" }'}</code> <code>{'{ "cleared": "enc/…" }'}</code> <code>{'{ "inParty": "npc/…" }'}</code>{' '}
-            <code>{'{ "relationship": "npc/…", "axis": "trust", "gte": 20 }'}</code> <code>{'{ "flag": "…" }'}</code> <code>{'{ "questDone": "quest/…" }'}</code> <code>{'{ "level": 2 }'}</code>
+            <code>{'{ "relationship": "npc/…", "axis": "trust", "gte": 20 }'}</code> (축: affinity·trust·respect·fear·intimacy·grudge){' '}
+            <code>{'{ "stage": "npc/…", "in": ["친구", "연인"] }'}</code> <code>{'{ "reputation": "fac/…", "gte": 30 }'}</code> <code>{'{ "flag": "…" }'}</code> <code>{'{ "questDone": "quest/…" }'}</code> <code>{'{ "level": 2 }'}</code>
           </p>
           {settings && (
             <div className="row">

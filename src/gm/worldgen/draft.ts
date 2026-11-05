@@ -8,15 +8,17 @@
 import { ABILITIES, CLASSES, SKILL_IDS } from '../../engine/character/rules';
 import { suggestedStandardArray } from '../../engine/character/sheet';
 import { MONSTERS } from '../../engine/combat/monsters';
-import type { Condition, Encounter, Ending, KnowledgeState, Quest, StoryFlag, WorldPackage } from '../../engine/schema';
+import type { Condition, Encounter, Ending, KnowledgeState, NpcRelationKind, Quest, RelationBeat, StoryFlag, WorldPackage } from '../../engine/schema';
 
 // ---------------------------------------------------------------- 초안 타입 (LLM 출력)
 
 export interface DraftAtom {
-  type: 'always' | 'knows' | 'at' | 'cleared' | 'in_party' | 'relationship' | 'flag' | 'quest_done' | 'level';
+  type: 'always' | 'knows' | 'at' | 'cleared' | 'in_party' | 'relationship' | 'stage' | 'reputation' | 'flag' | 'quest_done' | 'level';
   ref: string;
   min: '' | 'rumor' | 'partial' | 'confirmed';
-  axis: '' | 'affinity' | 'trust' | 'respect' | 'fear';
+  axis: '' | 'affinity' | 'trust' | 'respect' | 'fear' | 'intimacy' | 'grudge';
+  /** stage: 관계 단계 하나 (그 단계 이상 가까운 사이) */
+  stage?: string;
   value: number;
 }
 export interface DraftCond { op: 'all' | 'any'; items: DraftAtom[] }
@@ -31,7 +33,10 @@ export interface WorldDraft {
     key: string; name: string; appearance: string; personality: string; speech: string; location: string;
     improvisation: 'none' | 'minor' | 'free'; companion_class: string; join_condition: string;
     initial_affinity: number; initial_trust: number; secret_trust: number;
+    romanceable?: boolean; faction?: string;
   }[];
+  factions?: { key: string; name: string; description: string; reputation: number }[];
+  relations?: { a: string; b: string; kind: NpcRelationKind; note: string }[];
   truths: { key: string; statement: string; secrecy: number; subjects: string[]; protected_topic: string }[];
   claims: { key: string; statement: string; truth: 'true' | 'false' | 'partial'; relates_to: string }[];
   knowledge: { holder: string; claim: string; state: KnowledgeState }[];
@@ -43,6 +48,7 @@ export interface ScenarioDraft {
   flags: { key: string; when: string; location: string; requires: DraftCond }[];
   quests: { key: string; name: string; kind: 'main' | 'side'; start: DraftCond; stages: { objective: string; hint: string; complete: DraftCond }[]; reward_xp: number }[];
   endings: { key: string; name: string; condition: DraftCond; epilogue: string }[];
+  relation_beats?: { key: string; npc: string; name: string; condition: DraftCond; hint: string; resolve_flag: string }[];
 }
 
 // ---------------------------------------------------------------- JSON 스키마 (구조화 출력용)
@@ -56,11 +62,12 @@ const IMPROV = { type: 'string', enum: ['none', 'minor', 'free'] };
 const COND_SCHEMA = obj({
   op: { type: 'string', enum: ['all', 'any'] },
   items: arr(obj({
-    type: { type: 'string', enum: ['always', 'knows', 'at', 'cleared', 'in_party', 'relationship', 'flag', 'quest_done', 'level'] },
-    ref: { type: 'string', description: 'knows=명제 key, at=장소 key, cleared=조우 key, in_party/relationship=인물 key, flag=플래그 key, quest_done=임무 key. always/level은 ""' },
+    type: { type: 'string', enum: ['always', 'knows', 'at', 'cleared', 'in_party', 'relationship', 'stage', 'reputation', 'flag', 'quest_done', 'level'] },
+    ref: { type: 'string', description: 'knows=명제 key, at=장소 key, cleared=조우 key, in_party/relationship/stage=인물 key, reputation=세력 key, flag=플래그 key, quest_done=임무 key. always/level은 ""' },
     min: { type: 'string', enum: ['', 'rumor', 'partial', 'confirmed'] },
-    axis: { type: 'string', enum: ['', 'affinity', 'trust', 'respect', 'fear'] },
-    value: { type: 'integer', description: 'relationship: 최소값(-100~100), level: 최소 레벨, 그 외 0' },
+    axis: { type: 'string', enum: ['', 'affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge'] },
+    stage: { type: 'string', enum: ['', '아는 사이', '믿는 사이', '친구', '절친', '연인', '경계', '적대', '숙적'], description: 'stage: 이 단계 이상 (가까운 쪽은 더 가까운 단계 포함, 적대 쪽은 더 나쁜 단계 포함). 그 외 ""' },
+    value: { type: 'integer', description: 'relationship/reputation: 최소값(-100~100), level: 최소 레벨, 그 외 0' },
   })),
 });
 
@@ -73,7 +80,11 @@ export const WORLD_DRAFT_SCHEMA = obj({
     companion_class: { type: 'string', enum: ['', ...Object.keys(CLASSES)], description: '동료로 영입 가능하면 직업, 아니면 ""' },
     join_condition: { type: 'string', description: '동료라면 이 인물이 동행을 수락하는 기준, 아니면 ""' },
     initial_affinity: int, initial_trust: int, secret_trust: { type: 'integer', description: '비밀을 털어놓는 신뢰 기준 (20~70)' },
+    romanceable: { type: 'boolean', description: '플레이어와 연인이 될 수 있는 인물인가 (성인으로 설정된 인물만)' },
+    faction: { type: 'string', description: '소속 세력 key 또는 ""' },
   })),
+  factions: arr(obj({ key: str, name: str, description: str, reputation: { type: 'integer', description: '플레이어에 대한 처음 평판 (-30~30, 보통 0)' } })),
+  relations: arr(obj({ a: { type: 'string', description: '인물 key' }, b: { type: 'string', description: '인물 key' }, kind: { type: 'string', enum: ['family', 'ally', 'rival', 'lover', 'master', 'enemy'] }, note: str })),
   truths: arr(obj({ key: str, statement: str, secrecy: { type: 'integer', description: '0 상식 ~ 5 극비' }, subjects: arr(str), protected_topic: { type: 'string', description: '비밀이면 내용을 드러내지 않는 짧은 이름표, 아니면 ""' } })),
   claims: arr(obj({ key: str, statement: str, truth: { type: 'string', enum: ['true', 'false', 'partial'] }, relates_to: { type: 'string', description: '관련 truth key 또는 ""' } })),
   knowledge: arr(obj({ holder: { type: 'string', description: '인물 key' }, claim: str, state: { type: 'string', enum: ['rumor', 'partial', 'confirmed', 'mistaken', 'secret'] } })),
@@ -88,6 +99,11 @@ export const SCENARIO_DRAFT_SCHEMA = obj({
     stages: arr(obj({ objective: str, hint: str, complete: COND_SCHEMA })), reward_xp: int,
   })),
   endings: arr(obj({ key: str, name: str, condition: COND_SCHEMA, epilogue: str })),
+  relation_beats: arr(obj({
+    key: str, npc: { type: 'string', description: '인물 key' }, name: str, condition: COND_SCHEMA,
+    hint: { type: 'string', description: 'GM·인물에게 주는 장면 방향 (예: 그가 과거를 털어놓는다)' },
+    resolve_flag: { type: 'string', description: '장면이 끝났음을 나타내는 flags의 key 또는 ""' },
+  })),
 });
 
 // ---------------------------------------------------------------- 정리
@@ -122,6 +138,18 @@ export interface Refs {
   enc: (k: string) => string | undefined;
   quest: (k: string) => string | undefined;
   flag: (k: string) => string | undefined;
+  faction?: (k: string) => string | undefined;
+}
+
+const CLOSE = ['아는 사이', '믿는 사이', '친구', '절친', '연인'];
+const HOSTILE = ['경계', '적대', '숙적'];
+/** "친구" → 친구 이상 가까운 단계들, "적대" → 적대·숙적 */
+function stagesFrom(stage: string | undefined): string[] | null {
+  if (!stage) return null;
+  const c = CLOSE.indexOf(stage);
+  if (c >= 0) return CLOSE.slice(c);
+  const h = HOSTILE.indexOf(stage);
+  return h >= 0 ? HOSTILE.slice(h) : null;
 }
 
 /** 평평한 조건 → 조건식. 참조가 깨진 항목은 버리고 notes에 남긴다. */
@@ -136,9 +164,11 @@ export function convertCond(c: DraftCond | undefined, refs: Refs, where: string,
       case 'cleared': { const id = refs.enc(a.ref); if (id) items.push({ cleared: id }); else miss('조우'); break; }
       case 'in_party': { const id = refs.npc(a.ref); if (id) items.push({ inParty: id }); else miss('인물'); break; }
       case 'relationship': { const id = refs.npc(a.ref); if (id && a.axis) items.push({ relationship: id, axis: a.axis, gte: clamp(a.value, -100, 100) }); else miss('인물·관계 축'); break; }
+      case 'stage': { const id = refs.npc(a.ref); const st = stagesFrom(a.stage); if (id && st) items.push({ stage: id, in: st }); else miss('인물·관계 단계'); break; }
+      case 'reputation': { const id = refs.faction?.(a.ref); if (id) items.push({ reputation: id, gte: clamp(a.value, -100, 100) }); else miss('세력'); break; }
       case 'flag': { const id = refs.flag(a.ref); if (id) items.push({ flag: id }); else miss('플래그'); break; }
       case 'quest_done': { const id = refs.quest(a.ref); if (id) items.push({ questDone: id }); else miss('임무'); break; }
-      case 'level': items.push({ level: clamp(a.value, 1, 3) }); break;
+      case 'level': items.push({ level: clamp(a.value, 1, 5) }); break;
     }
   }
   if (items.length === 1) return items[0]!;
@@ -155,7 +185,13 @@ export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating:
   const npcMap = idMap(d.characters.map((c) => c.key), 'npc', taken);
   const factMap = idMap(d.truths.map((t) => t.key), 'fact', taken);
   const claimMap = idMap(d.claims.map((c) => c.key), 'claim', taken);
-  const loc = resolver(locMap), npc = resolver(npcMap), fact = resolver(factMap), claim = resolver(claimMap);
+  const facMap = idMap((d.factions ?? []).map((f) => f.key), 'fac', taken);
+  const loc = resolver(locMap), npc = resolver(npcMap), fact = resolver(factMap), claim = resolver(claimMap), fac = resolver(facMap);
+  const factions: NonNullable<WorldPackage['factions']> = [];
+  for (const f of d.factions ?? []) {
+    const id = fac(f.key)!;
+    if (!factions.some((x) => x.id === id)) factions.push({ id, name: f.name, description: f.description, ...(f.reputation ? { reputation: clamp(f.reputation, -100, 100) } : {}) });
+  }
 
   const locations: WorldPackage['locations'] = [];
   for (const l of locs) {
@@ -200,6 +236,8 @@ export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating:
       improvisation: c.improvisation,
       relationship: { affinity: clamp(c.initial_affinity, -100, 100), trust: clamp(c.initial_trust, -100, 100) },
       secretTrust: clamp(c.secret_trust || 40, 0, 100),
+      ...(c.romanceable ? { romanceable: true } : {}),
+      ...(c.faction && fac(c.faction) ? { faction: fac(c.faction)! } : {}),
       ...(cls ? {
         companion: {
           classId: cls.id,
@@ -232,9 +270,17 @@ export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating:
     (l.discoveries ??= []).push({ claim: cl, hint: disc.hint, ...(SKILL_IDS.includes(disc.check as never) ? { check: disc.check } : {}) });
   }
 
+  const relations: NonNullable<WorldPackage['relations']> = [];
+  for (const r of d.relations ?? []) {
+    const a = npc(r.a), b = npc(r.b);
+    if (!a || !b || a === b) { notes.push(`인물 관계: 없는 인물 ("${r.a}" ↔ "${r.b}")을 뺐습니다.`); continue; }
+    if (!relations.some((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a))) relations.push({ a, b, kind: r.kind, ...(r.note ? { note: r.note } : {}) });
+  }
+
   const world: WorldPackage = {
     manifest: { id: opts.id, type: 'world', name: d.name || 'AI가 만든 세계', version: '0.1.0', schemaVersion: '0', author: opts.author ?? '', license: 'CC-BY-4.0', contentRating: opts.contentRating, locales: ['ko'], aiAssisted: true },
     locations, characters, facts, claims, beliefs, encounters: [], quests: [], flags: [], endings: [],
+    ...(factions.length ? { factions } : {}), ...(relations.length ? { relations } : {}),
     start: { locationId: startId, openingScene: d.opening_scene || '낯선 곳에서 눈을 뜬다.' },
   };
   return { world, notes };
@@ -264,6 +310,7 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
     enc: (k) => resolver(encMap)(k) ?? byExisting('enc', w.encounters ?? [])(k),
     quest: (k) => resolver(questMap)(k) ?? byExisting('quest', w.quests ?? [])(k),
     flag: (k) => flagMap.get(k) ?? ((w.flags ?? []).some((f) => f.id === k) ? k : undefined),
+    faction: byExisting('fac', w.factions ?? []),
   };
 
   const encounters: Encounter[] = [];
@@ -294,6 +341,20 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
   const endings: Ending[] = d.endings.map((e) => ({ id: endMap.get(e.key)!, name: e.name, condition: convertCond(e.condition, refs, `결말 "${e.name}"`, notes), epilogue: e.epilogue }));
   for (const e of endings) if ('all' in e.condition && e.condition.all.length === 0) notes.push(`결말 "${e.name}": 조건이 비어 게임 시작과 동시에 도달합니다. 조건을 넣어 주세요.`);
 
+  const beatTaken = new Set((w.relationBeats ?? []).map((b) => b.id));
+  const beats: RelationBeat[] = [];
+  for (const b of d.relation_beats ?? []) {
+    const npcId = refs.npc(b.npc);
+    if (!npcId) { notes.push(`관계 사건 "${b.name}": 없는 인물 "${b.npc}"이라 뺐습니다.`); continue; }
+    let id = `beat/${slug(b.key)}`;
+    for (let n = 2; beatTaken.has(id) || taken.has(id); n++) id = `beat/${slug(b.key)}-${n}`;
+    beatTaken.add(id);
+    const condition = convertCond(b.condition, refs, `관계 사건 "${b.name}"`, notes);
+    if ('all' in condition && condition.all.length === 0) { notes.push(`관계 사건 "${b.name}": 조건이 비어 뺐습니다.`); continue; }
+    const flag = b.resolve_flag ? refs.flag(b.resolve_flag) : undefined;
+    beats.push({ id, npcId, name: b.name, condition, hint: b.hint, ...(flag ? { resolveFlag: flag } : {}) });
+  }
+  w.relationBeats = [...(w.relationBeats ?? []), ...beats];
   w.encounters = [...(w.encounters ?? []), ...encounters];
   w.flags = [...(w.flags ?? []), ...flags];
   w.quests = [...(w.quests ?? []), ...quests];

@@ -1,3 +1,4 @@
+import { loyaltyOf, OBEY_LOYALTY, relationshipOf } from '../engine/relationship';
 import { genreGuide, levelCapOf, reskinner } from '../engine/genre';
 import { RATING_GUIDE } from '../engine/rating';
 import { createRng, type Rng } from '../engine/dice/rng';
@@ -8,7 +9,7 @@ import type { WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
 import type { LlmClient } from '../llm/types';
-import { relationshipEvent } from './relationship';
+import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
 import { MONSTERS } from '../engine/combat/monsters';
@@ -59,20 +60,25 @@ function finishIfOver(b: Builder) {
   for (const id of Object.keys(party)) {
     const npc = b.world.characters.find((c) => c.id === id);
     if (!npc) continue;
-    const ev = cs.outcome === 'victory' ? relationshipEvent(b.world, b.state, npc, { trust: 5, respect: 3 }, '함께 싸워 이겼다')
-      : cs.outcome === 'fled' && cs.combatants[id] && cs.combatants[id]!.hp > 0 ? relationshipEvent(b.world, b.state, npc, { respect: -3 }, '함께 물러났다')
-      : null;
-    if (ev) b.push(ev);
+    const evs = cs.outcome === 'victory' ? relationshipEvents(b.world, b.state, npc, { trust: 5, respect: 3, intimacy: 2 }, '함께 싸워 이겼다')
+      : cs.outcome === 'fled' && cs.combatants[id] && cs.combatants[id]!.hp > 0 ? relationshipEvents(b.world, b.state, npc, { respect: -3 }, '함께 물러났다')
+      : [];
+    evs.forEach((e) => b.push(e));
   }
   // 조우 결과로 퀘스트가 진행될 수 있다
   scenarioEvents(b.world, b.state).events.forEach((e) => b.push(e));
   if (cs.outcome === 'defeat') b.push({ type: 'time_advanced', minutes: 60 });
 }
 
+/** 충성도가 낮은 동료는 명령을 따르지 않고 제멋대로 싸운다 (설계 v3 4.2) */
+export function obeyedOrders(world: WorldPackage, state: GameState): GameState['partyOrders'] {
+  return Object.fromEntries(Object.entries(state.partyOrders).filter(([id]) => loyaltyOf(relationshipOf(world, state.relationships, id)) >= OBEY_LOYALTY));
+}
+
 function runEnemies(b: Builder, rng: Rng) {
   const cs = b.state.combat;
   if (!cs || cs.outcome) return;
-  const { steps } = runAutoTurns(cs, rng, b.state.partyOrders);
+  const { steps } = runAutoTurns(cs, rng, obeyedOrders(b.world, b.state));
   for (const st of steps) {
     if (st.kind === 'end_turn') b.push({ type: 'combat_turn_ended' });
     else b.push({ type: 'combat_action', actorId: st.actorId, cardId: st.cardId, target: st.target, effects: st.resolution.effects, log: st.resolution.log, rngState: st.rngState });

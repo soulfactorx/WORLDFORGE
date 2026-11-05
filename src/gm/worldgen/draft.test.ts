@@ -71,3 +71,34 @@ describe('초안 정리', () => {
     expect(r.notes.some((n) => n.includes('빈 결말'))).toBe(true);
   });
 });
+
+describe('초안: 세력·인물 관계·관계 사건 (설계 v3 R5)', () => {
+  it('세력 소속·연인 가능·인물 관계를 옮기고, 관계 사건의 단계 조건을 펼친다', () => {
+    const d: WorldDraft = {
+      ...messy,
+      characters: messy.characters.map((c, i) => ({ ...c, romanceable: i === 0, faction: i === 0 ? 'Light Keepers' : 'nope' })),
+      factions: [{ key: 'Light Keepers', name: '등대회', description: '등대를 지키는 사람들', reputation: 10 }],
+      relations: [{ a: 'keeper', b: 'sailor', kind: 'rival', note: '오랜 앙숙' }, { a: 'keeper', b: 'ghost', kind: 'ally', note: '' }],
+    };
+    const { world, notes } = worldFromDraft(d, { id: 'test.port', contentRating: 'teen' });
+    expect(world.factions).toEqual([{ id: 'fac/light-keepers', name: '등대회', description: '등대를 지키는 사람들', reputation: 10 }]);
+    expect(world.characters[0]).toMatchObject({ romanceable: true, faction: 'fac/light-keepers' });
+    expect(world.characters[1]!.faction).toBeUndefined();
+    expect(world.relations).toEqual([{ a: 'npc/keeper', b: 'npc/sailor', kind: 'rival', note: '오랜 앙숙' }]);
+    expect(notes.some((n) => n.includes('ghost'))).toBe(true);
+    const sc: ScenarioDraft = {
+      encounters: [], quests: [], endings: [],
+      flags: [{ key: 'keeper_confessed', when: '등대지기가 고백했을 때', location: '', requires: always }],
+      relation_beats: [
+        { key: 'confession', npc: 'keeper', name: '등대지기의 고백', condition: { op: 'all', items: [atom('stage', 'keeper', { stage: '친구' }), atom('reputation', 'Light Keepers', { value: 20 })] }, hint: '그가 그날 밤의 일을 털어놓는다', resolve_flag: 'keeper_confessed' },
+        { key: 'empty', npc: 'keeper', name: '빈 사건', condition: always, hint: '', resolve_flag: '' },
+      ],
+    };
+    const r = addScenario(world, sc);
+    expect(r.world.relationBeats).toEqual([{
+      id: 'beat/confession', npcId: 'npc/keeper', name: '등대지기의 고백', hint: '그가 그날 밤의 일을 털어놓는다', resolveFlag: 'keeper_confessed',
+      condition: { all: [{ stage: 'npc/keeper', in: ['친구', '절친', '연인'] }, { reputation: 'fac/light-keepers', gte: 20 }] },
+    }]);
+    expect(validateWorld(r.world).filter((i) => i.level === 'error')).toEqual([]);
+  });
+});

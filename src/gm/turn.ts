@@ -9,12 +9,12 @@ import { RATING_GUIDE } from '../engine/rating';
 import { applyEvent, type GameState, initialState, MAX_PARTY } from '../engine/state/state';
 import { companionSheet } from '../engine/character/sheet';
 import { josa } from '../engine/text/josa';
-import { relationshipEvent } from './relationship';
+import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
-import { activeQuests, flagAllowed, pendingDiscoveries } from '../engine/scenario';
+import { activeBeats, activeQuests, flagAllowed, pendingDiscoveries } from '../engine/scenario';
 import { DISCOVERY_XP } from '../engine/character/progression';
-import { applyDelta, canShareSecret, joinBlocker, LEAVE_AFFINITY, relationshipOf } from '../engine/relationship';
+import { applyDelta, canShareSecret, joinBlocker, relationshipOf, wantsToLeave } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
 import { playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
 import { availableEncounters, beginEncounter } from './combat';
@@ -85,7 +85,7 @@ interface ActorOutput {
   dialogue: string;
   shared_claims: string[];
   party_decision: 'none' | 'join' | 'leave';
-  relationship_change: { affinity: number; trust: number; respect: number; fear: number; reason: string };
+  relationship_change: { affinity: number; trust: number; respect: number; fear: number; intimacy: number; grudge: number; reason: string };
   /** v0.13: 표정 태그 */
   expression?: string;
 }
@@ -99,10 +99,12 @@ const ACTOR_SCHEMA = {
     shared_claims: { type: 'array', items: { type: 'string' }, description: '이번 대사에서 실제로 알려준 "네가 아는 것"의 [ID] 목록' },
     party_decision: { type: 'string', enum: ['none', 'join', 'leave'], description: '이번 대사로 동행을 수락하면 join, 동료에서 떠나면 leave, 아니면 none' },
     relationship_change: {
-      type: 'object', additionalProperties: false, required: ['affinity', 'trust', 'respect', 'fear', 'reason'],
+      type: 'object', additionalProperties: false, required: ['affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge', 'reason'],
       description: '이번 상호작용으로 네 감정이 바뀐 정도 (-10 ~ 10). 별일 없으면 모두 0',
       properties: {
         affinity: { type: 'integer' }, trust: { type: 'integer' }, respect: { type: 'integer' }, fear: { type: 'integer' },
+        intimacy: { type: 'integer', description: '친밀: 마음을 나누거나 함께 위기를 넘기는 등 가까워지면 +, 거리를 두면 -' },
+        grudge: { type: 'integer', description: '원한: 배신·모욕·해를 입으면 +, 진심 어린 사과·보상이면 -' },
         reason: { type: 'string', description: '바뀐 이유 한 줄 (바뀌지 않았으면 "")' },
       },
     },
@@ -117,6 +119,8 @@ const ACTOR_SYSTEM = `너는 1인칭 TRPG 속 한 명의 NPC다. 주어진 성�
 - 동행 여부는 "동행" 항목의 기준에 따라 네 성격대로 판단한다. 제안을 받지 않았으면 none.
 - 감정 변화는 이번 상호작용에 비례해 작게 정한다. 플레이어가 너에게 직접 무언가를 하지 않았으면(예: "계속", 주변 살피기) 모두 0. 평범한 대화는 0~2, 도움·모욕·위협 같은 큰 일은 5~10.
 - 지금 감정에 맞게 말한다. 경계하는 상대에게는 짧고 퉁명스럽게, 믿는 상대에게는 마음을 연다.
+- 친밀은 천천히 쌓인다 (한 번에 1~5). 원한은 쉽게 풀리지 않는다.
+- "지금 너의 마음" 항목에 열린 장면이 있으면, 자연스러운 때에 그 방향으로 행동한다.
 - 대사는 한국어로 1~4문장.`;
 
 interface RecorderOutput {
@@ -259,7 +263,8 @@ export async function runTurn(
     reactions.push(`- ${npc.name} [${npc.id}]: ${out.action ? `(${out.action}) ` : ''}${out.dialogue ? `"${out.dialogue}"` : '(말없음)'}`);
     // 관계 변화 (엔진이 턴당 한도로 자른다)
     // 판정에는 바로 반영하고, 화면 기록은 서술 뒤에 보이도록 reveals에 넣는다
-    const relEvent = relationshipEvent(world, s, npc, out.relationship_change, out.relationship_change?.reason || '대화');
+    const relEvents = relationshipEvents(world, s, npc, out.relationship_change, out.relationship_change?.reason || '대화');
+    const relEvent = relEvents[0];
     const rel0 = relationshipOf(world, s.relationships, npc.id);
     const rel = relEvent && relEvent.type === 'relationship_changed' ? applyDelta(rel0, relEvent.delta) : rel0;
 
@@ -276,9 +281,9 @@ export async function runTurn(
     } else if (out.party_decision === 'join' && npc.companion && !s.party[npc.id]) {
       outcomes.push(`${josa(npc.name, '은/는')} 함께 가고 싶어 하지만 일행이 이미 가득 찼다`);
     }
-    if (relEvent) reveals.push(relEvent);
-    // 동료가 적대적으로 돌아서면 떠난다
-    if (s.party[npc.id] && rel.affinity <= LEAVE_AFFINITY && out.party_decision !== 'leave') {
+    reveals.push(...relEvents);
+    // 동료가 적대적으로 돌아서거나 원한이 쌓이면 떠난다
+    if (s.party[npc.id] && wantsToLeave(rel) && out.party_decision !== 'leave') {
       push({ type: 'companion_left', npcId: npc.id, locationId: s.player.locationId });
       outcomes.push(`${josa(npc.name, '이/가')} 실망해 일행을 떠난다`);
     }
@@ -377,9 +382,11 @@ export async function runTurn(
 function scenarioBlock(world: WorldPackage, s: GameState): string {
   const quests = activeQuests(world, s).map((q) => `- [${q.quest.kind === 'main' ? '메인' : '사이드'}] ${q.quest.name} — 목표: ${q.stage.objective} / 힌트: ${q.stage.hint}`);
   const flags = (world.flags ?? []).filter((f) => flagAllowed(world, s, f.id)).map((f) => `- ${f.id}: ${f.when}`);
+  const beats = activeBeats(world, s).map((b) => `- ${world.characters.find((c) => c.id === b.npcId)?.name ?? b.npcId} [${b.npcId}] — ${b.name}: ${b.hint}${b.resolveFlag ? ` (장면이 끝나면 플래그 ${b.resolveFlag})` : ''}`);
   const disc = pendingDiscoveries(world, s).map((x) => `- ${x.claim}: ${x.hint}${x.check ? ` (필요 판정: ${x.check} 기술)` : ''}`);
   return [
     '## 진행 중인 이야기 (플레이어는 모름)', ...(quests.length ? quests : ['(없음)']), '',
+    ...(beats.length ? ['## 열린 관계 사건 (그 인물과 마주치면 이 장면으로 이끈다. 억지로 끌어오지 않는다)', ...beats, ''] : []),
     '## 세울 수 있는 플래그', ...(flags.length ? flags : ['(없음)']), '',
     '## 이 장소에서 발견할 수 있는 것', ...(disc.length ? disc : ['(없음)']),
   ].join('\n');

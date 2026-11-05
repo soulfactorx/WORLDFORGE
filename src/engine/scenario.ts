@@ -1,4 +1,4 @@
-import { relationshipOf } from './relationship';
+import { relationshipOf, reputationOf, stageFor } from './relationship';
 import type { Condition, Ending, EntityId, KnowledgeState, Quest, WorldPackage } from './schema';
 import type { GameState } from './state/state';
 
@@ -31,6 +31,11 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('inParty' in c) return !!state.party[c.inParty];
   if ('relationship' in c) {
     const v = relationshipOf(world, state.relationships, c.relationship)[c.axis];
+    return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte);
+  }
+  if ('stage' in c) return c.in.includes(stageFor(world, state.relationships, c.stage));
+  if ('reputation' in c) {
+    const v = reputationOf(world, state.reputation ?? {}, c.reputation);
     return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte);
   }
   if ('flag' in c) return state.flags.includes(c.flag);
@@ -100,4 +105,9 @@ export function activeQuests(world: WorldPackage, state: GameState) {
     const p = state.quests[q.id];
     return p && !p.done ? [{ quest: q, stage: q.stages[p.stage]!, index: p.stage }] : [];
   });
+}
+
+/** 지금 열려 있는 관계 사건 (설계 v3 4.2) */
+export function activeBeats(world: WorldPackage, state: GameState) {
+  return (world.relationBeats ?? []).filter((b) => state.beats?.[b.id] && !state.beats[b.id]!.done);
 }

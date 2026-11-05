@@ -66,8 +66,12 @@ export interface Character {
   improvisation: Improvisation;
   /** 동료로 영입할 수 있는 NPC의 전투 능력과 영입 조건 (v0.5) */
   companion?: CompanionSpec;
-  /** 플레이어에 대한 초기 관계 (v0.6, 기본 모두 0) */
-  relationship?: Partial<{ affinity: number; trust: number; respect: number; fear: number }>;
+  /** 플레이어에 대한 초기 관계 (v0.6, 기본 모두 0). 친밀·원한은 설계 v3 4.2 */
+  relationship?: Partial<Record<RelationAxis, number>>;
+  /** 연인 관계가 될 수 있는 인물 (설계 v3 4.2) */
+  romanceable?: boolean;
+  /** 소속 세력 ID (설계 v3 4.4) */
+  faction?: EntityId;
   /** 비밀 상태의 지식을 털어놓는 데 필요한 신뢰 (v0.6, 기본 40) */
   secretTrust?: number;
   /** 두려움이 이 값 이상이면 신뢰가 부족해도 비밀을 털어놓는다 (v0.8, 기본 없음) */
@@ -82,6 +86,43 @@ export interface Character {
   gender?: 'M' | 'F';
   /** 외부에서 가져온 인물의 출처 (v0.12) */
   source?: { format: 'charx' | 'ccv3' | 'ccv2' | 'ccv1'; name: string; creator?: string; version?: string; importedAt: string };
+}
+
+/** 관계 6축 (설계 v3 4.2): 호감·신뢰·존경·두려움 + 친밀·원한 */
+export type RelationAxis = 'affinity' | 'trust' | 'respect' | 'fear' | 'intimacy' | 'grudge';
+
+/** 세력 (설계 v3 4.4). 평판은 -100~100 */
+export interface Faction {
+  id: EntityId;
+  name: string;
+  description: string;
+  /** 처음 평판 (기본 0) */
+  reputation?: number;
+}
+
+export type NpcRelationKind = 'family' | 'ally' | 'rival' | 'lover' | 'master' | 'enemy';
+
+/** NPC ↔ NPC 관계 (설계 v3 4.3). master는 a가 b의 스승·주인 */
+export interface NpcRelation {
+  a: EntityId;
+  b: EntityId;
+  kind: NpcRelationKind;
+  /** 한 줄 설명 (NPC 연기에 쓰임) */
+  note?: string;
+}
+
+/**
+ * 관계 사건 (설계 v3 4.2): 조건이 맞으면 열리는 그 인물의 결정적 장면.
+ * 열리면 GM과 그 인물에게 힌트가 간다. resolveFlag가 세워지면 닫힌다 (없으면 몇 턴 뒤 닫힘).
+ */
+export interface RelationBeat {
+  id: EntityId;
+  npcId: EntityId;
+  name: string;
+  condition: Condition;
+  /** GM·인물에게 주는 장면 방향 (예: "그가 과거의 비밀을 털어놓는다") */
+  hint: string;
+  resolveFlag?: string;
 }
 
 export interface CompanionSpec {
@@ -152,7 +193,11 @@ export type Condition =
   | { at: EntityId }
   | { cleared: EntityId }
   | { inParty: EntityId }
-  | { relationship: EntityId; axis: 'affinity' | 'trust' | 'respect' | 'fear'; gte?: number; lte?: number }
+  | { relationship: EntityId; axis: RelationAxis; gte?: number; lte?: number }
+  /** 관계 단계 (예: ["친구", "절친", "연인"]) */
+  | { stage: EntityId; in: string[] }
+  /** 세력 평판 (설계 v3 4.4) */
+  | { reputation: EntityId; gte?: number; lte?: number }
   | { flag: string }
   | { questDone: EntityId }
   | { level: number };
@@ -172,7 +217,7 @@ export interface Quest {
   /** 시작 조건 */
   start: Condition;
   stages: QuestStage[];
-  rewards?: { xp?: number; relationship?: { npcId: EntityId; trust?: number; affinity?: number; respect?: number }[] };
+  rewards?: { xp?: number; relationship?: ({ npcId: EntityId } & Partial<Record<RelationAxis, number>>)[]; reputation?: { factionId: EntityId; delta: number }[] };
 }
 
 /** Director가 이야기 속 사건을 기록하는 플래그. 선언된 것만, 지정 장소에서만 세울 수 있다. */
@@ -246,6 +291,10 @@ export interface WorldPackage {
   quests?: Quest[];
   flags?: StoryFlag[];
   endings?: Ending[];
+  /** 세력·NPC 관계·관계 사건 (설계 v3 4.2~4.4) */
+  factions?: Faction[];
+  relations?: NpcRelation[];
+  relationBeats?: RelationBeat[];
   start: {
     locationId: EntityId;
     /** 플레이어가 깨어났을 때의 첫 장면 */

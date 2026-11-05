@@ -1,5 +1,5 @@
 import { knowledgeOf } from '../engine/knowledge/knowledge';
-import { AXES, AXIS_NAMES, relationshipOf, stageOf } from '../engine/relationship';
+import { AXES, AXIS_NAMES, HOSTILE_STAGES, loyaltyOf, OBEY_LOYALTY, relationshipOf, reputationLabel, reputationOf, stageFor } from '../engine/relationship';
 import type { WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
@@ -15,6 +15,8 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
   const metIds = [...new Set([...Object.keys(state.npcMemory), ...Object.keys(state.party), ...Object.keys(state.relationships)])];
   const met = metIds.map((id) => world.characters.find((c) => c.id === id)).filter((c) => !!c);
   const quests = (world.quests ?? []).filter((q) => state.quests[q.id]);
+  // 평판이 바뀌었거나, 만난 사람이 속한 세력만 보여준다
+  const factions = (world.factions ?? []).filter((f) => (state.reputation ?? {})[f.id] !== undefined || met.some((c) => c.faction === f.id));
   return (
     <aside className="sheet">
       <b>임무</b>
@@ -61,19 +63,22 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
         <ul className="people">
           {met.map((c) => {
             const r = relationshipOf(world, state.relationships, c.id);
+            const stage = stageFor(world, state.relationships, c.id);
+            const loyalty = loyaltyOf(r);
             return (
               <li key={c.id}>
                 <div className="row">
                   {c.portrait && <img className="portrait small-portrait" src={c.portrait} alt="" />}
                   <b>{c.name}</b>
-                  <span className={`tag stage-${stageOf(r)}`}>{stageOf(r)}</span>
+                  <span className={`tag ${HOSTILE_STAGES.includes(stage) ? 'stage-hostile' : stage === '낯섦' || stage === '아는 사이' ? '' : 'stage-close'} ${stage === '연인' ? 'stage-lover' : ''}`}>{stage}</span>
                   {state.party[c.id] && <span className="tag confirmed">동료</span>}
+                  {state.party[c.id] && <span className={`small ${loyalty < OBEY_LOYALTY ? 'warn-text' : 'muted'}`} title="충성도가 낮으면 전투 명령을 따르지 않는다">충성 {loyalty}</span>}
                 </div>
                 <div className="rel-bars small">
                   {AXES.map((a) => (
                     <span key={a} className="rel">
                       <span className="muted">{AXIS_NAMES[a]}</span>
-                      <span className="bar"><span className={r[a] < 0 ? 'neg' : 'pos'} style={{ width: `${Math.abs(r[a]) / 2}%`, [r[a] < 0 ? 'right' : 'left']: '50%' }} /></span>
+                      <span className="bar"><span className={(a === 'grudge' || a === 'fear' ? r[a] > 0 : r[a] < 0) ? 'neg' : 'pos'} style={{ width: `${Math.abs(r[a]) / 2}%`, [r[a] < 0 ? 'right' : 'left']: '50%' }} /></span>
                     </span>
                   ))}
                 </div>
@@ -81,6 +86,17 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
             );
           })}
         </ul>
+      )}
+      {factions.length > 0 && (
+        <>
+          <b>세력 평판</b>
+          <ul className="people">
+            {factions.map((f) => {
+              const n = reputationOf(world, state.reputation ?? {}, f.id);
+              return <li key={f.id} className="row"><b>{f.name}</b> <span className={`tag ${n <= -10 ? 'stage-hostile' : n >= 10 ? 'stage-close' : ''}`}>{reputationLabel(n)}</span> <span className="small muted">{n > 0 ? '+' : ''}{n}</span></li>;
+            })}
+          </ul>
+        </>
       )}
     </aside>
   );
