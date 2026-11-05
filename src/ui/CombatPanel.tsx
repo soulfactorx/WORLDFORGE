@@ -92,7 +92,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, portr
                     onClick={(e) => { e.stopPropagation(); if (targetable) pick(c.id); }}>
                     <span className={`token ${c.side} ${pops.some((p) => p.id === c.id && p.cls === 'dmg') ? 'hurt' : ''}`}
                       style={{ ['--hp' as string]: `${Math.max(0, Math.round((100 * c.hp) / c.maxHp))}%` }}>
-                      <span className="token-face">{portrait?.(c.id) ?? (c.side === 'enemy' ? ROLE_GLYPH[MONSTERS[c.monsterId ?? '']?.role ?? ''] ?? '⚔' : c.isPlayer ? '★' : '🛡')}</span>
+                      <span className="token-face">{portrait?.(c.id) ?? (c.side === 'enemy' ? ROLE_GLYPH[c.role ?? MONSTERS[c.monsterId ?? '']?.role ?? ''] ?? '⚔' : c.isPlayer ? '★' : '🛡')}</span>
                       {pops.filter((p) => p.id === c.id).map((p) => <span key={p.key} className={`pop ${p.cls}`}>{p.text}</span>)}
                     </span>
                     <span className="chip-name">{c.isPlayer ? '당신' : rs(c.name)}{c.side === 'party' && !c.isPlayer ? ' (동료)' : ''}{c.escaped ? ' (도망침)' : ''}</span>

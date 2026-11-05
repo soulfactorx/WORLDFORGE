@@ -39,7 +39,7 @@ export function PackExport({ w, kind, onClose }: { w: WorldPackage; kind: 'chara
         <>
           <p className="small muted">{kind === 'character'
             ? '고른 인물과 그들이 아는 것, 그들 사이의 관계, 그들의 이미지·건네는 아이템을 담습니다. 세력·진실·임무는 세계의 것이라 담지 않습니다.'
-            : '이 세계만의 아이템과 장르 용어 바꿈표·화폐·최대 레벨을 담습니다.'}</p>
+            : '이 세계만의 아이템·적과 장르 용어 바꿈표·화폐·최대 레벨을 담습니다.'}</p>
           {kind === 'character' && (
             <div className="stage-checks">
               {w.characters.map((c) => (
@@ -93,7 +93,7 @@ export function PackImport({ w, onApply, onClose }: { w: WorldPackage; onApply: 
         <>
           <p><b>{pack.manifest.name}</b> <span className="small muted">{pack.manifest.type === 'character' ? '인물 패키지' : '규칙 패키지'} · {pack.manifest.id}@{pack.manifest.version} · {pack.manifest.author} · {pack.manifest.license} · 등급 {pack.manifest.contentRating}</span></p>
           {'characters' in pack && <p className="small">인물: {pack.characters.map((c) => c.name).join(', ')} · 지식 {pack.claims.length} · 관계 {pack.relations.length} · 이미지 {pack.assets.length} · 아이템 {pack.items.length}</p>}
-          {!('characters' in pack) && <p className="small">아이템 {pack.items.length}{pack.genre?.terms ? ` · 용어 ${Object.keys(pack.genre.terms).length}` : ''}{pack.genre?.currency ? ` · 화폐 ${pack.genre.currency}` : ''}{pack.genre?.levelCap ? ` · 최대 레벨 ${pack.genre.levelCap}` : ''}</p>}
+          {!('characters' in pack) && <p className="small">아이템 {pack.items.length}{pack.monsters?.length ? ` · 적 ${pack.monsters.length}종` : ''}{pack.genre?.terms ? ` · 용어 ${Object.keys(pack.genre.terms).length}` : ''}{pack.genre?.currency ? ` · 화폐 ${pack.genre.currency}` : ''}{pack.genre?.levelCap ? ` · 최대 레벨 ${pack.genre.levelCap}` : ''}</p>}
           {plan.blockers.map((b) => <p key={b} className="status">⛔ {b}</p>)}
           {plan.missingRequires.length > 0 && <p className="small warn-text">이 패키지가 쓰는 다른 패키지가 세계에 없습니다: {plan.missingRequires.map((r) => `${r.id}@${r.version}`).join(', ')} — 먼저 넣으면 좋습니다.</p>}
           {plan.warnings.map((x) => <p key={x} className="small muted">⚠ {x}</p>)}

@@ -7,7 +7,7 @@
  */
 import { ABILITIES, CLASSES, SKILL_IDS } from '../../engine/character/rules';
 import { suggestedStandardArray } from '../../engine/character/sheet';
-import { MONSTERS } from '../../engine/combat/monsters';
+import { MONSTERS, monsterTable } from '../../engine/combat/monsters';
 import { STD_ITEM_MAP, STD_ITEMS } from '../../data/items';
 import { QUEST_TYPES, type QuestType } from '../../engine/schema';
 import type { Clock, Condition, DecisiveChoice, Encounter, Ending, KnowledgeState, NpcRelationKind, Quest, RelationBeat, StoryEffect, StoryFlag, WorldPackage } from '../../engine/schema';
@@ -120,8 +120,9 @@ export const WORLD_DRAFT_SCHEMA = obj({
   discoveries: arr(obj({ location: str, claim: str, check: { type: 'string', enum: ['', ...SKILL_IDS] }, hint: str })),
 });
 
-export const SCENARIO_DRAFT_SCHEMA = obj({
-  encounters: arr(obj({ key: str, name: str, location: str, enemies: arr(obj({ monster: { type: 'string', enum: Object.keys(MONSTERS) }, zone: { type: 'integer', enum: [2, 3] } })), trigger: str })),
+/** 이야기 초안 스키마. 적 목록은 기본 적 + 세계만의 적 */
+export const scenarioDraftSchema = (monsterIds: string[] = Object.keys(MONSTERS)) => obj({
+  encounters: arr(obj({ key: str, name: str, location: str, enemies: arr(obj({ monster: { type: 'string', enum: monsterIds }, zone: { type: 'integer', enum: [2, 3] } })), trigger: str })),
   flags: arr(obj({ key: { type: 'string', description: '영문 소문자와 _' }, when: str, location: { type: 'string', description: '장소 key 또는 ""' }, requires: COND_SCHEMA })),
   quests: arr(obj({
     key: str, name: str, kind: { type: 'string', enum: ['main', 'side'] }, start: COND_SCHEMA,
@@ -137,7 +138,7 @@ export const SCENARIO_DRAFT_SCHEMA = obj({
     jobs: arr(obj({
       key: str, name: str, type: { type: 'string', enum: [...QUEST_TYPES] }, description: { type: 'string', description: '의뢰 내용 한두 문장' },
       location: { type: 'string', description: '일이 벌어지는 장소 key' },
-      enemies: arr(obj({ monster: { type: 'string', enum: Object.keys(MONSTERS) }, zone: { type: 'integer', enum: [2, 3] } })),
+      enemies: arr(obj({ monster: { type: 'string', enum: monsterIds }, zone: { type: 'integer', enum: [2, 3] } })),
       reward_money: { type: 'integer', description: '보상 돈 (0이면 엔진이 위협도로 정함)' }, repeatable: { type: 'boolean' },
     })),
   }),
@@ -172,6 +173,7 @@ export const SCENARIO_DRAFT_SCHEMA = obj({
     resolve_flag: { type: 'string', description: '장면이 끝났음을 나타내는 flags의 key 또는 ""' },
   })),
 });
+export const SCENARIO_DRAFT_SCHEMA = scenarioDraftSchema();
 
 // ---------------------------------------------------------------- 정리
 
@@ -369,6 +371,7 @@ export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating:
 /** 시나리오 초안을 기존 세계에 덧붙인다 (기존 ID와 겹치지 않게) */
 export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: WorldPackage; notes: string[] } {
   const notes: string[] = [];
+  const MT = monsterTable(world);
   const w: WorldPackage = structuredClone(world);
   const taken = new Set<string>([...w.locations, ...w.characters, ...w.facts, ...w.claims, ...(w.encounters ?? []), ...(w.quests ?? []), ...(w.endings ?? [])].map((x) => x.id));
   const encMap = idMap(d.encounters.map((e) => e.key), 'enc', taken);
@@ -396,7 +399,7 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
   const encounters: Encounter[] = [];
   for (const e of d.encounters) {
     const locationId = refs.loc(e.location);
-    const enemies = e.enemies.filter((x) => MONSTERS[x.monster]).map((x) => ({ monsterId: x.monster, zone: (x.zone === 3 ? 3 : 2) as 2 | 3 }));
+    const enemies = e.enemies.filter((x) => MT[x.monster]).map((x) => ({ monsterId: x.monster, zone: (x.zone === 3 ? 3 : 2) as 2 | 3 }));
     if (!locationId || !enemies.length) { notes.push(`조우 "${e.name}": 장소나 적이 올바르지 않아 뺐습니다.`); continue; }
     encounters.push({ id: encMap.get(e.key)!, name: e.name, locationId, enemies: enemies.slice(0, 4), trigger: e.trigger });
   }
@@ -494,7 +497,7 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
     const boardLoc = w.locations.find((l) => l.id === refs.loc(d.board!.location));
     const jobs = d.board.jobs.flatMap((j) => {
       const locationId = refs.loc(j.location);
-      const enemies = j.enemies.filter((x) => MONSTERS[x.monster]).map((x) => ({ monsterId: x.monster, zone: (x.zone === 3 ? 3 : 2) as 2 | 3 })).slice(0, 4);
+      const enemies = j.enemies.filter((x) => MT[x.monster]).map((x) => ({ monsterId: x.monster, zone: (x.zone === 3 ? 3 : 2) as 2 | 3 })).slice(0, 4);
       if (!locationId || !enemies.length) { notes.push(`의뢰 "${j.name}": 장소나 토벌할 적이 없어 뺐습니다.`); return []; }
       return [{ id: freshId('job', j.key), name: j.name, type: j.type, description: j.description, locationId, enemies, ...(j.reward_money > 0 ? { rewards: { money: clamp(j.reward_money, 1, 5000) } } : {}), ...(j.repeatable === false ? { repeatable: false } : {}) }];
     });

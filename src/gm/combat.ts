@@ -12,7 +12,7 @@ import type { LlmClient } from '../llm/types';
 import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
-import { MONSTERS } from '../engine/combat/monsters';
+import { MONSTERS, monsterTable } from '../engine/combat/monsters';
 import { CLASS_KITS } from '../engine/combat/cards';
 import type { Gear } from '../engine/combat/combat';
 import { abilityModifier } from '../engine/dice/dice';
@@ -65,13 +65,13 @@ function finishIfOver(b: Builder) {
   if (cs.outcome === 'victory') {
     const total = Object.values(cs.combatants)
       .filter((c) => c.side === 'enemy' && c.hp <= 0)
-      .reduce((sum, c) => sum + (MONSTERS[c.id.split('#')[0]!]?.xp ?? 0), 0);
+      .reduce((sum, c) => sum + (c.xp ?? MONSTERS[c.id.split('#')[0]!]?.xp ?? 0), 0);
     const members = Object.values(cs.combatants).filter((c) => c.side === 'party').map((c) => c.id);
     const share = Math.floor(total / Math.max(1, members.length));
     progressEvents(b.state, members.map((who) => ({ who, amount: share })), `전투 승리 · 총 ${total} XP를 ${members.length}명이 나눔`, levelCapOf(b.world)).forEach((e) => b.push(e));
     // 전리품: 조우에 정해진 것, 없으면 적 경험치에 비례한 돈 (도망친 적은 빼고)
     const enc = b.world.encounters?.find((x) => x.id === cs.encounterId);
-    const beaten = Object.values(cs.combatants).filter((c) => c.side === 'enemy' && c.hp <= 0 && !c.escaped).reduce((sum, c) => sum + (MONSTERS[c.monsterId ?? '']?.xp ?? 0), 0);
+    const beaten = Object.values(cs.combatants).filter((c) => c.side === 'enemy' && c.hp <= 0 && !c.escaped).reduce((sum, c) => sum + (c.xp ?? MONSTERS[c.monsterId ?? '']?.xp ?? 0), 0);
     // 의뢰 토벌은 의뢰 보상으로 받으므로 기본 전리품 돈이 없다
     const money = enc?.loot ? enc.loot.money ?? 0 : cs.encounterId.startsWith('job/') ? 0 : Math.round(beaten / 10);
     if (money > 0) b.push({ type: 'money_changed', delta: money, reason: '전리품', currency: currencyName(b.world) });
@@ -128,7 +128,7 @@ export function beginEncounter(world: WorldPackage, state: GameState, encounterI
   if (!enc) throw new Error('이 장소에서 시작할 수 없는 조우');
   const rng = createRng(state.rngState);
   const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id], cards: state.grantedCards?.[id] }));
-  const combat = startCombat(enc, state.player.sheet, rng, companions, playerGear(world, state));
+  const combat = startCombat(enc, state.player.sheet, rng, companions, playerGear(world, state), monsterTable(world));
   const b = new Builder(world, state, turn);
   b.push({ type: 'combat_started', combat, rngState: rng.state() });
   runEnemies(b, rng);
@@ -180,7 +180,7 @@ export async function narrateCombat(
 - 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
 - ${genreGuide(world)}
 - ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
-    user: `## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'}${c.monsterId && MONSTERS[c.monsterId] ? ` — ${MONSTERS[c.monsterId]!.look}` : ''})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
+    user: `## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'}${c.look ? ` — ${c.look}` : c.monsterId && MONSTERS[c.monsterId] ? ` — ${MONSTERS[c.monsterId]!.look}` : ''})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
     maxTokens: 3000,
   }, onText, signal);
 }

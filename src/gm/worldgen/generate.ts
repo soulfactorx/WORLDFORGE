@@ -1,13 +1,13 @@
 import { genreGuide } from '../../engine/genre';
 import { genreOf } from '../../data/genres';
 import { CLASSES } from '../../engine/character/rules';
-import { monstersFor } from '../../engine/combat/monsters';
+import { monsterTable, monstersOfWorld } from '../../engine/combat/monsters';
 import { validateWorld, type Issue } from '../../engine/package/validate';
 import type { WorldPackage } from '../../engine/schema';
 import type { LlmClient } from '../../llm/types';
 import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
-import { addScenario, SCENARIO_DRAFT_SCHEMA, type ScenarioDraft, WORLD_DRAFT_SCHEMA, type WorldDraft, worldFromDraft } from './draft';
+import { addScenario, scenarioDraftSchema, type ScenarioDraft, WORLD_DRAFT_SCHEMA, type WorldDraft, worldFromDraft } from './draft';
 
 /**
  * AI 세계관 생성 보조 (설계서 5.3절).
@@ -124,8 +124,8 @@ export async function generateScenario(
   onStage('이야기 만드는 중 (임무·조우·결말)…');
   const draft = await llm.json<ScenarioDraft>({
     system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${genreOf(world.genre?.id).combat === 'rare' ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : ''}`,
-    user: `${worldSummary(world)}\n\n## 쓸 수 있는 적 (이 세계의 장르)\n${monstersFor(world.genre?.id).map((m) => `- ${m.id}: ${m.name} · ${m.role} · 경험치 ${m.xp} · ${m.look}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
+    user: `${worldSummary(world)}\n\n## 쓸 수 있는 적 (이 세계의 장르)\n${monstersOfWorld(world).map((m) => `- ${m.id}: ${m.name} · ${m.role} · 경험치 ${m.xp} · ${m.look}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 12000, effort: 'medium',
-  }, SCENARIO_DRAFT_SCHEMA, signal);
+  }, scenarioDraftSchema(Object.keys(monsterTable(world))), signal);
   return addScenario(world, draft);
 }

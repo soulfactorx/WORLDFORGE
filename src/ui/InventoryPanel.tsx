@@ -4,6 +4,7 @@ import type { GameEvent } from '../engine/state/events';
 import type { GameState } from '../engine/state/state';
 import { acceptJob, buyItem, currencyName, equipItem, sellItem, shopHere, useItem } from '../gm/economy';
 import { boardHere, jobRewards, jobStatus } from '../engine/jobs';
+import { monsterTable } from '../engine/combat/monsters';
 import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { useRs } from './reskin';
 
@@ -104,7 +105,7 @@ export function BoardPanel({ world, state, onCommit, disabled }: { world: WorldP
       <ul className="items-list">
         {board.jobs.map((job) => {
           const st = jobStatus(world, state, job);
-          const r = jobRewards(job);
+          const r = jobRewards(job, monsterTable(world));
           const where = world.locations.find((l) => l.id === job.locationId)?.name;
           return (
             <li key={job.id}>

@@ -2,6 +2,7 @@ import { levelCapOf } from '../engine/genre';
 import { evalCondition, questTransitions, reachedEnding } from '../engine/scenario';
 import type { Rewards, WorldPackage } from '../engine/schema';
 import { jobRewards, jobTransitions } from '../engine/jobs';
+import { monsterTable } from '../engine/combat/monsters';
 import { ALL_CARDS } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
@@ -98,7 +99,7 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
   for (const t of jobTransitions(world, s)) {
     if (t.kind === 'completed') {
       push({ type: 'job_completed', jobId: t.job.id, name: t.job.name });
-      rewardEvents(world, s, jobRewards(t.job), `의뢰 완료: ${t.job.name}`).forEach(push);
+      rewardEvents(world, s, jobRewards(t.job, monsterTable(world)), `의뢰 완료: ${t.job.name}`).forEach(push);
     } else push({ type: 'job_failed', jobId: t.job.id, name: t.job.name, reason: t.reason ?? '' });
   }
   // 관계 사건: 조건이 맞으면 열리고, 해결 플래그가 서거나 시간이 지나면 닫힌다

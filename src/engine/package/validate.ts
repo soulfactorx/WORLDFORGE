@@ -7,7 +7,7 @@ import { STD_ITEMS } from '../../data/items';
 import { QUEST_TYPES, type Rewards } from '../schema';
 import { ALL_CARDS } from '../combat/combat';
 import { STAGES } from '../relationship';
-import { encounterDifficulty, MONSTERS } from '../combat/monsters';
+import { encounterDifficulty, MONSTERS, monsterTable } from '../combat/monsters';
 import type { Condition, WorldPackage } from '../schema';
 import { GENRES } from '../../data/genres';
 import { MAX_LEVEL } from '../character/progression';
@@ -65,6 +65,15 @@ export function validateWorld(input: unknown): Issue[] {
     return v as T[];
   };
   const locations = arr<WorldPackage['locations'][number]>('locations', true);
+  // ---- 세계만의 적 (기본 적 위에 더한다)
+  const customMonsters = arr<NonNullable<WorldPackage['monsters']>[number]>('monsters', false);
+  const MT: Record<string, unknown> = { ...MONSTERS };
+  const DICE = /^\d{0,2}d\d{1,3}$/;
+  const CONDS = ['poisoned', 'frightened', 'restrained', 'stunned', 'blinded'];
+  const ABILS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  const ROLES = ['minion', 'brute', 'skirmisher', 'artillery', 'controller', 'leader', 'boss'];
+  for (const m of customMonsters) if (isObj(m) && isStr(m.id)) MT[m.id] = m;
+
   const characters = arr<WorldPackage['characters'][number]>('characters', true);
   const facts = arr<WorldPackage['facts'][number]>('facts', true);
   const claims = arr<WorldPackage['claims'][number]>('claims', true);
@@ -202,14 +211,14 @@ export function validateWorld(input: unknown): Issue[] {
     if (!locIds.has(e.locationId)) err(`${p}.locationId`, `없는 장소 "${e.locationId}"`);
     if (!Array.isArray(e.enemies) || !e.enemies.length) err(`${p}.enemies`, '적이 한 명 이상 필요합니다.');
     else e.enemies.forEach((en, j) => {
-      if (!MONSTERS[en.monsterId]) err(`${p}.enemies[${j}].monsterId`, `알 수 없는 몬스터 "${en.monsterId}" (${Object.keys(MONSTERS).join(', ')})`);
+      if (!MT[en.monsterId]) err(`${p}.enemies[${j}].monsterId`, `알 수 없는 적 "${en.monsterId}" (기본 적 또는 이 세계의 적 ID)`);
       if (en.zone !== 2 && en.zone !== 3) err(`${p}.enemies[${j}].zone`, 'zone은 2(적 전열) 또는 3(적 후열)입니다.');
     });
     text(e.trigger, `${p}.trigger`);
     // 난이도: 1레벨 혼자 기준으로 치명적이면 알린다 (동료가 있거나 레벨이 오르면 괜찮을 수 있다)
-    const ids = (e.enemies ?? []).map((x) => x.monsterId).filter((id) => MONSTERS[id]);
+    const ids = (e.enemies ?? []).map((x) => x.monsterId).filter((id) => MT[id]);
     if (ids.length) {
-      const d = encounterDifficulty(ids, [1, 1]);
+      const d = encounterDifficulty(ids, [1, 1], monsterTable(w as WorldPackage));
       if (d.difficulty === 'deadly') warn(p, `"${e.name}"은(는) 1레벨 2인 일행에게 치명적인 조우입니다 (적 경험치 ${d.xp} > 예산 ${d.budget[2]}). 레벨이 오른 뒤에 일어나도록 조건을 걸거나 적을 줄이세요.`);
     }
   });
@@ -230,7 +239,7 @@ export function validateWorld(input: unknown): Issue[] {
     if ('knows' in cond) { if (!claimIds.has(cond.knows)) err(path, `없는 명제 "${cond.knows}"`); if (cond.min && !KNOWLEDGE_STATES.includes(cond.min)) err(path, `알 수 없는 지식 상태 "${cond.min}"`); return; }
     if ('npcAt' in cond) { if (!charIds.has(cond.npcAt)) err(path, `없는 인물 "${cond.npcAt}"`); if (!locIds.has(cond.at)) err(path, `없는 장소 "${cond.at}"`); return; }
     if ('npcAlive' in cond) { if (!charIds.has(cond.npcAlive)) err(path, `없는 인물 "${cond.npcAlive}"`); return; }
-    if ('defeated' in cond) { if (!MONSTERS[cond.defeated]) err(path, `없는 적 "${cond.defeated}"`); return; }
+    if ('defeated' in cond) { if (!MT[cond.defeated]) err(path, `없는 적 "${cond.defeated}"`); return; }
     if ('questFailed' in cond) { if (!questIds.has(cond.questFailed)) err(path, `없는 임무 "${cond.questFailed}"`); return; }
     if ('at' in cond) { if (!locIds.has(cond.at)) err(path, `없는 장소 "${cond.at}"`); return; }
     if ('cleared' in cond) { if (!encIds.has(cond.cleared)) err(path, `없는 조우 "${cond.cleared}"`); return; }
@@ -318,6 +327,42 @@ export function validateWorld(input: unknown): Issue[] {
       err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money 중 하나를 쓰세요.');
     });
   };
+  // ---- 세계만의 적
+  customMonsters.forEach((m, i) => {
+    const p = `monsters[${i}]`;
+    if (!isObj(m)) { err(p, '적 정의는 객체입니다.'); return; }
+    if (!isStr(m.id) || !/^mon\/[a-z0-9_-]+$/.test(m.id)) err(`${p}.id`, '적 ID는 "mon/소문자-이름" 형식입니다.');
+    else if (customMonsters.findIndex((x) => x?.id === m.id) !== i) err(`${p}.id`, `ID "${m.id}"가 중복됩니다.`);
+    text(m.name, `${p}.name`); text(m.look, `${p}.look`, false);
+    if (!ROLES.includes(m.role)) err(`${p}.role`, `역할은 ${ROLES.join('/')} 중 하나입니다.`);
+    for (const k of ['xp', 'ac', 'hp'] as const) if (typeof m[k] !== 'number' || m[k] < (k === 'xp' ? 0 : 1) || m[k] > (k === 'xp' ? 50000 : k === 'ac' ? 30 : 1000)) err(`${p}.${k}`, `${k}가 올바른 숫자가 아닙니다.`);
+    if (!isObj(m.abilities) || !ABILS.every((a) => typeof (m.abilities as Record<string, unknown>)[a] === 'number')) err(`${p}.abilities`, '능력치 6개(str dex con int wis cha)가 필요합니다.');
+    const checkAtk = (a: unknown, q: string) => {
+      if (!isObj(a)) { err(q, '공격은 객체입니다.'); return; }
+      text(a.name as string, `${q}.name`);
+      if (a.kind !== 'melee' && a.kind !== 'ranged') err(`${q}.kind`, 'melee 또는 ranged입니다.');
+      if (!isStr(a.damage) || !DICE.test(a.damage)) err(`${q}.damage`, '피해는 주사위 식입니다 (예: 1d8).');
+      if (typeof a.toHit !== 'number' || typeof a.bonus !== 'number') err(q, 'toHit·bonus는 숫자입니다.');
+      if (isObj(a.inflict) && (!CONDS.includes(a.inflict.condition as string) || !ABILS.includes(a.inflict.save as string))) err(`${q}.inflict`, `상태 이상(${CONDS.join('/')})과 내성 능력치를 정하세요.`);
+    };
+    const checkSp = (sp: unknown, q: string) => {
+      if (!isObj(sp)) { err(q, '기술은 객체입니다.'); return; }
+      text(sp.name as string, `${q}.name`);
+      if (sp.kind !== 'save' && sp.kind !== 'area') err(`${q}.kind`, 'save(한 명) 또는 area(한 존)입니다.');
+      if (!ABILS.includes(sp.save as string)) err(`${q}.save`, '내성 능력치가 필요합니다.');
+      if (!isStr(sp.damage) || !DICE.test(sp.damage)) err(`${q}.damage`, '피해는 주사위 식입니다 (예: 2d6).');
+      if (isObj(sp.inflict) && !CONDS.includes(sp.inflict.condition as string)) err(`${q}.inflict`, `상태 이상은 ${CONDS.join('/')} 중 하나입니다.`);
+    };
+    if (!Array.isArray(m.attacks) || !m.attacks.length) err(`${p}.attacks`, '공격이 하나 이상 필요합니다.');
+    else m.attacks.forEach((a, j) => checkAtk(a, `${p}.attacks[${j}]`));
+    (Array.isArray(m.specials) ? m.specials : []).forEach((sp, j) => checkSp(sp, `${p}.specials[${j}]`));
+    (Array.isArray(m.phases) ? m.phases : []).forEach((ph, j) => {
+      if (typeof ph.below !== 'number' || ph.below <= 0 || ph.below >= 1) err(`${p}.phases[${j}].below`, '0~1 사이 비율입니다 (예: 0.5).');
+      text(ph.line, `${p}.phases[${j}].line`);
+      (ph.attacks ?? []).forEach((a, k) => checkAtk(a, `${p}.phases[${j}].attacks[${k}]`));
+      (ph.specials ?? []).forEach((sp, k) => checkSp(sp, `${p}.phases[${j}].specials[${k}]`));
+    });
+  });
   // ---- 아이템·상점·전리품 (설계 v3 6.4)
   const checkStacks = (list: unknown, path: string) => {
     if (list === undefined) return;
@@ -361,7 +406,7 @@ export function validateWorld(input: unknown): Issue[] {
       text(job.name, `${p}.name`); text(job.description, `${p}.description`);
       if (!(QUEST_TYPES as readonly string[]).includes(job.type)) err(`${p}.type`, `유형은 ${QUEST_TYPES.join('/')} 중 하나입니다.`);
       if (!locIds.has(job.locationId)) err(`${p}.locationId`, `없는 장소 "${job.locationId}"`);
-      if (job.enemies?.length) job.enemies.forEach((e, k) => { if (!MONSTERS[e.monsterId]) err(`${p}.enemies[${k}]`, `없는 적 "${e.monsterId}"`); });
+      if (job.enemies?.length) job.enemies.forEach((e, k) => { if (!MT[e.monsterId]) err(`${p}.enemies[${k}]`, `없는 적 "${e.monsterId}"`); });
       else if (!job.complete) err(p, '토벌 적(enemies)이나 완료 조건(complete) 중 하나가 필요합니다.');
       if (job.complete) checkCond(job.complete, `${p}.complete`);
       if (job.requires) checkCond(job.requires, `${p}.requires`);

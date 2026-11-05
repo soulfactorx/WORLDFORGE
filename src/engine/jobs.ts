@@ -1,7 +1,7 @@
 /**
  * 의뢰판 (설계 v3 6.3) — 순수 함수. 반복 가능한 의뢰의 상태와 토벌 조우.
  */
-import { MONSTERS } from './combat/monsters';
+import { type MonsterDef, MONSTERS } from './combat/monsters';
 import { evalCondition } from './scenario';
 import type { Encounter, Job, WorldPackage } from './schema';
 import type { GameState } from './state/state';
@@ -39,12 +39,12 @@ export function jobEncounters(world: WorldPackage, state: GameState): Encounter[
 }
 
 /** 토벌 의뢰의 적 경험치 합 (보상 기준) */
-export const jobThreatXp = (job: Job) => (job.enemies ?? []).reduce((s, e) => s + (MONSTERS[e.monsterId]?.xp ?? 0), 0);
+export const jobThreatXp = (job: Job, table: Record<string, MonsterDef> = MONSTERS) => (job.enemies ?? []).reduce((s, e) => s + (table[e.monsterId]?.xp ?? 0), 0);
 
 /** 보상이 정해지지 않은 의뢰의 기본 보상: 위협도에 비례한 돈 */
-export function jobRewards(job: Job) {
+export function jobRewards(job: Job, table: Record<string, MonsterDef> = MONSTERS) {
   if (job.rewards) return job.rewards;
-  const xp = jobThreatXp(job);
+  const xp = jobThreatXp(job, table);
   return { money: xp ? Math.max(10, Math.round(xp / 4)) : 25 };
 }
 

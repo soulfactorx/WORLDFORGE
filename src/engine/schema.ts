@@ -148,6 +148,66 @@ export interface RelationBeat {
   resolveFlag?: string;
 }
 
+/**
+ * 세계만의 적 (설계 v3 4.5 · 규칙 패키지). 제작자가 쓰기 쉬운 형식 — 엔진이 전투 카드로 바꾼다.
+ * 하이 판타지·무협 기본 적(SRD 기반·자체 창작)은 엔진에 있고, 이것은 그 위에 더한다.
+ */
+export interface CustomMonster {
+  /** "mon/…" */
+  id: EntityId;
+  name: string;
+  /** 외형·성격 한 줄 (전투 서술에 쓰임) */
+  look: string;
+  role: 'minion' | 'brute' | 'skirmisher' | 'artillery' | 'controller' | 'leader' | 'boss';
+  /** 도전 지수 (표시·숙련 보너스용, 예: "1/2", "3") */
+  cr: string;
+  /** 처치 경험치 */
+  xp: number;
+  ac: number;
+  hp: number;
+  abilities: { str: number; dex: number; con: number; int: number; wis: number; cha: number };
+  saves?: ('str' | 'dex' | 'con' | 'int' | 'wis' | 'cha')[];
+  preferRanged?: boolean;
+  packTactics?: boolean;
+  fleeAt?: number;
+  immune?: ('poisoned' | 'frightened' | 'restrained' | 'stunned' | 'blinded')[];
+  attacks: MonsterAttack[];
+  /** 내성 기술 (한 명) · 범위 기술 (한 존) */
+  specials?: MonsterSpecial[];
+  /** 보스 단계: HP가 below 비율 아래로 떨어지면 대사와 함께 새 공격·방어도 변화 */
+  phases?: { below: number; line: string; ac?: number; attacks?: MonsterAttack[]; specials?: MonsterSpecial[] }[];
+}
+
+export interface MonsterAttack {
+  name: string;
+  kind: 'melee' | 'ranged';
+  toHit: number;
+  /** 주사위 (예: 1d8) */
+  damage: string;
+  bonus: number;
+  type: string;
+  /** 원거리 사거리 (존, 기본 3) */
+  range?: number;
+  /** 한 번에 여러 번 */
+  count?: number;
+  inflict?: { condition: 'poisoned' | 'frightened' | 'restrained' | 'stunned' | 'blinded'; save: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'; dc: number; rounds: number };
+  knockProne?: { save: 'str' | 'dex'; dc: number };
+}
+
+export interface MonsterSpecial {
+  name: string;
+  kind: 'save' | 'area';
+  save: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
+  dc: number;
+  damage: string;
+  type: string;
+  /** 사거리 (존, 범위는 0 = 자기 존) */
+  range: number;
+  /** 전투마다 쓸 수 있는 횟수 (없으면 제한 없음) */
+  uses?: number;
+  inflict?: { condition: 'poisoned' | 'frightened' | 'restrained' | 'stunned' | 'blinded'; rounds: number };
+}
+
 /** 아이템 (설계 v3 6.4). 표준 아이템(std/…)은 모든 세계에서 쓸 수 있다 */
 export interface ItemDef {
   id: EntityId;
@@ -514,6 +574,8 @@ export interface WorldPackage {
   };
   /** 이 세계만의 아이템 (설계 v3 6.4) */
   items?: ItemDef[];
+  /** 이 세계만의 적 (기본 적에 더한다) */
+  monsters?: CustomMonster[];
   /** 시작 방식 선택지 (v0.13) */
   starts?: StartOption[];
   /** 장르 (설계 v3 2장): 프로필 ID와 세계별 설정 */

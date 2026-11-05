@@ -3,7 +3,7 @@
  * 가져올 때 ID 충돌·없는 의존성·맞지 않는 참조를 보여주고, 덮어쓰지 않고 사용자가 고른다 (v2 원칙).
  * 순수 함수 — 파일 읽기·이미지 저장은 storage/packs.
  */
-import type { AssetMeta, Belief, Character, Claim, EntityId, ItemDef, NpcRelation, WorldPackage } from '../schema';
+import type { AssetMeta, Belief, Character, Claim, CustomMonster, EntityId, ItemDef, NpcRelation, WorldPackage } from '../schema';
 
 export interface PackManifest {
   id: string;
@@ -35,6 +35,8 @@ export interface CharacterPack {
 export interface RulesPack {
   manifest: PackManifest & { type: 'rules' };
   items: ItemDef[];
+  /** 세계만의 적 */
+  monsters?: CustomMonster[];
   genre?: { terms?: Record<string, string>; currency?: string; levelCap?: number };
 }
 
@@ -66,7 +68,8 @@ export function buildCharacterPack(world: WorldPackage, ids: EntityId[], manifes
 export function buildRulesPack(world: WorldPackage, manifest: Omit<PackManifest, 'type' | 'contentRating'>): RulesPack {
   const g = world.genre;
   const genre = g && (g.terms || g.currency || g.levelCap) ? { ...(g.terms ? { terms: g.terms } : {}), ...(g.currency ? { currency: g.currency } : {}), ...(g.levelCap ? { levelCap: g.levelCap } : {}) } : undefined;
-  return { manifest: { ...manifest, type: 'rules', contentRating: world.manifest.contentRating }, items: structuredClone(world.items ?? []), ...(genre ? { genre } : {}) };
+  return { manifest: { ...manifest, type: 'rules', contentRating: world.manifest.contentRating }, items: structuredClone(world.items ?? []),
+    ...(world.monsters?.length ? { monsters: structuredClone(world.monsters) } : {}), ...(genre ? { genre } : {}) };
 }
 
 /** 패키지 JSON 검사 (형식만 — 참조는 가져올 때 계획에서 본다) */
@@ -93,7 +96,7 @@ export type Resolution = 'rename' | 'replace' | 'skip';
 
 export interface ImportPlan {
   /** 세계에 이미 있는 ID (사용자가 이름 바꿔 넣기·바꾸기·건너뛰기를 고른다) */
-  conflicts: { kind: '인물' | '명제' | '아이템' | '이미지'; id: string; existing: string; incoming: string }[];
+  conflicts: { kind: '인물' | '명제' | '아이템' | '이미지' | '적'; id: string; existing: string; incoming: string }[];
   /** 세계에 없는 의존성 */
   missingRequires: { id: string; version: string }[];
   /** 세계에 없는 장소를 가리키는 인물·일정 (가져올 때 고른 장소로 옮긴다) */
@@ -129,6 +132,7 @@ export function planImport(world: WorldPackage, pack: ContentPack): ImportPlan {
     if (missing.length) plan.warnings.push(`세계에 없는 아이템을 건네는 인물이 있습니다 (${missing.join(', ')}) — 그 항목은 뺍니다.`);
   } else {
     itemConf((pack as RulesPack).items);
+    for (const m of (pack as RulesPack).monsters ?? []) { const ex = world.monsters?.find((x) => x.id === m.id); if (ex) plan.conflicts.push({ kind: '적', id: m.id, existing: ex.name, incoming: m.name }); }
     const g = (pack as RulesPack).genre;
     if (g?.terms && world.genre?.terms) {
       const clash = Object.keys(g.terms).filter((k) => world.genre!.terms![k] && world.genre!.terms![k] !== g.terms![k]);
@@ -171,7 +175,7 @@ export function applyPack(world: WorldPackage, pack: ContentPack, opts: ApplyOpt
   const notes: string[] = [];
   const res = (id: string): Resolution => opts.resolve?.[id] ?? 'rename';
   const conflict = (id: string) => plan.conflicts.some((c) => c.id === id);
-  const taken = new Set<string>([...w.characters, ...w.claims, ...w.locations, ...w.facts, ...(w.items ?? []), ...(w.assets ?? [])].map((x) => x.id));
+  const taken = new Set<string>([...w.characters, ...w.claims, ...w.locations, ...w.facts, ...(w.items ?? []), ...(w.assets ?? []), ...(w.monsters ?? [])].map((x) => x.id));
   const idMap = new Map<string, string>(); // 이름 바꾼 ID
   const skipped = new Set<string>();
   const place = (id: string) => {
@@ -192,6 +196,12 @@ export function applyPack(world: WorldPackage, pack: ContentPack, opts: ApplyOpt
     w.items = [...(w.items ?? []).filter((x) => x.id !== id), { ...it, id }];
   }
   if (pack.manifest.type === 'rules') {
+    for (const m of (pack as RulesPack).monsters ?? []) {
+      const id = place(m.id);
+      if (!id) continue;
+      w.monsters = [...(w.monsters ?? []).filter((x) => x.id !== id), { ...m, id }];
+    }
+    if ((pack as RulesPack).monsters?.length) notes.push(`적 ${(pack as RulesPack).monsters!.length}종을 넣었습니다 (조우 탭에서 쓸 수 있습니다).`);
     const g = (pack as RulesPack).genre;
     if (g?.terms) {
       const terms = { ...g.terms, ...(w.genre?.terms ?? {}) }; // 세계의 것이 이긴다

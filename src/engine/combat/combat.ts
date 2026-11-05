@@ -20,7 +20,7 @@ import { abilityModifier, d20Test, type RollMode } from '../dice/dice';
 import { type Rng, rollDie } from '../dice/rng';
 import { proficiencyBonus, SKILLS } from '../character/rules';
 import { BASIC_CARDS, type CardDef, CLASS_CARDS, CLASS_KITS, type Condition, CONDITION_LABEL, type Cost, type Inflict, kitCards, WEAPON_CARDS } from './cards';
-import { ALL_MONSTER_CARDS, MONSTERS } from './monsters';
+import { ALL_MONSTER_CARDS, type MonsterDef, type MonsterPhase, MONSTERS } from './monsters';
 
 export const ZONE_NAMES = ['아군 후열', '아군 전열', '적 전열', '적 후열'] as const;
 export const ZONE_COUNT = ZONE_NAMES.length;
@@ -82,8 +82,13 @@ export interface Combatant {
   uncannyDodge?: boolean;
   /** 소마법 강화: 소마법 피해 주사위 배수 (5레벨부터 2) */
   cantripTier?: number;
-  /** 이 전투원만 가진 카드 정의 (소지품 물약 등, 설계 v3 6.4) */
+  /** 이 전투원만 가진 카드 정의 (소지품 물약·세계만의 적 기술 등, 설계 v3 6.4) */
   extraCards?: CardDef[];
+  /** 적: 처치 경험치·역할·외형·보스 단계 (세계만의 적도 전투 안에서 스스로 완결되도록 담아 둔다) */
+  xp?: number;
+  role?: string;
+  look?: string;
+  phases?: MonsterPhase[];
 }
 
 export interface Economy {
@@ -159,8 +164,9 @@ export function cardOf(c: Combatant | undefined, id: string): CardDef {
 /** 손패: 기본 행동 + 캐릭터 카드 (+ 소모품). 몬스터는 기본 행동 중 이동·질주만 쓴다. 다 쓴 소모품은 빠진다. */
 export function handOf(c: Combatant): CardDef[] {
   const basics = c.side === 'party' ? BASIC_CARDS.map((b) => b.id) : ['basic/move', 'basic/dash', 'basic/stand', ...(c.fleeAt ? [ESCAPE_CARD.id] : [])];
-  const extra = (c.extraCards ?? []).filter((x) => !x.resource || (c.resources[x.resource]?.cur ?? 0) > 0);
-  return [...[...c.cards, ...basics].map(cardById), ...extra];
+  // 전투원 전용 정의는 두 가지: 손패에 붙는 소모품(item) · 카드 ID로 찾는 세계만의 적 기술 (단계 카드는 c.cards에 들어올 때만)
+  const extra = (c.extraCards ?? []).filter((x) => x.kind === 'item' && (!x.resource || (c.resources[x.resource]?.cur ?? 0) > 0));
+  return [...[...c.cards, ...basics].map((id) => cardOf(c, id)), ...extra];
 }
 
 // ---------------------------------------------------------------- 시작
@@ -208,10 +214,14 @@ export function slotFor(c: Combatant, minLevel: number): number | null {
 /** 도전 지수별 숙련 보너스 (SRD: CR 0~4 = +2, 5~8 = +3) */
 const monsterProf = (cr: string) => (Number(cr.includes('/') ? 0 : cr) >= 5 ? 3 : 2);
 
-export function monsterCombatant(monsterId: string, index: number, zone: number): Combatant {
-  const m = MONSTERS[monsterId];
+export function monsterCombatant(monsterId: string, index: number, zone: number, table: Record<string, MonsterDef> = MONSTERS): Combatant {
+  const m = table[monsterId];
   if (!m) throw new Error(`unknown monster: ${monsterId}`);
+  // 기본 적이 아니면 카드 정의를 전투원이 직접 들고 다닌다
+  const custom = MONSTERS[monsterId] !== m;
   return {
+    xp: m.xp, role: m.role, look: m.look, ...(m.phases?.length ? { phases: m.phases } : {}),
+    ...(custom ? { extraCards: [...m.cards, ...(m.phases ?? []).flatMap((p) => p.addCards ?? [])] } : {}),
     id: `${monsterId}#${index}`, name: `${m.name} ${index}`, side: 'enemy', isPlayer: false, zone,
     hp: m.hp, maxHp: m.hp, ac: m.ac, level: 1, abilities: { ...m.abilities }, profBonus: monsterProf(m.cr), saveProfs: [...(m.saves ?? [])],
     stealthBonus: abilityModifier(m.abilities.dex), cards: m.cards.map((c) => c.id),
@@ -238,7 +248,7 @@ function companionStartZone(c: CompanionEntry): number {
   return c.order?.mode === 'hold_back' || c.sheet.classId === 'wizard' ? 0 : 1;
 }
 
-export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng, companions: CompanionEntry[] = [], gear: Gear = {}): CombatState {
+export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng, companions: CompanionEntry[] = [], gear: Gear = {}, table: Record<string, MonsterDef> = MONSTERS): CombatState {
   const list: Combatant[] = [playerCombatant(sheet, gear)];
   for (const c of companions) {
     if (c.sheet.hp > 0) list.push(sheetCombatant(c.sheet, c.id, c.name, false, companionStartZone(c), c.cards?.length ? { cards: c.cards } : {}));
@@ -246,7 +256,7 @@ export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng,
   const counts: Record<string, number> = {};
   for (const e of enc.enemies) {
     counts[e.monsterId] = (counts[e.monsterId] ?? 0) + 1;
-    list.push(monsterCombatant(e.monsterId, counts[e.monsterId]!, Math.min(ZONE_COUNT - 1, Math.max(2, e.zone))));
+    list.push(monsterCombatant(e.monsterId, counts[e.monsterId]!, Math.min(ZONE_COUNT - 1, Math.max(2, e.zone)), table));
   }
   for (const c of list) c.initiative = rollDie(rng, 20) + abilityModifier(c.abilities.dex);
   const order = [...list].sort((a, b) => b.initiative - a.initiative || b.abilities.dex - a.abilities.dex || a.id.localeCompare(b.id)).map((c) => c.id);
@@ -650,7 +660,7 @@ function phaseCheck(cs: CombatState, effects: CombatEffect[], log: string[]) {
   for (const e of effects) if (e.kind === 'hp') delta[e.target] = (delta[e.target] ?? 0) + e.delta;
   for (const [id, d] of Object.entries(delta)) {
     const c = cs.combatants[id];
-    const phases = c?.monsterId ? MONSTERS[c.monsterId]?.phases : undefined;
+    const phases = c?.phases ?? (c?.monsterId ? MONSTERS[c.monsterId]?.phases : undefined);
     if (!c || !phases?.length || d >= 0) continue;
     const after = Math.max(0, c.hp + d);
     let index = c.phase ?? 0;
@@ -725,7 +735,7 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
       }
       case 'phase': {
         const c = next.combatants[e.target]!;
-        const ph = c.monsterId ? MONSTERS[c.monsterId]?.phases?.[e.index - 1] : undefined;
+        const ph = (c.phases ?? (c.monsterId ? MONSTERS[c.monsterId]?.phases : undefined))?.[e.index - 1];
         c.phase = e.index;
         if (ph) {
           c.cards = [...c.cards, ...(ph.addCards ?? []).map((x) => x.id)];

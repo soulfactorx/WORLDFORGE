@@ -6,6 +6,7 @@
 import type { Ability } from '../character/rules';
 import type { Abilities } from '../character/sheet';
 import type { CardDef, Condition, Inflict } from './cards';
+import type { CustomMonster, MonsterAttack, MonsterSpecial, WorldPackage } from '../schema';
 
 export type EnemyRole = 'minion' | 'brute' | 'skirmisher' | 'artillery' | 'controller' | 'leader' | 'boss';
 
@@ -225,9 +226,57 @@ const BUDGET: Record<number, [number, number, number]> = { 1: [50, 75, 100], 2: 
 export type Difficulty = 'easy' | 'moderate' | 'hard' | 'deadly';
 export const DIFFICULTY_LABEL: Record<Difficulty, string> = { easy: '쉬움', moderate: '보통', hard: '어려움', deadly: '치명적' };
 
-export function encounterDifficulty(monsterIds: string[], partyLevels: number[]): { xp: number; difficulty: Difficulty; budget: [number, number, number] } {
-  const xp = monsterIds.reduce((s, id) => s + (MONSTERS[id]?.xp ?? 0), 0);
+export function encounterDifficulty(monsterIds: string[], partyLevels: number[], table: Record<string, MonsterDef> = MONSTERS): { xp: number; difficulty: Difficulty; budget: [number, number, number] } {
+  const xp = monsterIds.reduce((s, id) => s + (table[id]?.xp ?? 0), 0);
   const budget = partyLevels.reduce<[number, number, number]>((acc, lv) => { const b = BUDGET[Math.max(1, Math.min(5, lv))]!; return [acc[0] + b[0], acc[1] + b[1], acc[2] + b[2]]; }, [0, 0, 0]);
   const difficulty: Difficulty = xp <= budget[0] ? 'easy' : xp <= budget[1] ? 'moderate' : xp <= budget[2] ? 'hard' : 'deadly';
   return { xp, difficulty, budget };
+}
+
+// ---------------------------------------------------------------- 세계만의 적 (설계 v3 4.5 · R7 규칙 패키지)
+
+const slugOf = (s: string) => s.replace(/^mon\//, '').replace(/[^a-z0-9_-]+/gi, '_');
+
+function attackCard(m: CustomMonster, a: MonsterAttack, i: number, tag = ''): CardDef {
+  const id = `${slugOf(m.id)}/${tag}a${i}`;
+  const spec: Atk = { toHit: a.toHit, dmg: a.damage, bonus: a.bonus, type: a.type, ...(a.range ? { range: a.range } : {}), ...(a.count && a.count > 1 ? { count: a.count } : {}),
+    ...(a.knockProne ? { prone: a.knockProne } : {}), ...(a.inflict ? { inflict: a.inflict } : {}) };
+  return a.kind === 'ranged' ? ranged(`custom/${id}`, a.name, spec) : melee(`custom/${id}`, a.name, spec);
+}
+
+function specialCard(m: CustomMonster, sp: MonsterSpecial, i: number, tag = ''): CardDef {
+  const id = `custom/${slugOf(m.id)}/${tag}s${i}`;
+  const spec: SaveSpec = { save: sp.save, dc: sp.dc, dmg: sp.damage, type: sp.type, range: sp.range, half: true, ...(sp.uses ? { resource: `${tag}s${i}` } : {}), ...(sp.inflict ? { inflict: sp.inflict } : {}) };
+  return sp.kind === 'area' ? area(id, sp.name, spec) : saveAtk(id, sp.name, spec);
+}
+
+/** 제작자 형식 → 엔진 적 정의 */
+export function compileMonster(m: CustomMonster): MonsterDef {
+  const resources: Record<string, number> = {};
+  (m.specials ?? []).forEach((sp, i) => { if (sp.uses) resources[`s${i}`] = sp.uses; });
+  (m.phases ?? []).forEach((ph, p) => (ph.specials ?? []).forEach((sp, i) => { if (sp.uses) resources[`p${p}s${i}`] = sp.uses; }));
+  return {
+    id: m.id, name: m.name, ac: m.ac, hp: m.hp, xp: m.xp, cr: m.cr, abilities: { ...m.abilities }, genres: [], role: m.role, look: m.look,
+    ...(m.saves?.length ? { saves: m.saves } : {}), ...(m.preferRanged ? { preferRanged: true } : {}), ...(m.packTactics ? { packTactics: true } : {}),
+    ...(m.fleeAt ? { fleeAt: m.fleeAt } : {}), ...(m.immune?.length ? { immune: m.immune } : {}), ...(Object.keys(resources).length ? { resources } : {}),
+    cards: [...m.attacks.map((a, i) => attackCard(m, a, i)), ...(m.specials ?? []).map((sp, i) => specialCard(m, sp, i))],
+    ...(m.phases?.length ? { phases: m.phases.map((ph, p) => ({
+      below: ph.below, line: ph.line, ...(ph.ac ? { ac: ph.ac } : {}),
+      addCards: [...(ph.attacks ?? []).map((a, i) => attackCard(m, a, i, `p${p}`)), ...(ph.specials ?? []).map((sp, i) => specialCard(m, sp, i, `p${p}`))],
+    })) } : {}),
+  };
+}
+
+/** 이 세계에서 쓸 수 있는 모든 적 (세계만의 적이 같은 ID의 기본 적보다 먼저) */
+export function monsterTable(world?: Pick<WorldPackage, 'monsters'>): Record<string, MonsterDef> {
+  const own = world?.monsters ?? [];
+  if (!own.length) return MONSTERS;
+  const out: Record<string, MonsterDef> = { ...MONSTERS };
+  for (const m of own) { try { out[m.id] = compileMonster(m); } catch { /* 검사기가 알린다 */ } }
+  return out;
+}
+
+/** 이 세계의 장르 적 + 세계만의 적 */
+export function monstersOfWorld(world: Pick<WorldPackage, 'monsters' | 'genre'>): MonsterDef[] {
+  return [...(world.monsters ?? []).map((m) => { try { return compileMonster(m); } catch { return null; } }).filter((x): x is MonsterDef => !!x), ...monstersFor(world.genre?.id)];
 }

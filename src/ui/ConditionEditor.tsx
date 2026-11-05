@@ -3,7 +3,7 @@
  * 모든 조건 종류를 지원하고, 언제든 JSON으로 볼 수 있다.
  */
 import { useState } from 'react';
-import { MONSTERS } from '../engine/combat/monsters';
+import { monsterTable } from '../engine/combat/monsters';
 import { allItems } from '../engine/items';
 import { AXES, AXIS_NAMES, STAGES } from '../engine/relationship';
 import type { Condition, WorldPackage } from '../engine/schema';
@@ -49,7 +49,7 @@ function blank(kind: Kind, w: WorldPackage): Condition {
     case 'day': return { day: 1 };
     case 'hasItem': return { hasItem: allItems(w)[0]?.id ?? '' };
     case 'money': return { money: 10 };
-    case 'defeated': return { defeated: Object.keys(MONSTERS)[0]!, n: 1 };
+    case 'defeated': return { defeated: Object.keys(monsterTable(w))[0]!, n: 1 };
     case 'npcAlive': return { npcAlive: first(w.characters) };
     case 'npcAt': return { npcAt: first(w.characters), at: first(w.locations) };
   }
@@ -85,7 +85,7 @@ export function describeCondition(c: Condition, w: WorldPackage): string {
     case 'day': return `${x.day}일 지남`;
     case 'hasItem': return `${name(allItems(w), x.hasItem as string)}${(x.n as number) > 1 ? ` ×${x.n}` : ''} 가짐`;
     case 'money': return `돈 ${x.money} 이상`;
-    case 'defeated': return `${MONSTERS[x.defeated as string]?.name ?? x.defeated} ${x.n ?? 1}마리 처치`;
+    case 'defeated': return `${monsterTable(w)[x.defeated as string]?.name ?? x.defeated} ${x.n ?? 1}마리 처치`;
     case 'npcAlive': return `${name(w.characters, x.npcAlive as string)} 생존`;
     case 'npcAt': return `${name(w.characters, x.npcAt as string)}이(가) ${name(w.locations, x.at as string)}에`;
   }
@@ -155,7 +155,7 @@ export function ConditionEditor({ value, world: w, onChange, depth = 0 }: { valu
       case 'day': return <NumIn value={x.day as number} onChange={(v) => set({ day: v ?? 0 })} />;
       case 'hasItem': return <><Sel value={x.hasItem as string} options={allItems(w).map((i) => [i.id, `${i.name} (${i.id})`] as const)} onChange={(v) => set({ hasItem: v })} /> × <NumIn value={x.n as number} placeholder="1" onChange={(v) => set({ n: v })} /></>;
       case 'money': return <NumIn value={x.money as number} onChange={(v) => set({ money: v ?? 0 })} />;
-      case 'defeated': return <><Sel value={x.defeated as string} options={Object.values(MONSTERS).map((m) => [m.id, `${m.name} (${m.id})`] as const)} onChange={(v) => set({ defeated: v })} /> × <NumIn value={x.n as number} placeholder="1" onChange={(v) => set({ n: v })} /></>;
+      case 'defeated': return <><Sel value={x.defeated as string} options={Object.values(monsterTable(w)).map((m) => [m.id, `${m.name} (${m.id})`] as const)} onChange={(v) => set({ defeated: v })} /> × <NumIn value={x.n as number} placeholder="1" onChange={(v) => set({ n: v })} /></>;
     }
   })();
   return (

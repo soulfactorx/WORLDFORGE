@@ -3,7 +3,7 @@ import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
-import { DIFFICULTY_LABEL, encounterDifficulty, monstersFor } from '../engine/combat/monsters';
+import { DIFFICULTY_LABEL, encounterDifficulty, monsterTable, monstersOfWorld } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import { type Belief, type Character, type Claim, type Fact, type Faction, type Location, type NpcRelationKind, QUEST_TYPES, type WorldPackage } from '../engine/schema';
@@ -49,7 +49,7 @@ function tabForPath(path: string): Tab {
   if (path.startsWith('facts') || path.startsWith('claims') || path.startsWith('beliefs')) return 'knowledge';
   if (path.startsWith('factions') || path.startsWith('relations') || path.startsWith('relationBeats')) return 'relations';
   if (path.startsWith('items')) return 'items';
-  if (path.startsWith('encounters')) return 'encounters';
+  if (path.startsWith('encounters') || path.startsWith('monsters')) return 'encounters';
   if (path.startsWith('arcs') || path.startsWith('choices') || path.startsWith('clocks') || path.startsWith('events')) return 'story';
   if (path.startsWith('quests') || path.startsWith('flags') || path.startsWith('endings')) return 'quests';
   return 'json';
@@ -392,12 +392,16 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
 
       {tab === 'encounters' && (
+        <JsonField label="이 세계만의 적 (기본 적에 더한다 — 규칙 패키지로 주고받을 수 있다)" value={w.monsters ?? []} onChange={(monsters) => set({ monsters: Array.isArray(monsters) && monsters.length ? monsters : undefined })} rows={14}
+          help='예: { "id": "mon/sand-wraith", "name": "모래 망령", "look": "모래바람 속의 일그러진 형체", "role": "controller", "cr": "2", "xp": 450, "ac": 13, "hp": 40, "abilities": { "str": 10, "dex": 15, "con": 14, "int": 8, "wis": 12, "cha": 14 }, "immune": ["poisoned"], "fleeAt": 0, "attacks": [{ "name": "모래 손톱", "kind": "melee", "toHit": 5, "damage": "2d6", "bonus": 3, "type": "참격", "count": 2, "inflict": { "condition": "blinded", "save": "con", "dc": 12, "rounds": 1 } }], "specials": [{ "name": "모래 폭풍", "kind": "area", "save": "dex", "dc": 13, "damage": "3d6", "type": "참격", "range": 1, "uses": 1 }], "phases": [{ "below": 0.5, "line": "망령이 울부짖는다!", "ac": 1, "attacks": [{ "name": "흡혼", "kind": "melee", "toHit": 6, "damage": "3d8", "bonus": 2, "type": "사령" }] }] } · 역할: minion·brute·skirmisher·artillery·controller·leader·boss · 경험치는 SRD 도전 지수 기준(1/4=50, 1/2=100, 1=200, 2=450, 3=700, 5=1800)' />
+      )}
+      {tab === 'encounters' && (
         <JsonField label="조우" value={w.encounters ?? []} onChange={(encounters) => set({ encounters })} rows={18}
-          help={`이 장르의 적: ${monstersFor(w.genre?.id).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건`} />
+          help={`이 세계의 적: ${monstersOfWorld(w).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건`} />
       )}
       {tab === 'encounters' && (w.encounters ?? []).length > 0 && (
         <ul className="small">
-          {(w.encounters ?? []).map((e) => { const d = encounterDifficulty(e.enemies.map((x) => x.monsterId), [1, 1]); const d3 = encounterDifficulty(e.enemies.map((x) => x.monsterId), [3, 3]);
+          {(w.encounters ?? []).map((e) => { const d = encounterDifficulty(e.enemies.map((x) => x.monsterId), [1, 1], monsterTable(w)); const d3 = encounterDifficulty(e.enemies.map((x) => x.monsterId), [3, 3], monsterTable(w));
             return <li key={e.id}><b>{e.name}</b> — 적 경험치 {d.xp} · 1레벨 2인: <b>{DIFFICULTY_LABEL[d.difficulty]}</b> · 3레벨 2인: {DIFFICULTY_LABEL[d3.difficulty]}</li>; })}
         </ul>
       )}
