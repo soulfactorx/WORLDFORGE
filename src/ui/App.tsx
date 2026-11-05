@@ -1,3 +1,4 @@
+import { Lightbox } from './Lightbox';
 import { useState } from 'react';
 import type { LlmSettings } from '../llm/types';
 import { loadSettings } from '../storage/settings';
@@ -52,6 +53,7 @@ export function App() {
             : <p>먼저 AI 설정을 해 주세요.</p>
         )}
       </main>
+      <Lightbox />
     </div>
   );
 }

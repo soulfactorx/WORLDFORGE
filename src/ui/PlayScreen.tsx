@@ -205,7 +205,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     <section className="play">
       <div className="play-head">
       <div className="scene-bar">
-        {locImage && <AssetImage pkg={world.manifest.id} id={locImage.id} alt={loc?.name ?? ''} className="loc-thumb" />}
+        {locImage && <AssetImage pkg={world.manifest.id} id={locImage.id} alt={loc?.name ?? ''} className="loc-thumb" zoom />}
         <b>{loc?.name}</b>
         {Object.keys(state.party).length > 0 && <span className="small muted">동행: {Object.values(state.party).map((c) => c.name).join(', ')}</span>}
         {date && <span className="small date">{date.label}{date.countdown && <b className={date.daysLeft !== undefined && date.daysLeft <= 7 ? 'dday urgent' : 'dday'}> · {date.countdown}</b>}</span>}
@@ -255,13 +255,13 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           <div key={i} className={`entry-wrap k-${e.kind}`}>
             {e.kind !== 'guide' && e.images && e.images.length > 0 && (
               <div className="scene-images">
-                {e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} /><figcaption>{im.caption}</figcaption></figure>)}
+                {e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} zoom /><figcaption>{im.caption}</figcaption></figure>)}
               </div>
             )}
             {e.kind === 'guide' ? (
               <div className={`guide ${i === lastGuide ? 'current' : 'past'}`}>
                 {e.images && e.images.length > 0 && i === lastGuide && (
-                  <div className="guide-faces">{e.images.map((im) => <span key={im.id} className="face"><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} /><small>{im.caption}</small></span>)}</div>
+                  <div className="guide-faces">{e.images.map((im) => <span key={im.id} className="face"><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} zoom /><small>{im.caption}</small></span>)}</div>
                 )}
                 <p><b>🎲 GM</b> {e.text}</p>
                 {e.suggestion && i === lastGuide && <p className="suggestion">💡 {e.suggestion}</p>}

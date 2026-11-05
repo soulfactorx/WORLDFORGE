@@ -334,3 +334,10 @@ button.has-pending { border-color: var(--accent); color: var(--accent); }
 .av-vol input[type='range'] { flex: 1; padding: 0; }
 .av-vol { white-space: nowrap; }
 .av-vol select { flex: 1; width: auto; min-width: 0; }
+
+/* 이미지 크게 보기 (v0.37.11) */
+img.zoomable { cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; cursor: zoom-out; touch-action: pinch-zoom; }
+.lightbox img { max-width: 100%; max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); object-fit: contain; border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+.lightbox-caption { margin: 0; color: #eee; font-size: .9rem; text-align: center; }
+.lightbox-close { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,.5); color: #fff; border-color: rgba(255,255,255,.4); font-size: 1.1rem; }

@@ -1,3 +1,4 @@
+import { ZoomImg } from './Lightbox';
 import { knowledgeOf } from '../engine/knowledge/knowledge';
 import { AXES, AXIS_NAMES, HOSTILE_STAGES, loyaltyOf, OBEY_LOYALTY, relationshipOf, reputationLabel, reputationOf, stageFor } from '../engine/relationship';
 import type { WorldPackage } from '../engine/schema';
@@ -110,7 +111,7 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
             return (
               <li key={c.id}>
                 <div className="row">
-                  {c.portrait && <img className="portrait small-portrait" src={c.portrait} alt="" />}
+                  {c.portrait && <ZoomImg className="portrait small-portrait" src={c.portrait} alt={c.name} />}
                   <b>{c.name}</b>
                   <span className={`tag ${HOSTILE_STAGES.includes(stage) ? 'stage-hostile' : stage === '낯섦' || stage === '아는 사이' ? '' : 'stage-close'} ${stage === '연인' ? 'stage-lover' : ''}`}>{stage}</span>
                   {state.party[c.id] && <span className="tag confirmed">동료</span>}

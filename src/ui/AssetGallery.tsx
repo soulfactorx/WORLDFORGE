@@ -89,7 +89,7 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
             const fb = assets.find((a) => (nd.kind === 'character' ? a.characterId : a.locationId) === nd.id);
             return (
               <li key={nd.id}>
-                {fb ? <AssetImage pkg={world.manifest.id} id={fb.id} alt={nd.name} className="need-thumb" /> : <span className="asset-ph need-thumb" />}
+                {fb ? <AssetImage pkg={world.manifest.id} id={fb.id} alt={nd.name} className="need-thumb" zoom /> : <span className="asset-ph need-thumb" />}
                 <span className="need-body">
                   <b>{nd.kind === 'character' ? '인물' : '장소'} · {nd.name}</b> <span className="small muted">{nd.status === 'stock' ? '앱 내장 그림으로 대신하는 중' : '이미지 없음'} · 추천 파일 이름 <code>{nd.fileName}</code></span>
                   {nd.describe && <span className="small muted need-desc">{nd.describe}</span>}
@@ -149,7 +149,7 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
       <div className="gallery">
         {shown.map((a) => (
           <figure key={a.id}>
-            <AssetImage pkg={world.manifest.id} id={a.id} alt={a.name} />
+            <AssetImage pkg={world.manifest.id} id={a.id} alt={a.name} zoom />
             <figcaption>
               {a.name}
               <select value={a.kind} onChange={(e) => up(a.id, { kind: e.target.value as AssetMeta['kind'] })}>

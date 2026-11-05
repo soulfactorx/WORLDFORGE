@@ -15,6 +15,7 @@ import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/pac
 import { MATURE_NOTE, shareBlocked } from '../engine/rating';
 import { confirmAdult } from './adult';
 import { AssetGallery } from './AssetGallery';
+import { ZoomImg } from './Lightbox';
 import { fillOrphanKnowledge } from '../gm/worldgen/fromCard';
 import { imageNeeds } from '../gm/worldgen/imageNeeds';
 import { GENRES, genreOf } from '../data/genres';
@@ -261,7 +262,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <Select label="성별 (이미지 고르기용)" value={c.gender ?? ''} options={[['', '정하지 않음'], ['F', '여성'], ['M', '남성']] as const} onChange={(g) => up({ gender: g || undefined })} />
               <Area label="배경 (이 인물만 아는 과거)" value={c.background} onChange={(background) => up({ background: background || undefined })} rows={3} />
               <Area label="첫 만남의 말 (참고)" value={c.greeting} onChange={(greeting) => up({ greeting: greeting || undefined })} rows={2} />
-              {c.portrait && <div className="row"><img className="portrait" src={c.portrait} alt="" /><button type="button" onClick={() => up({ portrait: undefined })}>초상화 지우기</button></div>}
+              {c.portrait && <div className="row"><ZoomImg className="portrait" src={c.portrait} alt={c.name} /><button type="button" onClick={() => up({ portrait: undefined })}>초상화 지우기</button></div>}
               {c.source && <p className="muted small">출처: {c.source.format.toUpperCase()} "{c.source.name}"{c.source.creator && ` · 제작 ${c.source.creator}`} · 가져온 날 {c.source.importedAt.slice(0, 10)}</p>}
               <Select label="있는 곳" value={c.locationId} options={locOptions} onChange={(locationId) => up({ locationId })} />
               <JsonField label="일정 (시각에 따라 있는 곳 — 비우면 늘 위의 장소)" value={c.schedule ?? []} onChange={(schedule) => up({ schedule: Array.isArray(schedule) && schedule.length ? schedule : undefined })} rows={3}
