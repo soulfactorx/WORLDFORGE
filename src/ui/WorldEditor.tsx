@@ -3,6 +3,7 @@ import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
+import { ArcForms, BoardForms, ChoiceForms, ClockForms, EventForms, ItemForms, MonsterForms } from './WorldForms';
 import { DIFFICULTY_LABEL, encounterDifficulty, monsterTable, monstersOfWorld } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
@@ -392,8 +393,17 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
 
       {tab === 'encounters' && (
+        <>
+          <h4>이 세계만의 적 (기본 적에 더한다 — 규칙 패키지로 주고받을 수 있다)</h4>
+          <div className="row"><b>보기:</b>
+            <button type="button" className={questView === 'form' ? 'primary' : ''} onClick={() => setQuestView('form')}>폼</button>
+            <button type="button" className={questView === 'json' ? 'primary' : ''} onClick={() => setQuestView('json')}>JSON</button>
+          </div>
+          {questView === 'form' ? <MonsterForms w={w} set={set} /> : (
         <JsonField label="이 세계만의 적 (기본 적에 더한다 — 규칙 패키지로 주고받을 수 있다)" value={w.monsters ?? []} onChange={(monsters) => set({ monsters: Array.isArray(monsters) && monsters.length ? monsters : undefined })} rows={14}
           help='예: { "id": "mon/sand-wraith", "name": "모래 망령", "look": "모래바람 속의 일그러진 형체", "role": "controller", "cr": "2", "xp": 450, "ac": 13, "hp": 40, "abilities": { "str": 10, "dex": 15, "con": 14, "int": 8, "wis": 12, "cha": 14 }, "immune": ["poisoned"], "fleeAt": 0, "attacks": [{ "name": "모래 손톱", "kind": "melee", "toHit": 5, "damage": "2d6", "bonus": 3, "type": "참격", "count": 2, "inflict": { "condition": "blinded", "save": "con", "dc": 12, "rounds": 1 } }], "specials": [{ "name": "모래 폭풍", "kind": "area", "save": "dex", "dc": 13, "damage": "3d6", "type": "참격", "range": 1, "uses": 1 }], "phases": [{ "below": 0.5, "line": "망령이 울부짖는다!", "ac": 1, "attacks": [{ "name": "흡혼", "kind": "melee", "toHit": 6, "damage": "3d8", "bonus": 2, "type": "사령" }] }] } · 역할: minion·brute·skirmisher·artillery·controller·leader·boss · 경험치는 SRD 도전 지수 기준(1/4=50, 1/2=100, 1=200, 2=450, 3=700, 5=1800)' />
+          )}
+        </>
       )}
       {tab === 'encounters' && (
         <JsonField label="조우" value={w.encounters ?? []} onChange={(encounters) => set({ encounters })} rows={18}
@@ -438,9 +448,12 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <JsonField label="결말" value={w.endings ?? []} onChange={(endings) => set({ endings })} rows={8} />
             </>
           )}
+          <h4>의뢰판</h4>
+          {questView === 'form' ? <BoardForms w={w} set={set} /> : (
           <JsonField label="의뢰판 (장소 ID → 의뢰판, 반복할 수 있는 의뢰)" value={Object.fromEntries(w.locations.flatMap((l) => (l.board ? [[l.id, l.board]] : [])))}
             onChange={(m: Record<string, Location['board']>) => m && typeof m === 'object' && set({ locations: w.locations.map((l) => { const { board: _b, ...rest } = l; return m[l.id] ? { ...rest, board: m[l.id] } : rest; }) })} rows={12}
             help='예: { "loc/guild": { "name": "길드 게시판", "jobs": [{ "id": "job/wolves", "name": "늑대 퇴치", "type": "hunt", "description": "…", "locationId": "loc/forest", "enemies": [{ "monsterId": "wolf", "zone": 2 }], "timeLimit": { "days": 3 } }, { "id": "job/herbs", "name": "약초 채집", "type": "gather", "description": "…", "locationId": "loc/forest", "complete": { "hasItem": "item/herb", "n": 3 }, "rewards": { "money": 30 }, "requires": { "reputation": "fac/…", "gte": 10 } }] } } · 토벌 의뢰는 받을 때마다 조우가 새로 생기고, 보상이 없으면 위협도로 돈이 정해진다' />
+          )}
         </>
       )}
 
@@ -466,8 +479,15 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             </div>
             <JsonField label="처음 소지품 (비우면 치유 물약 1개)" value={w.start.items ?? null} onChange={(items) => set({ start: { ...w.start, items: Array.isArray(items) ? items : undefined } })} rows={3}
               help='예: [{ "itemId": "std/potion-healing", "n": 2 }, { "itemId": "std/rope" }]' />
+            <h4>이 세계만의 아이템</h4>
+            <div className="row"><b>보기:</b>
+            <button type="button" className={questView === 'form' ? 'primary' : ''} onClick={() => setQuestView('form')}>폼</button>
+            <button type="button" className={questView === 'json' ? 'primary' : ''} onClick={() => setQuestView('json')}>JSON</button>
+          </div>
+            {questView === 'form' ? <ItemForms w={w} set={set} /> : (
             <JsonField label="이 세계만의 아이템" value={w.items ?? []} onChange={(items) => set({ items })} rows={10}
               help='예: { "id": "item/silver-key", "name": "은 열쇠", "description": "…", "kind": "key" } · 종류: consumable(heal: "2d4+2", cures: ["poisoned"]) · weapon(card: "weapon/longsword") · armor(armor: { "base": 14, "dexMax": 2 }) · shield(acBonus: 2) · key · treasure · misc' />
+            )}
             <JsonField label="상점 (장소 ID → 상점)" value={byId(w.locations, (l: Location) => l.shop)} onChange={(m) => applyMap('locations', 'shop', m)} rows={8}
               help='예: { "loc/market": { "name": "잡화점", "items": ["std/potion-healing", "std/rope"], "factionId": "fac/…" } }' />
             <JsonField label="주울 수 있는 것 (장소 ID → 목록, hint는 GM에게만)" value={byId(w.locations, (l: Location) => l.pickups)} onChange={(m) => applyMap('locations', 'pickups', m)} rows={6}
@@ -494,6 +514,20 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
 
       {tab === 'story' && (
         <>
+          <div className="row"><b>보기:</b>
+            <button type="button" className={questView === 'form' ? 'primary' : ''} onClick={() => setQuestView('form')}>폼</button>
+            <button type="button" className={questView === 'json' ? 'primary' : ''} onClick={() => setQuestView('json')}>JSON</button>
+          </div>
+          {questView === 'form' ? (
+            <>
+              <p className="muted small">세계가 스스로 움직이게 하는 장치들입니다. 조건은 조건 빌더로, 일어나는 일은 효과 목록으로 고릅니다.</p>
+              <h4>줄기 (1부·2부… 시작 조건으로 열리고, 장마다 목표·완료·실패)</h4><ArcForms w={w} set={set} />
+              <h4>결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지)</h4><ChoiceForms w={w} set={set} />
+              <h4>진행 시계 (시간·사건으로 차오르고, 정해진 칸에서 일이 벌어진다)</h4><ClockForms w={w} set={set} />
+              <h4>연표 사건 (날짜·날 수·조건에 일어나고, 막을 수 있다)</h4><EventForms w={w} set={set} />
+            </>
+          ) : (
+            <>
           <p className="muted small">
             세계가 스스로 움직이게 하는 장치들입니다. 조건식은 임무 탭과 같고, 여기서는 <code>{'{ "chapter": "arc/…", "gte": 1 }'}</code> <code>{'{ "arcDone": "arc/…" }'}</code>{' '}
             <code>{'{ "clock": "clock/…", "gte": 4 }'}</code> <code>{'{ "choice": "choice/…", "is": "옵션id" }'}</code> <code>{'{ "day": 3 }'}</code>도 쓸 수 있습니다.
@@ -508,6 +542,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             help='예: { "id": "clock/raid", "name": "도적의 습격 준비", "segments": 6, "tick": [{ "every": "day", "by": 1 }, { "on": { "flag": "warned" }, "by": -2 }], "at": [{ "segment": 3, "omen": "플레이어에게 보이는 징조" }, { "segment": 6, "effects": [{ "setFlag": "raid" }] }] }' />
           <JsonField label="연표 사건 (날짜·날 수·조건에 일어난다. unless가 참이면 막힌다)" value={w.events ?? []} onChange={(events) => set({ events })} rows={12}
             help={`예: { "id": "event/coup", "name": "반역", "when": { "date": { "year": 429, "month": 9, "day": 21 } }, "unless": { "flag": "warned_guard" }, "effects": [{ "killNpc": "npc/…" }], "announce": "플레이어에게 보이는 소식" } · when.day = 시작 후 지난 날 수${w.calendar ? '' : ' · 날짜(date)를 쓰려면 기본 탭에서 달력을 정하세요'}`} />
+            </>
+          )}
         </>
       )}
 
