@@ -142,6 +142,9 @@ export const ALL_CARDS: Record<string, CardDef> = Object.fromEntries(
   [...BASIC_CARDS, ...WEAPON_CARDS, ...CLASS_CARDS, ...ALL_MONSTER_CARDS, ESCAPE_CARD].map((c) => [c.id, c]),
 );
 
+/** 보상으로 줄 수 있는 카드 ID (몬스터 카드 제외) */
+export const CARD_LIST = [...WEAPON_CARDS, ...CLASS_CARDS].map((c) => c.id);
+
 export function cardById(id: string): CardDef {
   const c = ALL_CARDS[id];
   if (!c) throw new Error(`unknown card: ${id}`);

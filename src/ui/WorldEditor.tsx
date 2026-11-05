@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react';
+import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { EndingForms, FlagForms, QuestForms } from './StoryForms';
+import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { DIFFICULTY_LABEL, encounterDifficulty, monstersFor } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
@@ -26,9 +29,9 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'quests' | 'story' | 'images' | 'json';
+type Tab = 'basic' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
-  ['basic', '기본'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
+  ['basic', '기본'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
   ['encounters', '조우'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
@@ -51,73 +54,6 @@ function tabForPath(path: string): Tab {
   return 'json';
 }
 
-// ---------------------------------------------------------------- 작은 입력 컴포넌트
-
-const Text = ({ label, value, onChange, placeholder }: { label: string; value: string | undefined; onChange: (v: string) => void; placeholder?: string }) => (
-  <label>{label}<input value={value ?? ''} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></label>
-);
-const Area = ({ label, value, onChange, rows = 3 }: { label: string; value: string | undefined; onChange: (v: string) => void; rows?: number }) => (
-  <label>{label}<textarea rows={rows} value={value ?? ''} onChange={(e) => onChange(e.target.value)} /></label>
-);
-const Num = ({ label, value, onChange }: { label: string; value: number | undefined; onChange: (v: number | undefined) => void }) => (
-  <label>{label}<input type="number" value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))} /></label>
-);
-function Select<T extends string>({ label, value, options, onChange }: { label: string; value: T | undefined; options: readonly (readonly [T, string])[]; onChange: (v: T) => void }) {
-  return (
-    <label>{label}
-      <select value={value ?? ''} onChange={(e) => onChange(e.target.value as T)}>
-        {value === undefined && <option value="">(선택)</option>}
-        {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
-    </label>
-  );
-}
-
-/** JSON으로 값 하나를 편집 (파싱 오류는 표시만 하고 반영하지 않는다) */
-function JsonField<T>({ label, value, onChange, rows = 10, help }: { label: string; value: T; onChange: (v: T) => void; rows?: number; help?: string }) {
-  const [text, setText] = useState(() => JSON.stringify(value ?? null, null, 2));
-  const [error, setError] = useState('');
-  const [last, setLast] = useState(value);
-  if (value !== last) { setLast(value); setText(JSON.stringify(value ?? null, null, 2)); setError(''); }
-  return (
-    <label>{label}
-      {help && <span className="muted small">{help}</span>}
-      <textarea className="code" rows={rows} value={text} spellCheck={false} onChange={(e) => {
-        setText(e.target.value);
-        try { const v = JSON.parse(e.target.value) as T; setError(''); setLast(v); onChange(v); } catch (er) { setError((er as Error).message); }
-      }} />
-      {error && <span className="small err">JSON 오류: {error}</span>}
-    </label>
-  );
-}
-
-/** 목록 + 선택한 항목 편집 */
-function ItemList<T extends { id: string }>({ items, onChange, make, render, title }: {
-  items: T[]; onChange: (items: T[]) => void; make: (n: number) => T; render: (item: T, set: (patch: Partial<T>) => void) => React.ReactNode; title: string;
-}) {
-  const [sel, setSel] = useState(0);
-  const cur = items[sel];
-  return (
-    <div className="item-list">
-      <div className="items">
-        {items.map((it, i) => (
-          <button key={i} type="button" className={i === sel ? 'primary' : ''} onClick={() => setSel(i)}>{it.id || '(ID 없음)'}</button>
-        ))}
-        <button type="button" onClick={() => { onChange([...items, make(items.length + 1)]); setSel(items.length); }}>＋ {title} 추가</button>
-      </div>
-      {cur && (
-        <div className="item-form">
-          {render(cur, (patch) => onChange(items.map((x, i) => (i === sel ? { ...x, ...patch } : x))))}
-          <div className="row">
-            <span className="spacer" />
-            <button type="button" onClick={() => { if (confirm(`"${cur.id}"을(를) 삭제할까요?`)) { onChange(items.filter((_, i) => i !== sel)); setSel(Math.max(0, sel - 1)); } }}>삭제</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------- 편집기
 
 export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard, alreadySaved }: {
@@ -128,6 +64,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   initialCard?: File;
 }) {
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
+  const [questView, setQuestView] = useState<'form' | 'json'>('form');
   const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
@@ -458,25 +395,39 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
 
       {tab === 'quests' && (
         <>
-          <p className="muted small">
+          {questView === 'json' && <p className="muted small">
             조건식: <code>{'{ "all": [...] }'}</code> <code>{'{ "any": [...] }'}</code> <code>{'{ "not": ... }'}</code> <code>{'{ "knows": "claim/…", "min": "partial" }'}</code>{' '}
             <code>{'{ "at": "loc/…" }'}</code> <code>{'{ "cleared": "enc/…" }'}</code> <code>{'{ "inParty": "npc/…" }'}</code>{' '}
             <code>{'{ "relationship": "npc/…", "axis": "trust", "gte": 20 }'}</code> (축: affinity·trust·respect·fear·intimacy·grudge){' '}
             <code>{'{ "stage": "npc/…", "in": ["친구", "연인"] }'}</code> <code>{'{ "reputation": "fac/…", "gte": 30 }'}</code> <code>{'{ "flag": "…" }'}</code> <code>{'{ "questDone": "quest/…" }'}</code> <code>{'{ "level": 2 }'}</code>
-          </p>
+          </p>}
           {settings && (
             <div className="row">
               <input value={genRequest} placeholder="(선택) 원하는 이야기 방향 — 예: 배신하는 동료가 있는 메인 임무" onChange={(e) => setGenRequest(e.target.value)} />
               <button type="button" disabled={!!genStage} onClick={aiScenario}>{genStage || '✦ AI로 임무·조우·결말 추가'}</button>
             </div>
           )}
-          <JsonField label="임무" value={w.quests ?? []} onChange={(quests) => set({ quests })} rows={16}
+          <div className="row"><b>보기:</b>
+            <button type="button" className={questView === 'form' ? 'primary' : ''} onClick={() => setQuestView('form')}>폼</button>
+            <button type="button" className={questView === 'json' ? 'primary' : ''} onClick={() => setQuestView('json')}>JSON</button>
+          </div>
+          {questView === 'form' ? (
+            <>
+              <h4>임무</h4><QuestForms w={w} set={set} />
+              <h4>이야기 플래그 (GM이 세울 수 있는 결정)</h4><FlagForms w={w} set={set} />
+              <h4>결말</h4><EndingForms w={w} set={set} />
+            </>
+          ) : (
+            <>
+              <JsonField label="임무" value={w.quests ?? []} onChange={(quests) => set({ quests })} rows={16}
             help={`임무 2.0: "type"(${QUEST_TYPES.map((t) => `${t}=${QUEST_TYPE_LABEL[t]}`).join(', ')}) · "giver"(의뢰인 npc) · "target"(이 인물이 죽으면 실패) · "fail"(실패 조건, 단계마다도 가능) · "timeLimit": { "days": 3 } · "rewards": { "xp", "money", "items", "relationship", "reputation", "cards": [{ "who": "player" 또는 "npc/…", "cardId": "rogue/steady_aim" }] } · 조건 추가: { "defeated": "wolf", "n": 3 } { "npcAlive": "npc/…" } { "npcAt": "npc/…", "at": "loc/…" } { "questFailed": "quest/…" }`} />
+              <JsonField label="이야기 플래그 (Director가 세울 수 있는 결정)" value={w.flags ?? []} onChange={(flags) => set({ flags })} rows={8} />
+              <JsonField label="결말" value={w.endings ?? []} onChange={(endings) => set({ endings })} rows={8} />
+            </>
+          )}
           <JsonField label="의뢰판 (장소 ID → 의뢰판, 반복할 수 있는 의뢰)" value={Object.fromEntries(w.locations.flatMap((l) => (l.board ? [[l.id, l.board]] : [])))}
             onChange={(m: Record<string, Location['board']>) => m && typeof m === 'object' && set({ locations: w.locations.map((l) => { const { board: _b, ...rest } = l; return m[l.id] ? { ...rest, board: m[l.id] } : rest; }) })} rows={12}
             help='예: { "loc/guild": { "name": "길드 게시판", "jobs": [{ "id": "job/wolves", "name": "늑대 퇴치", "type": "hunt", "description": "…", "locationId": "loc/forest", "enemies": [{ "monsterId": "wolf", "zone": 2 }], "timeLimit": { "days": 3 } }, { "id": "job/herbs", "name": "약초 채집", "type": "gather", "description": "…", "locationId": "loc/forest", "complete": { "hasItem": "item/herb", "n": 3 }, "rewards": { "money": 30 }, "requires": { "reputation": "fac/…", "gte": 10 } }] } } · 토벌 의뢰는 받을 때마다 조우가 새로 생기고, 보상이 없으면 위협도로 돈이 정해진다' />
-          <JsonField label="이야기 플래그 (Director가 세울 수 있는 결정)" value={w.flags ?? []} onChange={(flags) => set({ flags })} rows={8} />
-          <JsonField label="결말" value={w.endings ?? []} onChange={(endings) => set({ endings })} rows={8} />
         </>
       )}
 
@@ -509,6 +460,17 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           </>
         );
       })()}
+
+      {tab === 'tools' && (
+        <>
+          <h4>지도</h4>
+          <WorldMap w={w} onPick={() => setTab('locations')} />
+          <h4>이야기 보드</h4>
+          <StoryBoard w={w} />
+          <h4>세계 시뮬레이터</h4>
+          {hasErrors(issues) ? <p className="status">검사 오류를 먼저 고쳐야 시뮬레이션할 수 있습니다.</p> : <Simulator w={w} />}
+        </>
+      )}
 
       {tab === 'story' && (
         <>

@@ -250,3 +250,31 @@ ul.needs label.file { flex: none; }
 .items-list .row { gap: 6px; flex-wrap: wrap; align-items: center; }
 
 .quests li.failed b { color: #b3412c; }
+
+/* R8 제작 도구 */
+.cond { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 6px; border-left: 3px solid var(--accent); margin: 2px 0; background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.cond.depth-1 { border-left-color: #4f9a5a; } .cond.depth-2 { border-left-color: #6b4fa0; }
+.cond select, .cond input { width: auto; max-width: 260px; }
+.cond input.num, input.num { width: 70px; }
+.cond-children { flex-basis: 100%; padding-left: 10px; display: flex; flex-direction: column; gap: 2px; }
+.cond-child { display: flex; gap: 4px; align-items: flex-start; }
+.cond-child > .cond { flex: 1; }
+.cond-field { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
+.cond-summary { margin: 2px 0 4px; }
+.stage-checks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.stage-box { border: 1px dashed var(--border); border-radius: 6px; padding: 6px 8px; }
+.board-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 760px) { .board-cols { grid-template-columns: 1fr; } }
+.board-card { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 4px 0; }
+.board-card ol, .board-card ul { margin: 4px 0 0; padding-left: 18px; }
+.flow-table { width: 100%; border-collapse: collapse; }
+.flow-table td, .flow-table th { border-bottom: 1px solid var(--border); padding: 3px 4px; text-align: left; vertical-align: top; }
+.flow-table tr.bad td { color: #b3412c; }
+.map-edge { stroke: var(--muted); stroke-width: 2; }
+.map-node rect { fill: var(--panel, #fff); stroke: var(--accent); stroke-width: 1.5; }
+.map-node.unreachable rect { stroke-dasharray: 4 3; opacity: .5; }
+.map-name { font-size: 13px; font-weight: 600; fill: currentColor; }
+.map-sub { font-size: 11px; fill: var(--muted); }
+.world-map svg { color: var(--text, #222); }
+.sim-days { padding-left: 18px; }
+.sim-days ul { margin: 2px 0 6px; padding-left: 16px; }
