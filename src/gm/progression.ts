@@ -19,7 +19,7 @@ export function progressEvents(state: GameState, awards: XpAward[], reason: stri
     const xp = (sheet.xp ?? 0) + amount;
     sheet = { ...sheet, xp };
     while (sheet.level < Math.min(MAX_LEVEL, levelCap, levelForXp(xp))) {
-      const r = levelUp(sheet);
+      const r = levelUp(sheet, { defer: who === 'player' });
       sheet = r.sheet;
       events.push({ type: 'level_up', who, sheet, hpGain: r.hpGain, features: r.features });
     }

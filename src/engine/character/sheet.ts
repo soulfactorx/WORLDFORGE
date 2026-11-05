@@ -19,6 +19,12 @@ export interface CharacterSheet {
   resources?: Record<string, { cur: number; max: number }>;
   /** 경험치 (v0.7) */
   xp?: number;
+  /** 하위 직업 (3레벨, v0.37) */
+  subclass?: string;
+  /** 특성 ID 목록 (v0.37) */
+  feats?: string[];
+  /** 아직 고르지 않은 능력치 향상·특성 선택 (레벨 목록, 플레이어만) */
+  pending?: number[];
 }
 
 export type CheckSpec =
@@ -110,7 +116,7 @@ const HALF_CASTER_SLOTS: Record<number, number[]> = {
 export const pactSlot = (level: number) => ({ level: Math.min(5, Math.ceil(level / 2)), count: level >= 2 ? 2 : 1 });
 
 /** 레벨별 직업 자원 (SRD 5.2.1). 긴 휴식에 모두 회복된다 (워락 슬롯은 짧은 휴식에도). */
-export function classResources(classId: string, level: number): Record<string, { cur: number; max: number }> {
+export function classResources(classId: string, level: number, subclass?: string): Record<string, { cur: number; max: number }> {
   const lv = Math.max(1, Math.min(10, level));
   const r = (n: number) => ({ cur: n, max: n });
   const out: Record<string, { cur: number; max: number }> = {};
@@ -126,11 +132,16 @@ export function classResources(classId: string, level: number): Record<string, {
   if (classId === 'wizard') out.arcane_recovery = r(1);
   if (classId === 'bard') out.bardic_inspiration = r(lv >= 10 ? 5 : lv >= 5 ? 4 : 3);
   if (classId === 'paladin') out.lay_on_hands = r(Math.max(1, Math.ceil(lv / 3)));
+  if (classId === 'paladin' && lv >= 3) out.channel_divinity = r(2);
+  // 하위 직업 자원
+  if (lv >= 3 && subclass === 'war') out.war_priest = r(3);
+  if (lv >= 3 && subclass === 'diviner') out.portent = r(2);
+  if (lv >= 3 && subclass === 'archfey') out.fey_presence = r(1);
   return out;
 }
 
 export function resourcesOf(sheet: CharacterSheet): Record<string, { cur: number; max: number }> {
-  return sheet.resources ?? classResources(sheet.classId, sheet.level);
+  return sheet.resources ?? classResources(sheet.classId, sheet.level, sheet.subclass);
 }
 
 /** 표준 배열을 직업 우선순위대로 자동 배치 */

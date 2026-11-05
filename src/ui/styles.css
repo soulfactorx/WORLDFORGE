@@ -303,3 +303,9 @@ ul.needs label.file { flex: none; }
 @media (prefers-reduced-motion: reduce) { .token.hurt, .pop { animation: none; } }
 .av { position: relative; }
 .av-pop { position: absolute; right: 0; top: 110%; z-index: 20; width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+
+/* 하위 직업·특성 고르기 (v0.37) */
+.build-choices { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.build-choices legend { color: var(--accent); }
+.build-option { text-align: left; display: block; width: 100%; }
+button.has-pending { border-color: var(--accent); color: var(--accent); }

@@ -107,3 +107,57 @@ describe('전투 퍼즈 — 장르별 적 세트 (설계 v3 R2)', () => {
     expect(conditions).toBeGreaterThan(0);
   });
 });
+
+describe('전투 퍼즈 — 하위 직업·특성 (v0.37)', () => {
+  it('직업 8종 × 무작위 하위 직업·특성: 아무 카드나 아무 대상에 써도 규칙상 유효하고 전투는 끝난다', async () => {
+    const { CLASSES } = await import('../character/rules');
+    const { levelUp } = await import('../character/progression');
+    const { applyBuildChoice, FEATS, needsSubclass, subclassesOf } = await import('../character/build');
+    const classes = Object.keys(CLASSES);
+    const build = (cls: string, level: number, r: () => number, name: string) => {
+      let s = createCharacter({ name, classId: cls, method: 'standard', abilities: suggestedStandardArray(cls), skills: CLASSES[cls]!.skillOptions.slice(0, CLASSES[cls]!.skillChoices) as never });
+      while (s.level < level) {
+        s = levelUp(s, { defer: true }).sheet;
+        if (needsSubclass(s)) s = applyBuildChoice(s, 'subclass', subclassesOf(cls)[r() < 0.5 ? 0 : 1]!.id)!.sheet;
+        while (s.pending?.length) {
+          const left = Object.keys(FEATS).filter((f) => !s.feats?.includes(f));
+          s = applyBuildChoice(s, r() < 0.3 ? 'asi' : 'feat', left[Math.floor(r() * left.length)]!)!.sheet;
+        }
+      }
+      return s;
+    };
+    let fights = 0;
+    const used = new Set<string>();
+    const stuck: string[] = [];
+    for (let seed = 0; seed < 480; seed++) {
+      const rng = createRng(5000 + seed);
+      const r = () => rng.next();
+      const level = 3 + (seed % 6);
+      const pc = classes[seed % 8]!, ally = classes[(seed >> 3) % 8]!;
+      let cs = startCombat({ id: 'e', enemies: [{ monsterId: 'bandit', zone: 2 }, { monsterId: 'wolf', zone: 3 }, { monsterId: 'goblin_warrior', zone: 2 }] }, build(pc, level, r, '나'), rng,
+        [{ id: 'npc/a', name: '동료', sheet: build(ally, level, r, '동료') }]);
+      for (let step = 0; step < 800 && !cs.outcome; step++) {
+        const id = currentActorId(cs);
+        const a = cs.combatants[id]!;
+        if (dying(a)) { cs = applyEffects(cs, rollDeathSave(a, rng).effects); if (!cs.outcome) cs = endTurn(cs); continue; }
+        let plan: { cardId: string; target: string | number | null } | null = null;
+        if (a.hp <= 0) plan = null;
+        else if (a.isPlayer) {
+          const usable = handOf(a).filter((c) => !unusableReason(cs, id, c) && c.effect.type !== 'flee' && (c.cost !== 'move' || c.effect.type !== 'move' || r() < 0.3));
+          // 공격 카드 위주로, 가끔은 아무 카드나 (새 카드도 모두 써 보도록)
+          const pick = usable.map((c) => [r(), c] as const).sort((x, y) => x[0] - y[0]).map(([, c]) => c).filter((c) => c.kind !== 'basic' && (r() < 0.6 || ['attack', 'save_damage', 'area_save', 'auto_damage'].includes(c.effect.type)))[0] ?? usable.find((c) => c.effect.type === 'move' && cs.economy.action);
+          if (pick) { const ts = validTargets(cs, id, pick); plan = { cardId: pick.id, target: ts[Math.floor(r() * ts.length)]! }; }
+        } else plan = a.side === 'enemy' ? planEnemyAction(cs) : planCompanionAction(cs);
+        if (!plan) { cs = endTurn(cs); continue; }
+        expect(() => resolveCard(cs, id, plan!.cardId, plan!.target, createRng(seed + step)), `seed ${seed} ${id} ${JSON.stringify(plan)}`).not.toThrow();
+        used.add(plan.cardId);
+        cs = applyEffects(cs, resolveCard(cs, id, plan.cardId, plan.target, rng).effects);
+      }
+      if (cs.outcome) fights++;
+      else if (stuck.length < 4) stuck.push(`seed ${seed} ${pc}/${ally} lv${level}: round ${cs.round}`);
+    }
+    expect(stuck).toEqual([]);
+    expect(fights).toBeGreaterThan(470);
+    for (const c of ['fighter/guard', 'cleric/war_strike', 'wizard/portent', 'bard/cutting_words', 'paladin/sacred_weapon', 'paladin/vow', 'warlock/fey_presence']) expect(used, c).toContain(c);
+  });
+});

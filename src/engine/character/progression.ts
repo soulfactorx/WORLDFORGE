@@ -1,11 +1,12 @@
 /**
  * 경험치와 레벨업 — SRD 5.2.1 (CC-BY-4.0) 기반. 1~10레벨 지원 (세계마다 상한을 더 낮게 둘 수 있다).
- * 4·8레벨(파이터 6, 로그 10 추가): 능력치 향상 — 직업 주능력치 +2 (최대 20, 넘치는 만큼 두 번째 능력치에).
+ * 4·8레벨(파이터 6, 로그 10 추가): 능력치 향상 또는 특성 (build.ts). 3레벨: 하위 직업.
  * 레벨업 HP는 고정값(생명 주사위 평균 = 주사위/2 + 1) + 건강 수정치 (최소 1).
  */
 import { abilityModifier } from '../dice/dice';
 import { CLASS_KITS } from '../combat/cards';
-import { ABILITY_NAMES, CLASSES } from './rules';
+import { CLASSES } from './rules';
+import { autoBuild, needsSubclass, subclassFeatures } from './build';
 import { type CharacterSheet, classResources, resourcesOf } from './sheet';
 
 export const MAX_LEVEL = 10;
@@ -33,38 +34,35 @@ export interface LevelUpResult {
   features: string[];
 }
 
-/** 한 레벨 올린 시트. 자원은 늘어난 최대치만큼 현재치도 늘린다 (이미 쓴 것은 유지). */
-export function levelUp(sheet: CharacterSheet): LevelUpResult {
+/**
+ * 한 레벨 올린 시트. 자원은 늘어난 최대치만큼 현재치도 늘린다 (이미 쓴 것은 유지).
+ * defer(플레이어): 하위 직업·능력치 향상/특성을 '선택 대기'로 남긴다. 아니면(동료) 자동으로 고른다.
+ */
+export function levelUp(sheet: CharacterSheet, opts: { defer?: boolean } = {}): LevelUpResult {
   const cls = CLASSES[sheet.classId];
   const level = sheet.level + 1;
-  // 능력치 향상: 주능력치 +2 (최대 20). 건강이 오르면 HP 최대치도 소급해서 오른다.
-  let abilities = sheet.abilities;
-  const asi: string[] = [];
-  if (cls && asiLevels(sheet.classId).includes(level)) {
-    abilities = { ...abilities };
-    let pts = 2;
-    for (const a of cls.priority) {
-      if (pts <= 0) break;
-      const add = Math.min(pts, 20 - abilities[a]);
-      if (add <= 0) continue;
-      abilities[a] += add;
-      pts -= add;
-      asi.push(`${ABILITY_NAMES[a]} +${add} (${abilities[a]})`);
-    }
-  }
-  const conGain = (abilityModifier(abilities.con) - abilityModifier(sheet.abilities.con)) * sheet.level;
   const before = resourcesOf(sheet);
-  const after = classResources(sheet.classId, level);
+  const after = classResources(sheet.classId, level, sheet.subclass);
   const resources: CharacterSheet['resources'] = {};
   for (const [k, v] of Object.entries(after)) {
     const old = before[k];
     resources[k] = old ? { max: v.max, cur: Math.min(v.max, old.cur + Math.max(0, v.max - old.max)) } : { ...v };
   }
-  const hpGain = (cls ? Math.max(1, cls.hitDie / 2 + 1 + abilityModifier(abilities.con)) : Math.max(1, 5 + abilityModifier(abilities.con))) + conGain;
-  const features = CLASS_KITS[sheet.classId]?.features?.[level] ?? [];
-  return {
-    sheet: { ...sheet, level, abilities, maxHp: sheet.maxHp + hpGain, hp: sheet.hp + hpGain, resources },
-    hpGain,
-    features: asi.length ? features.map((f) => (f === '능력치 향상' ? `능력치 향상: ${asi.join(', ')}` : f)) : features,
-  };
+  const tough = sheet.feats?.includes('tough') ? 2 : 0;
+  const hpGain = (cls ? Math.max(1, cls.hitDie / 2 + 1 + abilityModifier(sheet.abilities.con)) : Math.max(1, 5 + abilityModifier(sheet.abilities.con))) + tough;
+  let next: CharacterSheet = { ...sheet, level, maxHp: sheet.maxHp + hpGain, hp: sheet.hp + hpGain, resources };
+  const asi = !!cls && asiLevels(sheet.classId).includes(level);
+  if (asi) next = { ...next, pending: [...(next.pending ?? []), level] };
+  const base = CLASS_KITS[sheet.classId]?.features?.[level] ?? [];
+  let features = [...base, ...subclassFeatures(sheet.subclass, level)];
+  if (opts.defer) {
+    features = features.map((f) => (f === '능력치 향상' ? '능력치 향상 또는 특성 (캐릭터 창에서 고르기)' : f));
+    if (needsSubclass(next) && !needsSubclass(sheet)) features.push('하위 직업 (캐릭터 창에서 고르기)');
+  } else {
+    const r = autoBuild(next);
+    next = r.sheet;
+    const asiText = r.texts.find((t) => t.startsWith('능력치 향상'));
+    features = [...features.map((f) => (asiText && f === '능력치 향상' ? asiText : f)), ...r.texts.filter((t) => t !== asiText)];
+  }
+  return { sheet: next, hpGain: next.maxHp - sheet.maxHp, features };
 }

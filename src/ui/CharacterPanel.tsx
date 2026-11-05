@@ -5,10 +5,11 @@ import { abilityModifier } from '../engine/dice/dice';
 import { MAX_LEVEL, XP_FOR_LEVEL } from '../engine/character/progression';
 import { CLASS_KITS } from '../engine/combat/cards';
 import { resourcesOf } from '../engine/character/sheet';
+import { type BuildChoiceKind, FEATS, needsSubclass, SUBCLASSES, subclassesOf } from '../engine/character/build';
 
 const RESOURCE_LABEL: Record<string, string> = {
   slot1: '1레벨 슬롯', slot2: '2레벨 슬롯', slot3: '3레벨 슬롯', slot4: '4레벨 슬롯', slot5: '5레벨 슬롯', bardic_inspiration: '음유 영감', lay_on_hands: '안수', second_wind: '재기의 바람', action_surge: '행동 연쇄',
-  channel_divinity: '신성 변환', arcane_recovery: '비전 회복',
+  channel_divinity: '신성 변환', arcane_recovery: '비전 회복', war_priest: '전쟁 사제', portent: '예견', fey_presence: '요정의 위압',
 };
 
 function XpBar({ sheet }: { sheet: CharacterSheet }) {
@@ -24,13 +25,48 @@ function XpBar({ sheet }: { sheet: CharacterSheet }) {
 }
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
-export function CharacterPanel({ sheet, party = {} }: { sheet: CharacterSheet; party?: Record<string, CharacterSheet> }) {
+/** 하위 직업·능력치 향상/특성 고르기 (플레이어 레벨업 뒤, 고를 때까지 대기) */
+function BuildChoices({ sheet, onChoose, disabled }: { sheet: CharacterSheet; onChoose: (kind: BuildChoiceKind, value: string) => void; disabled?: boolean }) {
   const rs = useRs();
+  const asi = sheet.pending?.[0];
+  if (!needsSubclass(sheet) && asi === undefined) return null;
+  return (
+    <div className="build-choices">
+      {needsSubclass(sheet) && (
+        <fieldset>
+          <legend>★ 하위 직업 고르기 (3레벨)</legend>
+          {subclassesOf(sheet.classId).map((s) => (
+            <button key={s.id} className="build-option" disabled={disabled} onClick={() => onChoose('subclass', s.id)}>
+              <b>{rs(s.name)}</b> <span className="small muted">{rs(s.blurb)}</span>
+            </button>
+          ))}
+        </fieldset>
+      )}
+      {asi !== undefined && (
+        <fieldset>
+          <legend>★ 능력치 향상 또는 특성 ({asi}레벨){(sheet.pending?.length ?? 0) > 1 ? ` · ${sheet.pending!.length}개 남음` : ''}</legend>
+          <button className="build-option" disabled={disabled} onClick={() => onChoose('asi', '')}>
+            <b>능력치 향상</b> <span className="small muted">{(CLASSES[sheet.classId]?.priority ?? []).slice(0, 1).map((a) => ABILITY_NAMES[a]).join('')} +2 (20을 넘으면 다음 능력치로)</span>
+          </button>
+          {Object.values(FEATS).filter((f) => !sheet.feats?.includes(f.id)).map((f) => (
+            <button key={f.id} className="build-option" disabled={disabled} onClick={() => onChoose('feat', f.id)}>
+              <b>{f.name}</b> <span className="small muted">{f.desc}</span>
+            </button>
+          ))}
+        </fieldset>
+      )}
+    </div>
+  );
+}
+
+export function CharacterPanel({ sheet, party = {}, onChoose, disabled }: { sheet: CharacterSheet; party?: Record<string, CharacterSheet>; onChoose?: (kind: BuildChoiceKind, value: string) => void; disabled?: boolean }) {
+  const rs = useRs();
+  const subFeatures = sheet.subclass ? Object.entries(SUBCLASSES[sheet.subclass]?.features ?? {}).filter(([lv]) => Number(lv) <= sheet.level).flatMap(([, f]) => f) : [];
   return (
     <aside className="sheet">
       <div className="row">
         <b>{sheet.name}</b>
-        <span className="muted small">{rs(CLASSES[sheet.classId]?.name ?? '직업 없음')} {sheet.level}레벨 · 숙련 보너스 {sign(proficiencyBonus(sheet.level))}</span>
+        <span className="muted small">{rs(CLASSES[sheet.classId]?.name ?? '직업 없음')}{sheet.subclass && SUBCLASSES[sheet.subclass] ? ` (${rs(SUBCLASSES[sheet.subclass]!.name)})` : ''} {sheet.level}레벨 · 숙련 보너스 {sign(proficiencyBonus(sheet.level))}</span>
         <span className="spacer" />
         <span>HP {sheet.hp}/{sheet.maxHp}</span>
       </div>
@@ -42,6 +78,9 @@ export function CharacterPanel({ sheet, party = {} }: { sheet: CharacterSheet; p
       {Object.entries(CLASS_KITS[sheet.classId]?.features ?? {}).some(([lv]) => Number(lv) <= sheet.level) && (
         <p className="small muted">능력: {Object.entries(CLASS_KITS[sheet.classId]!.features!).filter(([lv]) => Number(lv) <= sheet.level).flatMap(([, f]) => f).join(' · ')}</p>
       )}
+      {subFeatures.length > 0 && <p className="small muted">{rs(SUBCLASSES[sheet.subclass!]!.name)}: {subFeatures.map(rs).join(' · ')}</p>}
+      {(sheet.feats?.length ?? 0) > 0 && <p className="small muted">특성: {sheet.feats!.map((f) => FEATS[f]?.name ?? f).join(' · ')}</p>}
+      {onChoose && <BuildChoices sheet={sheet} onChoose={onChoose} disabled={disabled} />}
       <div className="ability-grid">
         {ABILITIES.map((a) => (
           <div key={a} className="stat">
@@ -65,7 +104,7 @@ export function CharacterPanel({ sheet, party = {} }: { sheet: CharacterSheet; p
           {Object.entries(party).map(([id, c]) => (
             <div key={id} className="row small">
               <b>{c.name}</b>
-              <span className="muted">{rs(CLASSES[c.classId]?.name ?? '')} {c.level}레벨</span>
+              <span className="muted">{rs(CLASSES[c.classId]?.name ?? '')}{c.subclass && SUBCLASSES[c.subclass] ? ` (${rs(SUBCLASSES[c.subclass]!.name)})` : ''} {c.level}레벨</span>
               <span className="spacer" />
               {Object.entries(c.resources ?? {}).map(([k, r]) => <span key={k} className="muted">{rs(RESOURCE_LABEL[k] ?? k)} {r.cur}/{r.max}</span>)}
               <span>HP {c.hp}/{c.maxHp}</span>

@@ -19,6 +19,7 @@ import { type Abilities, type CharacterSheet, resourcesOf } from '../character/s
 import { abilityModifier, d20Test, type RollMode } from '../dice/dice';
 import { type Rng, rollDie } from '../dice/rng';
 import { proficiencyBonus, SKILLS } from '../character/rules';
+import { subclassCards } from '../character/build';
 import { BASIC_CARDS, type CardDef, CLASS_CARDS, CLASS_KITS, type Condition, CONDITION_LABEL, type Cost, type Inflict, kitCards, WEAPON_CARDS } from './cards';
 import { ALL_MONSTER_CARDS, type MonsterDef, type MonsterPhase, MONSTERS } from './monsters';
 
@@ -86,6 +87,10 @@ export interface Combatant {
   evasion?: boolean;
   /** 보호의 오라 (팔라딘 6레벨): 같은 존 아군의 내성에 더하는 값 */
   aura?: number;
+  /** 하위 직업·특성 효과 (v0.37) */
+  traits?: Trait[];
+  /** 우선권 보너스 (경계 특성·추적자) */
+  initBonus?: number;
   /** 이 전투원만 가진 카드 정의 (소지품 물약·세계만의 적 기술 등, 설계 v3 6.4) */
   extraCards?: CardDef[];
   /** 적: 처치 경험치·역할·외형·보스 단계 (세계만의 적도 전투 안에서 스스로 완결되도록 담아 둔다) */
@@ -94,6 +99,14 @@ export interface Combatant {
   look?: string;
   phases?: MonsterPhase[];
 }
+
+/**
+ * stealth_adv: 숨기 판정 이점 (도둑) · duelist: 홀로 선 적에게 근접 암습 (결투가) · life: 회복 주문 +2+슬롯 (생명 영역)
+ * evoker: 주문 피해 + 주문 능력 수정치 (방출술사) · colossus: 다친 적 +1d8 (사냥꾼)
+ * sharpshooter: 근접한 적이 있어도 원거리 불리점 없음 · war_caster: 건강 내성 이점
+ */
+export type Trait = 'stealth_adv' | 'duelist' | 'life' | 'evoker' | 'colossus' | 'sharpshooter' | 'war_caster';
+const hasTrait = (c: Combatant, t: Trait) => !!c.traits?.includes(t);
 
 export interface Economy {
   action: boolean;
@@ -193,17 +206,27 @@ export function sheetCombatant(sheet: CharacterSheet, id: string, name: string, 
   const pb = proficiencyBonus(sheet.level);
   const resources = structuredClone(resourcesOf(sheet));
   for (const it of gear.items ?? []) resources[it.card.resource!] = { cur: it.n, max: it.n };
-  const cards = [...new Set([...kitCards(kit, sheet.level), ...(gear.cards ?? []).filter((c) => ALL_CARDS[c])])];
+  const cards = [...new Set([...kitCards(kit, sheet.level), ...subclassCards(sheet.subclass, sheet.level), ...(gear.cards ?? []).filter((c) => ALL_CARDS[c])])];
+  const sc = sheet.subclass;
+  const feats = sheet.feats ?? [];
+  const traits: Trait[] = [];
+  const t = (on: boolean, x: Trait) => { if (on) traits.push(x); };
+  t(sc === 'thief', 'stealth_adv'); t(sc === 'duelist', 'duelist'); t(sc === 'life', 'life'); t(sc === 'evoker', 'evoker'); t(sc === 'hunter', 'colossus');
+  t(feats.includes('sharpshooter'), 'sharpshooter'); t(feats.includes('war_caster'), 'war_caster');
+  const acBonus = (feats.includes('defense') ? 1 : 0) + (sc === 'valor' ? 1 : 0) + (sc === 'guardian' && sheet.level >= 7 ? 1 : 0);
+  const initBonus = (feats.includes('alert') ? pb : 0) + (sc === 'tracker' ? abilityModifier(sheet.abilities.wis) : 0);
   return {
+    ...(traits.length ? { traits } : {}), ...(initBonus ? { initBonus } : {}),
     id, name, side: 'party', isPlayer, zone,
-    hp: sheet.hp, maxHp: sheet.maxHp, ac: gear.ac ?? (kit.ac(dex) + (kit.shield ? 2 : 0)), level: sheet.level, abilities: { ...sheet.abilities },
+    hp: sheet.hp, maxHp: sheet.maxHp, ac: (gear.ac ?? (kit.ac(dex) + (kit.shield ? 2 : 0))) + acBonus, level: sheet.level, abilities: { ...sheet.abilities },
     profBonus: pb, saveProfs: [...sheet.saveProficiencies],
     stealthBonus: abilityModifier(sheet.abilities[SKILLS.stealth.ability]) + (sheet.skillProficiencies.includes('stealth') ? pb : 0),
     spellAbility: kit.spellAbility, cards, resources, ...(gear.items?.length ? { extraCards: gear.items.map((x) => x.card) } : {}),
     dodging: false, hidden: false, initiative: 0,
     sneakAttack: kit.sneakAttack ? `${Math.ceil(sheet.level / 2)}d6` : undefined, // 암습 1d6(1~2레벨), 2d6(3~4레벨)
-    critRange: sheet.classId === 'fighter' && sheet.level >= 3 ? 19 : 20, // 투사: 향상된 치명타
-    ...(['fighter', 'ranger', 'paladin'].includes(sheet.classId) && sheet.level >= 5 ? { extraAttack: true } : {}),
+    // 챔피언: 향상된 치명타 (하위 직업을 아직 고르지 않은 파이터도 — 이전 세이브 호환)
+    critRange: sheet.classId === 'fighter' && sheet.level >= 3 && sc !== 'guardian' ? 19 : 20,
+    ...((['fighter', 'ranger', 'paladin'].includes(sheet.classId) && sheet.level >= 5) || (sc === 'valor' && sheet.level >= 6) ? { extraAttack: true } : {}),
     ...(sheet.classId === 'rogue' && sheet.level >= 5 ? { uncannyDodge: true } : {}),
     ...(sheet.classId === 'rogue' && sheet.level >= 7 ? { evasion: true } : {}),
     ...(sheet.classId === 'paladin' && sheet.level >= 6 ? { aura: Math.max(1, abilityModifier(sheet.abilities.cha)) } : {}),
@@ -264,7 +287,7 @@ export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng,
     counts[e.monsterId] = (counts[e.monsterId] ?? 0) + 1;
     list.push(monsterCombatant(e.monsterId, counts[e.monsterId]!, Math.min(ZONE_COUNT - 1, Math.max(2, e.zone)), table));
   }
-  for (const c of list) c.initiative = rollDie(rng, 20) + abilityModifier(c.abilities.dex);
+  for (const c of list) c.initiative = rollDie(rng, 20) + abilityModifier(c.abilities.dex) + (c.initBonus ?? 0);
   const order = [...list].sort((a, b) => b.initiative - a.initiative || b.abilities.dex - a.abilities.dex || a.id.localeCompare(b.id)).map((c) => c.id);
   return {
     encounterId: enc.id, round: 1, order, turnIndex: 0,
@@ -293,8 +316,9 @@ function saveTest(rng: Rng, t: Combatant, save: Ability, dc: number, cs?: Combat
   const aura = cs ? Math.max(0, ...Object.values(cs.combatants).filter((o) => o.side === t.side && o.aura && o.hp > 0 && o.zone === t.zone).map((o) => o.aura!)) : 0;
   const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0) + aura;
   if (hasCondition(t, 'stunned') && (save === 'str' || save === 'dex')) return { kept: 0, mod: sb, total: 0, success: false, note: '기절 — 자동 실패' };
-  const r = d20Test(rng, sb, dc, hasCondition(t, 'restrained') && save === 'dex' ? 'disadvantage' : 'normal');
-  return { kept: r.kept, mod: sb, total: r.total, success: r.success, note: r.rolls.length > 1 ? `불리점(포박) ${r.rolls.join(', ')}` : '' };
+  const mode = combineMode(hasTrait(t, 'war_caster') && save === 'con', hasCondition(t, 'restrained') && save === 'dex');
+  const r = d20Test(rng, sb, dc, mode);
+  return { kept: r.kept, mod: sb, total: r.total, success: r.success, note: mode === 'disadvantage' ? `불리점(포박) ${r.rolls.join(', ')}` : mode === 'advantage' ? `이점(전쟁 시전자) ${r.rolls.join(', ')} → ${r.total}` : '' };
 }
 
 /** 상태 이상 부여. saved: 이미 굴린 내성 결과 (내성 피해 카드). 없으면 inflict.save로 새로 굴린다. */
@@ -313,6 +337,9 @@ function tryInflict(rng: Rng, a: Combatant, t: Combatant, inf: Inflict, saved?: 
   const rounds = Math.max(inf.rounds, t.conditions?.[inf.condition] ?? 0);
   return { effects: [{ kind: 'condition', target: t.id, condition: inf.condition, rounds }], text: `,${roll} → ${label}(${inf.rounds}라운드)` };
 }
+
+/** 내성 피해 보너스: 카드의 주문 능력 보너스, 방출술사는 주문이면 항상 (두 번 더하지 않는다) */
+const evokeBonus = (card: CardDef, a: Combatant, bonus?: 'spell') => (bonus === 'spell' || (hasTrait(a, 'evoker') && card.kind === 'spell') ? spellMod(a) : 0);
 
 /** 소마법 강화: 5레벨부터 소마법 피해 주사위 2배 */
 function cantripDamage(card: CardDef, a: Combatant, damage: string): string {
@@ -347,6 +374,10 @@ export function validTargets(cs: CombatState, actorId: string, card: CardDef): T
     // 공포: 가장 가까운 적에게 다가가는 방향으로는 움직일 수 없다
     const dist = (z: number) => Math.min(...opponents(cs, a).map((o) => Math.abs(o.zone - z)));
     return zones.filter((z) => !opponents(cs, a).length || dist(z) >= dist(a.zone));
+  }
+  if (card.target === 'ally' && card.effect.type === 'protect') {
+    const range = card.effect.range;
+    return Object.values(cs.combatants).filter((o) => o.side === a.side && o.id !== a.id && alive(o) && Math.abs(o.zone - a.zone) <= range && !o.dodging).map((o) => o.id);
   }
   if (card.target === 'ally' && card.effect.type === 'inspire') {
     const range = card.effect.range;
@@ -421,6 +452,8 @@ interface AttackResult {
   effects: CombatEffect[];
   line: string;
   damage: number;
+  /** 거인 사냥꾼을 이번 굴림에 썼다 */
+  colossus?: boolean;
 }
 
 /** 한 번의 공격 굴림 (여러 줄 공격은 이 함수를 반복 호출) */
@@ -435,7 +468,7 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
   const tHelpless = (['stunned', 'restrained', 'blinded'] as const).find((k) => hasCondition(t, k));
   const aHindered = (['poisoned', 'frightened', 'restrained', 'blinded'] as const).find((k) => hasCondition(a, k));
   const adv = a.hidden || a.aimed || t.marked || pack || proneMelee || !!tHelpless;
-  const engaged = spec.kind === 'ranged' && hostileInZone(cs, a);
+  const engaged = spec.kind === 'ranged' && hostileInZone(cs, a) && !hasTrait(a, 'sharpshooter');
   const dis = t.dodging || engaged || !!a.prone || proneRanged || !!aHindered;
   const mode = combineMode(adv, dis);
   const r = d20Test(rng, toHit, t.ac, mode);
@@ -446,17 +479,27 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
   const head = `${a.name}의 ${cardName} → ${t.name}: d20(${r.rolls.join(', ')})${modeText} ${toHit >= 0 ? '+' : ''}${toHit} = ${r.total} vs AC ${t.ac}`;
   if (t.marked) effects.push({ kind: 'flag', target: t.id, marked: false });
   if (!hit) return { effects, line: `${head} → ${r.natural1 ? '대실패' : '빗나감'}`, damage: 0 };
-  const dmgBonus = spec.damageBonus ?? (spec.ability === 'spell' ? 0 : abil);
+  const dmgBonus = spec.damageBonus ?? (spec.ability === 'spell' ? (hasTrait(a, 'evoker') ? spellMod(a) : 0) : abil);
   const dmg = rollDamage(rng, damage, crit);
   let total = Math.max(0, dmg.total + dmgBonus);
   let extra = '';
   // 암습: 이점이 있거나, 불리점 없이 대상과 같은 존에 다른 아군이 있을 때 (SRD 5.2.1)
   const allyNearTarget = Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
-  if (sneakAvailable && a.sneakAttack && (mode === 'advantage' || (mode === 'normal' && allyNearTarget)) && (spec.kind === 'ranged' || spec.ability === 'finesse')) {
+  // 결투가: 대상이 그 존에 혼자 있으면 근접 암습
+  const alone = spec.kind === 'melee' && hasTrait(a, 'duelist') && !Object.values(cs.combatants).some((o) => o.side === t.side && o.id !== t.id && alive(o) && o.zone === t.zone);
+  if (sneakAvailable && a.sneakAttack && (mode === 'advantage' || (mode === 'normal' && (allyNearTarget || alone))) && (spec.kind === 'ranged' || spec.ability === 'finesse')) {
     const s = rollDamage(rng, a.sneakAttack, crit);
     total += s.total;
     extra = ` + 암습 ${s.total}`;
     effects.push({ kind: 'sneak_used' });
+  }
+  let colossus = false;
+  // 거인 사냥꾼: 다친 적을 무기로 맞히면 1d8 (카드 한 장당 한 번)
+  if (hasTrait(a, 'colossus') && spec.ability !== 'spell' && hpBefore < t.maxHp) {
+    const c = rollDamage(rng, '1d8', crit);
+    total += c.total;
+    extra += ` + 거인 사냥꾼 ${c.total}`;
+    colossus = true;
   }
   // 초감각 회피: 반응으로 피해 절반
   if (t.uncannyDodge && !t.reactionUsed && hpBefore > 0 && total > 0 && !hasCondition(t, 'stunned')) {
@@ -479,7 +522,7 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
     proneText += inf.text;
   }
   return {
-    effects, damage: total,
+    effects, damage: total, colossus,
     line: `${head} → ${crit ? '치명타!' : '명중'} ${spec.damageType} 피해 ${total} (${dmg.rolls.join('+')}${dmgBonus ? `${dmgBonus > 0 ? '+' : ''}${dmgBonus}` : ''}${extra})${at.mark ? ', 표식' : ''}${hpBefore - total <= 0 ? ` — ${t.name} 쓰러짐` : ''}${proneText}`,
   };
 }
@@ -546,10 +589,13 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       let sneak = !cs.sneakUsed;
       let reacted = !!t.reactionUsed;
       let conds = t.conditions;
+      let actor = a;
       for (let i = 0; i < count; i++) {
         if (hp <= 0) break;
         const tNow = { ...t, hp, reactionUsed: reacted, conditions: conds };
-        const r = rollAttack(i === 0 ? cs : { ...cs, combatants: { ...cs.combatants, [a.id]: { ...a, hidden: false, aimed: false }, [t.id]: { ...tNow, marked: false } } }, i === 0 ? a : { ...a, hidden: false, aimed: false }, i === 0 ? tNow : { ...tNow, marked: false }, name, e, damage, rng, sneak, hp);
+        if (i > 0) actor = { ...actor, hidden: false, aimed: false };
+        const r = rollAttack(i === 0 ? cs : { ...cs, combatants: { ...cs.combatants, [a.id]: actor, [t.id]: { ...tNow, marked: false } } }, actor, i === 0 ? tNow : { ...tNow, marked: false }, name, e, damage, rng, sneak, hp);
+        if (r.colossus) actor = { ...actor, traits: actor.traits?.filter((x) => x !== 'colossus') };
         effects.push(...r.effects);
         if (r.effects.some((x) => x.kind === 'sneak_used')) sneak = false;
         if (r.effects.some((x) => x.kind === 'flag' && x.target === t.id && x.reactionUsed)) reacted = true;
@@ -562,7 +608,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
     }
     case 'save_damage': {
       const t = cs.combatants[target as string]!;
-      const r = rollSave(a, t, name, e.save, cantripDamage(card, a, scaleDice(e.damage, card.upcast?.dice, up)), e.damageType, !!e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc, e.inflict, cs);
+      const r = rollSave(a, t, name, e.save, cantripDamage(card, a, scaleDice(e.damage, card.upcast?.dice, up)), e.damageType, !!e.half, evokeBonus(card, a, e.bonus), rng, e.dc, e.inflict, cs);
       effects.push(...r.effects);
       log.push(r.line);
       break;
@@ -572,7 +618,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       const foes = opponents(cs, a).filter((o) => o.zone === zone);
       log.push(`${a.name}의 ${name}: ${ZONE_NAMES[zone]}의 적 ${foes.length}명`);
       for (const t of foes) {
-        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc, e.inflict, cs);
+        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, evokeBonus(card, a, e.bonus), rng, e.dc, e.inflict, cs);
         effects.push(...r.effects);
         log.push(`  ${r.line}`);
       }
@@ -589,7 +635,8 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
     }
     case 'heal': {
       const t = cs.combatants[(target as string) ?? a.id]!;
-      const h = rollDamage(rng, scaleDice(e.dice, card.upcast?.dice, up)).total + (e.add === 'spell' ? spellMod(a) : e.add === 'level' ? a.level : 0);
+      const h = rollDamage(rng, scaleDice(e.dice, card.upcast?.dice, up)).total + (e.add === 'spell' ? spellMod(a) : e.add === 'level' ? a.level : 0)
+        + (hasTrait(a, 'life') && card.spellLevel ? 2 + card.spellLevel + up : 0); // 생명의 제자
       const healed = Math.min(t.maxHp - t.hp, Math.max(0, h));
       effects.push({ kind: 'hp', target: t.id, delta: healed });
       const cured = (e.cures ?? []).filter((k) => hasCondition(t, k));
@@ -639,6 +686,12 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       log.push(`${a.name}: ${name} → ${t.name} — 다음 공격이 이점`);
       break;
     }
+    case 'protect': {
+      const t = cs.combatants[target as string]!;
+      effects.push({ kind: 'flag', target: t.id, dodging: true });
+      log.push(`${a.name}: ${name} → ${t.name} — 다음 차례까지 그를 노리는 공격에 불리점`);
+      break;
+    }
     case 'inspire': {
       const t = cs.combatants[target as string]!;
       effects.push({ kind: 'flag', target: t.id, aimed: true });
@@ -651,7 +704,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       break;
     }
     case 'hide': {
-      const r = d20Test(rng, a.stealthBonus, 15);
+      const r = d20Test(rng, a.stealthBonus, 15, hasTrait(a, 'stealth_adv') ? 'advantage' : 'normal');
       if (r.success) effects.push({ kind: 'flag', target: a.id, hidden: true });
       log.push(`${a.name}: ${name} — 은신 d20(${r.kept}) ${a.stealthBonus >= 0 ? '+' : ''}${a.stealthBonus} = ${r.total} vs DC 15 → ${r.success ? '성공' : '실패'}`);
       break;

@@ -19,6 +19,7 @@ import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import { appendEvents, loadEvents, undoLastTurn } from '../storage/db';
 import { CharacterPanel } from './CharacterPanel';
+import { pendingChoices } from '../engine/character/build';
 import { JournalPanel } from './JournalPanel';
 import { AssetImage } from './AssetImage';
 import { RichText } from './RichText';
@@ -210,7 +211,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         {date && <span className="small date">{date.label}{date.countdown && <b className={date.daysLeft !== undefined && date.daysLeft <= 7 ? 'dday urgent' : 'dday'}> · {date.countdown}</b>}</span>}
         <span className="muted small">{String(Math.floor(state.worldMinutes / 60) % 24).padStart(2, '0')}:{String(state.worldMinutes % 60).padStart(2, '0')} · 턴 {state.turn}</span>
         <span className="spacer" />
-        <button onClick={() => setPanel((p) => (p === 'sheet' ? 'none' : 'sheet'))}>캐릭터 {panel === 'sheet' ? '▲' : '▼'}</button>
+        <button onClick={() => setPanel((p) => (p === 'sheet' ? 'none' : 'sheet'))} className={pendingChoices(state.player.sheet) ? 'has-pending' : undefined}>캐릭터{pendingChoices(state.player.sheet) ? ` ★${pendingChoices(state.player.sheet)}` : ''} {panel === 'sheet' ? '▲' : '▼'}</button>
         <button onClick={() => setPanel((p) => (p === 'journal' ? 'none' : 'journal'))}>수첩 {panel === 'journal' ? '▲' : '▼'}</button>
         <button onClick={() => setPanel((p) => (p === 'items' ? 'none' : 'items'))}>소지품 {panel === 'items' ? '▲' : '▼'}</button>
         {shop && !state.combat && <button onClick={() => setPanel((p) => (p === 'shop' ? 'none' : 'shop'))}>🛒 {rs(shop.name)}</button>}
@@ -231,7 +232,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       )}
       {panel !== 'none' && (
         <div className="head-panel">
-          {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} />}
+          {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} disabled={streaming !== null || !!state.playerDead} onChoose={(kind, value) => commitEvents(() => [{ type: 'build_choice', who: 'player', kind, value }])} />}
           {panel === 'journal' && <JournalPanel world={world} state={state} />}
           {panel === 'items' && <InventoryPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.combat || !!state.playerDead} />}
           {panel === 'board' && (board && !state.combat ? <BoardPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.playerDead} /> : <p className="muted small">여기에는 의뢰판이 없다.</p>)}

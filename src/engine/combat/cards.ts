@@ -69,6 +69,8 @@ export type Effect =
   | { type: 'mark'; range: number }
   /** 영감: 다른 아군의 다음 공격이 이점 (음유 영감) */
   | { type: 'inspire'; range: number }
+  /** 감싸기: 다른 아군 하나를 노리는 공격에 불리점 (그 아군의 다음 차례까지) */
+  | { type: 'protect'; range: number }
   /** 이번 차례 동안 이동해도 기회 공격을 받지 않는다 */
   | { type: 'disengage' }
   /** 넘어짐에서 일어선다 (이동력 소모) */
@@ -153,6 +155,14 @@ export const CLASS_CARDS: CardDef[] = [
   card({ id: 'spell/eldritch_blast', name: '섬뜩한 화살', desc: '소마법. 원거리 주문 공격 1d10 역장 (3존).', kind: 'spell', cost: 'action', target: 'enemy', effect: { type: 'attack', attack: { kind: 'ranged', ability: 'spell', damage: '1d10', damageType: '역장', range: 3 } } }),
   card({ id: 'warlock/hex', name: '저주', desc: '1레벨 주문, 보너스 행동. 3존 안의 적에게 저주의 표식 — 그 적에 대한 다음 공격이 이점.', kind: 'spell', cost: 'bonus', target: 'enemy', spellLevel: 1, effect: { type: 'mark', range: 3 } }),
   card({ id: 'spell/hunger_of_hadar', name: '하다르의 굶주림', desc: '3레벨 주문. 2존 안 한 존의 모든 적은 건강 내성, 실패 시 2d6 냉기와 1라운드 실명 (성공 시 절반).', kind: 'spell', cost: 'action', target: 'area', spellLevel: 3, upcast: { dice: '1d6' }, effect: { type: 'area_save', save: 'con', damage: '2d6', damageType: '냉기', range: 2, half: true, inflict: { condition: 'blinded', save: 'con', dc: 0, rounds: 1 } } }),
+  // ---- 하위 직업 (v0.37)
+  card({ id: 'fighter/guard', name: '감싸기', desc: '보너스 행동. 같은 존의 다른 아군 하나를 감싼다 — 그 아군을 노리는 공격에 불리점 (그 아군의 다음 차례까지).', kind: 'class', cost: 'bonus', target: 'ally', effect: { type: 'protect', range: 0 } }),
+  card({ id: 'cleric/war_strike', name: '전쟁 사제의 일격', desc: '보너스 행동. 근접 무기 공격 1d6 타격.', kind: 'class', cost: 'bonus', target: 'enemy', resource: 'war_priest', effect: { type: 'attack', attack: { kind: 'melee', ability: 'str', damage: '1d6', damageType: '타격', range: 0 } } }),
+  card({ id: 'wizard/portent', name: '예견', desc: '보너스 행동. 3존 안의 적 하나의 빈틈을 내다본다 — 그 적에 대한 다음 공격이 이점.', kind: 'class', cost: 'bonus', target: 'enemy', resource: 'portent', effect: { type: 'mark', range: 3 } }),
+  card({ id: 'bard/cutting_words', name: '날카로운 말', desc: '보너스 행동, 음유 영감 소모. 2존 안의 적 하나의 방어를 흔든다 — 그 적에 대한 다음 공격이 이점.', kind: 'class', cost: 'bonus', target: 'enemy', resource: 'bardic_inspiration', effect: { type: 'mark', range: 2 } }),
+  card({ id: 'paladin/sacred_weapon', name: '성스러운 무기', desc: '신성 변환, 보너스 행동. 무기에 빛을 깃들인다 — 내 다음 공격이 이점.', kind: 'class', cost: 'bonus', target: 'self', resource: 'channel_divinity', effect: { type: 'inspire', range: 0 } }),
+  card({ id: 'paladin/vow', name: '적의 맹세', desc: '신성 변환, 보너스 행동. 3존 안의 적 하나에게 맹세 — 그 적에 대한 다음 공격이 이점.', kind: 'class', cost: 'bonus', target: 'enemy', resource: 'channel_divinity', effect: { type: 'mark', range: 3 } }),
+  card({ id: 'warlock/fey_presence', name: '요정의 위압', desc: '행동. 내 존의 모든 적은 지혜 내성, 실패 시 1라운드 공포 (짧은 휴식당 1회).', kind: 'class', cost: 'action', target: 'area', resource: 'fey_presence', effect: { type: 'area_save', save: 'wis', damage: '1d4', damageType: '', range: 0, half: false, inflict: { condition: 'frightened', save: 'wis', dc: 0, rounds: 1 } } }),
   // ---- 6~10레벨 주문
   card({ id: 'spell/ice_storm', name: '얼음 폭풍', desc: '4레벨 주문. 3존 안 한 존의 모든 적은 민첩 내성, 실패 시 6d8 냉기 (성공 시 절반).', kind: 'spell', cost: 'action', target: 'area', spellLevel: 4, upcast: { dice: '1d8' }, effect: { type: 'area_save', save: 'dex', damage: '6d8', damageType: '냉기', range: 3, half: true } }),
   card({ id: 'spell/cone_of_cold', name: '냉기 원뿔', desc: '5레벨 주문. 1존 안 한 존의 모든 적은 건강 내성, 실패 시 8d8 냉기 (성공 시 절반).', kind: 'spell', cost: 'action', target: 'area', spellLevel: 5, upcast: { dice: '1d8' }, effect: { type: 'area_save', save: 'con', damage: '8d8', damageType: '냉기', range: 1, half: true } }),

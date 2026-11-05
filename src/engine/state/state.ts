@@ -6,6 +6,7 @@ import { josa } from '../text/josa';
 import { applyDelta, describeDelta, type Relationship } from '../relationship';
 import { applyEffects, type CombatState, endTurn, type PartyOrder, ZONE_NAMES } from '../combat/combat';
 import { classResources, resourcesOf } from '../character/sheet';
+import { applyBuildChoice } from '../character/build';
 import { ABILITY_NAMES, type Ability, SKILLS, type SkillId } from '../character/rules';
 
 export interface LogEntry {
@@ -204,6 +205,14 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: e.sheet } } : s;
       return { ...next, log: [...next.log, { turn, kind: 'progress', text }] };
     }
+    case 'build_choice': {
+      const sheet = e.who === 'player' ? s.player.sheet : s.party[e.who];
+      const r = sheet ? applyBuildChoice(sheet, e.kind, e.value) : null;
+      if (!sheet || !r) return s;
+      const name = e.who === 'player' ? '당신' : sheet.name;
+      const next = e.who === 'player' ? { ...s, player: { ...s.player, sheet: r.sheet } } : { ...s, party: { ...s.party, [e.who]: r.sheet } };
+      return { ...next, log: [...next.log, { turn, kind: 'progress', text: `★ ${name} — ${r.text}` }] };
+    }
     case 'relationship_changed': {
       const base = s.relationships[e.npcId] ?? e.base ?? {};
       return { ...s, relationships: { ...s.relationships, [e.npcId]: applyDelta(base, e.delta) },
@@ -333,9 +342,9 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'rested': {
       const sheet = s.player.sheet;
       if (e.kind === 'long') {
-        const party = Object.fromEntries(Object.entries(s.party).map(([id, sh]) => [id, { ...sh, hp: sh.maxHp, resources: classResources(sh.classId, sh.level) }]));
+        const party = Object.fromEntries(Object.entries(s.party).map(([id, sh]) => [id, { ...sh, hp: sh.maxHp, resources: classResources(sh.classId, sh.level, sh.subclass) }]));
         return { ...s, worldMinutes: s.worldMinutes + 8 * 60, party,
-          player: { ...s.player, sheet: { ...sheet, hp: sheet.maxHp, resources: classResources(sheet.classId, sheet.level) } },
+          player: { ...s.player, sheet: { ...sheet, hp: sheet.maxHp, resources: classResources(sheet.classId, sheet.level, sheet.subclass) } },
           log: [...s.log, { turn, kind: 'check', text: '긴 휴식 (8시간) — HP와 자원 모두 회복' }] };
       }
       // 짧은 휴식 (SRD 5.2.1): 재기의 바람 1회, 행동 연쇄 전부, 신성 변환 1회, 위저드 비전 회복(긴 휴식당 1번)
@@ -345,6 +354,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         regain('second_wind', 1);
         regain('action_surge', 99);
         regain('channel_divinity', 1);
+        regain('fey_presence', 99);
         // 워락 계약 슬롯은 짧은 휴식에 모두 회복, 바드 5레벨부터 음유 영감도
         if (sh.classId === 'warlock') for (const k of Object.keys(res)) if (k.startsWith('slot')) regain(k, 99);
         if (sh.classId === 'bard' && sh.level >= 5) regain('bardic_inspiration', 99);
