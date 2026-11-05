@@ -1,5 +1,6 @@
 import { useRs } from './reskin';
-import { useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { MONSTERS } from '../engine/combat/monsters';
 import { type CardDef, CONDITION_DESC, CONDITION_LABEL } from '../engine/combat/cards';
 import {
   conditionsOf,
@@ -12,8 +13,13 @@ const COST_LABEL = { action: '행동', bonus: '보너스', move: '이동', free:
 const SLOT_LABEL = (r: Record<string, { cur: number; max: number }>) =>
   Object.entries(r).filter(([k]) => k.startsWith('slot')).map(([k, v]) => `${k.slice(4)}레벨 ${v.cur}/${v.max}`).join(' · ');
 
-export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
+/** 적 역할별 표식 (초상화가 없을 때) */
+const ROLE_GLYPH: Record<string, string> = { minion: '🗡', brute: '🪓', skirmisher: '🏹', artillery: '🎯', controller: '🌀', leader: '🚩', boss: '👑' };
+
+export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, portrait }: {
   cs: CombatState;
+  /** 전투원 초상화 (동료·플레이어). 없으면 표식 */
+  portrait?: (combatantId: string) => ReactNode;
   busy: boolean;
   orders: Record<string, PartyOrder>;
   onAct: (cardId: string, target: Target) => void;
@@ -27,6 +33,26 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
   const me = cs.combatants.player!;
   const myTurn = currentActorId(cs) === 'player' && !cs.outcome;
   const targets = selected ? validTargets(cs, 'player', selected) : [];
+
+  // 연출 (설계 v3 R10): HP가 바뀐 전투원 위로 숫자가 떠오르고, 맞은 토큰은 흔들린다
+  const prevHp = useRef<Record<string, number> | null>(null);
+  const [pops, setPops] = useState<{ key: number; id: string; text: string; cls: string }[]>([]);
+  const popKey = useRef(0);
+  useEffect(() => {
+    const now = Object.fromEntries(Object.values(cs.combatants).map((c) => [c.id, c.hp]));
+    const prev = prevHp.current;
+    prevHp.current = now;
+    if (!prev) return;
+    const fresh = Object.entries(now).flatMap(([id, hp]) => {
+      const d = hp - (prev[id] ?? hp);
+      return d ? [{ key: ++popKey.current, id, text: d > 0 ? `+${d}` : `${d}`, cls: d > 0 ? 'heal' : 'dmg' }] : [];
+    });
+    if (!fresh.length) return;
+    setPops((p) => [...p, ...fresh]);
+    const keys = new Set(fresh.map((f) => f.key));
+    const t = setTimeout(() => setPops((p) => p.filter((x) => !keys.has(x.key))), 1400);
+    return () => clearTimeout(t);
+  }, [cs]);
 
   function choose(card: CardDef) {
     if (busy || unusableReason(cs, 'player', card)) return;
@@ -64,6 +90,11 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
                   <button key={c.id} type="button" disabled={!targetable && !!selected}
                     className={`chip ${c.side} ${c.hp <= 0 ? (c.side === 'party' && !c.dead ? 'downed' : 'down') : ''} ${targetable ? 'targetable' : ''} ${currentActorId(cs) === c.id ? 'active' : ''}`}
                     onClick={(e) => { e.stopPropagation(); if (targetable) pick(c.id); }}>
+                    <span className={`token ${c.side} ${pops.some((p) => p.id === c.id && p.cls === 'dmg') ? 'hurt' : ''}`}
+                      style={{ ['--hp' as string]: `${Math.max(0, Math.round((100 * c.hp) / c.maxHp))}%` }}>
+                      <span className="token-face">{portrait?.(c.id) ?? (c.side === 'enemy' ? ROLE_GLYPH[MONSTERS[c.monsterId ?? '']?.role ?? ''] ?? '⚔' : c.isPlayer ? '★' : '🛡')}</span>
+                      {pops.filter((p) => p.id === c.id).map((p) => <span key={p.key} className={`pop ${p.cls}`}>{p.text}</span>)}
+                    </span>
                     <span className="chip-name">{c.isPlayer ? '당신' : rs(c.name)}{c.side === 'party' && !c.isPlayer ? ' (동료)' : ''}{c.escaped ? ' (도망침)' : ''}</span>
                     <span className="hpbar"><span style={{ width: `${(100 * c.hp) / c.maxHp}%` }} /></span>
                     <span className="small">HP {c.hp}/{c.maxHp} · AC {c.ac}{c.dodging ? ' · 회피' : ''}{c.hidden ? ' · 숨음' : ''}{c.disengaged ? ' · 후퇴' : ''}</span>

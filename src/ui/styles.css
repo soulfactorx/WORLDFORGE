@@ -271,7 +271,7 @@ ul.needs label.file { flex: none; }
 .flow-table td, .flow-table th { border-bottom: 1px solid var(--border); padding: 3px 4px; text-align: left; vertical-align: top; }
 .flow-table tr.bad td { color: #b3412c; }
 .map-edge { stroke: var(--muted); stroke-width: 2; }
-.map-node rect { fill: var(--panel, #fff); stroke: var(--accent); stroke-width: 1.5; }
+.map-node rect { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; }
 .map-node.unreachable rect { stroke-dasharray: 4 3; opacity: .5; }
 .map-name { font-size: 13px; font-weight: 600; fill: currentColor; }
 .map-sub { font-size: 11px; fill: var(--muted); }
@@ -284,3 +284,22 @@ ul.needs label.file { flex: none; }
 .eval-list li { border-left: 3px solid #4f9a5a; padding: 2px 8px; }
 .eval-list li.fail { border-left-color: #b3412c; }
 .quality .row label { display: inline-flex; align-items: center; gap: 4px; }
+
+/* R10 전장 연출 */
+.chip { position: relative; }
+.token { position: relative; align-self: center; width: 46px; height: 46px; border-radius: 50%; padding: 3px; margin-bottom: 2px;
+  background: conic-gradient(var(--ring, #4f9a5a) var(--hp), color-mix(in srgb, var(--muted) 30%, transparent) 0); }
+.token.enemy { --ring: #b3412c; }
+.token-face { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; background: var(--surface); font-size: 20px; }
+.token-face img { width: 100%; height: 100%; object-fit: cover; }
+.chip.active .token { box-shadow: 0 0 0 3px var(--check), 0 0 12px var(--check); }
+.chip.down .token, .chip.downed .token { filter: grayscale(1); opacity: .6; }
+.token.hurt { animation: wf-shake .35s ease-in-out; }
+@keyframes wf-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.pop { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); font-weight: 800; font-size: 15px; pointer-events: none; animation: wf-pop 1.3s ease-out forwards; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.pop.dmg { color: #d6402a; }
+.pop.heal { color: #3f9d55; }
+@keyframes wf-pop { 0% { opacity: 0; transform: translate(-50%, 4px) scale(.8); } 15% { opacity: 1; transform: translate(-50%, -6px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -30px) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .token.hurt, .pop { animation: none; } }
+.av { position: relative; }
+.av-pop { position: absolute; right: 0; top: 110%; z-index: 20; width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }

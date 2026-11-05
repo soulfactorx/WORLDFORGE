@@ -13,6 +13,8 @@ import { narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from 
 import type { PartyOrder, Target } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
 import { CombatPanel } from './CombatPanel';
+import { AvControls } from './AvControls';
+import { moodOf, playSfx, setMusic, sfxForLog, speak, stopMusic, stopSpeaking, type Sfx } from './audio';
 import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import { appendEvents, loadEvents, undoLastTurn } from '../storage/db';
@@ -28,7 +30,7 @@ import { ABILITIES, ABILITY_NAMES, SKILL_IDS, SKILLS, type SkillId } from '../en
 import { checkModifier } from '../engine/character/sheet';
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
-import { pickSceneImage } from '../engine/assets';
+import { pickCharacterImage, pickSceneImage } from '../engine/assets';
 
 /**
  * 같은 세이브를 두 탭에서 동시에 열면 이벤트 로그가 꼬이므로 Web Locks로 한 탭만 허용한다.
@@ -97,6 +99,23 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   }
   useEffect(() => { reload(); return () => abort.current?.abort(); }, [saveId]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }); }, [state?.log.length, streaming]);
+
+  // 연출 (설계 v3 R10): 새로 생긴 기록에 효과음·음성, 장면에 맞는 음악
+  const seenLog = useRef<number | null>(null);
+  const [avTick, setAvTick] = useState(0);
+  useEffect(() => {
+    if (!state) return;
+    const prev = seenLog.current;
+    seenLog.current = state.log.length;
+    if (prev === null || state.log.length <= prev) return; // 처음 불러올 때·되돌릴 때는 조용히
+    const fresh = state.log.slice(prev);
+    const sounds = [...new Set(fresh.map((l) => sfxForLog(l.kind, l.text)).filter((x): x is Sfx => !!x))].slice(0, 3);
+    sounds.forEach((k, i) => setTimeout(() => playSfx(k), i * 180));
+    const narr = fresh.filter((l) => l.kind === 'narration').at(-1);
+    if (narr) speak(narr.text);
+  }, [state?.log.length]);
+  useEffect(() => { setMusic(state ? moodOf(world.genre?.id, !!state.combat) : null); }, [!!state?.combat, world.genre?.id, avTick, !!state]);
+  useEffect(() => () => { stopMusic(); stopSpeaking(); }, []);
 
   async function submit(choice?: string, choiceUse?: string, decision?: { choiceId: string; optionId: string }) {
     const text = (choice ?? input).trim();
@@ -196,6 +215,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         <button onClick={() => setPanel((p) => (p === 'items' ? 'none' : 'items'))}>소지품 {panel === 'items' ? '▲' : '▼'}</button>
         {shop && !state.combat && <button onClick={() => setPanel((p) => (p === 'shop' ? 'none' : 'shop'))}>🛒 {rs(shop.name)}</button>}
         {board && !state.combat && <button onClick={() => setPanel((p) => (p === 'board' ? 'none' : 'board'))}>📜 {rs(board.name)}</button>}
+        <AvControls onChange={() => setAvTick((n) => n + 1)} />
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null}>↶ 턴 되돌리기</button>
         <button onClick={onExit}>나가기</button>
       </div>
@@ -275,6 +295,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       {error && <p className="status">❌ {error}</p>}
       {state.playerDead ? null : state.combat ? (
         <CombatPanel cs={state.combat} busy={streaming !== null} orders={state.partyOrders}
+          portrait={(id) => { const img = id === 'player' ? undefined : pickCharacterImage(world, id, 'battle', 'combat'); return img ? <AssetImage pkg={world.manifest.id} id={img.id} alt="" /> : undefined; }}
           onOrder={(npcId: string, order: PartyOrder) => commitCombat((s) => setPartyOrder(s, npcId, order))}
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}
           onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
