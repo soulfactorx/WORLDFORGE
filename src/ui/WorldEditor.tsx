@@ -24,10 +24,10 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'encounters' | 'quests' | 'images' | 'json';
+type Tab = 'basic' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'encounters' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
   ['basic', '기본'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'],
-  ['encounters', '조우'], ['quests', '임무·플래그·결말'], ['images', '이미지'], ['json', 'JSON 전체'],
+  ['encounters', '조우'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
 const STATES = [['rumor', '소문'], ['partial', '들은 이야기'], ['confirmed', '확인됨'], ['mistaken', '잘못 앎'], ['secret', '비밀']] as const;
@@ -40,6 +40,7 @@ function tabForPath(path: string): Tab {
   if (path.startsWith('facts') || path.startsWith('claims') || path.startsWith('beliefs')) return 'knowledge';
   if (path.startsWith('factions') || path.startsWith('relations') || path.startsWith('relationBeats')) return 'relations';
   if (path.startsWith('encounters')) return 'encounters';
+  if (path.startsWith('arcs') || path.startsWith('choices') || path.startsWith('clocks') || path.startsWith('events')) return 'story';
   if (path.startsWith('quests') || path.startsWith('flags') || path.startsWith('endings')) return 'quests';
   return 'json';
 }
@@ -462,6 +463,25 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <JsonField label="임무" value={w.quests ?? []} onChange={(quests) => set({ quests })} rows={16} />
           <JsonField label="이야기 플래그 (Director가 세울 수 있는 결정)" value={w.flags ?? []} onChange={(flags) => set({ flags })} rows={8} />
           <JsonField label="결말" value={w.endings ?? []} onChange={(endings) => set({ endings })} rows={8} />
+        </>
+      )}
+
+      {tab === 'story' && (
+        <>
+          <p className="muted small">
+            세계가 스스로 움직이게 하는 장치들입니다. 조건식은 임무 탭과 같고, 여기서는 <code>{'{ "chapter": "arc/…", "gte": 1 }'}</code> <code>{'{ "arcDone": "arc/…" }'}</code>{' '}
+            <code>{'{ "clock": "clock/…", "gte": 4 }'}</code> <code>{'{ "choice": "choice/…", "is": "옵션id" }'}</code> <code>{'{ "day": 3 }'}</code>도 쓸 수 있습니다.
+            효과: <code>{'{ "setFlag": "…" }'}</code> <code>{'{ "moveNpc": "npc/…", "to": "loc/…" }'}</code> <code>{'{ "killNpc": "npc/…" }'}</code> <code>{'{ "reveal": "claim/…", "state": "rumor" }'}</code>{' '}
+            <code>{'{ "relationship": "npc/…", "delta": { "trust": 5 } }'}</code> <code>{'{ "reputation": "fac/…", "delta": -10 }'}</code> <code>{'{ "clock": "clock/…", "by": 2 }'}</code>
+          </p>
+          <JsonField label="줄기 (한 세계에 여러 개 — 시작 조건으로 열리고, 장마다 목표·완료·실패 조건)" value={w.arcs ?? []} onChange={(arcs) => set({ arcs })} rows={14}
+            help='예: { "id": "arc/main", "name": "숲의 그림자", "kind": "main", "start": { "all": [] }, "chapters": [{ "name": "낯선 땅", "goal": "GM용 목표", "summary": "수첩에 보이는 한 줄", "complete": { "at": "loc/…" }, "fail": { "flag": "…" } }] } · 2부는 start에 { "arcDone": "arc/main" }' />
+          <JsonField label="결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지가 뜬다)" value={w.choices ?? []} onChange={(choices) => set({ choices })} rows={12}
+            help='예: { "id": "choice/side", "name": "누구 편인가", "prompt": "누구의 말을 믿을 것인가?", "when": { "knows": "claim/…" }, "locationId": "loc/… (선택)", "options": [{ "id": "a", "text": "장로를 믿는다", "effects": [{ "setFlag": "…" }] }, { "id": "b", "text": "…", "effects": [] }] }' />
+          <JsonField label="진행 시계 (시간·사건으로 차오르고, 정해진 칸에서 일이 벌어진다)" value={w.clocks ?? []} onChange={(clocks) => set({ clocks })} rows={12}
+            help='예: { "id": "clock/raid", "name": "도적의 습격 준비", "segments": 6, "tick": [{ "every": "day", "by": 1 }, { "on": { "flag": "warned" }, "by": -2 }], "at": [{ "segment": 3, "omen": "플레이어에게 보이는 징조" }, { "segment": 6, "effects": [{ "setFlag": "raid" }] }] }' />
+          <JsonField label="연표 사건 (날짜·날 수·조건에 일어난다. unless가 참이면 막힌다)" value={w.events ?? []} onChange={(events) => set({ events })} rows={12}
+            help={`예: { "id": "event/coup", "name": "반역", "when": { "date": { "year": 429, "month": 9, "day": 21 } }, "unless": { "flag": "warned_guard" }, "effects": [{ "killNpc": "npc/…" }], "announce": "플레이어에게 보이는 소식" } · when.day = 시작 후 지난 날 수${w.calendar ? '' : ' · 날짜(date)를 쓰려면 기본 탭에서 달력을 정하세요'}`} />
         </>
       )}
 

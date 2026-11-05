@@ -49,6 +49,9 @@ const SCENARIO_SYSTEM = `너는 1인칭 AI TRPG의 시나리오 설계자다. �
 - 첫 단계 시작 조건이 없으면 { op: "all", items: [] } (항상 시작).
 - 관계 사건(relation_beats) 1~3개: 인물과의 관계가 일정 단계에 이르면 열리는 그 인물의 결정적 장면 (비밀 고백·부탁·질투·배신 등). 조건은 보통 stage(인물 key + 단계)나 relationship(친밀 intimacy·원한 grudge 등). 장면이 끝났음을 나타내는 플래그를 flags에 선언하고 resolve_flag에 쓴다.
 - 세력 평판 조건은 reputation(세력 key, 최소값).
+- 이야기 줄기(arc) 하나: 이번 이야기의 큰 흐름을 장 3~5개로 나눈다. 장의 complete는 임무 완료(quest_done)·지식·플래그 등으로, 메인 임무 단계와 겹쳐도 된다. 실패 조건(fail)은 필요할 때만.
+- 진행 시계(clocks) 1~2개: 플레이어가 막지 않으면 다가오는 위협 (예: 습격 준비, 의식 완성). 칸 4~8, 하루 1칸 정도. 중간 칸에 징조(omens.text), 마지막 칸에 결과 플래그(set_flag, flags에 선언).
+- 결정적 선택(choices) 1~2개: 이야기의 갈림길에서 플레이어가 고르는 고정 선택지 2~3개. 각 선택지는 플래그(set_flag, flags에 선언)를 세우고, 결말 조건이 그 플래그를 읽는다. when은 그 결정을 내릴 만한 지식·장면이 갖춰졌을 때.
 - key는 영문 소문자 슬러그, 이름과 내용은 한국어.`;
 
 export interface GenerateOptions {
@@ -79,6 +82,8 @@ export function worldSummary(w: WorldPackage): string {
     '## 진실', ...w.facts.map((f) => `- ${short(f.id)} (비밀 ${f.secrecy}): ${f.statement}`),
     '## 명제', ...w.claims.map((c) => `- ${short(c.id)} (${c.truth}): ${c.statement} — 아는 사람: ${w.beliefs.filter((b) => b.claim === c.id).map((b) => `${short(b.holder)}(${b.state})`).join(', ') || '없음'}`),
     ...(w.quests?.length ? ['## 이미 있는 임무', ...w.quests.map((q) => `- ${short(q.id)}: ${q.name}`)] : []),
+    ...(w.arcs?.length ? ['## 이미 있는 이야기 줄기 (새 줄기는 이 뒤에 이어진다 — 이전 이야기의 결말 이후를 다룬다)', ...w.arcs.map((a) => `- ${short(a.id)}: ${a.name} (${a.chapters.map((c) => c.name).join(' → ')})`)] : []),
+    ...(w.clocks?.length ? ['## 이미 있는 진행 시계', ...w.clocks.map((c) => `- ${short(c.id)}: ${c.name} (${c.segments}칸)`)] : []),
   ].join('\n');
 }
 

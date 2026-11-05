@@ -59,6 +59,12 @@ export const wuxiaSample: WorldPackage = {
   ],
   factions: [{ id: 'fac/cheongun', name: '청운문', description: '산 위의 정파 문파. 협의를 중시하지만 요즘 장문인의 병으로 기세가 꺾였다.' }],
   relations: [{ a: 'npc/unhak', b: 'npc/yeon', kind: 'master', note: '설하연을 어려서부터 거둬 키운 사부' }],
+  events: [
+    { id: 'event/elder-worse', name: '장문인의 병세', when: { day: 3 }, unless: { questDone: 'quest/blocked-road' }, effects: [{ reveal: 'claim/elder-sick', state: 'rumor' }],
+      announce: '📜 청운검문 장문인의 병세가 깊어졌다는 소문이 저잣거리에 돈다.' },
+    { id: 'event/elder-dies', name: '장문인의 죽음', when: { day: 7 }, unless: { questDone: 'quest/blocked-road' }, effects: [{ killNpc: 'npc/unhak' }, { relationship: 'npc/yeon', delta: { grudge: 5 } }],
+      announce: '📜 청운검문 장문인 운학 진인이 끝내 숨을 거두었다는 소식이 강호에 퍼진다.' },
+  ],
   flags: [{ id: 'swore_revenge', when: '진실을 안 플레이어가 흑풍채 채주를 응징하겠다고 문파 앞에서 맹세할 때', locationId: 'loc/sect', requires: { knows: 'claim/poison', min: 'partial' } }],
   endings: [{ id: 'ending/oath', name: '협객의 맹세', condition: { all: [{ questDone: 'quest/blocked-road' }, { flag: 'swore_revenge' }] }, epilogue: '청사초로 장문인의 독이 가라앉고, 주인공은 흑풍채를 향한 맹세와 함께 강호에 이름을 남기기 시작한다.' }],
   start: { locationId: 'loc/inn', openingScene: '삐걱이는 의자, 낯선 술 냄새. 정신을 차려 보니 객잔 구석 탁자에 앉아 있다. 소매 끝이 넓은 낯선 옷을 입고 있고, 허리에는 손에 익지 않은 칼이 걸려 있다.' },

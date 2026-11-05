@@ -59,6 +59,18 @@ export type GameEvent =
   /** 관계 사건이 열리고 닫힌다 (설계 v3 4.2) */
   | { type: 'beat_opened'; beatId: EntityId; npcId: EntityId; name: string }
   | { type: 'beat_closed'; beatId: EntityId }
+  /** 이야기 엔진 (설계 v3 5장) */
+  | { type: 'arc_started'; arcId: EntityId; name: string; chapter: string }
+  | { type: 'chapter_completed'; arcId: EntityId; index: number; name: string; next?: string }
+  | { type: 'arc_ended'; arcId: EntityId; name: string; failed: boolean }
+  /** 시계 값 갱신. minutes: 시간 눈금을 마지막으로 잰 시각, onFired: 발동한 조건 눈금 번호 */
+  | { type: 'clock_changed'; clockId: EntityId; value: number; minutes: number; onFired?: number[] }
+  | { type: 'clock_reached'; clockId: EntityId; segment: number; omen?: string }
+  | { type: 'world_event'; eventId: EntityId; name: string; skipped: boolean; announce?: string }
+  | { type: 'npc_moved'; npcId: EntityId; to: EntityId }
+  | { type: 'npc_killed'; npcId: EntityId; name: string }
+  | { type: 'choice_offered'; choiceId: EntityId; name: string }
+  | { type: 'choice_made'; choiceId: EntityId; optionId: string; text: string }
   /** 휴식 (v0.4). 짧은 휴식 1시간, 긴 휴식 8시간 */
   | { type: 'rested'; kind: 'short' | 'long' }
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */

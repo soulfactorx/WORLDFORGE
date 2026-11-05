@@ -10,7 +10,7 @@ import { ABILITY_NAMES, type Ability, SKILLS, type SkillId } from '../character/
 
 export interface LogEntry {
   turn: number;
-  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide';
+  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide' | 'omen';
   text: string;
   images?: { id: string; caption: string }[];
   /** guide: 진행 제안과 선택지 */
@@ -48,6 +48,13 @@ export interface GameState {
   reputation: Record<EntityId, number>;
   /** 관계 사건: 열린 턴과 닫혔는지 */
   beats: Record<EntityId, { turn: number; done: boolean }>;
+  /** 이야기 엔진 (설계 v3 5장): 줄기 진행 (chapter = 끝낸 장 수) */
+  arcs: Record<EntityId, { chapter: number; done: boolean; failed?: boolean }>;
+  clocks: Record<EntityId, { value: number; minutes: number; onFired: number[]; reached: number[] }>;
+  /** 일어난(또는 막힌) 연표 사건 */
+  worldEvents: Record<EntityId, { turn: number; skipped: boolean }>;
+  /** 결정적 선택: 나타난 턴과 고른 선택지 */
+  choices: Record<EntityId, { turn: number; chosen?: string }>;
   /** 퀘스트 진행 (v0.8) */
   quests: Record<EntityId, { stage: number; done: boolean }>;
   /** 이야기 플래그 (v0.8) */
@@ -80,7 +87,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, reputation: {}, beats: {}, quests: {}, flags: [], deadNpcs: [], log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, reputation: {}, beats: {}, arcs: {}, clocks: {}, worldEvents: {}, choices: {}, quests: {}, flags: [], deadNpcs: [], log: [],
   };
 }
 
@@ -198,6 +205,44 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     }
     case 'beat_opened':
       return { ...s, beats: { ...(s.beats ?? {}), [e.beatId]: { turn, done: false } } };
+    case 'arc_started':
+      return { ...s, arcs: { ...(s.arcs ?? {}), [e.arcId]: { chapter: 0, done: false } },
+        log: [...s.log, { turn, kind: 'quest', text: `새 이야기 — ${e.name}: ${e.chapter}` }] };
+    case 'chapter_completed': {
+      const a = s.arcs?.[e.arcId] ?? { chapter: 0, done: false };
+      return { ...s, arcs: { ...(s.arcs ?? {}), [e.arcId]: { ...a, chapter: e.index + 1 } },
+        log: e.next ? [...s.log, { turn, kind: 'quest', text: `${e.name} — 다음 장: ${e.next}` }] : s.log };
+    }
+    case 'arc_ended': {
+      const a = s.arcs?.[e.arcId] ?? { chapter: 0, done: false };
+      return { ...s, arcs: { ...(s.arcs ?? {}), [e.arcId]: { ...a, done: true, ...(e.failed ? { failed: true } : {}) } },
+        log: [...s.log, { turn, kind: 'quest', text: `이야기 ${e.failed ? '실패' : '완료'} — ${e.name}` }] };
+    }
+    case 'clock_changed': {
+      const c = s.clocks?.[e.clockId] ?? { value: 0, minutes: e.minutes, onFired: [], reached: [] };
+      return { ...s, clocks: { ...(s.clocks ?? {}), [e.clockId]: { ...c, value: e.value, minutes: e.minutes, onFired: [...c.onFired, ...(e.onFired ?? [])] } } };
+    }
+    case 'clock_reached': {
+      const c = s.clocks?.[e.clockId] ?? { value: 0, minutes: 0, onFired: [], reached: [] };
+      return { ...s, clocks: { ...(s.clocks ?? {}), [e.clockId]: { ...c, reached: [...c.reached, e.segment] } },
+        log: e.omen ? [...s.log, { turn, kind: 'omen', text: e.omen }] : s.log };
+    }
+    case 'world_event':
+      return { ...s, worldEvents: { ...(s.worldEvents ?? {}), [e.eventId]: { turn, skipped: e.skipped } },
+        log: e.announce && !e.skipped ? [...s.log, { turn, kind: 'omen', text: e.announce }] : s.log };
+    case 'npc_moved':
+      return s.party[e.npcId] ? s : { ...s, npcLocations: { ...s.npcLocations, [e.npcId]: e.to } };
+    case 'npc_killed': {
+      if (s.deadNpcs.includes(e.npcId)) return s;
+      const { [e.npcId]: _p, ...party } = s.party;
+      const { [e.npcId]: _o, ...partyOrders } = s.partyOrders;
+      return { ...s, party, partyOrders, deadNpcs: [...s.deadNpcs, e.npcId] };
+    }
+    case 'choice_offered':
+      return { ...s, choices: { ...(s.choices ?? {}), [e.choiceId]: { turn } } };
+    case 'choice_made':
+      return { ...s, choices: { ...(s.choices ?? {}), [e.choiceId]: { turn: s.choices?.[e.choiceId]?.turn ?? turn, chosen: e.optionId } },
+        log: [...s.log, { turn, kind: 'quest', text: `◆ 결정 — ${e.text}` }] };
     case 'beat_closed':
       return { ...s, beats: { ...(s.beats ?? {}), [e.beatId]: { turn: s.beats?.[e.beatId]?.turn ?? turn, done: true } } };
     case 'companion_died': {

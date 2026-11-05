@@ -15,10 +15,28 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
   const metIds = [...new Set([...Object.keys(state.npcMemory), ...Object.keys(state.party), ...Object.keys(state.relationships)])];
   const met = metIds.map((id) => world.characters.find((c) => c.id === id)).filter((c) => !!c);
   const quests = (world.quests ?? []).filter((q) => state.quests[q.id]);
+  const arcs = (world.arcs ?? []).flatMap((arc) => (state.arcs?.[arc.id] ? [{ arc, p: state.arcs[arc.id]! }] : []));
   // 평판이 바뀌었거나, 만난 사람이 속한 세력만 보여준다
   const factions = (world.factions ?? []).filter((f) => (state.reputation ?? {})[f.id] !== undefined || met.some((c) => c.faction === f.id));
   return (
     <aside className="sheet">
+      {arcs.length > 0 && (
+        <>
+          <b>이야기</b>
+          <ul className="arcs">
+            {arcs.map(({ arc, p }) => {
+              const ch = arc.chapters[p.chapter];
+              return (
+                <li key={arc.id} className={p.done ? 'done' : ''}>
+                  <b>{arc.name}</b>{' '}
+                  {p.done ? <span className={`tag ${p.failed ? 'stage-hostile' : 'confirmed'}`}>{p.failed ? '실패' : '완료'}</span>
+                    : ch && <span className="small">{p.chapter + 1}장 「{ch.name}」{ch.summary ? ` — ${ch.summary}` : ''}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
       <b>임무</b>
       {quests.length === 0 ? (
         <p className="muted small">아직 맡은 일이 없다.</p>

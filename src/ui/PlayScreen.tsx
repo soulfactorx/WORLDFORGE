@@ -4,6 +4,7 @@ import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
 import { replay, type GameState } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
+import { pendingChoice } from '../engine/story';
 import { narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
 import type { PartyOrder, Target } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
@@ -93,7 +94,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   useEffect(() => { reload(); return () => abort.current?.abort(); }, [saveId]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }); }, [state?.log.length, streaming]);
 
-  async function submit(choice?: string, choiceUse?: string) {
+  async function submit(choice?: string, choiceUse?: string, decision?: { choiceId: string; optionId: string }) {
     const text = (choice ?? input).trim();
     if (!state || !text || streaming !== null) return;
     const turnUse = choice !== undefined ? choiceUse : use || undefined;
@@ -102,7 +103,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     abort.current = new AbortController();
     try {
       const { events } = await runTurn(createLlmClient(settings), world, state, text,
-        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage, turnUse);
+        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage, turnUse, decision);
       const turn = state.turn + 1;
       await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));
       await reload();
@@ -158,6 +159,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const date = calendarDate(world, state.worldMinutes);
   const rs = reskinner(world);
   const lastGuide = state.log.findLastIndex((l) => l.kind === 'guide');
+  const decisive = !state.combat && !state.ending && !state.playerDead ? pendingChoice(world, state) : undefined;
   const canAct = streaming === null && !state.combat && !state.playerDead;
 
   return (
@@ -224,6 +226,18 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
             ) : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : rs(e.text)}</p>}
           </div>
         ))}
+        {decisive && streaming === null && (
+          <div className="decisive" role="group" aria-label="결정의 순간">
+            <p><b>◆ 결정의 순간 — {rs(decisive.name)}</b></p>
+            <p>{rs(decisive.prompt)}</p>
+            <div className="choices">
+              {decisive.options.map((o) => (
+                <button key={o.id} type="button" onClick={() => confirm(`"${o.text}" — 이 결정은 되돌리기 전에는 바꿀 수 없습니다. 고를까요?`) && submit(o.text, undefined, { choiceId: decisive.id, optionId: o.id })}>{rs(o.text)}</button>
+              ))}
+            </div>
+            <p className="small muted">아직 정하지 않았다면 평소처럼 행동해도 됩니다. 이 선택은 고를 때까지 남아 있습니다.</p>
+          </div>
+        )}
         {streaming !== null && <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>}
         <div ref={bottom} />
       </div>

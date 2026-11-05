@@ -13,6 +13,8 @@ import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
 import { activeBeats, activeQuests, flagAllowed, pendingDiscoveries } from '../engine/scenario';
+import { activeChapters, pacingHint, pendingChoice, upcomingWorldEvents } from '../engine/story';
+import { effectEvents } from './story';
 import { DISCOVERY_XP } from '../engine/character/progression';
 import { applyDelta, canShareSecret, joinBlocker, relationshipOf, wantsToLeave } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
@@ -186,6 +188,8 @@ export async function runTurn(
   onStage: (stage: string) => void = () => {},
   /** 플레이어가 쓰겠다고 고른 기술·능력치 ('skill:<id>' | 'ability:<id>') */
   use?: string,
+  /** 결정적 선택 (D4): 기다리던 선택에서 고른 것 */
+  decision?: { choiceId: string; optionId: string },
 ): Promise<TurnResult> {
   if (state.combat) throw new Error('전투 중에는 카드로 행동한다');
   if (state.playerDead) throw new Error('당신은 죽었다. 턴 되돌리기로 이전으로 돌아갈 수 있다.');
@@ -196,6 +200,16 @@ export async function runTurn(
 
   const declared = parseUse(use);
   push({ type: 'player_input', text: input, ...(declared ? { use } : {}) });
+  // 결정적 선택: 엔진이 검증하고 효과를 먼저 적용한다 (AI는 그 결과를 서술만 한다)
+  let decided = '';
+  if (decision) {
+    const ch = pendingChoice(world, s);
+    const opt = ch?.id === decision.choiceId ? ch.options.find((o) => o.id === decision.optionId) : undefined;
+    if (!ch || !opt) throw new Error('지금 고를 수 있는 선택이 아니다');
+    push({ type: 'choice_made', choiceId: ch.id, optionId: opt.id, text: `${ch.name}: ${opt.text}` });
+    effectEvents(world, s, opt.effects, ch.name).forEach(push);
+    decided = `${ch.prompt} → ${opt.text}`;
+  }
 
   // 1) Director
   onStage('GM이 행동을 판단하는 중');
@@ -205,7 +219,7 @@ export async function runTurn(
   );
 
   // 2) Validator + Rules Engine
-  const outcomes: string[] = [];
+  const outcomes: string[] = decided ? [`플레이어의 결정적 선택: ${decided} (되돌릴 수 없다. 이 결정의 무게를 서술에 담는다)`] : [];
   let spec = toCheckSpec(d);
   // 플레이어가 고른 기술·능력치가 있으면, 판정이 필요한 행동일 때 그것으로 굴린다 (내성은 상황이 정한다)
   if (declared && spec && spec.kind !== 'save') spec = declared;
@@ -382,11 +396,25 @@ export async function runTurn(
 function scenarioBlock(world: WorldPackage, s: GameState): string {
   const quests = activeQuests(world, s).map((q) => `- [${q.quest.kind === 'main' ? '메인' : '사이드'}] ${q.quest.name} — 목표: ${q.stage.objective} / 힌트: ${q.stage.hint}`);
   const flags = (world.flags ?? []).filter((f) => flagAllowed(world, s, f.id)).map((f) => `- ${f.id}: ${f.when}`);
+  const chapters = activeChapters(world, s).map((c) => `- [${c.arc.kind === 'main' ? '메인 줄기' : c.arc.kind === 'faction' ? '세력 줄기' : '인물 줄기'}] ${c.arc.name} ${c.index + 1}장 「${c.chapter.name}」 — 목표: ${c.chapter.goal}`);
+  const clocks = (world.clocks ?? []).map((c) => {
+    const v = s.clocks?.[c.id]?.value ?? c.start ?? 0;
+    const next = c.at.filter((a) => a.segment > v).sort((a, b) => a.segment - b.segment)[0];
+    return `- ${c.name}: ${v}/${c.segments}${next ? ` (${next.segment}칸에서 일이 벌어진다)` : ''} — 징조를 분위기·소문·인물의 행동으로 흘린다`;
+  });
+  const upcoming = upcomingWorldEvents(world, s).filter((u) => u.inDays <= 7).map((u) => `- ${u.inDays <= 0 ? '오늘' : `${u.inDays}일 뒤`}: ${u.event.name}${u.event.unless ? ' (막을 수 있다)' : ''}`);
+  const pending = pendingChoice(world, s);
+  const pace = pacingHint(s);
   const beats = activeBeats(world, s).map((b) => `- ${world.characters.find((c) => c.id === b.npcId)?.name ?? b.npcId} [${b.npcId}] — ${b.name}: ${b.hint}${b.resolveFlag ? ` (장면이 끝나면 플래그 ${b.resolveFlag})` : ''}`);
   const disc = pendingDiscoveries(world, s).map((x) => `- ${x.claim}: ${x.hint}${x.check ? ` (필요 판정: ${x.check} 기술)` : ''}`);
   return [
     '## 진행 중인 이야기 (플레이어는 모름)', ...(quests.length ? quests : ['(없음)']), '',
     ...(beats.length ? ['## 열린 관계 사건 (그 인물과 마주치면 이 장면으로 이끈다. 억지로 끌어오지 않는다)', ...beats, ''] : []),
+    ...(chapters.length ? ['## 진행 중인 줄기 (지금 장의 목표 — 연출 방향)', ...chapters, ''] : []),
+    ...(clocks.length ? ['## 진행 시계 (플레이어는 모름 — 시간이 흐르면 찬다)', ...clocks, ''] : []),
+    ...(upcoming.length ? ['## 다가오는 사건', ...upcoming, ''] : []),
+    ...(pending ? [`## 결정의 순간 (선택지가 플레이어 화면에 떠 있다): ${pending.prompt}`, '이 결정은 플레이어가 화면의 선택지로 내린다. 대신 결정하거나 플래그로 처리하지 않는다.', ''] : []),
+    ...(pace ? [`## 템포: ${pace}`, ''] : []),
     '## 세울 수 있는 플래그', ...(flags.length ? flags : ['(없음)']), '',
     '## 이 장소에서 발견할 수 있는 것', ...(disc.length ? disc : ['(없음)']),
   ].join('\n');

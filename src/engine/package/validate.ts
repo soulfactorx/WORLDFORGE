@@ -72,6 +72,10 @@ export function validateWorld(input: unknown): Issue[] {
   const factions = arr<NonNullable<WorldPackage['factions']>[number]>('factions', false);
   const relations = arr<NonNullable<WorldPackage['relations']>[number]>('relations', false);
   const relationBeats = arr<NonNullable<WorldPackage['relationBeats']>[number]>('relationBeats', false);
+  const arcs = arr<NonNullable<WorldPackage['arcs']>[number]>('arcs', false);
+  const choices = arr<NonNullable<WorldPackage['choices']>[number]>('choices', false);
+  const clocks = arr<NonNullable<WorldPackage['clocks']>[number]>('clocks', false);
+  const worldEvents = arr<NonNullable<WorldPackage['events']>[number]>('events', false);
 
   // ---- ID 중복
   const ids = new Map<string, string>();
@@ -89,6 +93,13 @@ export function validateWorld(input: unknown): Issue[] {
   endings.forEach((e, i) => register(e?.id, `endings[${i}]`));
   factions.forEach((f, i) => register(f?.id, `factions[${i}]`));
   relationBeats.forEach((b, i) => register(b?.id, `relationBeats[${i}]`));
+  arcs.forEach((a, i) => register(a?.id, `arcs[${i}]`));
+  choices.forEach((c, i) => register(c?.id, `choices[${i}]`));
+  clocks.forEach((c, i) => register(c?.id, `clocks[${i}]`));
+  worldEvents.forEach((e, i) => register(e?.id, `events[${i}]`));
+  const arcIds = new Set(arcs.map((a) => a?.id));
+  const clockIds = new Set(clocks.map((c) => c?.id));
+  const choiceIds = new Set(choices.map((c) => c?.id));
   const factionIds = new Set(factions.map((f) => f?.id));
 
   const locIds = new Set(locations.map((l) => l?.id));
@@ -215,10 +226,19 @@ export function validateWorld(input: unknown): Issue[] {
     if ('relationship' in cond) { if (!charIds.has(cond.relationship)) err(path, `없는 인물 "${cond.relationship}"`); if (!AXES.includes(cond.axis)) err(path, `알 수 없는 관계 축 "${cond.axis}"`); return; }
     if ('stage' in cond) { if (!charIds.has(cond.stage)) err(path, `없는 인물 "${cond.stage}"`); if (!Array.isArray(cond.in) || !cond.in.length || cond.in.some((x) => !STAGE_NAMES.includes(x))) err(path, `관계 단계는 ${STAGES.join('·')} 중에서 고릅니다.`); return; }
     if ('reputation' in cond) { if (!factionIds.has(cond.reputation)) err(path, `없는 세력 "${cond.reputation}"`); return; }
+    if ('chapter' in cond) { if (!arcIds.has(cond.chapter)) err(path, `없는 줄기 "${cond.chapter}"`); if (typeof cond.gte !== 'number') err(path, 'chapter에는 gte(끝낸 장 수)가 필요합니다.'); return; }
+    if ('arcDone' in cond) { if (!arcIds.has(cond.arcDone)) err(path, `없는 줄기 "${cond.arcDone}"`); return; }
+    if ('clock' in cond) { if (!clockIds.has(cond.clock)) err(path, `없는 시계 "${cond.clock}"`); return; }
+    if ('choice' in cond) {
+      if (!choiceIds.has(cond.choice)) err(path, `없는 결정적 선택 "${cond.choice}"`);
+      else if (cond.is !== undefined && !choices.find((c) => c.id === cond.choice)!.options?.some((o) => o.id === cond.is)) err(path, `선택 "${cond.choice}"에 없는 선택지 "${cond.is}"`);
+      return;
+    }
+    if ('day' in cond) { if (typeof cond.day !== 'number' || cond.day < 0) err(path, 'day는 0 이상의 숫자입니다.'); return; }
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('level' in cond) { if (typeof cond.level !== 'number') err(path, 'level은 숫자입니다.'); return; }
-    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·flag·questDone·level 중 하나를 쓰세요.`);
+    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·chapter·arcDone·clock·choice·day·flag·questDone·level 중 하나를 쓰세요.`);
   };
   quests.forEach((q, i) => {
     const p = `quests[${i}]`;
@@ -250,6 +270,70 @@ export function validateWorld(input: unknown): Issue[] {
     checkCond(b.condition, `${p}.condition`);
     if (isObj(b.condition) && 'all' in b.condition && Array.isArray(b.condition.all) && !b.condition.all.length) warn(`${p}.condition`, '조건이 비어 게임 시작과 함께 열립니다.');
     if (b.resolveFlag && !flagIds.has(b.resolveFlag)) err(`${p}.resolveFlag`, `선언되지 않은 플래그 "${b.resolveFlag}" — 플래그 목록에 추가하세요 (GM이 세울 수 있어야 사건이 닫힙니다).`);
+  });
+  // ---- 이야기 엔진 (설계 v3 5장)
+  const checkEffects = (list: unknown, path: string) => {
+    if (list === undefined) return;
+    if (!Array.isArray(list)) { err(path, '효과는 목록이어야 합니다.'); return; }
+    list.forEach((fx, j) => {
+      const p = `${path}[${j}]`;
+      if (!isObj(fx)) { err(p, '효과는 객체입니다.'); return; }
+      if ('setFlag' in fx) { if (!flagIds.has(fx.setFlag as string)) err(p, `선언되지 않은 플래그 "${String(fx.setFlag)}"`); return; }
+      if ('moveNpc' in fx) { if (!charIds.has(fx.moveNpc as string)) err(p, `없는 인물 "${String(fx.moveNpc)}"`); if (!locIds.has(fx.to as string)) err(p, `없는 장소 "${String(fx.to)}"`); return; }
+      if ('killNpc' in fx) { if (!charIds.has(fx.killNpc as string)) err(p, `없는 인물 "${String(fx.killNpc)}"`); return; }
+      if ('reveal' in fx) { if (!claimIds.has(fx.reveal as string)) err(p, `없는 명제 "${String(fx.reveal)}"`); return; }
+      if ('relationship' in fx) { if (!charIds.has(fx.relationship as string)) err(p, `없는 인물 "${String(fx.relationship)}"`); if (!isObj(fx.delta)) err(p, 'delta가 필요합니다 (예: { "trust": 5 }).'); return; }
+      if ('reputation' in fx) { if (!factionIds.has(fx.reputation as string)) err(p, `없는 세력 "${String(fx.reputation)}"`); return; }
+      if ('clock' in fx) { if (!clockIds.has(fx.clock as string)) err(p, `없는 시계 "${String(fx.clock)}"`); return; }
+      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock 중 하나를 쓰세요.');
+    });
+  };
+  arcs.forEach((a, i) => {
+    const p = `arcs[${i}]`;
+    text(a.name, `${p}.name`);
+    if (!['main', 'faction', 'character'].includes(a.kind)) err(`${p}.kind`, 'main·faction·character 중 하나입니다.');
+    checkCond(a.start, `${p}.start`);
+    if (!Array.isArray(a.chapters) || !a.chapters.length) err(`${p}.chapters`, '장이 하나 이상 필요합니다.');
+    else a.chapters.forEach((ch, j) => {
+      const q = `${p}.chapters[${j}]`;
+      text(ch.name, `${q}.name`); text(ch.goal, `${q}.goal`, false);
+      checkCond(ch.complete, `${q}.complete`);
+      if (isObj(ch.complete) && 'all' in ch.complete && Array.isArray(ch.complete.all) && !ch.complete.all.length) warn(`${q}.complete`, '완료 조건이 비어 바로 끝납니다.');
+      if (ch.fail) checkCond(ch.fail, `${q}.fail`);
+      checkEffects(ch.effects, `${q}.effects`);
+    });
+  });
+  choices.forEach((c, i) => {
+    const p = `choices[${i}]`;
+    text(c.name, `${p}.name`); text(c.prompt, `${p}.prompt`);
+    checkCond(c.when, `${p}.when`);
+    if (c.locationId && !locIds.has(c.locationId)) err(`${p}.locationId`, `없는 장소 "${c.locationId}"`);
+    if (!Array.isArray(c.options) || c.options.length < 2) err(`${p}.options`, '선택지가 둘 이상 필요합니다.');
+    else c.options.forEach((o, j) => { text(o.text, `${p}.options[${j}].text`); if (!isStr(o.id) || !o.id) err(`${p}.options[${j}].id`, '선택지 ID가 필요합니다.'); checkEffects(o.effects, `${p}.options[${j}].effects`); });
+  });
+  clocks.forEach((c, i) => {
+    const p = `clocks[${i}]`;
+    text(c.name, `${p}.name`);
+    if (typeof c.segments !== 'number' || c.segments < 1 || c.segments > 20) err(`${p}.segments`, '칸 수는 1~20입니다.');
+    (Array.isArray(c.tick) ? c.tick : []).forEach((t, j) => {
+      if (isObj(t) && 'on' in t) checkCond(t.on, `${p}.tick[${j}].on`);
+      else if (!isObj(t) || !('every' in t) || !['day', 'hour'].includes(t.every as string)) err(`${p}.tick[${j}]`, '{ "every": "day"|"hour", "by": n } 또는 { "on": 조건, "by": n } 입니다.');
+    });
+    (Array.isArray(c.at) ? c.at : []).forEach((a, j) => {
+      if (typeof a.segment !== 'number' || a.segment < 1 || a.segment > c.segments) err(`${p}.at[${j}].segment`, `1~${c.segments} 사이 칸이어야 합니다.`);
+      checkEffects(a.effects, `${p}.at[${j}].effects`);
+    });
+  });
+  worldEvents.forEach((e, i) => {
+    const p = `events[${i}]`;
+    text(e.name, `${p}.name`);
+    if (!isObj(e.when) || (e.when.day === undefined && !e.when.date && !e.when.condition)) err(`${p}.when`, 'day·date·condition 중 하나 이상이 필요합니다.');
+    else {
+      if (e.when.date && !w.calendar) warn(`${p}.when.date`, '달력이 없는 세계에서는 날짜 사건이 일어나지 않습니다 (기본 탭에서 달력을 정하거나 day를 쓰세요).');
+      if (e.when.condition) checkCond(e.when.condition, `${p}.when.condition`);
+    }
+    if (e.unless) checkCond(e.unless, `${p}.unless`);
+    checkEffects(e.effects, `${p}.effects`);
   });
   flags.forEach((f, i) => {
     const p = `flags[${i}]`;

@@ -8,7 +8,7 @@
 import { ABILITIES, CLASSES, SKILL_IDS } from '../../engine/character/rules';
 import { suggestedStandardArray } from '../../engine/character/sheet';
 import { MONSTERS } from '../../engine/combat/monsters';
-import type { Condition, Encounter, Ending, KnowledgeState, NpcRelationKind, Quest, RelationBeat, StoryFlag, WorldPackage } from '../../engine/schema';
+import type { Clock, Condition, DecisiveChoice, Encounter, Ending, KnowledgeState, NpcRelationKind, Quest, RelationBeat, StoryEffect, StoryFlag, WorldPackage } from '../../engine/schema';
 
 // ---------------------------------------------------------------- 초안 타입 (LLM 출력)
 
@@ -49,6 +49,17 @@ export interface ScenarioDraft {
   quests: { key: string; name: string; kind: 'main' | 'side'; start: DraftCond; stages: { objective: string; hint: string; complete: DraftCond }[]; reward_xp: number }[];
   endings: { key: string; name: string; condition: DraftCond; epilogue: string }[];
   relation_beats?: { key: string; npc: string; name: string; condition: DraftCond; hint: string; resolve_flag: string }[];
+  /** 이야기 엔진 (설계 v3 5장): 이번에 덧붙이는 줄기 하나와 시계·결정적 선택 */
+  arc?: { name: string; kind: 'main' | 'faction' | 'character'; chapters: { name: string; goal: string; summary: string; complete: DraftCond; fail: DraftCond }[] };
+  clocks?: { key: string; name: string; segments: number; per_day: number; omens: { segment: number; text: string; set_flag: string }[] }[];
+  choices?: { key: string; name: string; prompt: string; when: DraftCond; location: string; options: { text: string; effects: DraftEffect[] }[] }[];
+}
+
+export interface DraftEffect {
+  type: 'set_flag' | 'reveal' | 'relationship' | 'reputation' | 'clock';
+  ref: string;
+  axis: '' | 'affinity' | 'trust' | 'respect' | 'fear' | 'intimacy' | 'grudge';
+  value: number;
 }
 
 // ---------------------------------------------------------------- JSON 스키마 (구조화 출력용)
@@ -99,6 +110,30 @@ export const SCENARIO_DRAFT_SCHEMA = obj({
     stages: arr(obj({ objective: str, hint: str, complete: COND_SCHEMA })), reward_xp: int,
   })),
   endings: arr(obj({ key: str, name: str, condition: COND_SCHEMA, epilogue: str })),
+  arc: obj({
+    name: { type: 'string', description: '이번 이야기 줄기의 이름' }, kind: { type: 'string', enum: ['main', 'faction', 'character'] },
+    chapters: arr(obj({
+      name: str, goal: { type: 'string', description: 'GM용: 이 장에서 일어나야 할 일' }, summary: { type: 'string', description: '플레이어 수첩에 보이는 한 줄 (비밀 누설 금지)' },
+      complete: COND_SCHEMA, fail: { ...COND_SCHEMA, description: '이 조건이면 줄기가 실패로 끝난다. 없으면 items []' },
+    })),
+  }),
+  clocks: arr(obj({
+    key: str, name: { type: 'string', description: '진행 시계 이름 (예: 도적의 습격 준비) — 플레이어가 막지 않으면 다가오는 위협' },
+    segments: { type: 'integer', description: '칸 수 4~8' }, per_day: { type: 'integer', description: '하루에 차는 칸 (보통 1, 느리면 0)' },
+    omens: arr(obj({ segment: int, text: { type: 'string', description: '그 칸에 이르면 플레이어에게 보이는 징조 한 줄 (소문·분위기)' }, set_flag: { type: 'string', description: '그 칸에서 세울 flags key 또는 ""' } })),
+  })),
+  choices: arr(obj({
+    key: str, name: str, prompt: { type: 'string', description: '플레이어에게 보이는 결정의 질문' }, when: COND_SCHEMA, location: { type: 'string', description: '장소 key 또는 ""' },
+    options: arr(obj({
+      text: str,
+      effects: arr(obj({
+        type: { type: 'string', enum: ['set_flag', 'reveal', 'relationship', 'reputation', 'clock'] },
+        ref: { type: 'string', description: 'set_flag=flags key, reveal=명제 key, relationship=인물 key, reputation=세력 key, clock=시계 key' },
+        axis: { type: 'string', enum: ['', 'affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge'] },
+        value: { type: 'integer', description: 'relationship·reputation·clock의 변화량 (-10~10), 그 외 0' },
+      })),
+    })),
+  })),
   relation_beats: arr(obj({
     key: str, npc: { type: 'string', description: '인물 key' }, name: str, condition: COND_SCHEMA,
     hint: { type: 'string', description: 'GM·인물에게 주는 장면 방향 (예: 그가 과거를 털어놓는다)' },
@@ -355,6 +390,56 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
     beats.push({ id, npcId, name: b.name, condition, hint: b.hint, ...(flag ? { resolveFlag: flag } : {}) });
   }
   w.relationBeats = [...(w.relationBeats ?? []), ...beats];
+
+  // ---- 이야기 엔진: 시계 → 결정적 선택 → 줄기
+  const idTaken = new Set([...taken, ...(w.arcs ?? []), ...(w.clocks ?? []), ...(w.choices ?? [])].map((x) => (typeof x === 'string' ? x : x.id)));
+  const freshId = (prefix: string, key: string) => { let id = `${prefix}/${slug(key)}`; for (let n = 2; idTaken.has(id); n++) id = `${prefix}/${slug(key)}-${n}`; idTaken.add(id); return id; };
+  const clockMap = new Map<string, string>();
+  const clocks: Clock[] = [];
+  for (const c of d.clocks ?? []) {
+    const id = freshId('clock', c.key);
+    clockMap.set(c.key, id);
+    const segments = clamp(c.segments, 2, 12);
+    clocks.push({
+      id, name: c.name, segments, tick: c.per_day > 0 ? [{ every: 'day', by: clamp(c.per_day, 1, 3) }] : [],
+      at: c.omens.filter((o) => o.segment >= 1).map((o) => {
+        const flag = o.set_flag ? refs.flag(o.set_flag) : undefined;
+        return { segment: clamp(o.segment, 1, segments), ...(o.text ? { omen: o.text } : {}), ...(flag ? { effects: [{ setFlag: flag }] } : {}) };
+      }),
+    });
+  }
+  const effect = (e: DraftEffect, where: string): StoryEffect | null => {
+    const v = clamp(e.value, -10, 10);
+    switch (e.type) {
+      case 'set_flag': { const f = refs.flag(e.ref); if (f) return { setFlag: f }; break; }
+      case 'reveal': { const c = refs.claim(e.ref); if (c) return { reveal: c }; break; }
+      case 'relationship': { const n = refs.npc(e.ref); if (n && e.axis && v) return { relationship: n, delta: { [e.axis]: v } }; break; }
+      case 'reputation': { const f = refs.faction?.(e.ref); if (f && v) return { reputation: f, delta: v }; break; }
+      case 'clock': { const c = clockMap.get(e.ref) ?? (w.clocks ?? []).find((x) => x.id === e.ref)?.id; if (c && v) return { clock: c, by: v }; break; }
+    }
+    notes.push(`${where}: 쓸 수 없는 효과 (${e.type} "${e.ref}")를 뺐습니다.`);
+    return null;
+  };
+  const choices: DecisiveChoice[] = [];
+  for (const c of d.choices ?? []) {
+    const options = c.options.map((o, i) => ({ id: String.fromCharCode(97 + i), text: o.text, effects: o.effects.map((e) => effect(e, `결정 "${c.name}"`)).filter((x): x is StoryEffect => !!x) }));
+    if (options.length < 2) { notes.push(`결정 "${c.name}": 선택지가 둘 미만이라 뺐습니다.`); continue; }
+    const when = convertCond(c.when, refs, `결정 "${c.name}"`, notes);
+    const loc = refs.loc(c.location);
+    choices.push({ id: freshId('choice', c.key), name: c.name, prompt: c.prompt, when, ...(loc ? { locationId: loc } : {}), options });
+  }
+  if (d.arc?.chapters?.length) {
+    const chapters = d.arc.chapters.map((ch, i) => {
+      const complete = convertCond(ch.complete, refs, `줄기 "${d.arc!.name}" ${i + 1}장`, notes);
+      const fail = ch.fail?.items?.length ? convertCond(ch.fail, refs, `줄기 "${d.arc!.name}" ${i + 1}장 실패`, notes) : undefined;
+      return { name: ch.name, goal: ch.goal, ...(ch.summary ? { summary: ch.summary } : {}), complete, ...(fail ? { fail } : {}) };
+    });
+    // 새 줄기는 이전 줄기가 끝난 뒤에 열린다 (첫 줄기는 바로)
+    const prev = (w.arcs ?? []).at(-1);
+    w.arcs = [...(w.arcs ?? []), { id: freshId('arc', d.arc.name || 'story'), name: d.arc.name || '새 이야기', kind: d.arc.kind, start: prev ? { arcDone: prev.id } : { all: [] }, chapters }];
+  }
+  w.clocks = [...(w.clocks ?? []), ...clocks];
+  w.choices = [...(w.choices ?? []), ...choices];
   w.encounters = [...(w.encounters ?? []), ...encounters];
   w.flags = [...(w.flags ?? []), ...flags];
   w.quests = [...(w.quests ?? []), ...quests];

@@ -198,6 +198,15 @@ export type Condition =
   | { stage: EntityId; in: string[] }
   /** 세력 평판 (설계 v3 4.4) */
   | { reputation: EntityId; gte?: number; lte?: number }
+  /** 줄기에서 끝낸 장의 수 (설계 v3 5.1). 줄기를 끝냈으면 모든 장을 끝낸 것 */
+  | { chapter: EntityId; gte: number }
+  | { arcDone: EntityId; failed?: boolean }
+  /** 진행 시계의 칸 (설계 v3 5.3) */
+  | { clock: EntityId; gte?: number; lte?: number }
+  /** 결정적 선택: 이미 골랐는가 / 이 선택지를 골랐는가 */
+  | { choice: EntityId; is?: string }
+  /** 게임 시작 후 지난 날 수 */
+  | { day: number }
   | { flag: string }
   | { questDone: EntityId }
   | { level: number };
@@ -228,6 +237,76 @@ export interface StoryFlag {
   locationId?: EntityId;
   /** 이 조건이 참일 때만 세울 수 있다 */
   requires?: Condition;
+}
+
+// ------------------------------------------------------------ 이야기 엔진 (설계 v3 5장)
+
+/** 이야기 효과: 결정적 선택·진행 시계·연표 사건이 일으키는 상태 변화 (엔진이 적용) */
+export type StoryEffect =
+  | { setFlag: string }
+  | { moveNpc: EntityId; to: EntityId }
+  | { killNpc: EntityId }
+  /** 플레이어가 이 명제를 알게 된다 (기본 소문) */
+  | { reveal: EntityId; state?: 'rumor' | 'partial' | 'confirmed' }
+  | { relationship: EntityId; delta: Partial<Record<RelationAxis, number>> }
+  | { reputation: EntityId; delta: number }
+  | { clock: EntityId; by: number };
+
+/** 장 (설계 v3 5.1): 줄기의 큰 단계 */
+export interface Chapter {
+  name: string;
+  /** GM에게만: 이 장에서 무엇이 일어나야 하는가 */
+  goal: string;
+  /** 플레이어 수첩에 보이는 한 줄 (없으면 장 이름만) */
+  summary?: string;
+  complete: Condition;
+  /** 이 조건이 참이 되면 줄기가 실패로 끝난다 */
+  fail?: Condition;
+  /** 장을 끝냈을 때 */
+  effects?: StoryEffect[];
+}
+
+/** 줄기 (설계 v3 5.1·15.3): 한 세계에 여러 개. 시작 조건으로 열리고, 플래그로 서로 이어진다 */
+export interface Arc {
+  id: EntityId;
+  name: string;
+  kind: 'main' | 'faction' | 'character';
+  start: Condition;
+  chapters: Chapter[];
+}
+
+/** 결정적 선택 (D4): 조건이 맞으면 고정 선택지가 나타나고, 고른 것이 플래그·효과로 남는다 */
+export interface DecisiveChoice {
+  id: EntityId;
+  name: string;
+  /** 플레이어에게 보이는 질문 */
+  prompt: string;
+  when: Condition;
+  locationId?: EntityId;
+  options: { id: string; text: string; effects: StoryEffect[] }[];
+}
+
+/** 진행 시계 (설계 v3 5.3): 플레이어가 움직이지 않아도 세계가 흘러간다 */
+export interface Clock {
+  id: EntityId;
+  name: string;
+  segments: number;
+  /** 처음 칸 (기본 0) */
+  start?: number;
+  tick: ({ every: 'day' | 'hour'; by: number } | { on: Condition; by: number })[];
+  /** 이 칸에 이르면: 효과 + 플레이어에게 보이는 징조 한 줄 */
+  at: { segment: number; effects?: StoryEffect[]; omen?: string }[];
+}
+
+/** 연표 사건 (설계 v3 5.4): 날짜·날 수·조건에 일어나고, unless가 참이면 일어나지 않는다 */
+export interface WorldEvent {
+  id: EntityId;
+  name: string;
+  when: { day?: number; date?: { year: number; month: number; day: number }; condition?: Condition };
+  unless?: Condition;
+  effects: StoryEffect[];
+  /** 플레이어에게 보이는 소식 (없으면 조용히 일어난다) */
+  announce?: string;
 }
 
 export interface Ending {
@@ -295,6 +374,11 @@ export interface WorldPackage {
   factions?: Faction[];
   relations?: NpcRelation[];
   relationBeats?: RelationBeat[];
+  /** 이야기 엔진 (설계 v3 5장) */
+  arcs?: Arc[];
+  choices?: DecisiveChoice[];
+  clocks?: Clock[];
+  events?: WorldEvent[];
   start: {
     locationId: EntityId;
     /** 플레이어가 깨어났을 때의 첫 장면 */

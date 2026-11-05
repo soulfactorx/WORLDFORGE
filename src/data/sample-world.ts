@@ -185,6 +185,22 @@ export const sampleWorld: WorldPackage = {
     { id: 'chose_return', when: '진실을 안 플레이어가 소환진으로 원래 세계에 돌아가겠다고 결심하고 제단에서 의식을 치를 때', locationId: 'loc/forest-clearing', requires: { knows: 'claim/way-home', min: 'partial' } },
     { id: 'chose_stay', when: '진실을 안 플레이어가 이 세계에 남아 마을을 지키겠다고 장로나 마을 사람에게 분명히 선언할 때', requires: { knows: 'claim/altar-summoning', min: 'partial' } },
   ],
+  // 이야기 엔진 (설계 v3 5장): 결정의 순간과 시간이 흐르면 깨어나는 제단
+  choices: [{
+    id: 'choice/go-home', name: '돌아갈 것인가', prompt: '제단의 문양을 거꾸로 그리면 원래 세계로 돌아갈 수 있다. 이곳에 남을 것인가, 돌아갈 것인가?', locationId: 'loc/forest-clearing',
+    when: { all: [{ knows: 'claim/altar-summoning', min: 'partial' }, { knows: 'claim/way-home', min: 'partial' }] },
+    options: [
+      { id: 'return', text: '원래 세계로 돌아간다', effects: [{ setFlag: 'chose_return' }] },
+      { id: 'stay', text: '이 세계에 남아 마을을 지킨다', effects: [{ setFlag: 'chose_stay' }, { relationship: 'npc/orvin', delta: { trust: 5, respect: 5 } }] },
+    ],
+  }],
+  clocks: [{
+    id: 'clock/altar', name: '제단의 각성', segments: 6, tick: [{ every: 'day', by: 1 }],
+    at: [
+      { segment: 3, omen: '밤마다 숲 쪽에서 희미한 빛이 보인다는 이야기가 마을에 돈다.' },
+      { segment: 6, omen: '숲속 제단의 문양이 저절로 빛나기 시작했다 — 무언가가 다시 깨어나려 한다.', effects: [{ reveal: 'claim/altar-cursed', state: 'rumor' }] },
+    ],
+  }],
   endings: [
     {
       id: 'ending/return', name: '돌아가는 길',

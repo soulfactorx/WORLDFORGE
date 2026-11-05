@@ -38,6 +38,14 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
     const v = reputationOf(world, state.reputation ?? {}, c.reputation);
     return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte);
   }
+  if ('chapter' in c) { const a = state.arcs?.[c.chapter]; return !!a && (a.done && !a.failed ? Infinity : a.chapter) >= c.gte; }
+  if ('arcDone' in c) { const a = state.arcs?.[c.arcDone]; return !!a?.done && (c.failed === undefined || !!a.failed === c.failed); }
+  if ('clock' in c) {
+    const v = state.clocks?.[c.clock]?.value ?? world.clocks?.find((x) => x.id === c.clock)?.start ?? 0;
+    return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte);
+  }
+  if ('choice' in c) { const ch = state.choices?.[c.choice]?.chosen; return c.is === undefined ? !!ch : ch === c.is; }
+  if ('day' in c) return Math.floor(state.worldMinutes / 1440) >= c.day;
   if ('flag' in c) return state.flags.includes(c.flag);
   if ('questDone' in c) return !!state.quests[c.questDone]?.done;
   if ('level' in c) return state.player.sheet.level >= c.level;

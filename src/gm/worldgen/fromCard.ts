@@ -349,6 +349,29 @@ export async function cardToWorld(
   if (b.cover) inputs.push({ name: 'cover', mime: 'image/jpeg', size: b.cover.size, cardType: 'icon', src: 'cover' });
   const targets = ents.characters.map((c, i) => ({ id: c.id, aliases: [c.name, charInfo[i]!.latin, c.id.replace(/^npc\//, '')].filter(Boolean), ...(c.gender ? { gender: c.gender } : {}) }));
   const locTargets = world.locations.map((l) => ({ id: l.id, aliases: [l.name, l.id.replace(/^loc\//, '')] }));
+  // 연표 D-day (설계 v3 5.4): 날짜가 있는 미래 사건은 그날 일어나는 연표 사건이 된다.
+  // 공공연한 사건은 소식·소문으로 퍼지고, 비밀 사건은 조용히 플래그만 남긴다 (이후 이야기가 읽는다)
+  if (world.calendar) {
+    const events: NonNullable<WorldPackage['events']> = [];
+    const flags = [...(world.flags ?? [])];
+    for (const t of timeline.filter((x) => x.status === 'future')) {
+      const m = /(\d{1,5})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/.exec(t.when);
+      if (!m) continue;
+      const flag = `event_${slug(t.key).replace(/-/g, '_')}`.slice(0, 60);
+      if (!flags.some((f) => f.id === flag)) flags.push({ id: flag, when: `(연표 사건 "${cut(t.title, 40)}"이 일어나면 엔진이 세운다)`, requires: { not: { all: [] } } });
+      const cl = claimByKey(t.key);
+      events.push({
+        id: `event/${slug(t.key)}`, name: cut(t.title, 60), when: { date: { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) } },
+        effects: [{ setFlag: flag }, ...(t.secrecy < 3 && cl ? [{ reveal: cl, state: 'rumor' as const }] : [])],
+        ...(t.secrecy < 3 ? { announce: `📜 ${cut(t.title, 60)} — 소식이 퍼진다.` } : {}),
+      });
+    }
+    if (events.length) {
+      world = { ...world, events, flags };
+      notes.push(`날짜가 있는 앞으로의 사건 ${events.length}개를 연표 사건으로 옮겼습니다. 그날이 오면 세계에서 일어납니다 (편집기 "이야기 흐름" 탭에서 막을 조건을 넣을 수 있습니다).`);
+    }
+  }
+
   let assets: AssetMeta[] = matchAssets(inputs, targets, locTargets, ents.characters.length === 1 ? { mainCharacterId: ents.characters[0]!.id } : {});
   if (opts.classifyImages && assets.some((a) => a.kind === 'other')) {
     try {

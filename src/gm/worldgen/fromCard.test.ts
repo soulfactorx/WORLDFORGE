@@ -79,6 +79,9 @@ describe('cardToWorld', () => {
     expect(w.characters.find((c) => c.id === 'npc/karenya')!.gender).toBe('F');
     expect(w.characters.find((c) => c.id === 'npc/hedwig')).toMatchObject({ romanceable: true, faction: 'fac/court' });
     expect(w.factions).toEqual([{ id: 'fac/court', name: '황궁', description: '황제의 조정' }]);
+    // 날짜가 있는 미래 사건 → 연표 사건 (비밀이라 소식 없이 플래그만)
+    expect(w.events).toEqual([{ id: 'event/ruin', name: '제국 멸망', when: { date: { year: 429, month: 9, day: 21 } }, effects: [{ setFlag: 'event_ruin' }] }]);
+    expect(w.flags?.some((f) => f.id === 'event_ruin')).toBe(true);
     expect(w.relations).toEqual([{ a: 'npc/hedwig', b: 'npc/karenya', kind: 'ally', note: '충직한 기사' }]);
     // AI가 설정 글 속에서 찾은 인물 (이미 있는 인물·없는 항목은 버린다)
     const rau = w.characters.find((c) => c.id === 'npc/rauzent')!;
