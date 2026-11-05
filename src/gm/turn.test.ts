@@ -85,3 +85,26 @@ describe('콘텐츠 등급 안내', () => {
     expect(systems.find((s) => s.includes('서술자'))).toContain('청소년 이용가');
   });
 });
+
+describe('기록관 (실제 모델 평가 반영)', () => {
+  it('지어내기 금지 대상은 기록관에게 보여 주지 않고, 기록할 대상이 없으면 부르지 않는다', async () => {
+    const w = structuredClone(sampleWorld);
+    const gate = w.locations.find((l) => l.improvisation !== 'none')!;
+    const none = w.characters.find((c) => c.improvisation === 'none');
+    const llm = mock('조용하다.', 'none');
+    await runTurn(llm, w, start(w), '주변을 본다', () => {});
+    const rec = llm.users.find((u) => u.includes('## 대상 ID'));
+    if (rec) {
+      expect(rec).toContain(gate.id === start(w).player.locationId ? gate.id : '');
+      if (none) expect(rec).not.toContain(`- ${none.id}:`);
+    }
+    // 모든 대상이 지어내기 금지면 기록관 호출 없음
+    for (const l of w.locations) l.improvisation = 'none';
+    for (const c of w.characters) c.improvisation = 'none';
+    const llm2 = mock('조용하다.', 'none');
+    const r = await runTurn(llm2, w, start(w), '주변을 본다', () => {});
+    expect(llm2.users.some((u) => u.includes('## 대상 ID'))).toBe(false);
+    expect(r.rejected).toEqual([]);
+    expect(r.events.at(-1)!.type).toBe('gm_guide');
+  });
+});

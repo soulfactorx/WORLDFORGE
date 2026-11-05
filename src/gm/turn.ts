@@ -22,7 +22,7 @@ import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { DISCOVERY_XP } from '../engine/character/progression';
 import { applyDelta, canShareSecret, joinBlocker, relationshipOf, wantsToLeave } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
-import { playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
+import { improvisationOf, playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
 import { availableEncounters, beginEncounter } from './combat';
 import { contextExpression, expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
 import { basicGuide, gmGuide } from './guide';
@@ -139,11 +139,16 @@ interface RecorderOutput {
   facts: ProposedFact[];
 }
 
+/** 기록관이 한 턴에 뽑는 사실 수 (엔진 한도 MAX_FACTS_PER_TURN보다 작게 — 실제 모델 평가에서 한도 초과 거부가 잦았다) */
+const RECORDER_MAX = 3;
+/** 기록할 대상이 없는 장면: 기록관 호출을 건너뛴다 */
+class SkipRecorder extends Error {}
+
 const RECORDER_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['facts'],
   properties: {
     facts: {
-      type: 'array',
+      type: 'array', maxItems: RECORDER_MAX,
       items: {
         type: 'object', additionalProperties: false, required: ['subject', 'statement'],
         properties: { subject: { type: 'string', description: '대상 엔티티 ID' }, statement: { type: 'string', description: '한 문장의 지속적인 사실' } },
@@ -155,7 +160,8 @@ const RECORDER_SCHEMA = {
 const RECORDER_SYSTEM = `너는 TRPG 기록관이다. 방금 서술에서 등장인물·장소에 대해 새로 확정된 "지속적인 세부사항"만 뽑는다.
 - 뽑는 것: 이후에도 변하지 않을 사실 (가족, 나이, 과거 경력, 소지품, 장소의 고정된 특징 등).
 - 뽑지 않는 것: 일시적인 행동·표정·날씨, 이미 확정된 세부사항, 장면 설명에 이미 있는 내용, 플레이어에 대한 것.
-- 대상은 주어진 ID 목록에서만 고른다. 없으면 빈 배열.`;
+- 대상은 주어진 ID 목록에서만 고른다. 목록에 없는 인물·장소는 기록하지 않는다.
+- 많아야 ${RECORDER_MAX}개, 가장 중요한 것만. 한 문장은 짧게 (80자 이내). 새로 확정된 것이 없으면 빈 배열 — 대부분의 턴은 빈 배열이다.`;
 
 const DIRECTOR_SYSTEM = `너는 1인칭 TRPG의 게임 마스터 판단 모듈이다. 서술은 하지 않는다.
 플레이어 입력을 해석해서 규칙 판정이 필요한지, 장소 이동이 있는지만 결정한다.
@@ -404,13 +410,15 @@ export async function runTurn(
 
   // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략)
   try {
-    const subjects = sceneSubjects(world, s);
+    // 지어내기 금지 대상은 기록관에게 아예 보여 주지 않는다 (실제 모델 평가에서 금지 대상 기록 시도가 거부의 대부분)
+    const subjects = sceneSubjects(world, s).filter((id) => improvisationOf(world, id) !== 'none');
+    if (!subjects.length) throw new SkipRecorder();
     const names = subjects.map((id) => `- ${id}: ${world.characters.find((c) => c.id === id)?.name ?? world.locations.find((l) => l.id === id)?.name}`);
     const established = s.improvisedFacts.filter((f) => subjects.includes(f.subject)).map((f) => `- ${f.subject}: ${f.statement}`);
     const rec = await llm.json<RecorderOutput>({
       system: RECORDER_SYSTEM,
       user: `## 대상 ID\n${names.join('\n')}\n\n## 이미 확정된 세부사항\n${established.join('\n') || '(없음)'}\n\n## 장면 설명 (이미 알려진 내용)\n${world.locations.find((l) => l.id === s.player.locationId)?.description}\n\n## 방금 서술\n${narration}`,
-      maxTokens: 1500,
+      maxTokens: 800,
     }, RECORDER_SCHEMA, signal);
     for (const dec of validateImprovisedFacts(world, s.improvisedFacts, subjects, rec.facts ?? [])) {
       push(dec.accepted
@@ -419,7 +427,7 @@ export async function runTurn(
       if (!dec.accepted) rejected.push(`기록관의 즉흥 설정 거부: ${dec.reason ?? ''}`);
     }
   } catch (e) {
-    if (signal?.aborted) throw e;
+    if (signal?.aborted && !(e instanceof SkipRecorder)) throw e;
   }
   push(await guideP);
 
