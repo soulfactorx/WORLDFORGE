@@ -9,6 +9,7 @@ import { ABILITIES, CLASSES, SKILL_IDS } from '../../engine/character/rules';
 import { suggestedStandardArray } from '../../engine/character/sheet';
 import { MONSTERS } from '../../engine/combat/monsters';
 import { STD_ITEM_MAP, STD_ITEMS } from '../../data/items';
+import { QUEST_TYPES, type QuestType } from '../../engine/schema';
 import type { Clock, Condition, DecisiveChoice, Encounter, Ending, KnowledgeState, NpcRelationKind, Quest, RelationBeat, StoryEffect, StoryFlag, WorldPackage } from '../../engine/schema';
 
 // ---------------------------------------------------------------- 초안 타입 (LLM 출력)
@@ -49,7 +50,10 @@ export interface WorldDraft {
 export interface ScenarioDraft {
   encounters: { key: string; name: string; location: string; enemies: { monster: string; zone: number }[]; trigger: string }[];
   flags: { key: string; when: string; location: string; requires: DraftCond }[];
-  quests: { key: string; name: string; kind: 'main' | 'side'; start: DraftCond; stages: { objective: string; hint: string; complete: DraftCond }[]; reward_xp: number; reward_money?: number }[];
+  quests: { key: string; name: string; kind: 'main' | 'side'; start: DraftCond; stages: { objective: string; hint: string; complete: DraftCond }[]; reward_xp: number; reward_money?: number;
+    type?: QuestType | ''; giver?: string; target?: string; time_limit_days?: number }[];
+  /** 의뢰판 (설계 v3 6.3) */
+  board?: { location: string; name: string; jobs: { key: string; name: string; type: QuestType; description: string; location: string; enemies: { monster: string; zone: number }[]; reward_money: number; repeatable: boolean }[] };
   endings: { key: string; name: string; condition: DraftCond; epilogue: string }[];
   relation_beats?: { key: string; npc: string; name: string; condition: DraftCond; hint: string; resolve_flag: string }[];
   /** 이야기 엔진 (설계 v3 5장): 이번에 덧붙이는 줄기 하나와 시계·결정적 선택 */
@@ -117,7 +121,20 @@ export const SCENARIO_DRAFT_SCHEMA = obj({
     key: str, name: str, kind: { type: 'string', enum: ['main', 'side'] }, start: COND_SCHEMA,
     stages: arr(obj({ objective: str, hint: str, complete: COND_SCHEMA })), reward_xp: int,
     reward_money: { type: 'integer', description: '보상 돈 (사이드 20~100, 메인 100~300)' },
+    type: { type: 'string', enum: ['', ...QUEST_TYPES], description: '임무 유형' },
+    giver: { type: 'string', description: '의뢰인 인물 key 또는 ""' },
+    target: { type: 'string', description: '호위·구출 대상 인물 key (죽으면 실패) 또는 ""' },
+    time_limit_days: { type: 'integer', description: '기한 일수 (급한 일만, 없으면 0)' },
   })),
+  board: obj({
+    location: { type: 'string', description: '의뢰판이 있는 장소 key (마을·길드 등). 없으면 ""' }, name: { type: 'string', description: '의뢰판 이름 (예: 마을 게시판)' },
+    jobs: arr(obj({
+      key: str, name: str, type: { type: 'string', enum: [...QUEST_TYPES] }, description: { type: 'string', description: '의뢰 내용 한두 문장' },
+      location: { type: 'string', description: '일이 벌어지는 장소 key' },
+      enemies: arr(obj({ monster: { type: 'string', enum: Object.keys(MONSTERS) }, zone: { type: 'integer', enum: [2, 3] } })),
+      reward_money: { type: 'integer', description: '보상 돈 (0이면 엔진이 위협도로 정함)' }, repeatable: { type: 'boolean' },
+    })),
+  }),
   endings: arr(obj({ key: str, name: str, condition: COND_SCHEMA, epilogue: str })),
   arc: obj({
     name: { type: 'string', description: '이번 이야기 줄기의 이름' }, kind: { type: 'string', enum: ['main', 'faction', 'character'] },
@@ -385,6 +402,10 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
     if (!stages.length) { notes.push(`임무 "${q.name}": 단계가 없어 뺐습니다.`); continue; }
     quests.push({
       id: questMap.get(q.key)!, name: q.name, kind: q.kind, start: convertCond(q.start, refs, `임무 "${q.name}" 시작`, notes), stages,
+      ...(q.type ? { type: q.type } : {}),
+      ...(q.giver && refs.npc(q.giver) ? { giver: refs.npc(q.giver)! } : {}),
+      ...(q.target && refs.npc(q.target) ? { target: refs.npc(q.target)! } : {}),
+      ...((q.time_limit_days ?? 0) > 0 ? { timeLimit: { days: clamp(q.time_limit_days!, 1, 60) } } : {}),
       ...(q.reward_xp > 0 || (q.reward_money ?? 0) > 0 ? { rewards: { ...(q.reward_xp > 0 ? { xp: clamp(q.reward_xp, 0, 1000) } : {}), ...((q.reward_money ?? 0) > 0 ? { money: clamp(q.reward_money!, 0, 5000) } : {}) } } : {}),
     });
   }
@@ -455,6 +476,17 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
   }
   w.clocks = [...(w.clocks ?? []), ...clocks];
   w.choices = [...(w.choices ?? []), ...choices];
+  // 의뢰판: 토벌 의뢰는 그 장르의 적만 (적이 없는 의뢰는 조건이 없어 뺀다 — 편집기에서 complete를 넣을 수 있다)
+  if (d.board?.location && d.board.jobs?.length) {
+    const boardLoc = w.locations.find((l) => l.id === refs.loc(d.board!.location));
+    const jobs = d.board.jobs.flatMap((j) => {
+      const locationId = refs.loc(j.location);
+      const enemies = j.enemies.filter((x) => MONSTERS[x.monster]).map((x) => ({ monsterId: x.monster, zone: (x.zone === 3 ? 3 : 2) as 2 | 3 })).slice(0, 4);
+      if (!locationId || !enemies.length) { notes.push(`의뢰 "${j.name}": 장소나 토벌할 적이 없어 뺐습니다.`); return []; }
+      return [{ id: freshId('job', j.key), name: j.name, type: j.type, description: j.description, locationId, enemies, ...(j.reward_money > 0 ? { rewards: { money: clamp(j.reward_money, 1, 5000) } } : {}), ...(j.repeatable === false ? { repeatable: false } : {}) }];
+    });
+    if (boardLoc && jobs.length) boardLoc.board = { name: d.board.name || '의뢰판', jobs: [...(boardLoc.board?.jobs ?? []), ...jobs] };
+  }
   w.encounters = [...(w.encounters ?? []), ...encounters];
   w.flags = [...(w.flags ?? []), ...flags];
   w.quests = [...(w.quests ?? []), ...quests];

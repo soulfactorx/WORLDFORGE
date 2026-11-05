@@ -13,7 +13,9 @@ export const wuxiaSample: WorldPackage = {
   genre: { id: 'wuxia' },
   locations: [
     { id: 'loc/inn', name: '청운객잔', description: '현성 어귀의 이층 객잔. 붉은 등롱이 흔들리고, 술 냄새와 볶은 땅콩 냄새가 섞여 있다. 구석 탁자에 칼을 찬 손님 몇이 낮게 이야기한다.', connections: ['loc/town'], improvisation: 'minor' },
-    { id: 'loc/town', name: '현성 저잣거리', description: '나루와 맞닿은 장터. 생선 비린내와 호객 소리, 강 건너로 푸른 산봉우리가 보인다. 관아 앞 방(榜)에 새 공고가 붙어 있다.', connections: ['loc/inn', 'loc/bamboo'], shop: { name: '저잣거리 약방', items: ['std/potion-healing', 'std/potion-greater', 'std/antitoxin', 'std/rations', 'std/dagger', 'std/javelin'], factionId: 'fac/cheongun' },
+    { id: 'loc/town', name: '현성 저잣거리', description: '나루와 맞닿은 장터. 생선 비린내와 호객 소리, 강 건너로 푸른 산봉우리가 보인다. 관아 앞 방(榜)에 새 공고가 붙어 있다.', connections: ['loc/inn', 'loc/bamboo'], board: { name: '관아 방(榜)', jobs: [
+      { id: 'job/bandits', name: '죽림 산적 소탕', type: 'hunt', description: '죽림 산길에 흑풍채 졸개들이 또 나타났다. 소탕하면 관아에서 상금을 내린다.', locationId: 'loc/bamboo', enemies: [{ monsterId: 'wx_bandit', zone: 2 }, { monsterId: 'wx_bandit', zone: 3 }], timeLimit: { days: 4 } },
+    ] }, shop: { name: '저잣거리 약방', items: ['std/potion-healing', 'std/potion-greater', 'std/antitoxin', 'std/rations', 'std/dagger', 'std/javelin'], factionId: 'fac/cheongun' },
       discoveries: [{ claim: 'claim/notice', check: 'investigation', hint: '방을 자세히 읽으면 죽림 산길 통행을 막는다는 관아 공고와, 청운검문 제자가 실종됐다는 소식을 찾는다.' }] },
     { id: 'loc/bamboo', name: '죽림 산길', description: '대나무가 하늘을 가린 좁은 산길. 바람에 댓잎이 쓸리는 소리 사이로, 누군가 발소리를 죽이는 기척이 있다.', connections: ['loc/town', 'loc/sect'], improvisation: 'minor' },
     { id: 'loc/sect', name: '청운검문 연무장', description: '산 중턱의 문파. 붉은 전각 앞 연무장에 검을 든 제자들이 서 있지만, 다들 얼굴이 어둡다. 전각 안쪽에서 약 달이는 냄새가 난다.', connections: ['loc/bamboo'], improvisation: 'none',
@@ -49,7 +51,7 @@ export const wuxiaSample: WorldPackage = {
     { id: 'enc/bamboo-bandits', name: '죽림의 산적', locationId: 'loc/bamboo', enemies: [{ monsterId: 'wx_bandit', zone: 2 }, { monsterId: 'wx_bandit', zone: 2 }, { monsterId: 'wx_bandit', zone: 3 }], trigger: '플레이어가 죽림 산길을 지나가려 하거나 산적을 찾으면 흑풍채 졸개들이 길을 막는다.' },
   ],
   quests: [
-    { id: 'quest/blocked-road', name: '막힌 산길', kind: 'main', start: { all: [] },
+    { id: 'quest/blocked-road', name: '막힌 산길', kind: 'main', type: 'investigate', giver: 'npc/yeon', start: { all: [] },
       stages: [
         { objective: '객잔과 저잣거리에서 소문을 듣는다.', hint: '주모와 설하연은 산적 이야기를 한다. 방(榜)을 읽어도 된다.', complete: { any: [{ knows: 'claim/bandits' }, { knows: 'claim/notice' }] } },
         { objective: '죽림 산길의 산적을 물리친다.', hint: '설하연은 이 일이라면 함께 간다.', complete: { cleared: 'enc/bamboo-bandits' } },

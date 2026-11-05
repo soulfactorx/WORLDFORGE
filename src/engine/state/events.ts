@@ -36,6 +36,13 @@ export type GameEvent =
   | { type: 'quest_started'; questId: EntityId; name: string; objective: string }
   | { type: 'quest_advanced'; questId: EntityId; name: string; stage: number; objective: string }
   | { type: 'quest_completed'; questId: EntityId; name: string; stages: number }
+  /** 퀘스트 2.0 (설계 v3 6장) */
+  | { type: 'quest_failed'; questId: EntityId; name: string; reason: string }
+  | { type: 'enemies_defeated'; counts: Record<string, number> }
+  | { type: 'job_accepted'; jobId: EntityId; name: string; instance: number }
+  | { type: 'job_completed'; jobId: EntityId; name: string }
+  | { type: 'job_failed'; jobId: EntityId; name: string; reason: string }
+  | { type: 'card_granted'; who: string; whoName: string; cardId: string; name: string }
   | { type: 'flag_set'; flag: string }
   | { type: 'ending_reached'; endingId: EntityId; name: string }
   /** 경험치·레벨업 (v0.7). who = 'player' 또는 동료 NPC ID */

@@ -17,6 +17,8 @@ import { activeChapters, pacingHint, pendingChoice, upcomingWorldEvents } from '
 import { effectEvents } from './story';
 import { gainEvent, inventoryLine, moneyEvent, pendingGifts, pendingPickups } from './economy';
 import { itemDef } from '../engine/items';
+import { allJobs } from '../engine/jobs';
+import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { DISCOVERY_XP } from '../engine/character/progression';
 import { applyDelta, canShareSecret, joinBlocker, relationshipOf, wantsToLeave } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
@@ -418,7 +420,12 @@ export async function runTurn(
 
 /** Director에게만 주는 시나리오 정보: 진행 중인 임무 힌트, 세울 수 있는 플래그, 발견할 수 있는 것 */
 function scenarioBlock(world: WorldPackage, s: GameState): string {
-  const quests = activeQuests(world, s).map((q) => `- [${q.quest.kind === 'main' ? '메인' : '사이드'}] ${q.quest.name} — 목표: ${q.stage.objective} / 힌트: ${q.stage.hint}`);
+  const quests = activeQuests(world, s).map((q) => {
+    const left = q.quest.timeLimit && s.quests[q.quest.id]?.startedAt !== undefined ? q.quest.timeLimit.days - (s.worldMinutes - s.quests[q.quest.id]!.startedAt!) / 1440 : undefined;
+    const giver = q.quest.giver ? world.characters.find((c) => c.id === q.quest.giver)?.name : undefined;
+    return `- [${q.quest.kind === 'main' ? '메인' : '사이드'}${q.quest.type ? `·${QUEST_TYPE_LABEL[q.quest.type]}` : ''}] ${q.quest.name}${giver ? ` (의뢰인 ${giver})` : ''} — 목표: ${q.stage.objective} / 힌트: ${q.stage.hint}${left !== undefined ? ` / 기한 ${Math.max(0, Math.ceil(left))}일 남음` : ''}`;
+  });
+  const jobs = allJobs(world).filter((j) => s.jobs?.[j.id]?.active).map((j) => `- [의뢰·${QUEST_TYPE_LABEL[j.type]}] ${j.name} — ${j.description}${j.hint ? ` / 힌트: ${j.hint}` : ''} (장소: ${world.locations.find((l) => l.id === j.locationId)?.name ?? j.locationId})`);
   const flags = (world.flags ?? []).filter((f) => flagAllowed(world, s, f.id)).map((f) => `- ${f.id}: ${f.when}`);
   const chapters = activeChapters(world, s).map((c) => `- [${c.arc.kind === 'main' ? '메인 줄기' : c.arc.kind === 'faction' ? '세력 줄기' : '인물 줄기'}] ${c.arc.name} ${c.index + 1}장 「${c.chapter.name}」 — 목표: ${c.chapter.goal}`);
   const clocks = (world.clocks ?? []).map((c) => {
@@ -434,6 +441,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
   const disc = pendingDiscoveries(world, s).map((x) => `- ${x.claim}: ${x.hint}${x.check ? ` (필요 판정: ${x.check} 기술)` : ''}`);
   return [
     '## 진행 중인 이야기 (플레이어는 모름)', ...(quests.length ? quests : ['(없음)']), '',
+    ...(jobs.length ? ['## 맡은 의뢰', ...jobs, ''] : []),
     ...(beats.length ? ['## 열린 관계 사건 (그 인물과 마주치면 이 장면으로 이끈다. 억지로 끌어오지 않는다)', ...beats, ''] : []),
     ...(chapters.length ? ['## 진행 중인 줄기 (지금 장의 목표 — 연출 방향)', ...chapters, ''] : []),
     ...(clocks.length ? ['## 진행 시계 (플레이어는 모름 — 시간이 흐르면 찬다)', ...clocks, ''] : []),

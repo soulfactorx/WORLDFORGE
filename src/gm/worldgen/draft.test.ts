@@ -115,3 +115,23 @@ describe('초안: 상점·보상 돈 (설계 v3 R4a)', () => {
     expect(validateWorld(world).filter((i) => i.level === 'error')).toEqual([]);
   });
 });
+
+describe('초안: 임무 유형·의뢰판 (설계 v3 R4b)', () => {
+  it('임무 유형·의뢰인·대상·기한을 옮기고, 의뢰판에 토벌 의뢰를 단다', () => {
+    const { world } = worldFromDraft(messy, { id: 'test.board', contentRating: 'teen' });
+    const sc: ScenarioDraft = {
+      encounters: [], flags: [], endings: [],
+      quests: [{ key: 'guard', name: '선원 호위', kind: 'side', type: 'escort', giver: 'keeper', target: 'sailor', time_limit_days: 3, start: always,
+        stages: [{ objective: '선원을 등대까지', hint: '', complete: { op: 'all', items: [atom('at', 'lighthouse')] } }], reward_xp: 50, reward_money: 30 }],
+      board: { location: 'Pier', name: '부두 게시판', jobs: [
+        { key: 'wolves', name: '늑대 퇴치', type: 'hunt', description: '늑대를 쫓아라', location: 'lighthouse', enemies: [{ monster: 'wolf', zone: 2 }, { monster: 'nope', zone: 2 }], reward_money: 0, repeatable: true },
+        { key: 'talk', name: '대화', type: 'negotiate', description: '적 없음', location: 'market', enemies: [], reward_money: 10, repeatable: true },
+      ] },
+    };
+    const r = addScenario(world, sc);
+    expect(r.world.quests![0]).toMatchObject({ type: 'escort', giver: 'npc/keeper', target: 'npc/sailor', timeLimit: { days: 3 }, rewards: { xp: 50, money: 30 } });
+    const board = r.world.locations.find((l) => l.id === 'loc/pier')!.board!;
+    expect(board.jobs).toEqual([{ id: 'job/wolves', name: '늑대 퇴치', type: 'hunt', description: '늑대를 쫓아라', locationId: 'loc/lighthouse', enemies: [{ monsterId: 'wolf', zone: 2 }] }]);
+    expect(validateWorld(r.world).filter((i) => i.level === 'error')).toEqual([]);
+  });
+});

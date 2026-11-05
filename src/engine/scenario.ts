@@ -1,5 +1,10 @@
 import { relationshipOf, reputationOf, stageFor } from './relationship';
-import type { Condition, Ending, EntityId, KnowledgeState, Quest, WorldPackage } from './schema';
+import type { Condition, Ending, EntityId, KnowledgeState, Quest, QuestType, WorldPackage } from './schema';
+
+export const QUEST_TYPE_LABEL: Record<QuestType, string> = {
+  hunt: '토벌', escort: '호위', deliver: '전달', gather: '수집', investigate: '조사', infiltrate: '잠입',
+  rescue: '구출', defend: '방어', negotiate: '협상', survive: '생존', duel: '결투', bond: '관계',
+};
 import type { GameState } from './state/state';
 
 /**
@@ -12,6 +17,8 @@ export interface QuestProgress {
   /** 현재 단계 인덱스 (done이면 stages.length) */
   stage: number;
   done: boolean;
+  failed?: boolean;
+  startedAt?: number;
 }
 
 const KNOWLEDGE_RANK: Record<KnowledgeState, number> = { mistaken: 0, rumor: 1, partial: 2, confirmed: 3, secret: 3 };
@@ -26,6 +33,11 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('any' in c) return c.any.some((x) => evalCondition(world, state, x));
   if ('not' in c) return !evalCondition(world, state, c.not);
   if ('knows' in c) return playerKnows(state, c.knows, c.min);
+  if ('npcAt' in c) {
+    if (state.deadNpcs.includes(c.npcAt)) return false;
+    const at = state.party[c.npcAt] ? state.player.locationId : state.npcLocations[c.npcAt] ?? world.characters.find((x) => x.id === c.npcAt)?.locationId;
+    return at === c.at;
+  }
   if ('at' in c) return state.player.locationId === c.at;
   if ('cleared' in c) return state.clearedEncounters.includes(c.cleared);
   if ('inParty' in c) return !!state.party[c.inParty];
@@ -46,10 +58,13 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   }
   if ('choice' in c) { const ch = state.choices?.[c.choice]?.chosen; return c.is === undefined ? !!ch : ch === c.is; }
   if ('day' in c) return Math.floor(state.worldMinutes / 1440) >= c.day;
+  if ('defeated' in c) return (state.kills?.[c.defeated] ?? 0) >= (c.n ?? 1);
+  if ('npcAlive' in c) return !state.deadNpcs.includes(c.npcAlive);
+  if ('questFailed' in c) return !!state.quests[c.questFailed]?.failed;
   if ('hasItem' in c) return (state.inventory?.[c.hasItem] ?? 0) >= (c.n ?? 1);
   if ('money' in c) return (state.money ?? 0) >= c.money;
   if ('flag' in c) return state.flags.includes(c.flag);
-  if ('questDone' in c) return !!state.quests[c.questDone]?.done;
+  if ('questDone' in c) return !!state.quests[c.questDone]?.done && !state.quests[c.questDone]?.failed;
   if ('level' in c) return state.player.sheet.level >= c.level;
   return false;
 }
@@ -57,7 +72,18 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
 export type QuestTransition =
   | { kind: 'started'; quest: Quest }
   | { kind: 'advanced'; quest: Quest; stage: number }
-  | { kind: 'completed'; quest: Quest };
+  | { kind: 'completed'; quest: Quest }
+  | { kind: 'failed'; quest: Quest; reason: string };
+
+/** 임무가 지금 실패했는가 (대상 사망 · 기한 초과 · 실패 조건) */
+export function questFailure(world: WorldPackage, state: GameState, q: Quest, p: QuestProgress): string | null {
+  if (q.target && state.deadNpcs.includes(q.target)) return `${world.characters.find((c) => c.id === q.target)?.name ?? '대상'}이(가) 죽었다`;
+  if (q.timeLimit && p.startedAt !== undefined && state.worldMinutes - p.startedAt > q.timeLimit.days * 1440) return '기한이 지났다';
+  if (q.fail && evalCondition(world, state, q.fail)) return '돌이킬 수 없는 일이 일어났다';
+  const st = q.stages[p.stage];
+  if (st?.fail && evalCondition(world, state, st.fail)) return '돌이킬 수 없는 일이 일어났다';
+  return null;
+}
 
 /**
  * 현재 상태에서 일어나야 할 퀘스트 변화. 한 단계 완료가 다음 단계 완료로 이어질 수 있으므로
@@ -69,12 +95,14 @@ export function questTransitions(world: WorldPackage, state: GameState): QuestTr
   const view = (): GameState => ({ ...state, quests: progress });
   for (const q of world.quests ?? []) {
     if (!progress[q.id] && evalCondition(world, view(), q.start)) {
-      progress[q.id] = { stage: 0, done: false };
+      progress[q.id] = { stage: 0, done: false, startedAt: state.worldMinutes };
       out.push({ kind: 'started', quest: q });
     }
     const p = progress[q.id];
     if (!p) continue;
     for (let guard = 0; !p.done && guard <= q.stages.length; guard++) {
+      const why = questFailure(world, view(), q, p);
+      if (why) { p.done = true; p.failed = true; out.push({ kind: 'failed', quest: q, reason: why }); break; }
       const stage = q.stages[p.stage];
       if (!stage || !evalCondition(world, view(), stage.complete)) break;
       p.stage++;

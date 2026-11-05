@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { DIFFICULTY_LABEL, encounterDifficulty, monstersFor } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
-import type { Belief, Character, Claim, Fact, Faction, Location, NpcRelationKind, WorldPackage } from '../engine/schema';
+import { type Belief, type Character, type Claim, type Fact, type Faction, type Location, type NpcRelationKind, QUEST_TYPES, type WorldPackage } from '../engine/schema';
+import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { RELATION_KIND_LABEL, STAGES } from '../engine/relationship';
 import { STD_ITEMS } from '../data/items';
 import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
@@ -34,13 +35,16 @@ const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항�
 const STATES = [['rumor', '소문'], ['partial', '들은 이야기'], ['confirmed', '확인됨'], ['mistaken', '잘못 앎'], ['secret', '비밀']] as const;
 
 function tabForPath(path: string): Tab {
+  // 세부 경로가 먼저 (장소·인물 안의 상점·의뢰판·건넬 것)
+  if (/^locations\[\d+\]\.(shop|pickups)/.test(path) || /^characters\[\d+\]\.gives/.test(path) || path.startsWith('start.items')) return 'items';
+  if (/^locations\[\d+\]\.board/.test(path)) return 'quests';
   if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style')) return 'basic';
   if (path.startsWith('assets')) return 'images';
   if (path.startsWith('locations')) return 'locations';
   if (path.startsWith('characters')) return 'characters';
   if (path.startsWith('facts') || path.startsWith('claims') || path.startsWith('beliefs')) return 'knowledge';
   if (path.startsWith('factions') || path.startsWith('relations') || path.startsWith('relationBeats')) return 'relations';
-  if (path.startsWith('items') || /^locations\[\d+\]\.(shop|pickups)/.test(path) || /^characters\[\d+\]\.gives/.test(path) || path.startsWith('start.items')) return 'items';
+  if (path.startsWith('items')) return 'items';
   if (path.startsWith('encounters')) return 'encounters';
   if (path.startsWith('arcs') || path.startsWith('choices') || path.startsWith('clocks') || path.startsWith('events')) return 'story';
   if (path.startsWith('quests') || path.startsWith('flags') || path.startsWith('endings')) return 'quests';
@@ -462,7 +466,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <button type="button" disabled={!!genStage} onClick={aiScenario}>{genStage || '✦ AI로 임무·조우·결말 추가'}</button>
             </div>
           )}
-          <JsonField label="임무" value={w.quests ?? []} onChange={(quests) => set({ quests })} rows={16} />
+          <JsonField label="임무" value={w.quests ?? []} onChange={(quests) => set({ quests })} rows={16}
+            help={`임무 2.0: "type"(${QUEST_TYPES.map((t) => `${t}=${QUEST_TYPE_LABEL[t]}`).join(', ')}) · "giver"(의뢰인 npc) · "target"(이 인물이 죽으면 실패) · "fail"(실패 조건, 단계마다도 가능) · "timeLimit": { "days": 3 } · "rewards": { "xp", "money", "items", "relationship", "reputation", "cards": [{ "who": "player" 또는 "npc/…", "cardId": "rogue/steady_aim" }] } · 조건 추가: { "defeated": "wolf", "n": 3 } { "npcAlive": "npc/…" } { "npcAt": "npc/…", "at": "loc/…" } { "questFailed": "quest/…" }`} />
+          <JsonField label="의뢰판 (장소 ID → 의뢰판, 반복할 수 있는 의뢰)" value={Object.fromEntries(w.locations.flatMap((l) => (l.board ? [[l.id, l.board]] : [])))}
+            onChange={(m: Record<string, Location['board']>) => m && typeof m === 'object' && set({ locations: w.locations.map((l) => { const { board: _b, ...rest } = l; return m[l.id] ? { ...rest, board: m[l.id] } : rest; }) })} rows={12}
+            help='예: { "loc/guild": { "name": "길드 게시판", "jobs": [{ "id": "job/wolves", "name": "늑대 퇴치", "type": "hunt", "description": "…", "locationId": "loc/forest", "enemies": [{ "monsterId": "wolf", "zone": 2 }], "timeLimit": { "days": 3 } }, { "id": "job/herbs", "name": "약초 채집", "type": "gather", "description": "…", "locationId": "loc/forest", "complete": { "hasItem": "item/herb", "n": 3 }, "rewards": { "money": 30 }, "requires": { "reputation": "fac/…", "gte": 10 } }] } } · 토벌 의뢰는 받을 때마다 조우가 새로 생기고, 보상이 없으면 위협도로 돈이 정해진다' />
           <JsonField label="이야기 플래그 (Director가 세울 수 있는 결정)" value={w.flags ?? []} onChange={(flags) => set({ flags })} rows={8} />
           <JsonField label="결말" value={w.endings ?? []} onChange={(endings) => set({ endings })} rows={8} />
         </>

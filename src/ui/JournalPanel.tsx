@@ -3,6 +3,8 @@ import { AXES, AXIS_NAMES, HOSTILE_STAGES, loyaltyOf, OBEY_LOYALTY, relationship
 import type { WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
+import { allJobs } from '../engine/jobs';
+import { QUEST_TYPE_LABEL } from '../engine/scenario';
 
 const LABEL = { rumor: '소문', partial: '들은 이야기', confirmed: '확인됨', mistaken: '잘못 앎', secret: '비밀' } as const;
 
@@ -15,6 +17,12 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
   const metIds = [...new Set([...Object.keys(state.npcMemory), ...Object.keys(state.party), ...Object.keys(state.relationships)])];
   const met = metIds.map((id) => world.characters.find((c) => c.id === id)).filter((c) => !!c);
   const quests = (world.quests ?? []).filter((q) => state.quests[q.id]);
+  const jobs = allJobs(world).flatMap((job) => (state.jobs?.[job.id] ? [{ job, st: state.jobs[job.id]! }] : []));
+  const deadline = (days: number | undefined, from: number | undefined) => {
+    if (!days || from === undefined) return '';
+    const left = Math.ceil(days - (state.worldMinutes - from) / 1440);
+    return left <= 0 ? ' · 기한 오늘까지' : ` · 기한 ${left}일 남음`;
+  };
   const arcs = (world.arcs ?? []).flatMap((arc) => (state.arcs?.[arc.id] ? [{ arc, p: state.arcs[arc.id]! }] : []));
   // 평판이 바뀌었거나, 만난 사람이 속한 세력만 보여준다
   const factions = (world.factions ?? []).filter((f) => (state.reputation ?? {})[f.id] !== undefined || met.some((c) => c.faction === f.id));
@@ -45,16 +53,32 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
           {quests.map((q) => {
             const p = state.quests[q.id]!;
             return (
-              <li key={q.id} className={p.done ? 'done' : ''}>
+              <li key={q.id} className={p.done ? (p.failed ? 'done failed' : 'done') : ''}>
                 <span className={`tag ${q.kind === 'main' ? 'confirmed' : ''}`}>{q.kind === 'main' ? '메인' : '사이드'}</span>{' '}
+                {q.type && <span className="tag">{QUEST_TYPE_LABEL[q.type]}</span>}{' '}
                 <b>{q.name}</b>
-                {p.done ? <span className="small muted"> — 완료</span> : <div className="small">▸ {q.stages[p.stage]?.objective}</div>}
+                {q.giver && <span className="small muted"> · 의뢰인 {world.characters.find((c) => c.id === q.giver)?.name}</span>}
+                {p.done ? <span className={`small ${p.failed ? 'warn-text' : 'muted'}`}> — {p.failed ? '실패' : '완료'}</span> : <div className="small">▸ {q.stages[p.stage]?.objective}{deadline(q.timeLimit?.days, p.startedAt)}</div>}
                 {/* 지난 단계 */}
                 {q.stages.slice(0, p.stage).map((st) => <div key={st.objective} className="small muted past">✓ {st.objective}</div>)}
               </li>
             );
           })}
         </ul>
+      )}
+      {jobs.length > 0 && (
+        <>
+          <b>의뢰</b>
+          <ul className="quests">
+            {jobs.map(({ job, st }) => (
+              <li key={job.id} className={st.active ? '' : 'done'}>
+                <span className="tag">{QUEST_TYPE_LABEL[job.type]}</span> <b>{job.name}</b>
+                {st.active ? <div className="small">▸ {job.description} ({world.locations.find((l) => l.id === job.locationId)?.name}){deadline(job.timeLimit?.days, st.active.acceptedAt)}</div>
+                  : <span className="small muted"> — 완료 {st.done}회{st.failed ? ` · 실패 ${st.failed}회` : ''}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       {date && <p className="small">오늘: <b>{date.label}</b>{date.countdown && <> · <b className="dday">{date.countdown}</b></>}{date.elapsed > 0 && <span className="muted"> (시작한 지 {date.elapsed}일째)</span>}</p>}
       <b>알게 된 것</b>

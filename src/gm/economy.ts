@@ -11,6 +11,7 @@ import type { EntityId, ItemStack, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import type { GameState } from '../engine/state/state';
 import { npcLocation } from './context';
+import { boardHere, jobStatus } from '../engine/jobs';
 
 export const currencyName = (world: WorldPackage) => currencyOf(world, genreOf(world.genre?.id).currency);
 
@@ -100,4 +101,15 @@ export function pendingGifts(world: WorldPackage, state: GameState, npcId: Entit
 export function inventoryLine(world: WorldPackage, state: GameState): string {
   const items = Object.entries(state.inventory ?? {}).filter(([, n]) => n > 0).map(([id, n]) => `${itemDef(world, id)?.name ?? id}${n > 1 ? ` ×${n}` : ''}`);
   return `${currencyName(world)} ${moneyOf(state)}${items.length ? ` · ${items.join(', ')}` : ''}`;
+}
+
+/** 의뢰 받기 (의뢰판이 있는 장소에서) */
+export function acceptJob(world: WorldPackage, state: GameState, jobId: EntityId): GameEvent[] {
+  const board = boardHere(world, state);
+  const job = board?.jobs.find((j) => j.id === jobId);
+  if (!job) throw new Error('이 의뢰판의 의뢰가 아니다');
+  const st = jobStatus(world, state, job);
+  if (st !== 'available') throw new Error(st === 'active' ? '이미 맡은 의뢰다' : st === 'done' ? '이미 끝난 의뢰다' : '아직 이 의뢰를 맡을 수 없다');
+  const j = state.jobs?.[job.id];
+  return [{ type: 'job_accepted', jobId: job.id, name: job.name, instance: (j?.done ?? 0) + (j?.failed ?? 0) + 1 }];
 }

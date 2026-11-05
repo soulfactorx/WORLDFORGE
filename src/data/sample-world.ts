@@ -32,6 +32,10 @@ export const sampleWorld: WorldPackage = {
       id: 'loc/village-gate',
       name: '마을 입구',
       description: '나무 말뚝 울타리와 낡은 문. 문 위에 등불이 흔들린다. 경비 초소가 하나 있다.',
+      board: { name: '마을 게시판', jobs: [
+        { id: 'job/wolves', name: '늑대 몰아내기', type: 'hunt', description: '낡은 숲길에 늑대가 다시 나타났다. 몰아내 주면 사례하겠다. — 경비대', locationId: 'loc/old-road', enemies: [{ monsterId: 'wolf', zone: 2 }, { monsterId: 'wolf', zone: 3 }], timeLimit: { days: 3 } },
+        { id: 'job/supply', name: '여관에 횃불 전하기', type: 'deliver', description: '횃불 세 자루를 여관 주인에게 가져다 달라.', locationId: 'loc/inn', complete: { all: [{ at: 'loc/inn' }, { hasItem: 'std/torch', n: 3 }] }, rewards: { money: 10, reputation: [] }, repeatable: false },
+      ] },
       connections: ['loc/forest-clearing', 'loc/inn', 'loc/old-road', 'loc/elder-house'],
     },
     {
@@ -168,7 +172,7 @@ export const sampleWorld: WorldPackage = {
       rewards: { xp: 150 },
     },
     {
-      id: 'quest/road-goblins', name: '낡은 숲길의 고블린', kind: 'side',
+      id: 'quest/road-goblins', name: '낡은 숲길의 고블린', kind: 'side', type: 'hunt', giver: 'npc/bran',
       start: { any: [{ knows: 'claim/goblins-road' }, { at: 'loc/old-road' }] },
       stages: [
         { objective: '낡은 숲길의 고블린을 처치한다.', hint: '고블린 둘이 낡은 숲길 덤불에 숨어 있다. 브란은 이 일이라면 함께 간다.', complete: { cleared: 'enc/road-goblins' } },
@@ -176,12 +180,12 @@ export const sampleWorld: WorldPackage = {
       rewards: { xp: 100, money: 30, relationship: [{ npcId: 'npc/bran', trust: 8, respect: 5 }] },
     },
     {
-      id: 'quest/ilse-scar', name: '일제의 화상', kind: 'side',
+      id: 'quest/ilse-scar', name: '일제의 화상', kind: 'side', type: 'bond', giver: 'npc/ilse', target: 'npc/ilse',
       start: { relationship: 'npc/ilse', axis: 'trust', gte: 20 },
       stages: [
         { objective: '일제가 감추는 상처의 사연을 듣는다.', hint: '일제는 신뢰가 50 이상이 되면 화상의 사연을 털어놓는다. 그 사연은 제단과 이어져 있다.', complete: { knows: 'claim/ilse-burn', min: 'partial' } },
       ],
-      rewards: { xp: 75, relationship: [{ npcId: 'npc/ilse', affinity: 10 }] },
+      rewards: { xp: 75, relationship: [{ npcId: 'npc/ilse', affinity: 10, intimacy: 5 }], cards: [{ who: 'player', cardId: 'rogue/steady_aim' }] },
     },
   ],
   flags: [

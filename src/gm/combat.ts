@@ -18,6 +18,7 @@ import type { Gear } from '../engine/combat/combat';
 import { abilityModifier } from '../engine/dice/dice';
 import { equippedAc, itemCards, itemDef } from '../engine/items';
 import { currencyName } from './economy';
+import { jobEncounters } from '../engine/jobs';
 
 /**
  * 전투 진행 — 엔진 결과를 이벤트로 만든다. 전투 중에는 LLM을 호출하지 않는다 (비용·속도·결정성).
@@ -26,7 +27,7 @@ import { currencyName } from './economy';
 
 /** 이 장소에서 아직 끝나지 않은 조우 */
 export function availableEncounters(world: WorldPackage, state: GameState) {
-  return (world.encounters ?? []).filter((e) => e.locationId === state.player.locationId && !state.clearedEncounters.includes(e.id));
+  return [...(world.encounters ?? []), ...jobEncounters(world, state)].filter((e) => e.locationId === state.player.locationId && !state.clearedEncounters.includes(e.id));
 }
 
 class Builder {
@@ -55,6 +56,10 @@ function finishIfOver(b: Builder) {
   b.push({ type: 'combat_ended', outcome: p.dead ? 'defeat' : cs.outcome, playerDead: !!p.dead, hp: p.dead ? 0 : after(p.hp), resources, party });
   for (const u of used) b.push({ type: 'item_lost', itemId: u.itemId, name: itemDef(b.world, u.itemId)?.name ?? u.itemId, n: u.n, reason: '전투 중 사용' });
   for (const id of fallen) b.push({ type: 'companion_died', npcId: id, name: cs.combatants[id]!.name });
+  // 쓰러뜨린 적 기록 (도망친 적은 빼고) — 토벌 조건(defeated)에 쓰인다
+  const counts: Record<string, number> = {};
+  for (const c of Object.values(cs.combatants)) if (c.side === 'enemy' && c.hp <= 0 && !c.escaped && c.monsterId) counts[c.monsterId] = (counts[c.monsterId] ?? 0) + 1;
+  if (Object.keys(counts).length) b.push({ type: 'enemies_defeated', counts });
   if (p.dead) return;
   // 경험치: 승리하면 쓰러뜨린 적의 경험치를 아군 참가자에게 똑같이 나눈다 (SRD 5.2.1)
   if (cs.outcome === 'victory') {
@@ -67,7 +72,8 @@ function finishIfOver(b: Builder) {
     // 전리품: 조우에 정해진 것, 없으면 적 경험치에 비례한 돈 (도망친 적은 빼고)
     const enc = b.world.encounters?.find((x) => x.id === cs.encounterId);
     const beaten = Object.values(cs.combatants).filter((c) => c.side === 'enemy' && c.hp <= 0 && !c.escaped).reduce((sum, c) => sum + (MONSTERS[c.monsterId ?? '']?.xp ?? 0), 0);
-    const money = enc?.loot ? enc.loot.money ?? 0 : Math.round(beaten / 10);
+    // 의뢰 토벌은 의뢰 보상으로 받으므로 기본 전리품 돈이 없다
+    const money = enc?.loot ? enc.loot.money ?? 0 : cs.encounterId.startsWith('job/') ? 0 : Math.round(beaten / 10);
     if (money > 0) b.push({ type: 'money_changed', delta: money, reason: '전리품', currency: currencyName(b.world) });
     for (const it of enc?.loot?.items ?? []) {
       const def = itemDef(b.world, it.itemId);
@@ -111,7 +117,7 @@ export function playerGear(world: WorldPackage, state: GameState): Gear {
   const weapon = state.equipped?.weapon ? itemDef(world, state.equipped.weapon)?.card : undefined;
   return {
     ac: equippedAc(world, state, abilityModifier(sheet.abilities.dex), kit.ac, !!kit.shield),
-    ...(weapon ? { cards: [weapon] } : {}),
+    cards: [...(weapon ? [weapon] : []), ...(state.grantedCards?.player ?? [])],
     items: itemCards(world, state),
   };
 }
@@ -121,7 +127,7 @@ export function beginEncounter(world: WorldPackage, state: GameState, encounterI
   const enc = availableEncounters(world, state).find((e) => e.id === encounterId);
   if (!enc) throw new Error('이 장소에서 시작할 수 없는 조우');
   const rng = createRng(state.rngState);
-  const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id] }));
+  const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id], cards: state.grantedCards?.[id] }));
   const combat = startCombat(enc, state.player.sheet, rng, companions, playerGear(world, state));
   const b = new Builder(world, state, turn);
   b.push({ type: 'combat_started', combat, rngState: rng.state() });

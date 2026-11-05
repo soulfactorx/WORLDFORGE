@@ -226,6 +226,8 @@ export interface CompanionEntry {
   name: string;
   sheet: CharacterSheet;
   order?: PartyOrder;
+  /** 보상으로 얻은 전용 카드 */
+  cards?: string[];
 }
 
 /** 동료의 시작 존: 후방 유지 명령이거나 위저드면 후열, 아니면 전열 */
@@ -236,7 +238,7 @@ function companionStartZone(c: CompanionEntry): number {
 export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng, companions: CompanionEntry[] = [], gear: Gear = {}): CombatState {
   const list: Combatant[] = [playerCombatant(sheet, gear)];
   for (const c of companions) {
-    if (c.sheet.hp > 0) list.push(sheetCombatant(c.sheet, c.id, c.name, false, companionStartZone(c)));
+    if (c.sheet.hp > 0) list.push(sheetCombatant(c.sheet, c.id, c.name, false, companionStartZone(c), c.cards?.length ? { cards: c.cards } : {}));
   }
   const counts: Record<string, number> = {};
   for (const e of enc.enemies) {

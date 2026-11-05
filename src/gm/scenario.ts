@@ -1,6 +1,8 @@
 import { levelCapOf } from '../engine/genre';
 import { evalCondition, questTransitions, reachedEnding } from '../engine/scenario';
-import type { WorldPackage } from '../engine/schema';
+import type { Rewards, WorldPackage } from '../engine/schema';
+import { jobRewards, jobTransitions } from '../engine/jobs';
+import { ALL_CARDS } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
 import { progressEvents } from './progression';
@@ -16,6 +18,28 @@ export const BEAT_TURNS = 4;
  * 시나리오 평가 → 이벤트. 퀘스트 시작·갱신·완료, 보상(경험치·관계), 결말.
  * 매 턴과 전투가 끝난 뒤 호출한다.
  */
+/** 보상 → 이벤트 (임무·의뢰 공용). 순서대로 적용하므로 상태를 이어 받는다 */
+export function rewardEvents(world: WorldPackage, state: GameState, r: Rewards | undefined, reason: string): GameEvent[] {
+  if (!r) return [];
+  const out: GameEvent[] = [];
+  let s = state;
+  const push = (e: GameEvent | null) => { if (!e) return; out.push(e); s = applyEvent(s, e, state.turn); };
+  if (r.xp) progressEvents(s, [{ who: 'player', amount: r.xp }], reason, levelCapOf(world)).forEach(push);
+  if (r.money) push(moneyEvent(world, s, r.money, reason));
+  for (const it of r.items ?? []) push(gainEvent(world, it, reason));
+  for (const x of r.relationship ?? []) {
+    const npc = world.characters.find((c) => c.id === x.npcId);
+    if (npc) relationshipEvents(world, s, npc, x, reason).forEach(push);
+  }
+  for (const x of r.reputation ?? []) push(reputationEvent(world, s, x.factionId, x.delta, reason));
+  for (const c of r.cards ?? []) {
+    const card = ALL_CARDS[c.cardId];
+    const whoName = c.who === 'player' ? '당신' : world.characters.find((x) => x.id === c.who)?.name;
+    if (card && whoName && !(s.grantedCards?.[c.who] ?? []).includes(c.cardId)) push({ type: 'card_granted', who: c.who, whoName, cardId: c.cardId, name: card.name });
+  }
+  return out;
+}
+
 export function scenarioEvents(world: WorldPackage, state: GameState): { events: GameEvent[]; ending: string | null } {
   const events: GameEvent[] = [];
   let s = state;
@@ -49,20 +73,18 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
     const q = t.quest;
     if (t.kind === 'started') push({ type: 'quest_started', questId: q.id, name: q.name, objective: q.stages[0]?.objective ?? '' });
     if (t.kind === 'advanced') push({ type: 'quest_advanced', questId: q.id, name: q.name, stage: t.stage, objective: q.stages[t.stage]!.objective });
+    if (t.kind === 'failed') push({ type: 'quest_failed', questId: q.id, name: q.name, reason: t.reason });
     if (t.kind === 'completed') {
       push({ type: 'quest_completed', questId: q.id, name: q.name, stages: q.stages.length });
-      if (q.rewards?.xp) progressEvents(s, [{ who: 'player', amount: q.rewards.xp }], `임무 완료: ${q.name}`, levelCapOf(world)).forEach(push);
-      for (const r of q.rewards?.relationship ?? []) {
-        const npc = world.characters.find((c) => c.id === r.npcId);
-        if (npc) relationshipEvents(world, s, npc, r, `임무 완료: ${q.name}`).forEach(push);
-      }
-      if (q.rewards?.money) { const ev = moneyEvent(world, s, q.rewards.money, `임무 완료: ${q.name}`); if (ev) push(ev); }
-      for (const it of q.rewards?.items ?? []) { const ev = gainEvent(world, it, `임무 완료: ${q.name}`); if (ev) push(ev); }
-      for (const r of q.rewards?.reputation ?? []) {
-        const ev = reputationEvent(world, s, r.factionId, r.delta, `임무 완료: ${q.name}`);
-        if (ev) push(ev);
-      }
+      rewardEvents(world, s, q.rewards, `임무 완료: ${q.name}`).forEach(push);
     }
+  }
+  // 의뢰: 토벌 승리·완료 조건·기한
+  for (const t of jobTransitions(world, s)) {
+    if (t.kind === 'completed') {
+      push({ type: 'job_completed', jobId: t.job.id, name: t.job.name });
+      rewardEvents(world, s, jobRewards(t.job), `의뢰 완료: ${t.job.name}`).forEach(push);
+    } else push({ type: 'job_failed', jobId: t.job.id, name: t.job.name, reason: t.reason ?? '' });
   }
   // 관계 사건: 조건이 맞으면 열리고, 해결 플래그가 서거나 시간이 지나면 닫힌다
   for (const b of world.relationBeats ?? []) {

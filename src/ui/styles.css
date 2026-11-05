@@ -248,3 +248,5 @@ ul.needs label.file { flex: none; }
 .items-list { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .items-list li p { margin: 2px 0 0; }
 .items-list .row { gap: 6px; flex-wrap: wrap; align-items: center; }
+
+.quests li.failed b { color: #b3412c; }

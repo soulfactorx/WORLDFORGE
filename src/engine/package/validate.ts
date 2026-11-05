@@ -4,6 +4,7 @@
  */
 import { CLASSES, SKILL_IDS } from '../character/rules';
 import { STD_ITEMS } from '../../data/items';
+import { QUEST_TYPES, type Rewards } from '../schema';
 import { ALL_CARDS } from '../combat/combat';
 import { STAGES } from '../relationship';
 import { encounterDifficulty, MONSTERS } from '../combat/monsters';
@@ -227,6 +228,10 @@ export function validateWorld(input: unknown): Issue[] {
     }
     if ('not' in cond) return checkCond(cond.not, `${path}.not`, depth + 1);
     if ('knows' in cond) { if (!claimIds.has(cond.knows)) err(path, `없는 명제 "${cond.knows}"`); if (cond.min && !KNOWLEDGE_STATES.includes(cond.min)) err(path, `알 수 없는 지식 상태 "${cond.min}"`); return; }
+    if ('npcAt' in cond) { if (!charIds.has(cond.npcAt)) err(path, `없는 인물 "${cond.npcAt}"`); if (!locIds.has(cond.at)) err(path, `없는 장소 "${cond.at}"`); return; }
+    if ('npcAlive' in cond) { if (!charIds.has(cond.npcAlive)) err(path, `없는 인물 "${cond.npcAlive}"`); return; }
+    if ('defeated' in cond) { if (!MONSTERS[cond.defeated]) err(path, `없는 적 "${cond.defeated}"`); return; }
+    if ('questFailed' in cond) { if (!questIds.has(cond.questFailed)) err(path, `없는 임무 "${cond.questFailed}"`); return; }
     if ('at' in cond) { if (!locIds.has(cond.at)) err(path, `없는 장소 "${cond.at}"`); return; }
     if ('cleared' in cond) { if (!encIds.has(cond.cleared)) err(path, `없는 조우 "${cond.cleared}"`); return; }
     if ('inParty' in cond) { if (!charIds.has(cond.inParty)) err(path, `없는 인물 "${cond.inParty}"`); return; }
@@ -247,7 +252,16 @@ export function validateWorld(input: unknown): Issue[] {
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('level' in cond) { if (typeof cond.level !== 'number') err(path, 'level은 숫자입니다.'); return; }
-    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·chapter·arcDone·clock·choice·day·hasItem·money·flag·questDone·level 중 하나를 쓰세요.`);
+    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·chapter·arcDone·clock·choice·day·hasItem·money·defeated·npcAlive·npcAt·questFailed·flag·questDone·level 중 하나를 쓰세요.`);
+  };
+  const checkRewards = (r: Rewards | undefined, p: string) => {
+    if (!r) return;
+    (r.relationship ?? []).forEach((x, j) => { if (!charIds.has(x.npcId)) err(`${p}.relationship[${j}]`, `없는 인물 "${x.npcId}"`); });
+    (r.reputation ?? []).forEach((x, j) => { if (!factionIds.has(x.factionId)) err(`${p}.reputation[${j}]`, `없는 세력 "${x.factionId}"`); });
+    (r.cards ?? []).forEach((x, j) => {
+      if (!CARD_IDS.has(x.cardId)) err(`${p}.cards[${j}]`, `없는 카드 "${x.cardId}"`);
+      if (x.who !== 'player' && !charIds.has(x.who)) err(`${p}.cards[${j}].who`, `"player" 또는 인물 ID입니다 ("${x.who}")`);
+    });
   };
   quests.forEach((q, i) => {
     const p = `quests[${i}]`;
@@ -255,9 +269,13 @@ export function validateWorld(input: unknown): Issue[] {
     if (q.kind !== 'main' && q.kind !== 'side') err(`${p}.kind`, 'main 또는 side입니다.');
     checkCond(q.start, `${p}.start`);
     if (!Array.isArray(q.stages) || !q.stages.length) err(`${p}.stages`, '단계가 하나 이상 필요합니다.');
-    else q.stages.forEach((st, j) => { text(st.objective, `${p}.stages[${j}].objective`); text(st.hint, `${p}.stages[${j}].hint`, false); checkCond(st.complete, `${p}.stages[${j}].complete`); });
-    (q.rewards?.relationship ?? []).forEach((r, j) => { if (!charIds.has(r.npcId)) err(`${p}.rewards.relationship[${j}]`, `없는 인물 "${r.npcId}"`); });
-    (q.rewards?.reputation ?? []).forEach((r, j) => { if (!factionIds.has(r.factionId)) err(`${p}.rewards.reputation[${j}]`, `없는 세력 "${r.factionId}"`); });
+    else q.stages.forEach((st, j) => { text(st.objective, `${p}.stages[${j}].objective`); text(st.hint, `${p}.stages[${j}].hint`, false); checkCond(st.complete, `${p}.stages[${j}].complete`); if (st.fail) checkCond(st.fail, `${p}.stages[${j}].fail`); });
+    if (q.type && !(QUEST_TYPES as readonly string[]).includes(q.type)) err(`${p}.type`, `유형은 ${QUEST_TYPES.join('/')} 중 하나입니다.`);
+    if (q.giver && !charIds.has(q.giver)) err(`${p}.giver`, `없는 인물 "${q.giver}"`);
+    if (q.target && !charIds.has(q.target)) err(`${p}.target`, `없는 인물 "${q.target}"`);
+    if (q.fail) checkCond(q.fail, `${p}.fail`);
+    if (q.timeLimit && (typeof q.timeLimit.days !== 'number' || q.timeLimit.days <= 0)) err(`${p}.timeLimit`, '기한은 { "days": 1 이상 }입니다.');
+    checkRewards(q.rewards, `${p}.rewards`);
   });
   // ---- 세력·NPC 관계·관계 사건 (설계 v3 4.2~4.4)
   factions.forEach((f, i) => {
@@ -329,6 +347,28 @@ export function validateWorld(input: unknown): Issue[] {
   });
   encounters.forEach((e, i) => checkStacks(e.loot?.items, `encounters[${i}].loot.items`));
   quests.forEach((q, i) => checkStacks(q.rewards?.items, `quests[${i}].rewards.items`));
+  // ---- 의뢰판 (설계 v3 6.3)
+  const jobIds = new Set<string>();
+  locations.forEach((l, i) => {
+    if (!l.board) return;
+    const bp = `locations[${i}].board`;
+    text(l.board.name, `${bp}.name`);
+    (Array.isArray(l.board.jobs) ? l.board.jobs : []).forEach((job, j) => {
+      const p = `${bp}.jobs[${j}]`;
+      if (!isStr(job.id) || !job.id.startsWith('job/')) err(`${p}.id`, '의뢰 ID는 "job/"로 시작합니다.');
+      else if (jobIds.has(job.id) || ids.has(job.id)) err(`${p}.id`, `ID "${job.id}"가 중복됩니다.`);
+      jobIds.add(job.id);
+      text(job.name, `${p}.name`); text(job.description, `${p}.description`);
+      if (!(QUEST_TYPES as readonly string[]).includes(job.type)) err(`${p}.type`, `유형은 ${QUEST_TYPES.join('/')} 중 하나입니다.`);
+      if (!locIds.has(job.locationId)) err(`${p}.locationId`, `없는 장소 "${job.locationId}"`);
+      if (job.enemies?.length) job.enemies.forEach((e, k) => { if (!MONSTERS[e.monsterId]) err(`${p}.enemies[${k}]`, `없는 적 "${e.monsterId}"`); });
+      else if (!job.complete) err(p, '토벌 적(enemies)이나 완료 조건(complete) 중 하나가 필요합니다.');
+      if (job.complete) checkCond(job.complete, `${p}.complete`);
+      if (job.requires) checkCond(job.requires, `${p}.requires`);
+      checkRewards(job.rewards, `${p}.rewards`);
+      checkStacks(job.rewards?.items, `${p}.rewards.items`);
+    });
+  });
   if (isObj(w.start)) checkStacks(w.start.items, 'start.items');
 
   arcs.forEach((a, i) => {

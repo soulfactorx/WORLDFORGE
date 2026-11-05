@@ -38,6 +38,8 @@ export interface Location {
   /** 이 장소에서 주울 수 있는 것 (hint: Director에게만) */
   pickups?: (ItemStack & { hint: string })[];
   shop?: Shop;
+  /** 의뢰판 (설계 v3 6.3) */
+  board?: JobBoard;
 }
 
 /** 탐험으로 얻는 지식. check가 있으면 같은 턴에 그 판정에 성공해야 한다. */
@@ -249,6 +251,11 @@ export type Condition =
   /** 소지품·소지금 (설계 v3 6.1) */
   | { hasItem: EntityId; n?: number }
   | { money: number }
+  /** 퀘스트 2.0 (설계 v3 6.1): 쓰러뜨린 적 수, 인물 생존·위치, 실패한 임무 */
+  | { defeated: string; n?: number }
+  | { npcAlive: EntityId }
+  | { npcAt: EntityId; at: EntityId }
+  | { questFailed: EntityId }
   | { flag: string }
   | { questDone: EntityId }
   | { level: number };
@@ -259,16 +266,71 @@ export interface QuestStage {
   /** Director에게만 주는 진행 힌트 */
   hint: string;
   complete: Condition;
+  /** 이 단계에서 이 조건이 참이 되면 임무 실패 */
+  fail?: Condition;
+}
+
+/** 퀘스트 유형 12 (설계 v3 6.1) */
+export const QUEST_TYPES = ['hunt', 'escort', 'deliver', 'gather', 'investigate', 'infiltrate', 'rescue', 'defend', 'negotiate', 'survive', 'duel', 'bond'] as const;
+export type QuestType = (typeof QUEST_TYPES)[number];
+
+/** 보상 (임무·의뢰 공용). cards: 플레이어나 동료가 얻는 전용 카드 (설계 v3 4.2) */
+export interface Rewards {
+  xp?: number;
+  money?: number;
+  items?: ItemStack[];
+  relationship?: ({ npcId: EntityId } & Partial<Record<RelationAxis, number>>)[];
+  reputation?: { factionId: EntityId; delta: number }[];
+  cards?: { who: 'player' | EntityId; cardId: string }[];
 }
 
 export interface Quest {
   id: EntityId;
   name: string;
   kind: 'main' | 'side';
+  /** 유형 (없으면 일반) */
+  type?: QuestType;
+  /** 의뢰인 (수첩에 표시) */
+  giver?: EntityId;
+  /** 대상 인물: 호위·구출·관계 임무에서 이 인물이 죽으면 실패 */
+  target?: EntityId;
   /** 시작 조건 */
   start: Condition;
   stages: QuestStage[];
-  rewards?: { xp?: number; money?: number; items?: ItemStack[]; relationship?: ({ npcId: EntityId } & Partial<Record<RelationAxis, number>>)[]; reputation?: { factionId: EntityId; delta: number }[] };
+  /** 언제든 이 조건이 참이 되면 실패 */
+  fail?: Condition;
+  /** 시작 후 이 날 수 안에 끝내지 못하면 실패 */
+  timeLimit?: { days: number };
+  rewards?: Rewards;
+}
+
+/**
+ * 의뢰 (설계 v3 6.3): 장소의 의뢰판에 붙는 반복 가능한 일.
+ * enemies가 있으면 받을 때마다 그 장소(locationId)에 토벌 조우가 생기고, 이기면 끝난다. 없으면 complete 조건.
+ * 보상이 비면 엔진이 위협도(적 경험치)로 돈을 정한다.
+ */
+export interface Job {
+  id: EntityId;
+  name: string;
+  type: QuestType;
+  description: string;
+  locationId: EntityId;
+  enemies?: { monsterId: string; zone: 2 | 3 }[];
+  /** 토벌이 아닌 의뢰의 완료 조건 */
+  complete?: Condition;
+  /** Director 힌트 (조우 발동·진행) */
+  hint?: string;
+  /** 받을 수 있는 조건 (예: 평판) */
+  requires?: Condition;
+  timeLimit?: { days: number };
+  rewards?: Rewards;
+  /** 끝낸 뒤 다시 받을 수 있다 (기본 예) */
+  repeatable?: boolean;
+}
+
+export interface JobBoard {
+  name: string;
+  jobs: Job[];
 }
 
 /** Director가 이야기 속 사건을 기록하는 플래그. 선언된 것만, 지정 장소에서만 세울 수 있다. */

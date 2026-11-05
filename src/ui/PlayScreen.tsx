@@ -6,7 +6,8 @@ import { replay, type GameState } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
 import { pendingChoice } from '../engine/story';
 import { shopHere } from '../gm/economy';
-import { InventoryPanel, ShopPanel } from './InventoryPanel';
+import { BoardPanel, InventoryPanel, ShopPanel } from './InventoryPanel';
+import { boardHere } from '../engine/jobs';
 import { narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
 import type { PartyOrder, Target } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
@@ -84,7 +85,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const [startedAt, setStartedAt] = useState(0);
   const [, tick] = useState(0);
   useEffect(() => { if (streaming === null) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [streaming !== null]);
-  const [panel, setPanel] = useState<'none' | 'sheet' | 'journal' | 'items' | 'shop'>('none');
+  const [panel, setPanel] = useState<'none' | 'sheet' | 'journal' | 'items' | 'shop' | 'board'>('none');
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -174,6 +175,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const decisive = !state.combat && !state.ending && !state.playerDead ? pendingChoice(world, state) : undefined;
   const canAct = streaming === null && !state.combat && !state.playerDead;
   const shop = shopHere(world, state);
+  const board = boardHere(world, state);
 
   return (
     <ReskinContext.Provider value={rs}>
@@ -190,6 +192,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         <button onClick={() => setPanel((p) => (p === 'journal' ? 'none' : 'journal'))}>수첩 {panel === 'journal' ? '▲' : '▼'}</button>
         <button onClick={() => setPanel((p) => (p === 'items' ? 'none' : 'items'))}>소지품 {panel === 'items' ? '▲' : '▼'}</button>
         {shop && !state.combat && <button onClick={() => setPanel((p) => (p === 'shop' ? 'none' : 'shop'))}>🛒 {rs(shop.name)}</button>}
+        {board && !state.combat && <button onClick={() => setPanel((p) => (p === 'board' ? 'none' : 'board'))}>📜 {rs(board.name)}</button>}
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null}>↶ 턴 되돌리기</button>
         <button onClick={onExit}>나가기</button>
       </div>
@@ -208,6 +211,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} />}
           {panel === 'journal' && <JournalPanel world={world} state={state} />}
           {panel === 'items' && <InventoryPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.combat || !!state.playerDead} />}
+          {panel === 'board' && (board && !state.combat ? <BoardPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.playerDead} /> : <p className="muted small">여기에는 의뢰판이 없다.</p>)}
           {panel === 'shop' && (shop && !state.combat ? <ShopPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.playerDead} /> : <p className="muted small">여기에는 상점이 없다.</p>)}
         </div>
       )}

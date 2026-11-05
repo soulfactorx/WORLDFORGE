@@ -2,7 +2,9 @@ import { buyPrice, itemDef, moneyOf, priceFactor, sellPrice } from '../engine/it
 import type { ItemDef, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import type { GameState } from '../engine/state/state';
-import { buyItem, currencyName, equipItem, sellItem, shopHere, useItem } from '../gm/economy';
+import { acceptJob, buyItem, currencyName, equipItem, sellItem, shopHere, useItem } from '../gm/economy';
+import { boardHere, jobRewards, jobStatus } from '../engine/jobs';
+import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { useRs } from './reskin';
 
 const KIND_LABEL: Record<ItemDef['kind'], string> = { consumable: '소모품', weapon: '무기', armor: '갑옷', shield: '방패', key: '중요한 물건', treasure: '보물', misc: '잡동사니' };
@@ -86,6 +88,40 @@ export function ShopPanel({ world, state, onCommit, disabled }: { world: WorldPa
           )}
         </>
       )}
+    </aside>
+  );
+}
+
+/** 의뢰판 (설계 v3 6.3): 받을 수 있는 의뢰·진행 중·잠긴 의뢰 */
+export function BoardPanel({ world, state, onCommit, disabled }: { world: WorldPackage; state: GameState; onCommit: (make: (s: GameState) => GameEvent[]) => void; disabled: boolean }) {
+  const rs = useRs();
+  const board = boardHere(world, state);
+  if (!board) return null;
+  const cur = currencyName(world);
+  return (
+    <aside className="sheet board">
+      <b>📜 {rs(board.name)}</b>
+      <ul className="items-list">
+        {board.jobs.map((job) => {
+          const st = jobStatus(world, state, job);
+          const r = jobRewards(job);
+          const where = world.locations.find((l) => l.id === job.locationId)?.name;
+          return (
+            <li key={job.id}>
+              <div className="row">
+                <span className="tag">{QUEST_TYPE_LABEL[job.type]}</span><b>{rs(job.name)}</b>
+                <span className="spacer" />
+                {r.money ? <span className="small">보상 {r.money} {rs(cur)}</span> : null}
+                {st === 'available' && <button type="button" className="small" disabled={disabled} onClick={() => onCommit((s) => acceptJob(world, s, job.id))}>맡기</button>}
+                {st === 'active' && <span className="tag confirmed">진행 중</span>}
+                {st === 'locked' && <span className="tag muted">아직 맡길 수 없다</span>}
+                {st === 'done' && <span className="tag">끝남</span>}
+              </div>
+              <p className="small muted">{rs(job.description)}{where ? ` — 장소: ${rs(where)}` : ''}{job.timeLimit ? ` · 기한 ${job.timeLimit.days}일` : ''}{state.jobs?.[job.id]?.done ? ` · 완료 ${state.jobs[job.id]!.done}회` : ''}</p>
+            </li>
+          );
+        })}
+      </ul>
     </aside>
   );
 }

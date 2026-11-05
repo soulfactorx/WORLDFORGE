@@ -62,7 +62,13 @@ export interface GameState {
   /** 결정적 선택: 나타난 턴과 고른 선택지 */
   choices: Record<EntityId, { turn: number; chosen?: string }>;
   /** 퀘스트 진행 (v0.8) */
-  quests: Record<EntityId, { stage: number; done: boolean }>;
+  quests: Record<EntityId, { stage: number; done: boolean; failed?: boolean; startedAt?: number }>;
+  /** 쓰러뜨린 적 (몬스터 ID → 수) */
+  kills: Record<string, number>;
+  /** 의뢰 (설계 v3 6.3): 끝낸 수·실패 수·진행 중인 것 */
+  jobs: Record<EntityId, { done: number; failed: number; active?: { instance: number; acceptedAt: number } }>;
+  /** 보상으로 얻은 전용 카드 ('player' 또는 동료 ID → 카드) */
+  grantedCards: Record<string, string[]>;
   /** 이야기 플래그 (v0.8) */
   flags: string[];
   /** 도달한 결말 ID */
@@ -93,7 +99,7 @@ const KNOWLEDGE_LABEL: Record<Belief['state'], string> = {
 export function initialState(): GameState {
   return {
     packageId: '', packageVersion: '', turn: 0, rngState: 0, worldMinutes: 8 * 60,
-    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, reputation: {}, beats: {}, arcs: {}, clocks: {}, worldEvents: {}, choices: {}, inventory: {}, money: 0, equipped: {}, taken: [], quests: {}, flags: [], deadNpcs: [], log: [],
+    player: { name: '', locationId: '', sheet: legacyCharacter('') }, beliefs: [], improvisedFacts: [], npcMemory: {}, clearedEncounters: [], party: {}, partyOrders: {}, npcLocations: {}, relationships: {}, reputation: {}, beats: {}, arcs: {}, clocks: {}, worldEvents: {}, choices: {}, inventory: {}, money: 0, equipped: {}, taken: [], kills: {}, jobs: {}, grantedCards: {}, quests: {}, flags: [], deadNpcs: [], log: [],
   };
 }
 
@@ -169,7 +175,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         log: [...s.log, { turn, kind: 'knowledge', text: `${josa(left?.name ?? e.npcId, '이/가')} 일행을 떠났다.` }] };
     }
     case 'quest_started':
-      return { ...s, quests: { ...s.quests, [e.questId]: { stage: 0, done: false } },
+      return { ...s, quests: { ...s.quests, [e.questId]: { stage: 0, done: false, startedAt: s.worldMinutes } },
         log: [...s.log, { turn, kind: 'quest', text: `새 임무 — ${e.name}: ${e.objective}` }] };
     case 'quest_advanced':
       return { ...s, quests: { ...s.quests, [e.questId]: { stage: e.stage, done: false } },
@@ -249,6 +255,32 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'choice_made':
       return { ...s, choices: { ...(s.choices ?? {}), [e.choiceId]: { turn: s.choices?.[e.choiceId]?.turn ?? turn, chosen: e.optionId } },
         log: [...s.log, { turn, kind: 'quest', text: `◆ 결정 — ${e.text}` }] };
+    case 'quest_failed': {
+      const q = s.quests[e.questId] ?? { stage: 0, done: false };
+      return { ...s, quests: { ...s.quests, [e.questId]: { ...q, done: true, failed: true } },
+        log: [...s.log, { turn, kind: 'quest', text: `임무 실패 — ${e.name} (${e.reason})` }] };
+    }
+    case 'enemies_defeated': {
+      const kills = { ...(s.kills ?? {}) };
+      for (const [id, n] of Object.entries(e.counts)) kills[id] = (kills[id] ?? 0) + n;
+      return { ...s, kills };
+    }
+    case 'job_accepted': {
+      const j = s.jobs?.[e.jobId] ?? { done: 0, failed: 0 };
+      return { ...s, jobs: { ...(s.jobs ?? {}), [e.jobId]: { ...j, active: { instance: e.instance, acceptedAt: s.worldMinutes } } },
+        log: [...s.log, { turn, kind: 'quest', text: `의뢰 수락 — ${e.name}` }] };
+    }
+    case 'job_completed': case 'job_failed': {
+      const j = s.jobs?.[e.jobId] ?? { done: 0, failed: 0 };
+      const next = e.type === 'job_completed' ? { done: j.done + 1, failed: j.failed } : { done: j.done, failed: j.failed + 1 };
+      return { ...s, jobs: { ...(s.jobs ?? {}), [e.jobId]: next },
+        log: [...s.log, { turn, kind: 'quest', text: e.type === 'job_completed' ? `의뢰 완료 — ${e.name}` : `의뢰 실패 — ${e.name} (${e.reason})` }] };
+    }
+    case 'card_granted': {
+      const g = { ...(s.grantedCards ?? {}) };
+      g[e.who] = [...new Set([...(g[e.who] ?? []), e.cardId])];
+      return { ...s, grantedCards: g, log: [...s.log, { turn, kind: 'progress', text: `★ 새 기술 — ${e.whoName}: ${e.name}` }] };
+    }
     case 'item_gained': {
       const inv = { ...(s.inventory ?? {}) };
       inv[e.itemId] = (inv[e.itemId] ?? 0) + e.n;
