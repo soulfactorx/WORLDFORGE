@@ -185,6 +185,8 @@ const NARRATOR_SYSTEM = `너는 1인칭 TRPG의 서술자이자 NPC 연기자다
 export interface TurnResult {
   events: GameEvent[];
   state: GameState;
+  /** 엔진이 거부한 AI 제안 (설계 v3 R9 품질 측정) */
+  rejected: string[];
 }
 
 export async function runTurn(
@@ -207,6 +209,7 @@ export async function runTurn(
   const events: GameEvent[] = [];
   let s = state;
   const push = (e: GameEvent) => { events.push(e); s = applyEvent(s, e, turn); };
+  const rejected: string[] = [];
 
   const declared = parseUse(use);
   push({ type: 'player_input', text: input, ...(declared ? { use } : {}) });
@@ -247,10 +250,10 @@ export async function runTurn(
   for (const claimId of new Set(d.discover ?? [])) {
     const disc = pendingDiscoveries(world, s).find((x) => x.claim === claimId);
     const claim = world.claims.find((c) => c.id === claimId);
-    if (!disc || !claim) continue;
+    if (!disc || !claim) { rejected.push(`발견할 수 없는 것을 발견하려 함: ${claimId}`); continue; }
     if (disc.check) {
       const ok = spec?.kind === 'skill' && spec.skill === disc.check && lastCheck?.type === 'check_rolled' && lastCheck.result.success;
-      if (!ok) continue;
+      if (!ok) { rejected.push(`판정 없이 발견하려 함: ${claimId}`); continue; }
     }
     discoveredNow.push({ type: 'knowledge_revealed', belief: { holder: 'player', claim: claimId, state: disc.state ?? 'confirmed', source: s.player.locationId }, statement: claim.statement });
     outcomes.push(`발견: ${claim.statement}`);
@@ -259,18 +262,22 @@ export async function runTurn(
   for (const key of new Set(d.take_items ?? [])) {
     const p = pendingPickups(world, s).find((x) => x.key === key);
     const ev = p && gainEvent(world, p, '주웠다', p.key);
-    if (!ev || ev.type !== 'item_gained') continue;
+    if (!ev || ev.type !== 'item_gained') { rejected.push(`없는 물건을 주우려 함: ${key}`); continue; }
     push(ev);
     outcomes.push(`얻음: ${ev.name}${ev.n > 1 ? ` ×${ev.n}` : ''}`);
   }
   // 이야기 플래그: 선언된 것만, 조건을 만족할 때만
   for (const flag of new Set(d.set_flags ?? [])) {
     if (flagAllowed(world, s, flag)) push({ type: 'flag_set', flag });
+    else if (!s.flags.includes(flag)) rejected.push(`세울 수 없는 플래그: ${flag}`);
   }
 
   const here = world.locations.find((l) => l.id === s.player.locationId);
   const moving = !!d.move_to && !!here?.connections.includes(d.move_to);
-  if (d.move_to && !moving) outcomes.push('요청된 이동은 불가능함 (연결되지 않은 장소)');
+  if (d.move_to && !moving) { outcomes.push('요청된 이동은 불가능함 (연결되지 않은 장소)'); rejected.push(`연결되지 않은 장소로 이동: ${d.move_to}`); }
+  const unknownSpeakers = (d.speakers ?? []).filter((sp) => !presentCharacters(world, s).some((c) => c.id === sp.npc_id));
+  if (unknownSpeakers.length) rejected.push(`이 장면에 없는 인물을 말하게 함: ${unknownSpeakers.map((x) => x.npc_id).join(', ')}`);
+  if (d.start_encounter && !availableEncounters(world, s).some((e) => e.id === d.start_encounter)) rejected.push(`시작할 수 없는 조우: ${d.start_encounter}`);
 
   // 3) Actors — 이동하기 전 장소의 인물이 반응한다. NPC마다 독립 호출(병렬).
   const present = presentCharacters(world, s);
@@ -323,15 +330,15 @@ export async function runTurn(
     for (const key of new Set(out.give_items ?? [])) {
       const g = pendingGifts(world, s, npc.id).find((x) => x.key === key);
       const ev = g && gainEvent(world, g, `${npc.name}에게 받았다`, g.key);
-      if (!ev || ev.type !== 'item_gained') continue;
+      if (!ev || ev.type !== 'item_gained') { rejected.push(`${npc.name}이(가) 줄 수 없는 것을 줌: ${key}`); continue; }
       push(ev);
       outcomes.push(`${josa(npc.name, '이/가')} ${ev.name}${ev.n > 1 ? ` ${ev.n}개` : ''}를 건넸다`);
     }
     for (const claimId of new Set(out.shared_claims ?? [])) {
       const known = shareableBelief(world, s.beliefs, npc.id, claimId);
       const claim = world.claims.find((c) => c.id === claimId);
-      if (!known || !claim) continue; // 모르는 것은 전할 수 없다
-      if (known.state === 'secret' && !canShareSecret(world, npc.id, rel)) continue; // 신뢰가 부족하면 비밀은 전달되지 않는다
+      if (!known || !claim) { rejected.push(`${npc.name}이(가) 모르는 것을 전함: ${claimId}`); continue; } // 모르는 것은 전할 수 없다
+      if (known.state === 'secret' && !canShareSecret(world, npc.id, rel)) { rejected.push(`${npc.name}이(가) 신뢰 없이 비밀을 전하려 함: ${claimId}`); continue; } // 신뢰가 부족하면 비밀은 전달되지 않는다
       const already = s.beliefs.find((b) => b.holder === 'player' && b.claim === claimId);
       const state = playerStateFromNpc(known.state);
       if (already && (already.state === 'confirmed' || already.state === state)) continue;
@@ -409,13 +416,14 @@ export async function runTurn(
       push(dec.accepted
         ? { type: 'fact_asserted', subject: dec.fact.subject, statement: dec.fact.statement }
         : { type: 'fact_rejected', subject: dec.fact.subject, statement: dec.fact.statement, reason: dec.reason ?? '' });
+      if (!dec.accepted) rejected.push(`기록관의 즉흥 설정 거부: ${dec.reason ?? ''}`);
     }
   } catch (e) {
     if (signal?.aborted) throw e;
   }
   push(await guideP);
 
-  return { events, state: s };
+  return { events, state: s, rejected };
 }
 
 /** Director에게만 주는 시나리오 정보: 진행 중인 임무 힌트, 세울 수 있는 플래그, 발견할 수 있는 것 */

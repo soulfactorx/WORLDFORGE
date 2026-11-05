@@ -17,6 +17,31 @@ export interface LlmRequest {
   maxTokens: number;
   /** 추론 노력 (지원하는 제공자만). 기본: 구조화 응답은 low */
   effort?: 'low' | 'medium' | 'high';
+  /** 사용량 기록 (계측 래퍼가 넣고, 어댑터가 채운다. 재시도한 호출도 모두 더한다) */
+  meter?: Meter;
+}
+
+export interface Meter {
+  input: number;
+  output: number;
+  /** 실제 API 호출 수 (재시도 포함) */
+  calls: number;
+  /** 제공자가 사용량을 주지 않아 글자 수로 추정했다 */
+  estimated?: boolean;
+}
+
+/** 사용량이 없으면 글자 수로 추정 (한국어 기준 대략 2글자당 1토큰) */
+export function addUsage(m: Meter | undefined, input: number | undefined, output: number | undefined, fallback: { inChars: number; outChars: number }) {
+  if (!m) return;
+  m.calls++;
+  if (input === undefined || output === undefined) {
+    m.estimated = true;
+    m.input += Math.ceil(fallback.inChars / 2);
+    m.output += Math.ceil(fallback.outChars / 2);
+  } else {
+    m.input += input;
+    m.output += output;
+  }
 }
 
 export interface LlmClient {

@@ -4,6 +4,7 @@ import { loadSettings } from '../storage/settings';
 import { PlayScreen } from './PlayScreen';
 import { SaveList } from './SaveList';
 import { SettingsPanel } from './SettingsPanel';
+import { QualityPanel } from './QualityPanel';
 import { WorldEditor } from './WorldEditor';
 import { WorldGenPanel } from './WorldGenPanel';
 import { CardWorldPanel } from './CardWorldPanel';
@@ -30,7 +31,10 @@ export function App() {
       </header>
       <main>
         {view.name === 'settings' && (
-          <SettingsPanel initial={settings} onSaved={(s) => { setSettings(s); setView({ name: 'saves' }); }} />
+          <>
+            <SettingsPanel initial={settings} onSaved={(s) => { setSettings(s); setView({ name: 'saves' }); }} />
+            <QualityPanel settings={settings} />
+          </>
         )}
         {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world) => setView({ name: 'editor', world })} onGenerate={() => setView({ name: 'worldgen' })} onUserArt={() => setView({ name: 'userart' })}
           onCard={(file) => setView({ name: 'cardworld', file })} />}

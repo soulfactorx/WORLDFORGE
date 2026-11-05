@@ -278,3 +278,9 @@ ul.needs label.file { flex: none; }
 .world-map svg { color: var(--text, #222); }
 .sim-days { padding-left: 18px; }
 .sim-days ul { margin: 2px 0 6px; padding-left: 16px; }
+
+/* R9 품질 */
+.eval-list { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+.eval-list li { border-left: 3px solid #4f9a5a; padding: 2px 8px; }
+.eval-list li.fail { border-left-color: #b3412c; }
+.quality .row label { display: inline-flex; align-items: center; gap: 4px; }

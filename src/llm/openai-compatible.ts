@@ -1,4 +1,4 @@
-import { type LlmClient, LlmHttpError, LlmJsonError, type LlmRequest, type LlmSettings, LlmTruncatedError } from './types';
+import { addUsage, type LlmClient, LlmHttpError, LlmJsonError, type LlmRequest, type LlmSettings, LlmTruncatedError } from './types';
 
 /**
  * OpenAI 호환 Chat Completions 엔드포인트 어댑터 (OpenAI, OpenRouter, Ollama, LM Studio 등).
@@ -22,6 +22,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
       if (!res.ok || !res.body) throw new LlmHttpError(res.status, `LLM 요청 실패 (${res.status}): ${(await res.text()).slice(0, 500)}`);
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
       let buf = '', full = '';
+      let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -31,10 +32,13 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
         for (const line of lines) {
           const data = line.replace(/^data:\s*/, '').trim();
           if (!data || data === '[DONE]' || !line.startsWith('data:')) continue;
-          const delta = JSON.parse(data).choices?.[0]?.delta?.content as string | undefined;
+          const chunk = JSON.parse(data);
+          if (chunk.usage) usage = chunk.usage;
+          const delta = chunk.choices?.[0]?.delta?.content as string | undefined;
           if (delta) { full += delta; onText(delta); }
         }
       }
+      addUsage(req.meter, usage?.prompt_tokens, usage?.completion_tokens, { inChars: req.system.length + req.user.length, outChars: full.length });
       return full;
     },
     async json<T>(req: LlmRequest, schema: Record<string, unknown>, signal?: AbortSignal) {
@@ -52,6 +56,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
       if (!res.ok) throw new LlmHttpError(res.status, `LLM 요청 실패 (${res.status}): ${(await res.text()).slice(0, 500)}`);
       const body = await res.json();
       const text: string = body.choices?.[0]?.message?.content ?? '';
+      addUsage(req.meter, body.usage?.prompt_tokens, body.usage?.completion_tokens, { inChars: req.system.length + req.user.length + JSON.stringify(schema).length, outChars: text.length });
       const start = text.indexOf('{');
       if (body.choices?.[0]?.finish_reason === 'length') throw new LlmTruncatedError(start >= 0 ? text.slice(start) : text);
       const match = text.match(/\{[\s\S]*\}/);

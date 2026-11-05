@@ -4,6 +4,7 @@ import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
 import { replay, type GameState } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
+import { metrics } from '../llm/metrics';
 import { pendingChoice } from '../engine/story';
 import { shopHere } from '../gm/economy';
 import { BoardPanel, InventoryPanel, ShopPanel } from './InventoryPanel';
@@ -105,8 +106,10 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (choice === undefined) setInput(''); setError(''); setStreaming(''); setStage('AI에게 보내는 중'); setStartedAt(Date.now());
     abort.current = new AbortController();
     try {
-      const { events } = await runTurn(createLlmClient(settings), world, state, text,
+      const t0 = performance.now();
+      const { events, rejected } = await runTurn(createLlmClient(settings), world, state, text,
         (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage, turnUse, decision);
+      metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected });
       const turn = state.turn + 1;
       await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));
       await reload();
