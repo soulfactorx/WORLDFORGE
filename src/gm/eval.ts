@@ -54,6 +54,28 @@ const at = (loc: string) => (s: GameState): GameState => ({ ...s, player: { ...s
 /** 이 세계의 비밀 명제 중 이 인물이 아직 털어놓을 수 없는 것의 핵심 낱말 */
 const SECRET_WORDS = ['소환진', '다시 작동', '소환했'];
 
+/** 확정된 NPC 대사 중 서술에 그대로 들어가지 않은 것 */
+function missingDialogue(events: GameEvent[], narration: string) {
+  const n = norm(narration);
+  return events.filter((e): e is Extract<GameEvent, { type: 'npc_spoke' }> => e.type === 'npc_spoke' && !!e.dialogue)
+    .filter((e) => !n.includes(norm(e.dialogue).slice(0, Math.min(14, norm(e.dialogue).length))));
+}
+
+/** 따옴표 밖(서술)에서 플레이어를 '당신'이 아닌 말로 부른 곳 (NPC 말투 "자네", 1인칭 "내") */
+export function wrongAddress(narration: string): string | null {
+  const outside = narration.replace(/["“][^"”]*["”]/g, ' ').replace(/['‘][^'’\n]*['’]/g, ' ');
+  const m = /(^|[\s(])(자네(?:가|는|를|에게|의|도)?|너(?:는|의|를|에게)|내가|나는|나의|내)(?=[\s,.])/.exec(outside);
+  return m ? m[2]! : null;
+}
+
+/** 모든 시험에 공통으로 보는 것: 확정된 대사를 그대로 썼는가, 플레이어를 '당신'으로 부르는가 */
+export function commonIssue(events: GameEvent[], narration: string): string | null {
+  const missing = missingDialogue(events, narration);
+  if (missing.length) return `확정된 대사를 그대로 쓰지 않음 (요약·간접 화법): "${missing[0]!.dialogue.slice(0, 40)}"`;
+  const w = wrongAddress(narration);
+  return w ? `서술에서 플레이어를 "${w}"(으)로 부름 — "당신"이어야 한다` : null;
+}
+
 export const PROBES: Probe[] = [
   {
     id: 'move', name: '이동', setup: at('loc/forest-clearing'), input: '개 짖는 소리가 나는 쪽, 마을 입구로 걸어간다.',
@@ -67,8 +89,7 @@ export const PROBES: Probe[] = [
     judge: ({ events, narration }) => {
       const spoke = events.filter((e): e is Extract<GameEvent, { type: 'npc_spoke' }> => e.type === 'npc_spoke' && !!e.dialogue);
       if (!spoke.length) return { pass: false, detail: '경비병이 말하지 않음 (GM이 말할 인물을 고르지 않음)' };
-      const n = norm(narration);
-      const missing = spoke.filter((e) => !n.includes(norm(e.dialogue).slice(0, Math.min(14, norm(e.dialogue).length))));
+      const missing = missingDialogue(events, narration);
       return { pass: !missing.length, detail: missing.length ? `서술에 없는 대사: "${missing[0]!.dialogue.slice(0, 40)}"` : `대사 ${spoke.length}개가 서술에 그대로 있음` };
     },
   },
@@ -132,7 +153,9 @@ export async function runEval(
       let narration = '';
       const r = await runTurn(llm, world, before, p.input, (d) => { narration += d; }, signal);
       const narr = r.events.filter((e) => e.type === 'narration').map((e) => (e as { text: string }).text).join('\n') || narration;
-      const j = p.judge({ events: r.events, state: r.state, narration: narr, before });
+      let j = p.judge({ events: r.events, state: r.state, narration: narr, before });
+      const common = j.pass ? commonIssue(r.events, narr) : null;
+      if (common) j = { pass: false, detail: common };
       out.push({ id: p.id, name: p.name, ...j, ms: Math.round(performance.now() - t0), narration: narr.slice(0, 1200), rejected: r.rejected });
     } catch (e) {
       if (signal?.aborted) throw e;
