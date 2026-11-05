@@ -4,7 +4,7 @@
  * - 같은 출처의 정적 파일(JS·CSS·아이콘): 저장해 둔 것 우선, 뒤에서 새로 받아 갱신
  * - 다른 출처(AI API 등)는 건드리지 않는다. API 키·대화 내용은 캐시하지 않는다.
  */
-const CACHE = 'worldforge-v1';
+const CACHE = 'worldforge-v2'; // v2: 웹앱 설정(manifest)을 네트워크 우선으로 — 바뀐 설정(화면 방향 등)이 바로 반영되게
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -20,12 +20,13 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  if (req.mode === 'navigate') {
+  // 페이지와 웹앱 설정(manifest)은 네트워크 우선: 새 버전·새 설정이 바로 반영되도록
+  if (req.mode === 'navigate' || url.pathname.endsWith('.webmanifest')) {
     e.respondWith(fetch(req).then((res) => {
       const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put('./index.html', copy));
+      caches.open(CACHE).then((c) => c.put(req.mode === 'navigate' ? './index.html' : req, copy));
       return res;
-    }).catch(() => caches.match('./index.html').then((r) => r || caches.match('./'))));
+    }).catch(() => (req.mode === 'navigate' ? caches.match('./index.html').then((r) => r || caches.match('./')) : caches.match(req))));
     return;
   }
   e.respondWith(caches.match(req).then((hit) => {
