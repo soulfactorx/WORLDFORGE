@@ -40,7 +40,7 @@ export function sceneSubjects(world: WorldPackage, state: GameState): EntityId[]
   return [state.player.locationId, ...presentCharacters(world, state).map((c) => c.id)];
 }
 
-const POLICY_TEXT = { none: '지어내기 금지', minor: '작은 세부사항만 지어낼 수 있음', free: '자유롭게 지어낼 수 있음' } as const;
+const POLICY_TEXT = { none: '지어내기 금지 — 설명에 없는 흔적·단서·이상 징후를 덧붙이지 않는다', minor: '작은 세부사항만 지어낼 수 있음', free: '자유롭게 지어낼 수 있음' } as const;
 
 /** 엔티티별 확정된 세부사항 + 즉흥 허용 범위 + 보호 주제 (Narrator·Actor 공용) */
 function canonBlock(world: WorldPackage, state: GameState, id: EntityId, indent = '  '): string[] {
