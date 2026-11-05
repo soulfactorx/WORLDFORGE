@@ -23,6 +23,8 @@ export interface PackageManifest {
    * 이 브라우저에서 혼자 플레이할 수만 있고 패키지·세이브 내보내기가 막힌다.
    */
   private?: { source: string; note: string; /** 원본 카드 지문 (기기 간 이동용, v0.19) */ cardHash?: string };
+  /** 이 세계에 넣은 콘텐츠 패키지 (설계 v3 10장 · R7) */
+  includes?: { id: string; version: string; type: 'character' | 'rules'; name: string }[];
 }
 
 export interface Location {

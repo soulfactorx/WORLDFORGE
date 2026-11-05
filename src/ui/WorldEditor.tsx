@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
+import { PackExport, PackImport } from './PackDialog';
 import { DIFFICULTY_LABEL, encounterDifficulty, monstersFor } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { hasErrors, validateWorld } from '../engine/package/validate';
@@ -72,6 +73,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [genStage, setGenStage] = useState('');
   const [genRequest, setGenRequest] = useState('');
   const [importing, setImporting] = useState(!!initialCard);
+  const [packUi, setPackUi] = useState<null | 'import' | 'character' | 'rules'>(null);
 
   async function aiScenario() {
     if (!settings) return;
@@ -223,8 +225,15 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       {tab === 'characters' && (
         <div className="row">
           <button type="button" onClick={() => setImporting((v) => !v)}>⇩ CHARX · 캐릭터 카드 가져오기</button>
+          <button type="button" onClick={() => setPackUi((v) => (v === 'import' ? null : 'import'))}>⇩ 패키지 넣기 (.chp·.rule)</button>
+          <button type="button" onClick={() => setPackUi((v) => (v === 'character' ? null : 'character'))}>⇧ 인물 패키지 내보내기</button>
         </div>
       )}
+      {(tab === 'characters' || tab === 'items') && packUi === 'import' && (
+        <PackImport w={w} onClose={() => setPackUi(null)} onApply={(nw, notes) => { setW(nw); setPackUi(null); setStatus(`패키지를 넣었습니다. ${notes.join(' ')} 검토 후 저장하세요.`); }} />
+      )}
+      {tab === 'characters' && packUi === 'character' && <PackExport w={w} kind="character" onClose={() => setPackUi(null)} />}
+      {tab === 'items' && packUi === 'rules' && <PackExport w={w} kind="rules" onClose={() => setPackUi(null)} />}
       {tab === 'characters' && importing && (
         <CardImportDialog world={w} settings={settings} initialFile={initialCard} onClose={() => setImporting(false)} onAdd={(r) => {
           // 카드로 새로 만드는 세계라면 이름도 카드에서 가져온다
@@ -446,6 +455,10 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             </p>
             <div className="form-grid">
               <Num label="처음 소지금 (비우면 15)" value={w.start.money} onChange={(money) => set({ start: { ...w.start, money } })} />
+              <div className="row">
+                <button type="button" onClick={() => setPackUi((v) => (v === 'import' ? null : 'import'))}>⇩ 패키지 넣기 (.chp·.rule)</button>
+                <button type="button" onClick={() => setPackUi((v) => (v === 'rules' ? null : 'rules'))}>⇧ 규칙 패키지 내보내기</button>
+              </div>
             </div>
             <JsonField label="처음 소지품 (비우면 치유 물약 1개)" value={w.start.items ?? null} onChange={(items) => set({ start: { ...w.start, items: Array.isArray(items) ? items : undefined } })} rows={3}
               help='예: [{ "itemId": "std/potion-healing", "n": 2 }, { "itemId": "std/rope" }]' />
@@ -461,6 +474,9 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         );
       })()}
 
+      {tab === 'basic' && (w.manifest.includes ?? []).length > 0 && (
+        <p className="small muted">넣은 패키지: {(w.manifest.includes ?? []).map((x) => `${x.name} (${x.type === 'character' ? '인물' : '규칙'} · ${x.id}@${x.version})`).join(', ')}</p>
+      )}
       {tab === 'tools' && (
         <>
           <h4>지도</h4>
