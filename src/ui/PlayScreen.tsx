@@ -209,15 +209,25 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         <b>{loc?.name}</b>
         {Object.keys(state.party).length > 0 && <span className="small muted">동행: {Object.values(state.party).map((c) => c.name).join(', ')}</span>}
         {date && <span className="small date">{date.label}{date.countdown && <b className={date.daysLeft !== undefined && date.daysLeft <= 7 ? 'dday urgent' : 'dday'}> · {date.countdown}</b>}</span>}
-        <span className="muted small">{String(Math.floor(state.worldMinutes / 60) % 24).padStart(2, '0')}:{String(state.worldMinutes % 60).padStart(2, '0')} · 턴 {state.turn}</span>
-        <span className="spacer" />
-        <button onClick={() => setPanel((p) => (p === 'sheet' ? 'none' : 'sheet'))} className={pendingChoices(state.player.sheet) ? 'has-pending' : undefined}>캐릭터{pendingChoices(state.player.sheet) ? ` ★${pendingChoices(state.player.sheet)}` : ''} {panel === 'sheet' ? '▲' : '▼'}</button>
-        <button onClick={() => setPanel((p) => (p === 'journal' ? 'none' : 'journal'))}>수첩 {panel === 'journal' ? '▲' : '▼'}</button>
-        <button onClick={() => setPanel((p) => (p === 'items' ? 'none' : 'items'))}>소지품 {panel === 'items' ? '▲' : '▼'}</button>
-        {shop && !state.combat && <button onClick={() => setPanel((p) => (p === 'shop' ? 'none' : 'shop'))}>🛒 {rs(shop.name)}</button>}
-        {board && !state.combat && <button onClick={() => setPanel((p) => (p === 'board' ? 'none' : 'board'))}>📜 {rs(board.name)}</button>}
+        <span className="muted small nowrap">{String(Math.floor(state.worldMinutes / 60) % 24).padStart(2, '0')}:{String(state.worldMinutes % 60).padStart(2, '0')} · 턴 {state.turn}</span>
+      </div>
+      {/* 도구 줄: 넓은 화면은 한 줄, 휴대폰은 4칸 격자 (v0.37.7) */}
+      <div className="head-tools">
+        {(() => {
+          const tab = (id: typeof panel, label: string, extra?: string) => (
+            <button key={id} onClick={() => setPanel((p) => (p === id ? 'none' : id))} aria-expanded={panel === id} className={[panel === id ? 'on' : '', extra ?? ''].join(' ').trim() || undefined}>{label}</button>
+          );
+          const pending = pendingChoices(state.player.sheet);
+          return [
+            tab('sheet', `👤 캐릭터${pending ? ` ★${pending}` : ''}`, pending ? 'has-pending' : ''),
+            tab('journal', '📖 수첩'),
+            tab('items', '🎒 소지품'),
+            ...(shop && !state.combat ? [tab('shop', `🛒 ${rs(shop.name)}`)] : []),
+            ...(board && !state.combat ? [tab('board', `📜 ${rs(board.name)}`)] : []),
+          ];
+        })()}
         <AvControls onChange={() => setAvTick((n) => n + 1)} />
-        <button onClick={undo} disabled={state.turn === 0 || streaming !== null}>↶ 턴 되돌리기</button>
+        <button onClick={undo} disabled={state.turn === 0 || streaming !== null} title="턴 되돌리기">↶ 되돌리기</button>
         <button onClick={onExit}>나가기</button>
       </div>
       {state.playerDead && (

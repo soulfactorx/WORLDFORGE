@@ -23,11 +23,13 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <button className="brand" onClick={() => setView({ name: 'saves' })}>WORLDFORGE</button>
-        <span className="muted small">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · v{__APP_VERSION__}</span>
-        {__BUILD_TARGET__ === 'web' && <a className="small" href="./worldforge-offline.html" download>오프라인 HTML 받기</a>}
-        <InstallButton />
-        <a className="small" href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">소스 (GPL)</a>
-        <button onClick={() => setView({ name: 'settings' })}>AI 설정</button>
+        <span className="muted small nowrap" title={__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'}><span className="wide-only">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · </span>v{__APP_VERSION__}</span>
+        <span className="topbar-links">
+          {__BUILD_TARGET__ === 'web' && <a className="small nowrap" href="./worldforge-offline.html" download title="오프라인 HTML 받기">오프라인<span className="wide-only"> HTML 받기</span></a>}
+          <InstallButton />
+          <a className="small nowrap" href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">소스<span className="wide-only"> (GPL)</span></a>
+        </span>
+        <button className="topbar-settings" onClick={() => setView({ name: 'settings' })}>AI 설정</button>
       </header>
       <main>
         {view.name === 'settings' && (
