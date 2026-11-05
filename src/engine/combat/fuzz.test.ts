@@ -58,7 +58,7 @@ describe('전투 퍼즈', () => {
     }
     expect(stuck).toEqual([]);
     expect(fights).toBeGreaterThan(590);
-  });
+  }, 60_000); // 수백 판을 끝까지 치르는 결정적 시뮬레이션 — CI 러너가 느려 기본 5초를 넘긴 적이 있다
 });
 
 describe('전투 퍼즈 — 장르별 적 세트 (설계 v3 R2)', () => {
@@ -105,7 +105,7 @@ describe('전투 퍼즈 — 장르별 적 세트 (설계 v3 R2)', () => {
     expect(phases).toBeGreaterThan(0);
     expect(escapes).toBeGreaterThan(0);
     expect(conditions).toBeGreaterThan(0);
-  });
+  }, 60_000); // 수백 판을 끝까지 치르는 결정적 시뮬레이션 — CI 러너가 느려 기본 5초를 넘긴 적이 있다
 });
 
 describe('전투 퍼즈 — 하위 직업·특성 (v0.37)', () => {
@@ -159,5 +159,5 @@ describe('전투 퍼즈 — 하위 직업·특성 (v0.37)', () => {
     expect(stuck).toEqual([]);
     expect(fights).toBeGreaterThan(470);
     for (const c of ['fighter/guard', 'cleric/war_strike', 'wizard/portent', 'bard/cutting_words', 'paladin/sacred_weapon', 'paladin/vow', 'warlock/fey_presence']) expect(used, c).toContain(c);
-  });
+  }, 60_000); // 수백 판을 끝까지 치르는 결정적 시뮬레이션 — CI 러너가 느려 기본 5초를 넘긴 적이 있다
 });
