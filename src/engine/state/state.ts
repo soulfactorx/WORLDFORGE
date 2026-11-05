@@ -210,7 +210,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         if (res.arcane_recovery && res.arcane_recovery.cur > 0) {
           let budget = Math.ceil(sh.level / 2);
           let recovered = false;
-          for (const lv of [2, 1]) {
+          for (const lv of [3, 2, 1]) {
             const slot = res[`slot${lv}`];
             while (slot && slot.cur < slot.max && budget >= lv) { slot.cur++; budget -= lv; recovered = true; }
           }

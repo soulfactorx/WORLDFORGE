@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../dice/rng';
-import { type CharacterSheet, createCharacter, suggestedStandardArray } from '../character/sheet';
+import { type CharacterSheet, classResources, createCharacter, suggestedStandardArray } from '../character/sheet';
 import { applyEffects, currentActorId, dying, endTurn, handOf, planCompanionAction, planEnemyAction, resolveCard, rollDeathSave, startCombat, unusableReason, validTargets } from './combat';
 
 /**
@@ -66,15 +66,17 @@ describe('전투 퍼즈 — 장르별 적 세트 (설계 v3 R2)', () => {
     const { MONSTERS } = await import('./monsters');
     const ids = Object.keys(MONSTERS);
     const classes = Object.keys(SKILLS);
-    let fights = 0, phases = 0, escapes = 0;
+    let fights = 0, phases = 0, escapes = 0, conditions = 0;
     const stuck: string[] = [];
     for (let seed = 0; seed < 800; seed++) {
       const rng = createRng(1000 + seed);
       const pc = classes[seed % 4]!;
       const enemies = [ids[seed % ids.length]!, ids[(seed * 7 + 3) % ids.length]!].map((monsterId, i) => ({ monsterId, zone: 2 + (i % 2) }));
-      // 강한 적이 섞여도 끝나도록 레벨 3 파티 + 동료
-      const hero = { ...make(pc, SKILLS[pc]!), level: 3, hp: 30, maxHp: 30 };
-      let cs = startCombat({ id: 'e', enemies }, hero, rng, [{ id: 'npc/a', name: '동료', sheet: { ...make('fighter', SKILLS.fighter!, '동료'), level: 3, hp: 30, maxHp: 30 } }]);
+      // 강한 적이 섞여도 끝나도록 레벨 3~5 파티 + 동료 (4~5레벨 능력도 함께 검사)
+      const level = 3 + (seed % 3);
+      const hero = { ...make(pc, SKILLS[pc]!), level, hp: 30, maxHp: 30, resources: classResources(pc, level) };
+      const ally = classes[(seed >> 2) % 4]!;
+      let cs = startCombat({ id: 'e', enemies }, hero, rng, [{ id: 'npc/a', name: '동료', sheet: { ...make(ally, SKILLS[ally]!, '동료'), level, hp: 30, maxHp: 30, resources: classResources(ally, level) } }]);
       for (let step = 0; step < 800 && !cs.outcome; step++) {
         const id = currentActorId(cs);
         const a = cs.combatants[id]!;
@@ -92,6 +94,7 @@ describe('전투 퍼즈 — 장르별 적 세트 (설계 v3 R2)', () => {
         const r = resolveCard(cs, id, plan.cardId, plan.target, rng);
         if (r.effects.some((e) => e.kind === 'phase')) phases++;
         if (r.effects.some((e) => e.kind === 'escaped')) escapes++;
+        if (r.effects.some((e) => e.kind === 'condition')) conditions++;
         cs = applyEffects(cs, r.effects);
       }
       if (cs.outcome) fights++;
@@ -101,5 +104,6 @@ describe('전투 퍼즈 — 장르별 적 세트 (설계 v3 R2)', () => {
     expect(fights).toBeGreaterThan(790);
     expect(phases).toBeGreaterThan(0);
     expect(escapes).toBeGreaterThan(0);
+    expect(conditions).toBeGreaterThan(0);
   });
 });

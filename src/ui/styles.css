@@ -143,6 +143,13 @@ label.file input[type='file'] { font-size: .8rem; }
 .ai-draft { border: 1px dashed var(--accent); border-radius: 8px; padding: 8px 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .ai-draft ul { margin: 6px 0 0; padding-left: 18px; }
 .chip .cond { color: #b3412c; font-weight: 600; }
+.chip .conds { display: flex; flex-wrap: wrap; gap: 3px; }
+.cond-badge { border-radius: 4px; padding: 0 4px; font-size: 11px; background: #6b4fa0; color: #fff; }
+.cond-badge.c-poisoned { background: #4f7a2c; }
+.cond-badge.c-stunned { background: #b8862b; }
+.cond-badge.c-restrained { background: #7a5a3a; }
+.cond-badge.c-blinded { background: #444; }
+.cond-badge.c-frightened { background: #6b4fa0; }
 .chip.downed { opacity: .75; border-style: dashed; }
 .ending.dead { color: #b3412c; border-color: #b3412c; }
 .dialog { border: 1px solid var(--accent); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }

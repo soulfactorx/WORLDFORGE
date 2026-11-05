@@ -399,3 +399,80 @@ describe('기회 공격·죽음 내성·넘어짐', () => {
     expect(knocked).toBeGreaterThan(0);
   });
 });
+
+describe('4~5레벨 전투 능력 (R2b)', () => {
+  const lv = (sh: CharacterSheet, level: number): CharacterSheet => ({ ...sh, level, resources: classResources(sh.classId, level) });
+  it('파이터 5레벨 추가 공격: 무기 공격이 두 번', () => {
+    let cs = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'ogre', zone: 1 }] }, lv(fighter(), 5), createRng(3)));
+    cs = { ...cs, combatants: { ...cs.combatants, 'ogre#1': { ...cs.combatants['ogre#1']!, zone: 1 } } };
+    const r = resolveCard(cs, 'player', 'weapon/longsword', 'ogre#1', createRng(4));
+    expect(r.log).toHaveLength(2);
+    expect(cs.combatants.player!.profBonus).toBe(3);
+  });
+  it('위저드 5레벨: 화염구는 3레벨 슬롯, 소마법 피해 2배', () => {
+    const cs = playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'goblin_warrior', zone: 3 }, { monsterId: 'goblin_warrior', zone: 3 }] }, lv(wizard(), 5), createRng(1)));
+    const fb = cardById('spell/fireball');
+    expect(validTargets(cs, 'player', fb)).toEqual([3]);
+    const r = resolveCard(cs, 'player', 'spell/fireball', 3, createRng(2));
+    expect(r.effects).toContainEqual({ kind: 'resource', target: 'player', key: 'slot3', delta: -1 });
+    expect(r.log[0]).toContain('적 2명');
+    const bolt = resolveCard(cs, 'player', 'spell/fire_bolt', 'goblin_warrior#1', createRng(5));
+    const hit = bolt.log[0]!.match(/피해 \d+ \(([\d+]+)\)/);
+    if (hit) expect(hit[1]!.split('+').length).toBeGreaterThanOrEqual(2);
+  });
+  it('로그 5레벨 초감각 회피: 반응으로 피해 절반, 라운드당 1번', () => {
+    let cs = startCombat({ id: 'e', enemies: [{ monsterId: 'owlbear', zone: 1 }] }, lv(rogue(), 5), createRng(1));
+    cs = { ...cs, order: ['owlbear#1', 'player'], turnIndex: 0, combatants: { ...cs.combatants, 'owlbear#1': { ...cs.combatants['owlbear#1']!, zone: 1 } } };
+    let halved = 0;
+    for (let seed = 0; seed < 30; seed++) {
+      const r = resolveCard(cs, 'owlbear#1', 'monster/owlbear/rend', 'player', createRng(seed));
+      const n = r.log.filter((l) => l.includes('초감각 회피')).length;
+      expect(n).toBeLessThanOrEqual(1);
+      halved += n;
+    }
+    expect(halved).toBeGreaterThan(0);
+  });
+});
+
+describe('상태 이상 (R2b)', () => {
+  const withCond = (cs: CombatState, id: string, conditions: Record<string, number>): CombatState =>
+    ({ ...cs, combatants: { ...cs.combatants, [id]: { ...cs.combatants[id]!, conditions } } });
+  const base = () => playerFirst(startCombat({ id: 'e', enemies: [{ monsterId: 'bandit', zone: 2 }] }, fighter(), createRng(1)));
+  it('기절: 아무 행동도 못 하고, 적 AI는 차례를 넘긴다', () => {
+    const cs = withCond(base(), 'player', { stunned: 1 });
+    expect(unusableReason(cs, 'player', cardById('basic/move'))).toBe('기절해 행동할 수 없다');
+    const e = withCond({ ...base(), turnIndex: base().order.indexOf('bandit#1') }, 'bandit#1', { stunned: 1 });
+    expect(planEnemyAction(e)).toBeNull();
+  });
+  it('포박: 이동 불가 / 공포: 적에게 다가갈 수 없다', () => {
+    expect(unusableReason(withCond(base(), 'player', { restrained: 1 }), 'player', cardById('basic/move'))).toBe('포박되어 움직일 수 없다');
+    const f = withCond(base(), 'player', { frightened: 2 });
+    expect(validTargets(f, 'player', cardById('basic/move'))).toEqual([0]);
+  });
+  it('공격 굴림: 중독은 불리점, 기절한 대상에는 이점', () => {
+    let cs = base();
+    cs = { ...cs, combatants: { ...cs.combatants, player: { ...cs.combatants.player!, zone: 2 } } };
+    expect(resolveCard(withCond(cs, 'player', { poisoned: 1 }), 'player', 'weapon/longsword', 'bandit#1', createRng(2)).log[0]).toContain('불리점(중독)');
+    expect(resolveCard(withCond(cs, 'bandit#1', { stunned: 1 }), 'player', 'weapon/longsword', 'bandit#1', createRng(2)).log[0]).toContain('이점(대상 기절)');
+  });
+  it('걸린 대상의 차례가 끝날 때마다 줄어든다', () => {
+    let cs = withCond(base(), 'player', { poisoned: 2 });
+    cs = endTurn(cs);
+    expect(cs.combatants.player!.conditions).toEqual({ poisoned: 1 });
+    while (currentActorId(cs) !== 'player') cs = endTurn(cs);
+    cs = endTurn(cs);
+    expect(cs.combatants.player!.conditions).toEqual({});
+  });
+  it('몬스터 기술로 걸리고, 언데드는 중독 면역', () => {
+    let got = false;
+    for (let seed = 0; seed < 40 && !got; seed++) {
+      let cs = startCombat({ id: 'e', enemies: [{ monsterId: 'wx_viper', zone: 1 }] }, fighter(), createRng(seed));
+      cs = { ...cs, order: ['wx_viper#1', 'player'], turnIndex: 0, combatants: { ...cs.combatants, 'wx_viper#1': { ...cs.combatants['wx_viper#1']!, zone: 1 } } };
+      const r = resolveCard(cs, 'wx_viper#1', 'monster/wx_viper/bite', 'player', createRng(seed));
+      if (r.effects.some((e) => e.kind === 'condition' && e.condition === 'poisoned')) got = true;
+    }
+    expect(got).toBe(true);
+    const z = startCombat({ id: 'e', enemies: [{ monsterId: 'zombie', zone: 2 }] }, wizard(), createRng(1));
+    expect(z.combatants['zombie#1']!.immune).toContain('poisoned');
+  });
+});

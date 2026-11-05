@@ -11,14 +11,15 @@
  * 아군 NPC 동료는 규칙 기반 전술 AI가 플레이어의 명령(PartyOrder)에 따라 움직인다.
  * 기회 공격: 적이 있는 존을 떠나면 그 존의 적이 반응으로 근접 공격 1회 (후퇴하면 면제).
  * 죽음 내성: 아군은 HP 0이 되면 빈사 상태로 차례마다 d20 (10 이상 성공, 3성공 안정, 3실패 사망, 20은 HP 1 회복).
- * 상태 이상: 넘어짐 (근접 공격은 이점·원거리는 불리점으로 당하고, 자신의 공격은 불리점, 이동하려면 일어서야 함).
+ * 상태 이상: 넘어짐 (근접 공격은 이점·원거리는 불리점으로 당하고, 자신의 공격은 불리점, 이동하려면 일어서야 함),
+ *   중독·공포·포박·기절·실명 (cards.ts CONDITION_DESC). 걸린 대상의 차례가 끝날 때마다 남은 라운드가 줄어든다.
  */
 import type { Ability } from '../character/rules';
 import { type Abilities, type CharacterSheet, resourcesOf } from '../character/sheet';
 import { abilityModifier, d20Test, type RollMode } from '../dice/dice';
 import { type Rng, rollDie } from '../dice/rng';
 import { proficiencyBonus, SKILLS } from '../character/rules';
-import { BASIC_CARDS, type CardDef, CLASS_CARDS, CLASS_KITS, type Cost, kitCards, WEAPON_CARDS } from './cards';
+import { BASIC_CARDS, type CardDef, CLASS_CARDS, CLASS_KITS, type Condition, CONDITION_LABEL, type Cost, type Inflict, kitCards, WEAPON_CARDS } from './cards';
 import { ALL_MONSTER_CARDS, MONSTERS } from './monsters';
 
 export const ZONE_NAMES = ['아군 후열', '아군 전열', '적 전열', '적 후열'] as const;
@@ -71,6 +72,16 @@ export interface Combatant {
   phase?: number;
   fleeAt?: number;
   escaped?: boolean;
+  /** 상태 이상 → 남은 라운드 */
+  conditions?: Partial<Record<Condition, number>>;
+  /** 상태 이상 면역 (언데드의 중독 등) */
+  immune?: Condition[];
+  /** 추가 공격: 무기 공격 카드가 한 번 더 공격 (파이터 5레벨) */
+  extraAttack?: boolean;
+  /** 초감각 회피: 반응으로 명중한 공격의 피해 절반 (로그 5레벨) */
+  uncannyDodge?: boolean;
+  /** 소마법 강화: 소마법 피해 주사위 배수 (5레벨부터 2) */
+  cantripTier?: number;
 }
 
 export interface Economy {
@@ -112,7 +123,9 @@ export type CombatEffect =
   /** 적이 달아났다 */
   | { kind: 'escaped'; target: string }
   /** 보스 단계 진입 (index = 지금까지 진입한 단계 수) */
-  | { kind: 'phase'; target: string; index: number };
+  | { kind: 'phase'; target: string; index: number }
+  /** 상태 이상 부여 (rounds 0 = 해제) */
+  | { kind: 'condition'; target: string; condition: Condition; rounds: number };
 
 export interface Resolution {
   effects: CombatEffect[];
@@ -159,6 +172,9 @@ export function sheetCombatant(sheet: CharacterSheet, id: string, name: string, 
     dodging: false, hidden: false, initiative: 0,
     sneakAttack: kit.sneakAttack ? `${Math.ceil(sheet.level / 2)}d6` : undefined, // 암습 1d6(1~2레벨), 2d6(3~4레벨)
     critRange: sheet.classId === 'fighter' && sheet.level >= 3 ? 19 : 20, // 투사: 향상된 치명타
+    ...(sheet.classId === 'fighter' && sheet.level >= 5 ? { extraAttack: true } : {}),
+    ...(sheet.classId === 'rogue' && sheet.level >= 5 ? { uncannyDodge: true } : {}),
+    ...(sheet.level >= 5 ? { cantripTier: 2 } : {}),
   };
 }
 
@@ -180,7 +196,7 @@ export function monsterCombatant(monsterId: string, index: number, zone: number)
     stealthBonus: abilityModifier(m.abilities.dex), cards: m.cards.map((c) => c.id),
     resources: Object.fromEntries(Object.entries(m.resources ?? {}).map(([k, n]) => [k, { cur: n, max: n }])),
     dodging: false, hidden: false, packTactics: m.packTactics, preferRanged: m.preferRanged, initiative: 0,
-    monsterId, phase: 0, ...(m.fleeAt ? { fleeAt: m.fleeAt } : {}),
+    monsterId, phase: 0, ...(m.fleeAt ? { fleeAt: m.fleeAt } : {}), ...(m.immune ? { immune: [...m.immune] } : {}),
   };
 }
 
@@ -228,6 +244,41 @@ const hostileInZone = (cs: CombatState, c: Combatant, zone = c.zone) => opponent
 const mod = (c: Combatant, a: Ability) => abilityModifier(c.abilities[a]);
 const spellMod = (c: Combatant) => (c.spellAbility ? mod(c, c.spellAbility) : 0);
 export const spellSaveDc = (c: Combatant) => 8 + c.profBonus + spellMod(c);
+export const hasCondition = (c: Combatant, k: Condition) => (c.conditions?.[k] ?? 0) > 0;
+/** 지금 걸려 있는 상태 이상 */
+export const conditionsOf = (c: Combatant) => Object.entries(c.conditions ?? {}).filter(([, n]) => (n ?? 0) > 0).map(([k, n]) => ({ condition: k as Condition, rounds: n! }));
+
+/** 내성 굴림 (상태 이상 반영): 기절은 근력·민첩 자동 실패, 포박은 민첩 불리점 */
+function saveTest(rng: Rng, t: Combatant, save: Ability, dc: number): { kept: number; mod: number; total: number; success: number | boolean; note: string } {
+  const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0);
+  if (hasCondition(t, 'stunned') && (save === 'str' || save === 'dex')) return { kept: 0, mod: sb, total: 0, success: false, note: '기절 — 자동 실패' };
+  const r = d20Test(rng, sb, dc, hasCondition(t, 'restrained') && save === 'dex' ? 'disadvantage' : 'normal');
+  return { kept: r.kept, mod: sb, total: r.total, success: r.success, note: r.rolls.length > 1 ? `불리점(포박) ${r.rolls.join(', ')}` : '' };
+}
+
+/** 상태 이상 부여. saved: 이미 굴린 내성 결과 (내성 피해 카드). 없으면 inflict.save로 새로 굴린다. */
+function tryInflict(rng: Rng, a: Combatant, t: Combatant, inf: Inflict, saved?: boolean): { effects: CombatEffect[]; text: string } {
+  const label = CONDITION_LABEL[inf.condition];
+  if (t.immune?.includes(inf.condition)) return { effects: [], text: `, ${label} 면역` };
+  let failed: boolean;
+  let roll = '';
+  if (saved === undefined) {
+    const dc = inf.dc || spellSaveDc(a);
+    const r = saveTest(rng, t, inf.save, dc);
+    failed = !r.success;
+    roll = ` 내성 ${r.note || r.total} vs DC ${dc}`;
+  } else failed = !saved;
+  if (!failed) return { effects: [], text: `,${roll} ${label} 버팀` };
+  const rounds = Math.max(inf.rounds, t.conditions?.[inf.condition] ?? 0);
+  return { effects: [{ kind: 'condition', target: t.id, condition: inf.condition, rounds }], text: `,${roll} → ${label}(${inf.rounds}라운드)` };
+}
+
+/** 소마법 강화: 5레벨부터 소마법 피해 주사위 2배 */
+function cantripDamage(card: CardDef, a: Combatant, damage: string): string {
+  if (card.kind !== 'spell' || card.spellLevel || (a.cantripTier ?? 1) < 2) return damage;
+  const dice = /^(\d*d\d+)/.exec(damage)?.[1];
+  return dice ? scaleDice(damage, dice, (a.cantripTier ?? 1) - 1) : damage;
+}
 
 function attackAbilityMod(c: Combatant, a: 'str' | 'dex' | 'finesse' | 'spell'): number {
   if (a === 'finesse') return Math.max(mod(c, 'str'), mod(c, 'dex'));
@@ -249,7 +300,13 @@ const healRange = (card: CardDef) => (card.effect.type === 'heal' ? card.effect.
 export function validTargets(cs: CombatState, actorId: string, card: CardDef): Target[] {
   const a = cs.combatants[actorId]!;
   if (card.target === 'self') return [actorId];
-  if (card.target === 'zone') return [a.zone - 1, a.zone + 1].filter((z) => z >= 0 && z < ZONE_COUNT);
+  if (card.target === 'zone') {
+    const zones = [a.zone - 1, a.zone + 1].filter((z) => z >= 0 && z < ZONE_COUNT);
+    if (!hasCondition(a, 'frightened')) return zones;
+    // 공포: 가장 가까운 적에게 다가가는 방향으로는 움직일 수 없다
+    const dist = (z: number) => Math.min(...opponents(cs, a).map((o) => Math.abs(o.zone - z)));
+    return zones.filter((z) => !opponents(cs, a).length || dist(z) >= dist(a.zone));
+  }
   if (card.target === 'ally') {
     const range = healRange(card);
     // 빈사(HP 0)인 아군도 치료 대상 — 치료받으면 정신을 차린다
@@ -270,6 +327,8 @@ export function unusableReason(cs: CombatState, actorId: string, card: CardDef):
   if (cs.outcome) return '전투가 끝났다';
   if (currentActorId(cs) !== actorId) return '내 차례가 아니다';
   if (!alive(a)) return '쓰러진 상태';
+  if (hasCondition(a, 'stunned')) return '기절해 행동할 수 없다';
+  if (hasCondition(a, 'restrained') && (card.effect.type === 'move' || card.effect.type === 'flee' || card.effect.type === 'escape')) return '포박되어 움직일 수 없다';
   if (card.cost !== 'free' && !cs.economy[card.cost]) return { action: '행동을 이미 사용했다', bonus: '보너스 행동을 이미 사용했다', move: '이동을 이미 사용했다' }[card.cost];
   if (card.resource && (a.resources[card.resource]?.cur ?? 0) <= 0) return '남은 사용 횟수가 없다';
   if (card.spellLevel && slotFor(a, card.spellLevel) === null) return `${card.spellLevel}레벨 이상 주문 슬롯이 없다`;
@@ -328,14 +387,16 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
   const pack = !!a.packTactics && Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
   const proneMelee = !!t.prone && spec.kind === 'melee';
   const proneRanged = !!t.prone && spec.kind === 'ranged';
-  const adv = a.hidden || a.aimed || t.marked || pack || proneMelee;
+  const tHelpless = (['stunned', 'restrained', 'blinded'] as const).find((k) => hasCondition(t, k));
+  const aHindered = (['poisoned', 'frightened', 'restrained', 'blinded'] as const).find((k) => hasCondition(a, k));
+  const adv = a.hidden || a.aimed || t.marked || pack || proneMelee || !!tHelpless;
   const engaged = spec.kind === 'ranged' && hostileInZone(cs, a);
-  const dis = t.dodging || engaged || !!a.prone || proneRanged;
+  const dis = t.dodging || engaged || !!a.prone || proneRanged || !!aHindered;
   const mode = combineMode(adv, dis);
   const r = d20Test(rng, toHit, t.ac, mode);
   const crit = !r.natural1 && r.kept >= (a.critRange ?? 20);
   const hit = !r.natural1 && (crit || r.success);
-  const why = [a.hidden && '숨음', a.aimed && '조준', t.marked && '표식', pack && '무리 전술', proneMelee && '넘어진 대상', t.dodging && '대상 회피', engaged && '근접한 적', a.prone && '넘어짐', proneRanged && '넘어진 대상'].filter(Boolean).join(', ');
+  const why = [a.hidden && '숨음', a.aimed && '조준', t.marked && '표식', pack && '무리 전술', proneMelee && '넘어진 대상', tHelpless && `대상 ${CONDITION_LABEL[tHelpless]}`, t.dodging && '대상 회피', engaged && '근접한 적', a.prone && '넘어짐', aHindered && CONDITION_LABEL[aHindered], proneRanged && '넘어진 대상'].filter(Boolean).join(', ');
   const modeText = mode === 'normal' ? '' : ` ${mode === 'advantage' ? '이점' : '불리점'}${why ? `(${why})` : ''}`;
   const head = `${a.name}의 ${cardName} → ${t.name}: d20(${r.rolls.join(', ')})${modeText} ${toHit >= 0 ? '+' : ''}${toHit} = ${r.total} vs AC ${t.ac}`;
   if (t.marked) effects.push({ kind: 'flag', target: t.id, marked: false });
@@ -352,15 +413,25 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
     extra = ` + 암습 ${s.total}`;
     effects.push({ kind: 'sneak_used' });
   }
+  // 초감각 회피: 반응으로 피해 절반
+  if (t.uncannyDodge && !t.reactionUsed && hpBefore > 0 && total > 0 && !hasCondition(t, 'stunned')) {
+    total = Math.floor(total / 2);
+    extra += ' → 초감각 회피로 절반';
+    effects.push({ kind: 'flag', target: t.id, reactionUsed: true });
+  }
   effects.push({ kind: 'hp', target: t.id, delta: -total, crit });
   if (at.mark) effects.push({ kind: 'flag', target: t.id, marked: true });
   // 넘어뜨리기: 살아남은 대상은 내성 굴림
   let proneText = '';
   if (at.knockProne && hpBefore - total > 0 && !t.prone) {
-    const sb = mod(t, at.knockProne.save) + (t.saveProfs.includes(at.knockProne.save) ? t.profBonus : 0);
-    const sr = d20Test(rng, sb, at.knockProne.dc);
+    const sr = saveTest(rng, t, at.knockProne.save, at.knockProne.dc);
     if (!sr.success) effects.push({ kind: 'flag', target: t.id, prone: true });
-    proneText = `, 넘어뜨리기 내성 ${sr.total} vs DC ${at.knockProne.dc} → ${sr.success ? '버팀' : '넘어짐'}`;
+    proneText = `, 넘어뜨리기 내성 ${sr.note || sr.total} vs DC ${at.knockProne.dc} → ${sr.success ? '버팀' : '넘어짐'}`;
+  }
+  if (at.inflict && hpBefore - total > 0) {
+    const inf = tryInflict(rng, a, t, at.inflict);
+    effects.push(...inf.effects);
+    proneText += inf.text;
   }
   return {
     effects, damage: total,
@@ -369,17 +440,23 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
 }
 
 /** 내성 피해 한 명분 */
-function rollSave(a: Combatant, t: Combatant, cardName: string, save: Ability, damage: string, damageType: string, half: boolean, bonus: number, rng: Rng, fixedDc?: number): { effects: CombatEffect[]; line: string } {
+function rollSave(a: Combatant, t: Combatant, cardName: string, save: Ability, damage: string, damageType: string, half: boolean, bonus: number, rng: Rng, fixedDc?: number, inflict?: Inflict): { effects: CombatEffect[]; line: string } {
   const dc = fixedDc ?? spellSaveDc(a);
-  const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0);
-  const r = d20Test(rng, sb, dc);
-  const head = `${a.name}의 ${cardName} → ${t.name}: 내성 d20(${r.kept}) ${sb >= 0 ? '+' : ''}${sb} = ${r.total} vs DC ${dc}`;
+  const r = saveTest(rng, t, save, dc);
+  const head = `${a.name}의 ${cardName} → ${t.name}: 내성 ${r.note ? r.note : `d20(${r.kept}) ${r.mod >= 0 ? '+' : ''}${r.mod} = ${r.total}`} vs DC ${dc}`;
+  // 피해 없는 순수 상태 이상 주문 (예: 인간 속박)
+  if (!damageType) {
+    const inf = inflict ? tryInflict(rng, a, t, inflict, !!r.success) : { effects: [], text: '' };
+    return { effects: inf.effects, line: `${head} → ${r.success ? '성공' : '실패'}${inf.text}` };
+  }
   if (r.success && !half) return { effects: [], line: `${head} → 성공, 피해 없음` };
   const full = rollDamage(rng, damage).total + bonus;
   const dealt = r.success ? Math.floor(full / 2) : full;
+  const survives = t.hp - dealt > 0;
+  const inf = inflict && survives ? tryInflict(rng, a, t, inflict, !!r.success) : { effects: [], text: '' };
   return {
-    effects: dealt > 0 ? [{ kind: 'hp', target: t.id, delta: -dealt }] : [],
-    line: `${head} → ${r.success ? '성공, 절반' : '실패,'} ${damageType} 피해 ${dealt}${t.hp - dealt <= 0 ? ` — ${t.name} 쓰러짐` : ''}`,
+    effects: [...(dealt > 0 ? [{ kind: 'hp', target: t.id, delta: -dealt } as CombatEffect] : []), ...inf.effects],
+    line: `${head} → ${r.success ? '성공, 절반' : '실패,'} ${damageType} 피해 ${dealt}${survives ? '' : ` — ${t.name} 쓰러짐`}${r.success ? '' : inf.text}`,
   };
 }
 
@@ -414,15 +491,21 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
   switch (e.type) {
     case 'attack': {
       const t = cs.combatants[target as string]!;
-      const count = (e.count ?? 1) + (card.upcast?.count ?? 0) * up;
-      const damage = scaleDice(e.attack.damage, card.upcast?.dice, up);
+      // 추가 공격: 무기 공격은 한 번 더
+      const count = (e.count ?? 1) + (card.upcast?.count ?? 0) * up + (a.extraAttack && card.kind === 'weapon' ? 1 : 0);
+      const damage = cantripDamage(card, a, scaleDice(e.attack.damage, card.upcast?.dice, up));
       let hp = t.hp;
       let sneak = !cs.sneakUsed;
+      let reacted = !!t.reactionUsed;
+      let conds = t.conditions;
       for (let i = 0; i < count; i++) {
         if (hp <= 0) break;
-        const r = rollAttack(i === 0 ? cs : { ...cs, combatants: { ...cs.combatants, [a.id]: { ...a, hidden: false, aimed: false }, [t.id]: { ...t, hp, marked: false } } }, a, { ...t, hp }, name, e, damage, rng, sneak, hp);
+        const tNow = { ...t, hp, reactionUsed: reacted, conditions: conds };
+        const r = rollAttack(i === 0 ? cs : { ...cs, combatants: { ...cs.combatants, [a.id]: { ...a, hidden: false, aimed: false }, [t.id]: { ...tNow, marked: false } } }, i === 0 ? a : { ...a, hidden: false, aimed: false }, i === 0 ? tNow : { ...tNow, marked: false }, name, e, damage, rng, sneak, hp);
         effects.push(...r.effects);
         if (r.effects.some((x) => x.kind === 'sneak_used')) sneak = false;
+        if (r.effects.some((x) => x.kind === 'flag' && x.target === t.id && x.reactionUsed)) reacted = true;
+        for (const x of r.effects) if (x.kind === 'condition' && x.target === t.id) conds = { ...conds, [x.condition]: x.rounds };
         hp -= r.damage;
         log.push(r.line);
       }
@@ -431,7 +514,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
     }
     case 'save_damage': {
       const t = cs.combatants[target as string]!;
-      const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, !!e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc);
+      const r = rollSave(a, t, name, e.save, cantripDamage(card, a, scaleDice(e.damage, card.upcast?.dice, up)), e.damageType, !!e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc, e.inflict);
       effects.push(...r.effects);
       log.push(r.line);
       break;
@@ -441,7 +524,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       const foes = opponents(cs, a).filter((o) => o.zone === zone);
       log.push(`${a.name}의 ${name}: ${ZONE_NAMES[zone]}의 적 ${foes.length}명`);
       for (const t of foes) {
-        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, 0, rng, e.dc);
+        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc, e.inflict);
         effects.push(...r.effects);
         log.push(`  ${r.line}`);
       }
@@ -468,13 +551,15 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       // 기회 공격: 떠나는 존의 적이 반응으로 근접 공격 1회씩 (후퇴 중이면 면제)
       let hp = a.hp;
       let knocked = false;
+      let aReacted = !!a.reactionUsed;
       if (!a.disengaged) {
         for (const foe of opponents(cs, a).filter((o) => o.zone === a.zone && !o.reactionUsed)) {
           const melee = handOf(foe).find((c) => c.effect.type === 'attack' && c.effect.attack.kind === 'melee');
           if (!melee || melee.effect.type !== 'attack' || hp <= 0) continue;
           effects.push({ kind: 'flag', target: foe.id, reactionUsed: true });
-          const r = rollAttack(cs, foe, { ...a, hp }, `기회 공격(${melee.name})`, melee.effect, melee.effect.attack.damage, rng, false, hp);
+          const r = rollAttack(cs, foe, { ...a, hp, reactionUsed: aReacted }, `기회 공격(${melee.name})`, melee.effect, melee.effect.attack.damage, rng, false, hp);
           effects.push(...r.effects.filter((x) => x.kind !== 'sneak_used'));
+          if (r.effects.some((x) => x.kind === 'flag' && x.target === a.id && x.reactionUsed)) aReacted = true;
           if (r.effects.some((x) => x.kind === 'flag' && x.prone)) knocked = true;
           hp -= r.damage;
           log.push(r.line);
@@ -606,6 +691,13 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
       case 'sneak_used': next.sneakUsed = true; break;
       case 'fled': next.outcome = 'fled'; break;
       case 'escaped': { const c = next.combatants[e.target]!; c.escaped = true; c.hp = 0; break; }
+      case 'condition': {
+        const c = next.combatants[e.target]!;
+        const conds = { ...(c.conditions ?? {}) };
+        if (e.rounds > 0) conds[e.condition] = e.rounds; else delete conds[e.condition];
+        c.conditions = conds;
+        break;
+      }
       case 'phase': {
         const c = next.combatants[e.target]!;
         const ph = c.monsterId ? MONSTERS[c.monsterId]?.phases?.[e.index - 1] : undefined;
@@ -630,7 +722,14 @@ export function applyEffects(cs: CombatState, effects: CombatEffect[]): CombatSt
 /** 다음 살아 있는 전투원의 차례로 넘긴다. 회피 자세는 자기 차례가 시작될 때 풀린다. */
 export function endTurn(cs: CombatState): CombatState {
   const next: CombatState = structuredClone(cs);
-  next.combatants[currentActorId(next)]!.disengaged = false;
+  const ending = next.combatants[currentActorId(next)]!;
+  ending.disengaged = false;
+  // 상태 이상: 걸린 대상의 차례가 끝날 때 1라운드씩 줄어든다
+  if (ending.conditions) {
+    const left: Partial<Record<Condition, number>> = {};
+    for (const [k, n] of Object.entries(ending.conditions)) if ((n ?? 0) > 1) left[k as Condition] = n! - 1;
+    ending.conditions = left;
+  }
   for (let i = 0; i < next.order.length; i++) {
     next.turnIndex = (next.turnIndex + 1) % next.order.length;
     if (next.turnIndex === 0) next.round++;
@@ -660,7 +759,7 @@ export interface PlannedAction {
 export function planEnemyAction(cs: CombatState): PlannedAction | null {
   const id = currentActorId(cs);
   const a = cs.combatants[id]!;
-  if (a.side !== 'enemy' || cs.outcome) return null;
+  if (a.side !== 'enemy' || cs.outcome || hasCondition(a, 'stunned')) return null;
   const hand = handOf(a);
   const attacks = hand.filter((c) => c.effect.type === 'attack' && !unusableReason(cs, id, c));
   const pick = (cards: CardDef[]) => {
@@ -674,7 +773,7 @@ export function planEnemyAction(cs: CombatState): PlannedAction | null {
   };
   const isRanged = (c: CardDef) => c.effect.type === 'attack' && c.effect.attack.kind === 'ranged';
   // 넘어졌으면 먼저 일어선다
-  if (a.prone && cs.economy.move) return { cardId: 'basic/stand', target: a.id };
+  if (a.prone && cs.economy.move && !hasCondition(a, 'restrained')) return { cardId: 'basic/stand', target: a.id };
   // 크게 다치면 달아난다 (도망치는 적만)
   if (a.fleeAt && a.hp <= a.fleeAt * a.maxHp && cs.economy.action && !unusableReason(cs, id, ESCAPE_CARD)) return { cardId: ESCAPE_CARD.id, target: id };
   // 특수 기술 (내성 피해·범위): 쓸 수 있으면 먼저 — 범위는 상대가 가장 많은 존, 단일은 HP가 가장 낮은 대상
@@ -746,7 +845,7 @@ const isRangedCard = (c: CardDef) =>
 export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT_ORDER): PlannedAction | null {
   const id = currentActorId(cs);
   const a = cs.combatants[id]!;
-  if (a.side !== 'party' || a.isPlayer || cs.outcome) return null;
+  if (a.side !== 'party' || a.isPlayer || cs.outcome || hasCondition(a, 'stunned')) return null;
   const usable = handOf(a).filter((c) => !unusableReason(cs, id, c));
   const party = Object.values(cs.combatants).filter((o) => o.side === 'party' && alive(o));
   const critical = (c: Combatant) => c.hp <= c.maxHp / 3;
@@ -818,7 +917,7 @@ export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT
         if (bonusEscape) return { cardId: bonusEscape.id, target: a.id };
         if (order.mode === 'hold_back' && usable.some((c) => c.id === 'basic/disengage')) return { cardId: 'basic/disengage', target: a.id };
       }
-      if (cs.economy.move) return { cardId: 'basic/move', target: step };
+      if (cs.economy.move && validTargets(cs, id, cardById('basic/move')).includes(step) && !unusableReason(cs, id, cardById('basic/move'))) return { cardId: 'basic/move', target: step };
     }
   }
   // 할 일이 없으면, 적과 붙어 있을 때는 회피

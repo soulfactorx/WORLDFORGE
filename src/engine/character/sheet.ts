@@ -98,22 +98,23 @@ export function createCharacter(input: CreationInput): CharacterSheet {
   };
 }
 
-/** 전업 시전자 주문 슬롯 (SRD 5.2.1): [1레벨 슬롯, 2레벨 슬롯] */
-const FULL_CASTER_SLOTS: Record<number, [number, number]> = { 1: [2, 0], 2: [3, 0], 3: [4, 2] };
+/** 전업 시전자 주문 슬롯 (SRD 5.2.1): [1레벨, 2레벨, 3레벨 슬롯] */
+const FULL_CASTER_SLOTS: Record<number, [number, number, number]> = { 1: [2, 0, 0], 2: [3, 0, 0], 3: [4, 2, 0], 4: [4, 3, 0], 5: [4, 3, 2] };
 
 /** 레벨별 직업 자원 (SRD 5.2.1). 긴 휴식에 모두 회복된다. */
 export function classResources(classId: string, level: number): Record<string, { cur: number; max: number }> {
-  const lv = Math.max(1, Math.min(3, level));
+  const lv = Math.max(1, Math.min(5, level));
   const r = (n: number) => ({ cur: n, max: n });
   const out: Record<string, { cur: number; max: number }> = {};
   if (classId === 'fighter') {
-    out.second_wind = r(2);
+    out.second_wind = r(lv >= 4 ? 3 : 2);
     if (lv >= 2) out.action_surge = r(1);
   }
   if (classId === 'cleric' || classId === 'wizard') {
-    const [s1, s2] = FULL_CASTER_SLOTS[lv]!;
+    const [s1, s2, s3] = FULL_CASTER_SLOTS[lv]!;
     out.slot1 = r(s1);
     if (s2) out.slot2 = r(s2);
+    if (s3) out.slot3 = r(s3);
   }
   if (classId === 'cleric' && lv >= 2) out.channel_divinity = r(2);
   if (classId === 'wizard') out.arcane_recovery = r(1);

@@ -5,7 +5,7 @@
  */
 import type { Ability } from '../character/rules';
 import type { Abilities } from '../character/sheet';
-import type { CardDef } from './cards';
+import type { CardDef, Condition, Inflict } from './cards';
 
 export type EnemyRole = 'minion' | 'brute' | 'skirmisher' | 'artillery' | 'controller' | 'leader' | 'boss';
 
@@ -46,29 +46,35 @@ export interface MonsterDef {
   resources?: Record<string, number>;
   /** 보스 단계 */
   phases?: MonsterPhase[];
+  /** 상태 이상 면역 */
+  immune?: Condition[];
   /** 외형·성격 한 줄 (AI 서술 참고) */
   look: string;
 }
 
 // ---------------------------------------------------------------- 카드 도우미
 
-type Atk = { toHit: number; dmg: string; bonus: number; type: string; range?: number; ability?: 'str' | 'dex'; count?: number; prone?: { save: Ability; dc: number } };
+type Atk = { toHit: number; dmg: string; bonus: number; type: string; range?: number; ability?: 'str' | 'dex'; count?: number; prone?: { save: Ability; dc: number }; inflict?: Inflict };
 const melee = (id: string, name: string, a: Atk): CardDef => ({
   id: `monster/${id}`, name, desc: '', kind: 'monster', cost: 'action', target: 'enemy',
-  effect: { type: 'attack', attack: { kind: 'melee', ability: a.ability ?? 'str', damage: a.dmg, damageType: a.type, range: 0, toHit: a.toHit, damageBonus: a.bonus }, ...(a.count ? { count: a.count } : {}), ...(a.prone ? { knockProne: a.prone } : {}) },
+  effect: { type: 'attack', attack: { kind: 'melee', ability: a.ability ?? 'str', damage: a.dmg, damageType: a.type, range: 0, toHit: a.toHit, damageBonus: a.bonus }, ...(a.count ? { count: a.count } : {}), ...(a.prone ? { knockProne: a.prone } : {}), ...(a.inflict ? { inflict: a.inflict } : {}) },
 });
 const ranged = (id: string, name: string, a: Atk): CardDef => ({
   id: `monster/${id}`, name, desc: '', kind: 'monster', cost: 'action', target: 'enemy',
-  effect: { type: 'attack', attack: { kind: 'ranged', ability: a.ability ?? 'dex', damage: a.dmg, damageType: a.type, range: a.range ?? 3, toHit: a.toHit, damageBonus: a.bonus }, ...(a.count ? { count: a.count } : {}) },
+  effect: { type: 'attack', attack: { kind: 'ranged', ability: a.ability ?? 'dex', damage: a.dmg, damageType: a.type, range: a.range ?? 3, toHit: a.toHit, damageBonus: a.bonus }, ...(a.count ? { count: a.count } : {}), ...(a.inflict ? { inflict: a.inflict } : {}) },
 });
-const saveAtk = (id: string, name: string, s: { save: Ability; dc: number; dmg: string; type: string; range: number; half?: boolean; resource?: string }): CardDef => ({
+type SaveSpec = { save: Ability; dc: number; dmg: string; type: string; range: number; half?: boolean; resource?: string; inflict?: { condition: Condition; rounds: number } };
+/** 내성 피해에 붙는 상태 이상은 같은 내성에 실패하면 걸린다 */
+const withInflict = (s: SaveSpec) => (s.inflict ? { inflict: { ...s.inflict, save: s.save, dc: s.dc } } : {});
+const saveAtk = (id: string, name: string, s: SaveSpec): CardDef => ({
   id: `monster/${id}`, name, desc: '', kind: 'monster', cost: 'action', target: 'enemy', ...(s.resource ? { resource: s.resource } : {}),
-  effect: { type: 'save_damage', save: s.save, damage: s.dmg, damageType: s.type, range: s.range, half: s.half, dc: s.dc },
+  effect: { type: 'save_damage', save: s.save, damage: s.dmg, damageType: s.type, range: s.range, half: s.half, dc: s.dc, ...withInflict(s) },
 });
-const area = (id: string, name: string, s: { save: Ability; dc: number; dmg: string; type: string; range: number; resource?: string }): CardDef => ({
+const area = (id: string, name: string, s: SaveSpec): CardDef => ({
   id: `monster/${id}`, name, desc: '', kind: 'monster', cost: 'action', target: 'area', ...(s.resource ? { resource: s.resource } : {}),
-  effect: { type: 'area_save', save: s.save, damage: s.dmg, damageType: s.type, range: s.range, half: true, dc: s.dc },
+  effect: { type: 'area_save', save: s.save, damage: s.dmg, damageType: s.type, range: s.range, half: true, dc: s.dc, ...withInflict(s) },
 });
+const UNDEAD: Condition[] = ['poisoned', 'frightened'];
 const escape = (id: string, name: string): CardDef => ({ id: `monster/${id}`, name, desc: '', kind: 'monster', cost: 'bonus', target: 'self', effect: { type: 'disengage' } });
 
 const ab = (str: number, dex: number, con: number, int: number, wis: number, cha: number): Abilities => ({ str, dex, con, int, wis, cha });
@@ -105,15 +111,15 @@ const LIST: MonsterDef[] = [
     look: '검은 법의의 사제. 손끝에서 검은 연기가 피어오른다.',
     cards: [melee('cult_fanatic/dagger', '의식용 단검 연격', { toHit: 4, dmg: '1d4', bonus: 2, type: '관통', ability: 'dex', count: 2 }),
       saveAtk('cult_fanatic/inflict', '고통의 말', { save: 'con', dc: 12, dmg: '3d10', type: '사령', range: 1, half: true, resource: 'dark_word' })] },
-  { id: 'skeleton', name: '해골 병사', ac: 13, hp: 13, xp: 50, cr: '1/4', abilities: ab(10, 16, 15, 6, 8, 5), genres: F, role: 'skirmisher',
+  { id: 'skeleton', name: '해골 병사', ac: 13, hp: 13, xp: 50, cr: '1/4', abilities: ab(10, 16, 15, 6, 8, 5), genres: F, role: 'skirmisher', immune: UNDEAD,
     look: '녹슨 갑옷 조각을 걸친 해골. 텅 빈 눈구멍에 푸른 불빛.',
     cards: [melee('skeleton/shortsword', '숏소드', { toHit: 5, dmg: '1d6', bonus: 3, type: '관통', ability: 'dex' }), ranged('skeleton/shortbow', '숏보우', { toHit: 5, dmg: '1d6', bonus: 3, type: '관통' })] },
-  { id: 'zombie', name: '좀비', ac: 8, hp: 15, xp: 50, cr: '1/4', abilities: ab(13, 6, 16, 3, 6, 5), genres: F, role: 'brute',
+  { id: 'zombie', name: '좀비', ac: 8, hp: 15, xp: 50, cr: '1/4', abilities: ab(13, 6, 16, 3, 6, 5), genres: F, role: 'brute', immune: UNDEAD,
     look: '썩어 가는 시체. 느리지만 쓰러뜨려도 다시 일어날 듯하다.',
     cards: [melee('zombie/slam', '후려치기', { toHit: 3, dmg: '1d8', bonus: 1, type: '타격' })] },
-  { id: 'ghoul', name: '구울', ac: 12, hp: 22, xp: 200, cr: '1', abilities: ab(13, 15, 10, 7, 10, 6), genres: F, role: 'skirmisher', packTactics: true,
+  { id: 'ghoul', name: '구울', ac: 12, hp: 22, xp: 200, cr: '1', abilities: ab(13, 15, 10, 7, 10, 6), genres: F, role: 'skirmisher', packTactics: true, immune: UNDEAD,
     look: '잿빛 피부에 길게 찢어진 입. 시체 썩는 냄새가 난다.',
-    cards: [melee('ghoul/claws', '할퀴기', { toHit: 4, dmg: '1d4', bonus: 2, type: '참격', ability: 'dex', count: 2 }), melee('ghoul/bite', '물기', { toHit: 2, dmg: '2d6', bonus: 2, type: '관통' })] },
+    cards: [melee('ghoul/claws', '마비의 손톱', { toHit: 4, dmg: '1d4', bonus: 2, type: '참격', ability: 'dex', count: 2, inflict: { condition: 'stunned', save: 'con', dc: 10, rounds: 1 } }), melee('ghoul/bite', '물기', { toHit: 2, dmg: '2d6', bonus: 2, type: '관통' })] },
   { id: 'hobgoblin_warrior', name: '홉고블린 전사', ac: 18, hp: 11, xp: 100, cr: '1/2', abilities: ab(13, 12, 12, 10, 10, 9), genres: F, role: 'brute', packTactics: true,
     look: '붉은 피부에 규율 잡힌 군인. 반짝이는 판금과 긴 칼.',
     cards: [melee('hobgoblin/longsword', '롱소드', { toHit: 3, dmg: '2d10', bonus: 1, type: '참격' }), ranged('hobgoblin/longbow', '롱보우', { toHit: 3, dmg: '1d8', bonus: 1, type: '관통', range: 3 })] },
@@ -123,13 +129,13 @@ const LIST: MonsterDef[] = [
   { id: 'gnoll_warrior', name: '놀 전사', ac: 15, hp: 27, xp: 100, cr: '1/2', abilities: ab(14, 12, 11, 6, 10, 7), genres: F, role: 'skirmisher', packTactics: true,
     look: '하이에나 머리의 짐승 인간. 낄낄대는 웃음소리.',
     cards: [melee('gnoll/rend', '물어뜯기', { toHit: 4, dmg: '1d6', bonus: 2, type: '관통' }), ranged('gnoll/bow', '뼈 활', { toHit: 3, dmg: '1d10', bonus: 1, type: '관통' })] },
-  { id: 'animated_armor', name: '움직이는 갑옷', ac: 18, hp: 33, xp: 200, cr: '1', abilities: ab(14, 11, 13, 1, 3, 1), genres: F, role: 'brute',
+  { id: 'animated_armor', name: '움직이는 갑옷', ac: 18, hp: 33, xp: 200, cr: '1', abilities: ab(14, 11, 13, 1, 3, 1), genres: F, role: 'brute', immune: ['poisoned', 'frightened', 'blinded'],
     look: '속이 텅 빈 판금 갑옷이 삐걱이며 걸어온다.',
     cards: [melee('armor/slam', '강타 연격', { toHit: 4, dmg: '1d6', bonus: 2, type: '타격', count: 2 })] },
   { id: 'giant_spider', name: '거대 거미', ac: 14, hp: 26, xp: 200, cr: '1', abilities: ab(14, 16, 12, 2, 11, 4), genres: F, role: 'controller', resources: { web: 1 },
     look: '마차 바퀴만 한 털북숭이 거미. 독니에서 진액이 떨어진다.',
-    cards: [melee('spider/bite', '독니', { toHit: 5, dmg: '1d8', bonus: 3, type: '관통', ability: 'dex' }),
-      saveAtk('spider/venom', '맹독 거미줄', { save: 'con', dc: 11, dmg: '2d8', type: '독', range: 2, half: true, resource: 'web' })] },
+    cards: [melee('spider/bite', '독니', { toHit: 5, dmg: '1d8', bonus: 3, type: '관통', ability: 'dex', inflict: { condition: 'poisoned', save: 'con', dc: 11, rounds: 2 } }),
+      saveAtk('spider/web', '거미줄', { save: 'dex', dc: 13, dmg: '1d6', type: '독', range: 2, half: true, resource: 'web', inflict: { condition: 'restrained', rounds: 2 } })] },
   { id: 'brown_bear', name: '불곰', ac: 11, hp: 22, xp: 200, cr: '1', abilities: ab(17, 12, 15, 2, 13, 7), genres: F, role: 'brute',
     look: '거대한 불곰. 일어서면 사람 둘 키다.',
     cards: [melee('bear/maul', '물고 할퀴기', { toHit: 5, dmg: '1d8', bonus: 3, type: '참격', count: 2 })] },
@@ -161,14 +167,15 @@ const LIST: MonsterDef[] = [
   { id: 'wx_sect_master', name: '사파 고수', ac: 15, hp: 52, xp: 700, cr: '3', abilities: ab(14, 17, 14, 12, 13, 12), genres: W, role: 'leader', saves: ['dex', 'wis'], resources: { palm: 2 },
     look: '날카로운 눈매의 중년 무인. 소매 끝에 기가 맺혀 펄럭인다.',
     cards: [melee('wx_sect_master/sword', '연환검', { toHit: 5, dmg: '1d8', bonus: 3, type: '참격', ability: 'dex', count: 2 }),
-      saveAtk('wx_sect_master/palm', '벽공장', { save: 'con', dc: 13, dmg: '3d8', type: '역장', range: 2, half: true, resource: 'palm' })] },
+      saveAtk('wx_sect_master/palm', '벽공장', { save: 'con', dc: 13, dmg: '3d8', type: '역장', range: 2, half: true, resource: 'palm' }),
+      melee('wx_sect_master/acupoint', '점혈수', { toHit: 5, dmg: '1d4', bonus: 3, type: '타격', ability: 'dex', inflict: { condition: 'stunned', save: 'con', dc: 13, rounds: 1 } })] },
   { id: 'wx_assassin', name: '살수', ac: 15, hp: 33, xp: 450, cr: '2', abilities: ab(11, 17, 12, 12, 12, 9), genres: W, role: 'skirmisher', preferRanged: true, fleeAt: 0.3,
     look: '복면을 쓴 흑의 살수. 기척이 거의 없다.',
     cards: [melee('wx_assassin/dagger', '비수 연격', { toHit: 5, dmg: '1d4', bonus: 3, type: '관통', ability: 'dex', count: 2 }), ranged('wx_assassin/needle', '독침', { toHit: 5, dmg: '1d6', bonus: 3, type: '독', range: 3 }), escape('wx_assassin/vanish', '은형보')] },
   { id: 'wx_poisoner', name: '독문 제자', ac: 12, hp: 22, xp: 200, cr: '1', abilities: ab(10, 14, 12, 13, 12, 9), genres: W, role: 'controller', preferRanged: true, resources: { poison_palm: 2 },
     look: '푸른빛 손톱의 창백한 무인. 주변 풀잎이 시든다.',
-    cards: [ranged('wx_poisoner/needle', '취혼침', { toHit: 4, dmg: '1d6', bonus: 2, type: '독', range: 3 }),
-      saveAtk('wx_poisoner/palm', '독사장', { save: 'con', dc: 12, dmg: '2d8', type: '독', range: 1, half: true, resource: 'poison_palm' })] },
+    cards: [ranged('wx_poisoner/needle', '취혼침', { toHit: 4, dmg: '1d6', bonus: 2, type: '독', range: 3, inflict: { condition: 'poisoned', save: 'con', dc: 12, rounds: 2 } }),
+      saveAtk('wx_poisoner/palm', '독사장', { save: 'con', dc: 12, dmg: '2d8', type: '독', range: 1, half: true, resource: 'poison_palm', inflict: { condition: 'poisoned', rounds: 3 } })] },
   { id: 'wx_cultist', name: '마교도', ac: 13, hp: 16, xp: 50, cr: '1/4', abilities: ab(12, 13, 12, 9, 9, 10), genres: W, role: 'minion', packTactics: true,
     look: '붉은 띠를 맨 마교 신도. 눈동자에 광기가 서려 있다.',
     cards: [melee('wx_cultist/saber', '곡도', { toHit: 3, dmg: '1d6', bonus: 1, type: '참격' })] },
@@ -177,26 +184,26 @@ const LIST: MonsterDef[] = [
     cards: [melee('wx_cult_elder/palm', '혈마장 연격', { toHit: 7, dmg: '2d8', bonus: 4, type: '사령', count: 2 }),
       area('wx_cult_elder/blood', '혈우마공', { save: 'con', dc: 15, dmg: '4d8', type: '사령', range: 1, resource: 'blood_art' })],
     phases: [{ below: 0.5, line: '장로의 눈이 붉게 물든다 — "천마해체대법(天魔解體大法)!"', ac: 1, addCards: [area('wx_cult_elder/heaven', '천마해체대법', { save: 'dex', dc: 15, dmg: '5d8', type: '사령', range: 0 })] }] },
-  { id: 'wx_jiangshi', name: '강시', ac: 10, hp: 30, xp: 100, cr: '1/2', abilities: ab(15, 6, 16, 3, 6, 5), genres: W, role: 'brute',
+  { id: 'wx_jiangshi', name: '강시', ac: 10, hp: 30, xp: 100, cr: '1/2', abilities: ab(15, 6, 16, 3, 6, 5), genres: W, role: 'brute', immune: UNDEAD,
     look: '부적을 이마에 붙인 시체. 두 팔을 뻗고 뛰어온다.',
-    cards: [melee('wx_jiangshi/claw', '강시조', { toHit: 4, dmg: '1d8', bonus: 2, type: '참격' })] },
+    cards: [melee('wx_jiangshi/claw', '강시조', { toHit: 4, dmg: '1d8', bonus: 2, type: '참격', inflict: { condition: 'restrained', save: 'str', dc: 12, rounds: 1 } })] },
   { id: 'wx_fox_spirit', name: '구미호', ac: 13, hp: 27, xp: 450, cr: '2', abilities: ab(10, 16, 12, 14, 14, 18), genres: W, role: 'controller', preferRanged: true, resources: { charm: 2 }, fleeAt: 0.3,
     look: '흰 비단옷의 아름다운 여인. 그림자에 꼬리가 여럿 비친다.',
     cards: [melee('wx_fox/claw', '여우 손톱', { toHit: 5, dmg: '1d6', bonus: 3, type: '참격', ability: 'dex' }),
-      saveAtk('wx_fox/charm', '미혼술', { save: 'wis', dc: 13, dmg: '3d6', type: '정신', range: 2, half: true, resource: 'charm' })] },
+      saveAtk('wx_fox/charm', '미혼술', { save: 'wis', dc: 13, dmg: '3d6', type: '정신', range: 2, half: true, resource: 'charm', inflict: { condition: 'blinded', rounds: 1 } })] },
   { id: 'wx_tiger', name: '산군(호랑이)', ac: 12, hp: 37, xp: 200, cr: '1', abilities: ab(17, 15, 14, 3, 12, 8), genres: W, role: 'brute',
     look: '산을 다스린다는 거대한 범. 울음에 숲이 숨을 죽인다.',
     cards: [melee('wx_tiger/pounce', '덮치기', { toHit: 5, dmg: '1d10', bonus: 3, type: '참격', prone: { save: 'str', dc: 13 } })] },
   { id: 'wx_viper', name: '독사', ac: 13, hp: 7, xp: 25, cr: '1/8', abilities: ab(4, 16, 11, 1, 10, 3), genres: W, role: 'minion',
     look: '풀숲에 숨은 독사. 비늘이 푸르게 번들거린다.',
-    cards: [melee('wx_viper/bite', '독니', { toHit: 5, dmg: '1d4', bonus: 3, type: '독', ability: 'dex' })] },
+    cards: [melee('wx_viper/bite', '독니', { toHit: 5, dmg: '1d4', bonus: 3, type: '독', ability: 'dex', inflict: { condition: 'poisoned', save: 'con', dc: 10, rounds: 2 } })] },
   { id: 'wx_soldier', name: '관병', ac: 16, hp: 16, xp: 50, cr: '1/4', abilities: ab(13, 12, 12, 10, 11, 10), genres: W, role: 'minion', packTactics: true,
     look: '붉은 전포에 창을 든 관병. 대열을 지어 다가온다.',
     cards: [melee('wx_soldier/spear', '창', { toHit: 3, dmg: '1d8', bonus: 1, type: '관통' }), ranged('wx_soldier/crossbow', '노', { toHit: 3, dmg: '1d8', bonus: 1, type: '관통', range: 3 })] },
-  { id: 'wx_vengeful_ghost', name: '원귀', ac: 11, hp: 22, xp: 200, cr: '1', abilities: ab(7, 13, 10, 10, 12, 15), genres: W, role: 'controller', resources: { wail: 2 },
+  { id: 'wx_vengeful_ghost', name: '원귀', ac: 11, hp: 22, xp: 200, cr: '1', abilities: ab(7, 13, 10, 10, 12, 15), genres: W, role: 'controller', resources: { wail: 2 }, immune: UNDEAD,
     look: '흐트러진 머리의 창백한 혼령. 서늘한 곡소리가 따른다.',
     cards: [melee('wx_ghost/touch', '한기', { toHit: 4, dmg: '2d6', bonus: 1, type: '사령', ability: 'dex' }),
-      area('wx_ghost/wail', '원한의 곡성', { save: 'wis', dc: 12, dmg: '2d8', type: '정신', range: 1, resource: 'wail' })] },
+      area('wx_ghost/wail', '원한의 곡성', { save: 'wis', dc: 12, dmg: '2d8', type: '정신', range: 1, resource: 'wail', inflict: { condition: 'frightened', rounds: 2 } })] },
 ];
 
 export const MONSTERS: Record<string, MonsterDef> = Object.fromEntries(LIST.map((m) => [m.id, m]));

@@ -1,7 +1,8 @@
 import { useRs } from './reskin';
 import { useState } from 'react';
-import type { CardDef } from '../engine/combat/cards';
+import { type CardDef, CONDITION_DESC, CONDITION_LABEL } from '../engine/combat/cards';
 import {
+  conditionsOf,
   alive, type CombatState, currentActorId, DEFAULT_ORDER, handOf, type PartyOrder, type Target, unusableReason, validTargets, ZONE_NAMES,
 } from '../engine/combat/combat';
 
@@ -70,6 +71,13 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder }: {
                       <span className="small cond">
                         {c.dead ? '✝ 사망' : c.stable ? '안정 (의식 없음)' : c.hp <= 0 && c.side === 'party' ? `빈사 — 성공 ${c.deathSaves?.success ?? 0} · 실패 ${c.deathSaves?.fail ?? 0}` : ''}
                         {c.prone && !c.dead && c.hp > 0 ? '넘어짐' : ''}
+                      </span>
+                    )}
+                    {c.hp > 0 && conditionsOf(c).length > 0 && (
+                      <span className="small conds">
+                        {conditionsOf(c).map(({ condition, rounds }) => (
+                          <span key={condition} className={`cond-badge c-${condition}`} title={CONDITION_DESC[condition]}>{CONDITION_LABEL[condition]} {rounds}</span>
+                        ))}
                       </span>
                     )}
                   </button>

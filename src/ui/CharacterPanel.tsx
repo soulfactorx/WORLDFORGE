@@ -7,7 +7,7 @@ import { CLASS_KITS } from '../engine/combat/cards';
 import { resourcesOf } from '../engine/character/sheet';
 
 const RESOURCE_LABEL: Record<string, string> = {
-  slot1: '1레벨 슬롯', slot2: '2레벨 슬롯', second_wind: '재기의 바람', action_surge: '행동 연쇄',
+  slot1: '1레벨 슬롯', slot2: '2레벨 슬롯', slot3: '3레벨 슬롯', second_wind: '재기의 바람', action_surge: '행동 연쇄',
   channel_divinity: '신성 변환', arcane_recovery: '비전 회복',
 };
 

@@ -25,13 +25,36 @@ export interface AttackSpec {
   damageBonus?: number;
 }
 
+/** 상태 이상 (SRD 5.2.1 기반, 존 전투에 맞게 단순화) */
+export type Condition = 'poisoned' | 'frightened' | 'restrained' | 'stunned' | 'blinded';
+export const CONDITION_LABEL: Record<Condition, string> = { poisoned: '중독', frightened: '공포', restrained: '포박', stunned: '기절', blinded: '실명' };
+export const CONDITION_DESC: Record<Condition, string> = {
+  poisoned: '공격 굴림에 불리점',
+  frightened: '공격 굴림에 불리점, 적에게 다가갈 수 없다',
+  restrained: '움직일 수 없다. 공격에 불리점, 받는 공격에 이점, 민첩 내성에 불리점',
+  stunned: '행동할 수 없다. 받는 공격에 이점, 근력·민첩 내성 자동 실패',
+  blinded: '공격에 불리점, 받는 공격에 이점',
+};
+
+/**
+ * 상태 이상 부여. 공격은 명중 후 대상이 save 내성(dc)을 굴려 실패하면 걸린다.
+ * 내성 피해·범위 피해는 그 내성에 실패하면 바로 걸린다 (save·dc 무시).
+ * rounds: 걸린 대상의 차례가 이만큼 끝나면 풀린다.
+ */
+export interface Inflict {
+  condition: Condition;
+  save: Ability;
+  dc: number;
+  rounds: number;
+}
+
 export type Effect =
   /** count: 여러 번 공격 (예: 불타는 광선). mark: 명중 시 대상에게 '표식' (다음 공격 이점) */
-  | { type: 'attack'; attack: AttackSpec; count?: number; mark?: boolean; knockProne?: { save: Ability; dc: number } }
+  | { type: 'attack'; attack: AttackSpec; count?: number; mark?: boolean; knockProne?: { save: Ability; dc: number }; inflict?: Inflict }
   /** half: 내성 성공 시 절반 피해. bonus: 주문 능력 수정치를 피해에 더함 */
-  | { type: 'save_damage'; save: Ability; damage: string; damageType: string; range: number; half?: boolean; bonus?: 'spell'; dc?: number }
+  | { type: 'save_damage'; save: Ability; damage: string; damageType: string; range: number; half?: boolean; bonus?: 'spell'; dc?: number; inflict?: Inflict }
   /** 범위 내성 피해: 대상 존의 모든 적 (range = 존 거리, 0이면 자기 존) */
-  | { type: 'area_save'; save: Ability; damage: string; damageType: string; range: number; half: boolean; dc?: number }
+  | { type: 'area_save'; save: Ability; damage: string; damageType: string; range: number; half: boolean; dc?: number; inflict?: Inflict; bonus?: 'spell' }
   /** 적이 전장에서 달아난다 */
   | { type: 'escape' }
   | { type: 'auto_damage'; count: number; damage: string; damageType: string; range: number }
@@ -108,6 +131,11 @@ export const CLASS_CARDS: CardDef[] = [
   card({ id: 'spell/healing_word', name: '치유의 말', desc: '1레벨 주문, 보너스 행동. 2존 안의 아군 HP를 2d4 + 주문 능력 수정치만큼 회복.', kind: 'spell', cost: 'bonus', target: 'ally', spellLevel: 1, upcast: { dice: '2d4' }, effect: { type: 'heal', dice: '2d4', add: 'spell', range: 2 } }),
   card({ id: 'spell/guiding_bolt', name: '인도의 화살', desc: '1레벨 주문. 원거리 주문 공격 4d6 광휘 (3존). 명중하면 다음 공격이 그 대상에게 이점.', kind: 'spell', cost: 'action', target: 'enemy', spellLevel: 1, upcast: { dice: '1d6' }, effect: { type: 'attack', attack: { kind: 'ranged', ability: 'spell', damage: '4d6', damageType: '광휘', range: 3 }, mark: true } }),
   card({ id: 'spell/burning_hands', name: '타오르는 손길', desc: '1레벨 주문. 내 존의 모든 적은 민첩 내성, 실패 시 3d6 화염 (성공 시 절반).', kind: 'spell', cost: 'action', target: 'area', spellLevel: 1, upcast: { dice: '1d6' }, effect: { type: 'area_save', save: 'dex', damage: '3d6', damageType: '화염', range: 0, half: true } }),
+  // ---- 4~5레벨 (SRD 5.2.1)
+  card({ id: 'spell/fireball', name: '화염구', desc: '3레벨 주문. 3존 안의 한 존을 골라, 그 존의 모든 적은 민첩 내성, 실패 시 8d6 화염 (성공 시 절반).', kind: 'spell', cost: 'action', target: 'area', spellLevel: 3, upcast: { dice: '1d6' }, effect: { type: 'area_save', save: 'dex', damage: '8d6', damageType: '화염', range: 3, half: true } }),
+  card({ id: 'spell/spirit_guardians', name: '수호 영령', desc: '3레벨 주문. 영령들이 내 존을 휩쓸어, 그 존의 모든 적은 지혜 내성, 실패 시 3d8 광휘 (성공 시 절반).', kind: 'spell', cost: 'action', target: 'area', spellLevel: 3, upcast: { dice: '1d8' }, effect: { type: 'area_save', save: 'wis', damage: '3d8', damageType: '광휘', range: 0, half: true } }),
+  card({ id: 'spell/hold_person', name: '인간 속박', desc: '2레벨 주문. 2존 안의 적은 지혜 내성, 실패 시 1라운드 동안 기절(행동 불가, 받는 공격에 이점).', kind: 'spell', cost: 'action', target: 'enemy', spellLevel: 2, effect: { type: 'save_damage', save: 'wis', damage: '0d4', damageType: '', range: 2, inflict: { condition: 'stunned', save: 'wis', dc: 0, rounds: 1 } } }),
+  card({ id: 'spell/ray_of_sickness', name: '병마의 광선', desc: '1레벨 주문. 원거리 주문 공격 2d8 독 (3존). 명중하면 대상은 건강 내성, 실패 시 2라운드 중독.', kind: 'spell', cost: 'action', target: 'enemy', spellLevel: 1, upcast: { dice: '1d8' }, effect: { type: 'attack', attack: { kind: 'ranged', ability: 'spell', damage: '2d8', damageType: '독', range: 3 }, inflict: { condition: 'poisoned', save: 'con', dc: 0, rounds: 2 } } }),
   card({ id: 'spell/scorching_ray', name: '작열 광선', desc: '2레벨 주문. 광선 3줄, 각각 원거리 주문 공격 2d6 화염 (3존).', kind: 'spell', cost: 'action', target: 'enemy', spellLevel: 2, upcast: { count: 1 }, effect: { type: 'attack', attack: { kind: 'ranged', ability: 'spell', damage: '2d6', damageType: '화염', range: 3 }, count: 3 } }),
 ];
 
@@ -133,22 +161,22 @@ export const CLASS_KITS: Record<string, ClassKit> = {
   fighter: {
     cards: ['weapon/longsword', 'weapon/javelin', 'fighter/second_wind'], ac: () => 16, // 체인 메일
     progression: { 2: ['fighter/action_surge'] },
-    features: { 2: ['행동 연쇄'], 3: ['투사: 향상된 치명타 (19~20)'] },
+    features: { 2: ['행동 연쇄'], 3: ['투사: 향상된 치명타 (19~20)'], 4: ['능력치 향상', '재기의 바람 3회'], 5: ['추가 공격 (무기 공격 2회)', '숙련 보너스 +3'] },
   },
   rogue: {
     cards: ['weapon/shortsword', 'weapon/shortbow'], ac: (d) => 11 + d, sneakAttack: '1d6', // 가죽 갑옷
     progression: { 2: ['rogue/cunning_dash', 'rogue/cunning_disengage', 'rogue/cunning_hide'], 3: ['rogue/steady_aim'] },
-    features: { 2: ['교활한 행동 (질주·후퇴·숨기)'], 3: ['암습 2d6', '정밀 조준'] },
+    features: { 2: ['교활한 행동 (질주·후퇴·숨기)'], 3: ['암습 2d6', '정밀 조준'], 4: ['능력치 향상'], 5: ['암습 3d6', '초감각 회피 (반응으로 받은 공격 피해 절반)', '숙련 보너스 +3'] },
   },
   cleric: {
     cards: ['weapon/mace', 'spell/sacred_flame', 'spell/cure_wounds'], ac: (d) => 13 + Math.min(d, 2) + 2, spellAbility: 'wis', // 체인 셔츠 + 방패
-    progression: { 2: ['cleric/divine_spark_heal', 'cleric/divine_spark_harm', 'spell/healing_word'], 3: ['spell/guiding_bolt'] },
-    features: { 2: ['신성 변환: 신성 불꽃', '치유의 말', '1레벨 슬롯 +1'], 3: ['인도의 화살', '1레벨 슬롯 +1', '2레벨 슬롯 2개'] },
+    progression: { 2: ['cleric/divine_spark_heal', 'cleric/divine_spark_harm', 'spell/healing_word'], 3: ['spell/guiding_bolt', 'spell/hold_person'], 5: ['spell/spirit_guardians'] },
+    features: { 2: ['신성 변환: 신성 불꽃', '치유의 말', '1레벨 슬롯 +1'], 3: ['인도의 화살', '인간 속박', '1레벨 슬롯 +1', '2레벨 슬롯 2개'], 4: ['능력치 향상', '2레벨 슬롯 +1'], 5: ['수호 영령', '3레벨 슬롯 2개', '소마법 강화', '숙련 보너스 +3'] },
   },
   wizard: {
     cards: ['weapon/dagger', 'spell/fire_bolt', 'spell/magic_missile'], ac: (d) => 10 + d, spellAbility: 'int',
-    progression: { 2: ['spell/burning_hands'], 3: ['spell/scorching_ray'] },
-    features: { 2: ['타오르는 손길', '1레벨 슬롯 +1'], 3: ['작열 광선', '1레벨 슬롯 +1', '2레벨 슬롯 2개'] },
+    progression: { 2: ['spell/burning_hands'], 3: ['spell/scorching_ray'], 4: ['spell/ray_of_sickness'], 5: ['spell/fireball'] },
+    features: { 2: ['타오르는 손길', '1레벨 슬롯 +1'], 3: ['작열 광선', '1레벨 슬롯 +1', '2레벨 슬롯 2개'], 4: ['능력치 향상', '병마의 광선', '2레벨 슬롯 +1'], 5: ['화염구', '3레벨 슬롯 2개', '소마법 강화', '숙련 보너스 +3'] },
   },
   none: { cards: ['weapon/dagger'], ac: (d) => 10 + d },
 };
