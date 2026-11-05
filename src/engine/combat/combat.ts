@@ -82,6 +82,10 @@ export interface Combatant {
   uncannyDodge?: boolean;
   /** 소마법 강화: 소마법 피해 주사위 배수 (5레벨부터 2) */
   cantripTier?: number;
+  /** 회피 (로그 7레벨): 민첩 내성 절반 피해 — 성공 0, 실패 절반 */
+  evasion?: boolean;
+  /** 보호의 오라 (팔라딘 6레벨): 같은 존 아군의 내성에 더하는 값 */
+  aura?: number;
   /** 이 전투원만 가진 카드 정의 (소지품 물약·세계만의 적 기술 등, 설계 v3 6.4) */
   extraCards?: CardDef[];
   /** 적: 처치 경험치·역할·외형·보스 단계 (세계만의 적도 전투 안에서 스스로 완결되도록 담아 둔다) */
@@ -199,8 +203,10 @@ export function sheetCombatant(sheet: CharacterSheet, id: string, name: string, 
     dodging: false, hidden: false, initiative: 0,
     sneakAttack: kit.sneakAttack ? `${Math.ceil(sheet.level / 2)}d6` : undefined, // 암습 1d6(1~2레벨), 2d6(3~4레벨)
     critRange: sheet.classId === 'fighter' && sheet.level >= 3 ? 19 : 20, // 투사: 향상된 치명타
-    ...(sheet.classId === 'fighter' && sheet.level >= 5 ? { extraAttack: true } : {}),
+    ...(['fighter', 'ranger', 'paladin'].includes(sheet.classId) && sheet.level >= 5 ? { extraAttack: true } : {}),
     ...(sheet.classId === 'rogue' && sheet.level >= 5 ? { uncannyDodge: true } : {}),
+    ...(sheet.classId === 'rogue' && sheet.level >= 7 ? { evasion: true } : {}),
+    ...(sheet.classId === 'paladin' && sheet.level >= 6 ? { aura: Math.max(1, abilityModifier(sheet.abilities.cha)) } : {}),
     ...(sheet.level >= 5 ? { cantripTier: 2 } : {}),
   };
 }
@@ -282,22 +288,24 @@ export const hasCondition = (c: Combatant, k: Condition) => (c.conditions?.[k] ?
 export const conditionsOf = (c: Combatant) => Object.entries(c.conditions ?? {}).filter(([, n]) => (n ?? 0) > 0).map(([k, n]) => ({ condition: k as Condition, rounds: n! }));
 
 /** 내성 굴림 (상태 이상 반영): 기절은 근력·민첩 자동 실패, 포박은 민첩 불리점 */
-function saveTest(rng: Rng, t: Combatant, save: Ability, dc: number): { kept: number; mod: number; total: number; success: number | boolean; note: string } {
-  const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0);
+function saveTest(rng: Rng, t: Combatant, save: Ability, dc: number, cs?: CombatState): { kept: number; mod: number; total: number; success: number | boolean; note: string } {
+  // 보호의 오라: 같은 존에 서 있는 (쓰러지지 않은) 팔라딘
+  const aura = cs ? Math.max(0, ...Object.values(cs.combatants).filter((o) => o.side === t.side && o.aura && o.hp > 0 && o.zone === t.zone).map((o) => o.aura!)) : 0;
+  const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0) + aura;
   if (hasCondition(t, 'stunned') && (save === 'str' || save === 'dex')) return { kept: 0, mod: sb, total: 0, success: false, note: '기절 — 자동 실패' };
   const r = d20Test(rng, sb, dc, hasCondition(t, 'restrained') && save === 'dex' ? 'disadvantage' : 'normal');
   return { kept: r.kept, mod: sb, total: r.total, success: r.success, note: r.rolls.length > 1 ? `불리점(포박) ${r.rolls.join(', ')}` : '' };
 }
 
 /** 상태 이상 부여. saved: 이미 굴린 내성 결과 (내성 피해 카드). 없으면 inflict.save로 새로 굴린다. */
-function tryInflict(rng: Rng, a: Combatant, t: Combatant, inf: Inflict, saved?: boolean): { effects: CombatEffect[]; text: string } {
+function tryInflict(rng: Rng, a: Combatant, t: Combatant, inf: Inflict, saved?: boolean, cs?: CombatState): { effects: CombatEffect[]; text: string } {
   const label = CONDITION_LABEL[inf.condition];
   if (t.immune?.includes(inf.condition)) return { effects: [], text: `, ${label} 면역` };
   let failed: boolean;
   let roll = '';
   if (saved === undefined) {
     const dc = inf.dc || spellSaveDc(a);
-    const r = saveTest(rng, t, inf.save, dc);
+    const r = saveTest(rng, t, inf.save, dc, cs);
     failed = !r.success;
     roll = ` 내성 ${r.note || r.total} vs DC ${dc}`;
   } else failed = !saved;
@@ -323,7 +331,7 @@ function inRange(card: CardDef, actor: Combatant, target: Combatant): boolean {
   const e = card.effect;
   const dist = Math.abs(actor.zone - target.zone);
   if (e.type === 'attack') return e.attack.kind === 'melee' ? dist === 0 : dist <= e.attack.range;
-  if (e.type === 'save_damage' || e.type === 'auto_damage') return dist <= e.range;
+  if (e.type === 'save_damage' || e.type === 'auto_damage' || e.type === 'mark') return dist <= e.range;
   return false;
 }
 
@@ -339,6 +347,10 @@ export function validTargets(cs: CombatState, actorId: string, card: CardDef): T
     // 공포: 가장 가까운 적에게 다가가는 방향으로는 움직일 수 없다
     const dist = (z: number) => Math.min(...opponents(cs, a).map((o) => Math.abs(o.zone - z)));
     return zones.filter((z) => !opponents(cs, a).length || dist(z) >= dist(a.zone));
+  }
+  if (card.target === 'ally' && card.effect.type === 'inspire') {
+    const range = card.effect.range;
+    return Object.values(cs.combatants).filter((o) => o.side === a.side && o.id !== a.id && alive(o) && Math.abs(o.zone - a.zone) <= range && !o.aimed).map((o) => o.id);
   }
   if (card.target === 'ally') {
     const range = healRange(card);
@@ -457,12 +469,12 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
   // 넘어뜨리기: 살아남은 대상은 내성 굴림
   let proneText = '';
   if (at.knockProne && hpBefore - total > 0 && !t.prone) {
-    const sr = saveTest(rng, t, at.knockProne.save, at.knockProne.dc);
+    const sr = saveTest(rng, t, at.knockProne.save, at.knockProne.dc, cs);
     if (!sr.success) effects.push({ kind: 'flag', target: t.id, prone: true });
     proneText = `, 넘어뜨리기 내성 ${sr.note || sr.total} vs DC ${at.knockProne.dc} → ${sr.success ? '버팀' : '넘어짐'}`;
   }
   if (at.inflict && hpBefore - total > 0) {
-    const inf = tryInflict(rng, a, t, at.inflict);
+    const inf = tryInflict(rng, a, t, at.inflict, undefined, cs);
     effects.push(...inf.effects);
     proneText += inf.text;
   }
@@ -473,20 +485,23 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
 }
 
 /** 내성 피해 한 명분 */
-function rollSave(a: Combatant, t: Combatant, cardName: string, save: Ability, damage: string, damageType: string, half: boolean, bonus: number, rng: Rng, fixedDc?: number, inflict?: Inflict): { effects: CombatEffect[]; line: string } {
+function rollSave(a: Combatant, t: Combatant, cardName: string, save: Ability, damage: string, damageType: string, half: boolean, bonus: number, rng: Rng, fixedDc?: number, inflict?: Inflict, cs?: CombatState): { effects: CombatEffect[]; line: string } {
   const dc = fixedDc ?? spellSaveDc(a);
-  const r = saveTest(rng, t, save, dc);
+  const r = saveTest(rng, t, save, dc, cs);
   const head = `${a.name}의 ${cardName} → ${t.name}: 내성 ${r.note ? r.note : `d20(${r.kept}) ${r.mod >= 0 ? '+' : ''}${r.mod} = ${r.total}`} vs DC ${dc}`;
   // 피해 없는 순수 상태 이상 주문 (예: 인간 속박)
   if (!damageType) {
-    const inf = inflict ? tryInflict(rng, a, t, inflict, !!r.success) : { effects: [], text: '' };
+    const inf = inflict ? tryInflict(rng, a, t, inflict, !!r.success, cs) : { effects: [], text: '' };
     return { effects: inf.effects, line: `${head} → ${r.success ? '성공' : '실패'}${inf.text}` };
   }
   if (r.success && !half) return { effects: [], line: `${head} → 성공, 피해 없음` };
+  // 회피 (로그 7레벨): 민첩 절반 피해는 성공 0, 실패 절반
+  const evade = !!t.evasion && save === 'dex' && half && !hasCondition(t, 'stunned');
+  if (evade && r.success) return { effects: [], line: `${head} → 성공, 회피로 피해 없음` };
   const full = rollDamage(rng, damage).total + bonus;
-  const dealt = r.success ? Math.floor(full / 2) : full;
+  const dealt = r.success || evade ? Math.floor(full / 2) : full;
   const survives = t.hp - dealt > 0;
-  const inf = inflict && survives ? tryInflict(rng, a, t, inflict, !!r.success) : { effects: [], text: '' };
+  const inf = inflict && survives ? tryInflict(rng, a, t, inflict, !!r.success, cs) : { effects: [], text: '' };
   return {
     effects: [...(dealt > 0 ? [{ kind: 'hp', target: t.id, delta: -dealt } as CombatEffect] : []), ...inf.effects],
     line: `${head} → ${r.success ? '성공, 절반' : '실패,'} ${damageType} 피해 ${dealt}${survives ? '' : ` — ${t.name} 쓰러짐`}${r.success ? '' : inf.text}`,
@@ -547,7 +562,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
     }
     case 'save_damage': {
       const t = cs.combatants[target as string]!;
-      const r = rollSave(a, t, name, e.save, cantripDamage(card, a, scaleDice(e.damage, card.upcast?.dice, up)), e.damageType, !!e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc, e.inflict);
+      const r = rollSave(a, t, name, e.save, cantripDamage(card, a, scaleDice(e.damage, card.upcast?.dice, up)), e.damageType, !!e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc, e.inflict, cs);
       effects.push(...r.effects);
       log.push(r.line);
       break;
@@ -557,7 +572,7 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
       const foes = opponents(cs, a).filter((o) => o.zone === zone);
       log.push(`${a.name}의 ${name}: ${ZONE_NAMES[zone]}의 적 ${foes.length}명`);
       for (const t of foes) {
-        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc, e.inflict);
+        const r = rollSave(a, t, name, e.save, scaleDice(e.damage, card.upcast?.dice, up), e.damageType, e.half, e.bonus === 'spell' ? spellMod(a) : 0, rng, e.dc, e.inflict, cs);
         effects.push(...r.effects);
         log.push(`  ${r.line}`);
       }
@@ -616,6 +631,18 @@ export function resolveCard(cs: CombatState, actorId: string, cardId: string, ta
     case 'stand': {
       effects.push({ kind: 'flag', target: a.id, prone: false });
       log.push(`${a.name}: 일어섰다`);
+      break;
+    }
+    case 'mark': {
+      const t = cs.combatants[target as string]!;
+      effects.push({ kind: 'flag', target: t.id, marked: true });
+      log.push(`${a.name}: ${name} → ${t.name} — 다음 공격이 이점`);
+      break;
+    }
+    case 'inspire': {
+      const t = cs.combatants[target as string]!;
+      effects.push({ kind: 'flag', target: t.id, aimed: true });
+      log.push(`${a.name}: ${name} → ${t.name} — 다음 공격이 이점`);
       break;
     }
     case 'dodge': {

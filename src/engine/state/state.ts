@@ -345,10 +345,13 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         regain('second_wind', 1);
         regain('action_surge', 99);
         regain('channel_divinity', 1);
+        // 워락 계약 슬롯은 짧은 휴식에 모두 회복, 바드 5레벨부터 음유 영감도
+        if (sh.classId === 'warlock') for (const k of Object.keys(res)) if (k.startsWith('slot')) regain(k, 99);
+        if (sh.classId === 'bard' && sh.level >= 5) regain('bardic_inspiration', 99);
         if (res.arcane_recovery && res.arcane_recovery.cur > 0) {
           let budget = Math.ceil(sh.level / 2);
           let recovered = false;
-          for (const lv of [3, 2, 1]) {
+          for (const lv of [5, 4, 3, 2, 1]) {
             const slot = res[`slot${lv}`];
             while (slot && slot.cur < slot.max && budget >= lv) { slot.cur++; budget -= lv; recovered = true; }
           }

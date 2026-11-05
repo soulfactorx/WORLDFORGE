@@ -7,7 +7,7 @@ const make = (classId: string, skills: string[]) =>
 
 describe('레벨업', () => {
   it('경험치 표 (SRD: 2레벨 300, 3레벨 900, 4레벨 2700, 5레벨 6500)', () => {
-    expect([0, 299, 300, 899, 900, 2699, 2700, 6499, 6500, 99999].map(levelForXp)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+    expect([0, 299, 300, 899, 900, 2699, 2700, 6499, 6500, 14000, 63999, 64000, 999999].map(levelForXp)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 9, 10, 10]);
     expect(xpToNext({ ...make('fighter', ['athletics', 'perception']), xp: 100 })).toBe(200);
   });
   it('HP는 고정값 + 건강 수정치, 새 능력 안내', () => {
@@ -50,6 +50,6 @@ describe('레벨업', () => {
     expect(w.level).toBe(5);
     expect(w.resources).toMatchObject({ slot1: { max: 4 }, slot2: { max: 3 }, slot3: { max: 2, cur: 2 } });
     expect(feats).toContain('화염구');
-    expect(xpToNext({ ...w, xp: 7000 })).toBeNull();
+    expect(xpToNext({ ...w, xp: 7000 })).toBe(14000 - 7000);
   });
 });

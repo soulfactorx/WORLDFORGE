@@ -43,6 +43,8 @@ export interface ClassTemplate {
   skillOptions: SkillId[];
   /** 추천 능력치 순서 (표준 배열 자동 배치용) */
   priority: Ability[];
+  /** 한 줄 소개 (직업 고르기 화면) */
+  blurb: string;
 }
 
 export const CLASSES: Record<string, ClassTemplate> = {
@@ -50,21 +52,49 @@ export const CLASSES: Record<string, ClassTemplate> = {
     id: 'fighter', name: '파이터', hitDie: 10, saves: ['str', 'con'], skillChoices: 2,
     skillOptions: ['acrobatics', 'animal_handling', 'athletics', 'history', 'insight', 'intimidation', 'persuasion', 'perception', 'survival'],
     priority: ['str', 'con', 'dex', 'wis', 'cha', 'int'],
+    blurb: '튼튼한 갑옷과 무기의 달인. 재기의 바람으로 버티고, 5레벨부터 두 번 벤다.',
   },
   rogue: {
     id: 'rogue', name: '로그', hitDie: 8, saves: ['dex', 'int'], skillChoices: 4,
     skillOptions: ['acrobatics', 'athletics', 'deception', 'insight', 'intimidation', 'investigation', 'perception', 'persuasion', 'sleight_of_hand', 'stealth'],
     priority: ['dex', 'con', 'wis', 'int', 'cha', 'str'],
+    blurb: '그림자 속의 기술자. 틈을 노린 암습, 재빠른 몸놀림, 7레벨 회피.',
   },
   cleric: {
     id: 'cleric', name: '클레릭', hitDie: 8, saves: ['wis', 'cha'], skillChoices: 2,
     skillOptions: ['history', 'insight', 'medicine', 'persuasion', 'religion'],
     priority: ['wis', 'con', 'str', 'cha', 'dex', 'int'],
+    blurb: '신의 힘을 빌리는 치유자이자 전사. 치유·광휘 주문, 신성 변환.',
   },
   wizard: {
     id: 'wizard', name: '위저드', hitDie: 6, saves: ['int', 'wis'], skillChoices: 2,
     skillOptions: ['arcana', 'history', 'insight', 'investigation', 'medicine', 'nature', 'religion'],
     priority: ['int', 'con', 'dex', 'wis', 'cha', 'str'],
+    blurb: '책으로 익힌 비전 마법. 몸은 약하지만 화염구·냉기 원뿔로 전장을 바꾼다.',
+  },
+  bard: {
+    id: 'bard', name: '바드', hitDie: 8, saves: ['dex', 'cha'], skillChoices: 3,
+    skillOptions: ['acrobatics', 'animal_handling', 'arcana', 'athletics', 'deception', 'history', 'insight', 'intimidation', 'investigation', 'medicine', 'nature', 'perception', 'performance', 'persuasion', 'religion', 'sleight_of_hand', 'stealth', 'survival'],
+    priority: ['cha', 'dex', 'con', 'wis', 'int', 'str'],
+    blurb: '말과 노래로 싸우는 이야기꾼. 음유 영감으로 동료를 돕고, 조롱·최면 문양으로 적을 흔든다.',
+  },
+  ranger: {
+    id: 'ranger', name: '레인저', hitDie: 10, saves: ['str', 'dex'], skillChoices: 3,
+    skillOptions: ['animal_handling', 'athletics', 'insight', 'investigation', 'nature', 'perception', 'stealth', 'survival'],
+    priority: ['dex', 'wis', 'con', 'str', 'int', 'cha'],
+    blurb: '황야의 사냥꾼. 사냥꾼의 표식으로 사냥감을 쫓고, 활과 칼, 약간의 자연 마법.',
+  },
+  paladin: {
+    id: 'paladin', name: '팔라딘', hitDie: 10, saves: ['wis', 'cha'], skillChoices: 2,
+    skillOptions: ['athletics', 'insight', 'intimidation', 'medicine', 'persuasion', 'religion'],
+    priority: ['str', 'cha', 'con', 'wis', 'dex', 'int'],
+    blurb: '맹세로 싸우는 성기사. 안수로 치유하고, 신성 강타로 내리치며, 6레벨부터 곁의 동료를 지킨다.',
+  },
+  warlock: {
+    id: 'warlock', name: '워락', hitDie: 8, saves: ['wis', 'cha'], skillChoices: 2,
+    skillOptions: ['arcana', 'deception', 'history', 'intimidation', 'investigation', 'nature', 'religion'],
+    priority: ['cha', 'con', 'dex', 'wis', 'int', 'str'],
+    blurb: '계약으로 힘을 얻은 술사. 슬롯은 적지만 짧은 휴식마다 돌아온다. 섬뜩한 화살과 저주.',
   },
 };
 

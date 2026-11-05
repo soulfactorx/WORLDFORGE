@@ -151,6 +151,18 @@ const LIST: MonsterDef[] = [
     cards: [melee('knight/greatsword', '대검 연격', { toHit: 5, dmg: '2d6', bonus: 3, type: '참격', count: 2 }), ranged('knight/crossbow', '중쇠뇌', { toHit: 2, dmg: '1d10', bonus: 0, type: '관통', range: 2 })],
     phases: [{ below: 0.5, line: '흑기사가 투구를 벗어 던진다 — "이제부터가 진짜다!"', ac: -2, addCards: [melee('knight/fury', '분노의 일격', { toHit: 6, dmg: '4d6', bonus: 3, type: '참격' })] }] },
 
+  // ---- 고레벨 (6~10레벨 파티)
+  { id: 'troll', name: '트롤', ac: 15, hp: 94, xp: 1800, cr: '5', abilities: ab(18, 13, 20, 7, 9, 7), genres: F, role: 'brute',
+    look: '녹회색 피부의 거구. 베인 상처가 눈앞에서 아문다.',
+    cards: [melee('troll/rend', '할퀴고 물기 연격', { toHit: 7, dmg: '2d6', bonus: 4, type: '참격', count: 3 })] },
+  { id: 'wyvern', name: '와이번', ac: 14, hp: 110, xp: 2300, cr: '6', abilities: ab(19, 10, 16, 5, 12, 6), genres: F, role: 'skirmisher',
+    look: '가죽 날개의 비룡. 꼬리 끝 독침에서 진액이 떨어진다.',
+    cards: [melee('wyvern/bite', '물기', { toHit: 7, dmg: '2d6', bonus: 4, type: '관통' }), melee('wyvern/sting', '독침', { toHit: 7, dmg: '2d6', bonus: 4, type: '독', inflict: { condition: 'poisoned', save: 'con', dc: 15, rounds: 2 } })] },
+  { id: 'young_red_dragon', name: '젊은 붉은 용', ac: 18, hp: 178, xp: 5900, cr: '10', abilities: ab(23, 10, 21, 14, 11, 19), genres: F, role: 'boss', saves: ['dex', 'con', 'wis', 'cha'], resources: { breath: 1 },
+    look: '붉은 비늘의 용. 숨을 들이쉴 때마다 목구멍 안이 붉게 달아오른다.',
+    cards: [melee('dragon/rend', '물기와 할퀴기', { toHit: 10, dmg: '2d10', bonus: 6, type: '참격', count: 3 }), area('dragon/breath', '화염 숨결', { save: 'dex', dc: 17, dmg: '16d6', type: '화염', range: 2, resource: 'breath' })],
+    phases: [{ below: 0.5, line: '용이 날개를 펼치며 포효한다 — 공기가 타오른다!', addCards: [area('dragon/breath2', '두 번째 숨결', { save: 'dex', dc: 17, dmg: '12d6', type: '화염', range: 2 })] }] },
+
   // ======================================================== 무협 (자체 창작)
   { id: 'wx_bandit', name: '산적 졸개', ac: 12, hp: 11, xp: 25, cr: '1/8', abilities: ab(12, 12, 12, 8, 10, 8), genres: W, role: 'minion', fleeAt: 0.4,
     look: '머리에 띠를 두른 산채 졸개. 박도를 휘두르며 소리친다.',
@@ -205,6 +217,16 @@ const LIST: MonsterDef[] = [
     look: '흐트러진 머리의 창백한 혼령. 서늘한 곡소리가 따른다.',
     cards: [melee('wx_ghost/touch', '한기', { toHit: 4, dmg: '2d6', bonus: 1, type: '사령', ability: 'dex' }),
       area('wx_ghost/wail', '원한의 곡성', { save: 'wis', dc: 12, dmg: '2d8', type: '정신', range: 1, resource: 'wail', inflict: { condition: 'frightened', rounds: 2 } })] },
+  // ---- 고레벨 (6~10레벨 파티)
+  { id: 'wx_sword_saint', name: '검성', ac: 18, hp: 120, xp: 2900, cr: '7', abilities: ab(16, 20, 16, 14, 16, 14), genres: W, role: 'leader', saves: ['dex', 'wis'], resources: { sword_qi: 2 },
+    look: '백발의 노검객. 칼을 뽑지 않았는데도 주위 공기가 갈라진다.',
+    cards: [melee('wx_sword_saint/strikes', '천검일섬 연격', { toHit: 9, dmg: '1d10', bonus: 5, type: '참격', ability: 'dex', count: 3 }),
+      saveAtk('wx_sword_saint/qi', '검기', { save: 'dex', dc: 16, dmg: '6d8', type: '역장', range: 2, half: true, resource: 'sword_qi' })] },
+  { id: 'wx_demon_lord', name: '마두', ac: 18, hp: 160, xp: 5000, cr: '9', abilities: ab(20, 16, 20, 16, 16, 20), genres: W, role: 'boss', saves: ['con', 'wis', 'cha'], resources: { demon_art: 1 },
+    look: '핏빛 기운을 두른 마도의 거두. 눈빛만으로 사람을 얼어붙게 한다.',
+    cards: [melee('wx_demon_lord/palm', '마라장 연격', { toHit: 10, dmg: '2d10', bonus: 5, type: '사령', count: 2 }),
+      area('wx_demon_lord/gaze', '마안', { save: 'wis', dc: 17, dmg: '4d10', type: '정신', range: 1, resource: 'demon_art', inflict: { condition: 'frightened', rounds: 2 } })],
+    phases: [{ below: 0.4, line: '마두가 피를 토하며 웃는다 — "천마강림!"', ac: 1, addCards: [area('wx_demon_lord/descent', '천마강림', { save: 'con', dc: 17, dmg: '10d8', type: '사령', range: 0 })] }] },
 ];
 
 export const MONSTERS: Record<string, MonsterDef> = Object.fromEntries(LIST.map((m) => [m.id, m]));
@@ -221,14 +243,17 @@ export const ALL_MONSTER_CARDS: CardDef[] = LIST.flatMap((m) => [...m.cards, ...
 // ---------------------------------------------------------------- 조우 난이도 (SRD 5.2.1 경험치 예산)
 
 /** 캐릭터 레벨별 1인 예산 [낮음, 보통, 높음] */
-const BUDGET: Record<number, [number, number, number]> = { 1: [50, 75, 100], 2: [100, 150, 200], 3: [150, 225, 400], 4: [250, 375, 500], 5: [500, 750, 1100] };
+const BUDGET: Record<number, [number, number, number]> = {
+  1: [50, 75, 100], 2: [100, 150, 200], 3: [150, 225, 400], 4: [250, 375, 500], 5: [500, 750, 1100],
+  6: [600, 1000, 1400], 7: [750, 1300, 1700], 8: [1000, 1700, 2100], 9: [1300, 2000, 2600], 10: [1600, 2300, 3100],
+};
 
 export type Difficulty = 'easy' | 'moderate' | 'hard' | 'deadly';
 export const DIFFICULTY_LABEL: Record<Difficulty, string> = { easy: '쉬움', moderate: '보통', hard: '어려움', deadly: '치명적' };
 
 export function encounterDifficulty(monsterIds: string[], partyLevels: number[], table: Record<string, MonsterDef> = MONSTERS): { xp: number; difficulty: Difficulty; budget: [number, number, number] } {
   const xp = monsterIds.reduce((s, id) => s + (table[id]?.xp ?? 0), 0);
-  const budget = partyLevels.reduce<[number, number, number]>((acc, lv) => { const b = BUDGET[Math.max(1, Math.min(5, lv))]!; return [acc[0] + b[0], acc[1] + b[1], acc[2] + b[2]]; }, [0, 0, 0]);
+  const budget = partyLevels.reduce<[number, number, number]>((acc, lv) => { const b = BUDGET[Math.max(1, Math.min(10, lv))]!; return [acc[0] + b[0], acc[1] + b[1], acc[2] + b[2]]; }, [0, 0, 0]);
   const difficulty: Difficulty = xp <= budget[0] ? 'easy' : xp <= budget[1] ? 'moderate' : xp <= budget[2] ? 'hard' : 'deadly';
   return { xp, difficulty, budget };
 }

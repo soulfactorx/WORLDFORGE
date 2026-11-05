@@ -98,26 +98,34 @@ export function createCharacter(input: CreationInput): CharacterSheet {
   };
 }
 
-/** 전업 시전자 주문 슬롯 (SRD 5.2.1): [1레벨, 2레벨, 3레벨 슬롯] */
-const FULL_CASTER_SLOTS: Record<number, [number, number, number]> = { 1: [2, 0, 0], 2: [3, 0, 0], 3: [4, 2, 0], 4: [4, 3, 0], 5: [4, 3, 2] };
+/** 전업 시전자 주문 슬롯 (SRD 5.2.1): [1~5레벨 슬롯] */
+const FULL_CASTER_SLOTS: Record<number, number[]> = {
+  1: [2], 2: [3], 3: [4, 2], 4: [4, 3], 5: [4, 3, 2], 6: [4, 3, 3], 7: [4, 3, 3, 1], 8: [4, 3, 3, 2], 9: [4, 3, 3, 3, 1], 10: [4, 3, 3, 3, 2],
+};
+/** 반 시전자 (팔라딘·레인저, SRD 5.2.1) */
+const HALF_CASTER_SLOTS: Record<number, number[]> = {
+  1: [2], 2: [2], 3: [3], 4: [3], 5: [4, 2], 6: [4, 2], 7: [4, 3], 8: [4, 3], 9: [4, 3, 2], 10: [4, 3, 2],
+};
+/** 워락 계약 마법: 모든 슬롯이 같은 레벨, 짧은 휴식에 회복 */
+export const pactSlot = (level: number) => ({ level: Math.min(5, Math.ceil(level / 2)), count: level >= 2 ? 2 : 1 });
 
-/** 레벨별 직업 자원 (SRD 5.2.1). 긴 휴식에 모두 회복된다. */
+/** 레벨별 직업 자원 (SRD 5.2.1). 긴 휴식에 모두 회복된다 (워락 슬롯은 짧은 휴식에도). */
 export function classResources(classId: string, level: number): Record<string, { cur: number; max: number }> {
-  const lv = Math.max(1, Math.min(5, level));
+  const lv = Math.max(1, Math.min(10, level));
   const r = (n: number) => ({ cur: n, max: n });
   const out: Record<string, { cur: number; max: number }> = {};
+  const slots = (table: Record<number, number[]>) => table[lv]!.forEach((n, i) => { if (n) out[`slot${i + 1}`] = r(n); });
   if (classId === 'fighter') {
-    out.second_wind = r(lv >= 4 ? 3 : 2);
+    out.second_wind = r(lv >= 10 ? 4 : lv >= 4 ? 3 : 2);
     if (lv >= 2) out.action_surge = r(1);
   }
-  if (classId === 'cleric' || classId === 'wizard') {
-    const [s1, s2, s3] = FULL_CASTER_SLOTS[lv]!;
-    out.slot1 = r(s1);
-    if (s2) out.slot2 = r(s2);
-    if (s3) out.slot3 = r(s3);
-  }
-  if (classId === 'cleric' && lv >= 2) out.channel_divinity = r(2);
+  if (classId === 'cleric' || classId === 'wizard' || classId === 'bard') slots(FULL_CASTER_SLOTS);
+  if (classId === 'paladin' || classId === 'ranger') slots(HALF_CASTER_SLOTS);
+  if (classId === 'warlock') { const p = pactSlot(lv); out[`slot${p.level}`] = r(p.count); }
+  if (classId === 'cleric' && lv >= 2) out.channel_divinity = r(lv >= 6 ? 3 : 2);
   if (classId === 'wizard') out.arcane_recovery = r(1);
+  if (classId === 'bard') out.bardic_inspiration = r(lv >= 10 ? 5 : lv >= 5 ? 4 : 3);
+  if (classId === 'paladin') out.lay_on_hands = r(Math.max(1, Math.ceil(lv / 3)));
   return out;
 }
 

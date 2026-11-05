@@ -54,6 +54,7 @@ export function CharacterCreator({ onCreate, onCancel }: { onCreate: (c: Charact
             <button key={c.id} type="button" className={c.id === classId ? 'primary' : ''} onClick={() => changeClass(c.id)}>{rs(c.name)}</button>
           ))}
         </div>
+        <p className="small">{rs(cls.blurb)}</p>
         <p className="muted small">생명 주사위 d{cls.hitDie} · 내성 숙련: {cls.saves.map((a) => ABILITY_NAMES[a]).join(', ')}</p>
       </fieldset>
 

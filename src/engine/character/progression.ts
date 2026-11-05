@@ -1,6 +1,6 @@
 /**
- * 경험치와 레벨업 — SRD 5.2.1 (CC-BY-4.0) 기반. 1~5레벨 지원 (세계마다 상한을 더 낮게 둘 수 있다).
- * 4레벨: 능력치 향상 — 직업 주능력치 +2 (최대 20, 넘치는 만큼 두 번째 능력치에).
+ * 경험치와 레벨업 — SRD 5.2.1 (CC-BY-4.0) 기반. 1~10레벨 지원 (세계마다 상한을 더 낮게 둘 수 있다).
+ * 4·8레벨(파이터 6, 로그 10 추가): 능력치 향상 — 직업 주능력치 +2 (최대 20, 넘치는 만큼 두 번째 능력치에).
  * 레벨업 HP는 고정값(생명 주사위 평균 = 주사위/2 + 1) + 건강 수정치 (최소 1).
  */
 import { abilityModifier } from '../dice/dice';
@@ -8,10 +8,11 @@ import { CLASS_KITS } from '../combat/cards';
 import { ABILITY_NAMES, CLASSES } from './rules';
 import { type CharacterSheet, classResources, resourcesOf } from './sheet';
 
-export const MAX_LEVEL = 5;
-export const XP_FOR_LEVEL: Record<number, number> = { 1: 0, 2: 300, 3: 900, 4: 2700, 5: 6500 };
-/** 능력치 향상을 받는 레벨 */
-export const ASI_LEVELS = [4];
+export const MAX_LEVEL = 10;
+export const XP_FOR_LEVEL: Record<number, number> = { 1: 0, 2: 300, 3: 900, 4: 2700, 5: 6500, 6: 14000, 7: 23000, 8: 34000, 9: 48000, 10: 64000 };
+/** 능력치 향상을 받는 레벨 (SRD 5.2.1: 파이터는 6레벨, 로그는 10레벨에 한 번 더) */
+export const ASI_LEVELS = [4, 8];
+export const asiLevels = (classId: string) => (classId === 'fighter' ? [4, 6, 8] : classId === 'rogue' ? [4, 8, 10] : ASI_LEVELS);
 /** 플레이어가 새로운 사실을 알게 됐을 때의 경험치 (탐험·대화 보상) */
 export const DISCOVERY_XP = 25;
 
@@ -39,7 +40,7 @@ export function levelUp(sheet: CharacterSheet): LevelUpResult {
   // 능력치 향상: 주능력치 +2 (최대 20). 건강이 오르면 HP 최대치도 소급해서 오른다.
   let abilities = sheet.abilities;
   const asi: string[] = [];
-  if (cls && ASI_LEVELS.includes(level)) {
+  if (cls && asiLevels(sheet.classId).includes(level)) {
     abilities = { ...abilities };
     let pts = 2;
     for (const a of cls.priority) {

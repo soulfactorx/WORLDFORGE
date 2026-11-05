@@ -23,7 +23,7 @@ describe('장르 코어 (설계 v3 R1)', () => {
   it('세계마다 최대 레벨 (엔진 상한 이하)', () => {
     expect(levelCapOf(romanceSample)).toBe(3);
     expect(levelCapOf({ genre: { id: 'wuxia', levelCap: 1 } })).toBe(1);
-    expect(levelCapOf({ genre: { id: 'wuxia', levelCap: 99 } })).toBeLessThanOrEqual(5);
+    expect(levelCapOf({ genre: { id: 'wuxia', levelCap: 99 } })).toBe(10);
   });
   it('기본 이미지 배정은 장르에 맞는 그림을 고른다', async () => {
     const w = { ...wuxiaSample, assets: [] };
