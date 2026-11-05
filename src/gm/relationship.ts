@@ -2,6 +2,13 @@ import { type Axis, clampDelta, initialRelationship, relationsOf, relationshipOf
 import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
+import { displayName } from '../engine/names';
+
+/** 기록에 보이는 이름: 플레이어가 이름을 모르면 외형 별칭 */
+const nameFor = (world: WorldPackage, state: GameState, npc: Pick<Character, 'id' | 'name'>) => {
+  const c = world.characters.find((x) => x.id === npc.id);
+  return c ? displayName(state, c) : npc.name;
+};
 
 /** 제안된 관계 변화 → 검증된 이벤트 하나 (변화가 없으면 null). 파급은 relationshipEvents. */
 export function relationshipEvent(
@@ -11,7 +18,7 @@ export function relationshipEvent(
   const delta = clampDelta(proposed);
   if (!delta) return null;
   return {
-    type: 'relationship_changed', npcId: npc.id, name: npc.name, delta, reason: reason.slice(0, 80),
+    type: 'relationship_changed', npcId: npc.id, name: nameFor(world, state, npc), delta, reason: reason.slice(0, 80),
     ...(state.relationships[npc.id] ? {} : { base: initialRelationship(world, npc.id) }),
   };
 }

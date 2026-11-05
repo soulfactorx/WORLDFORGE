@@ -10,6 +10,7 @@
  *  5. 플레이어 주도권: 플레이어의 속마음·대사를 대신 쓰지 않는다
  *  6. 대사 날조: 아무도 말하지 않은 턴에 서술이 인물의 대사를 지어내지 않는다
  */
+import { knowsName } from '../engine/names';
 import { sampleWorld } from '../data/sample-world';
 import { createCharacter, suggestedStandardArray } from '../engine/character/sheet';
 import type { WorldPackage } from '../engine/schema';
@@ -69,11 +70,17 @@ export function wrongAddress(narration: string): string | null {
 }
 
 /** 모든 시험에 공통으로 보는 것: 확정된 대사를 그대로 썼는가, 플레이어를 '당신'으로 부르는가 */
-export function commonIssue(events: GameEvent[], narration: string): string | null {
+export function commonIssue(events: GameEvent[], narration: string, world?: WorldPackage, state?: GameState): string | null {
   const missing = missingDialogue(events, narration);
   if (missing.length) return `확정된 대사를 그대로 쓰지 않음 (요약·간접 화법): "${missing[0]!.dialogue.slice(0, 40)}"`;
   const w = wrongAddress(narration);
-  return w ? `서술에서 플레이어를 "${w}"(으)로 부름 — "당신"이어야 한다` : null;
+  if (w) return `서술에서 플레이어를 "${w}"(으)로 부름 — "당신"이어야 한다`;
+  // 아직 이름을 듣지 못한 인물의 이름이 서술에 나옴
+  if (world && state) {
+    const leak = world.characters.find((c) => !knowsName(state, c.id) && c.name.length >= 2 && narration.includes(c.name));
+    if (leak) return `플레이어가 아직 모르는 이름이 서술에 나옴: ${leak.name}`;
+  }
+  return null;
 }
 
 export const PROBES: Probe[] = [
@@ -154,7 +161,7 @@ export async function runEval(
       const r = await runTurn(llm, world, before, p.input, (d) => { narration += d; }, signal);
       const narr = r.events.filter((e) => e.type === 'narration').map((e) => (e as { text: string }).text).join('\n') || narration;
       let j = p.judge({ events: r.events, state: r.state, narration: narr, before });
-      const common = j.pass ? commonIssue(r.events, narr) : null;
+      const common = j.pass ? commonIssue(r.events, narr, world, r.state) : null;
       if (common) j = { pass: false, detail: common };
       out.push({ id: p.id, name: p.name, ...j, ms: Math.round(performance.now() - t0), narration: narr.slice(0, 1200), rejected: r.rejected });
     } catch (e) {

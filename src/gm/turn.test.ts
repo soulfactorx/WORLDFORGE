@@ -108,3 +108,32 @@ describe('기록관 (실제 모델 평가 반영)', () => {
     expect(r.events.at(-1)!.type).toBe('gm_guide');
   });
 });
+
+describe('플레이어가 아는 이름 (실제 모델 평가 반영)', () => {
+  it('이름을 듣기 전에는 서술 AI에게 이름 대신 외형을 주고, 대사에서 이름이 나오면 알게 된다', async () => {
+    const narr: string[] = [];
+    const llm: LlmClient = {
+      stream: async (r, onText) => { narr.push(r.user); onText('.'); return '.'; },
+      json: async <T,>(r: { system: string; user: string }) => {
+        if (r.system.includes('판단 모듈')) return { action_summary: '말을 건다', check_kind: 'none', check_skill: '', check_ability: 'wis', check_dc_tier: 'easy', check_mode: 'normal', check_reason: '', move_to: '', speakers: [{ npc_id: 'npc/bran', reacting_to: '인사' }], start_encounter: '', rest: 'none', discover: [], set_flags: [], scene_image: '' } as T;
+        if (r.system.includes('한 명의 NPC')) return { action: '', dialogue: narr.length ? '내 이름은 브란이오.' : '무슨 일이오.', shared_claims: [], party_decision: 'none', relationship_change: { affinity: 0, trust: 0, respect: 0, fear: 0, intimacy: 0, grudge: 0, reason: '' }, expression: '', give_items: [] } as T;
+        if (r.system.includes('안내자')) return { summary: '요약', suggestion: '', choices: [{ text: '본다', skill: '' }] } as T;
+        return { facts: [] } as T;
+      },
+    };
+    let s = start();
+    s = { ...s, player: { ...s.player, locationId: 'loc/village-gate' } };
+    const r1 = await runTurn(llm, sampleWorld, s, '경비병에게 인사한다', () => {});
+    expect(narr[0]).not.toContain('브란');
+    expect(narr[0]).toContain('턱수염이 희끗한 중년 경비병');
+    expect(r1.state.namesKnown).not.toContain('npc/bran');
+    const r2 = await runTurn(llm, sampleWorld, r1.state, '이름을 묻는다', () => {});
+    expect(r2.events.some((e) => e.type === 'names_learned' && e.ids.includes('npc/bran'))).toBe(true);
+    expect(narr[1]).toContain('- 브란 [npc/bran]');
+    // 이전 세이브(이름 기록 없음)는 모두 아는 것으로 본다
+    const legacy = { ...s, namesKnown: undefined };
+    narr.length = 0;
+    await runTurn(llm, sampleWorld, legacy, '인사한다', () => {});
+    expect(narr[0]).toContain('- 브란 [npc/bran]');
+  });
+});

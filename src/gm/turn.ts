@@ -27,6 +27,7 @@ import { availableEncounters, beginEncounter } from './combat';
 import { contextExpression, expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
 import { basicGuide, gmGuide } from './guide';
 import { buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects } from './context';
+import { displayName, knowsName, namesIn } from '../engine/names';
 
 /**
  * 턴 파이프라인 (설계 리뷰 2.1·2.2·3.5절):
@@ -303,11 +304,14 @@ export async function runTurn(
     }, ACTOR_SCHEMA, signal);
     return { npc, out };
   }));
+  // 이름: 확정된 대사에서 불렸거나 플레이어가 직접 부른 인물은 이제 이름을 안다 (관계 기록·서술 전에 반영)
+  const heard = namesIn(world, [input, ...actorResults.map((r) => r.out.dialogue ?? '')].join('\n')).filter((id) => !knowsName(s, id));
+  if (heard.length) push({ type: 'names_learned', ids: heard });
   const reactions: string[] = [];
   const reveals: GameEvent[] = [...discoveredNow]; // 서술 뒤에 기록해 화면에서 "알게 된 것"이 서술 다음에 보이게 한다
   for (const { npc, out } of actorResults) {
     push({ type: 'npc_spoke', npcId: npc.id, dialogue: out.dialogue, action: out.action });
-    reactions.push(`- ${npc.name} [${npc.id}]: ${out.action ? `(${out.action}) ` : ''}${out.dialogue ? `"${out.dialogue}"` : '(말없음)'}`);
+    reactions.push(`- ${displayName(s, npc)} [${npc.id}]: ${out.action ? `(${out.action}) ` : ''}${out.dialogue ? `"${out.dialogue}"` : '(말없음)'}`);
     // 관계 변화 (엔진이 턴당 한도로 자른다)
     // 판정에는 바로 반영하고, 화면 기록은 서술 뒤에 보이도록 reveals에 넣는다
     const relEvents = relationshipEvents(world, s, npc, out.relationship_change, out.relationship_change?.reason || '대화');
@@ -501,6 +505,9 @@ export function startEvents(world: WorldPackage, character: CharacterSheet, seed
     { type: 'narration', text: `${opening}\n\n${world.locations.find((l) => l.id === locationId)?.description ?? ''}`,
       ...(scene ? { images: [scene] } : {}) },
   ];
+  // 시작 장면에 이름이 나온 인물은 처음부터 이름을 안다
+  const known = namesIn(world, `${opening}\n${world.locations.find((l) => l.id === locationId)?.description ?? ''}`);
+  if (known.length) events.push({ type: 'names_learned', ids: known });
   // 이 시작 방식으로 처음부터 아는 것
   for (const claim of opt?.knows ?? []) {
     const c = world.claims.find((x) => x.id === claim);

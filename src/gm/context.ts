@@ -6,6 +6,7 @@ import { npcLocationOf } from '../engine/world';
 import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
+import { epithetOf, knowsName } from '../engine/names';
 
 const dateLabel = (world: WorldPackage, minutes: number) => { const d = calendarDate(world, minutes); return d ? `${d.label}${d.countdown ? ` (${d.countdown})` : ''} ` : ''; };
 
@@ -169,7 +170,7 @@ function beatLines(world: WorldPackage, state: GameState, npc: Character): strin
 
 export function buildNarratorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => [
-    `- ${c.name} [${c.id}] — 외형: ${c.appearance} — 플레이어를 대하는 태도: ${stageFor(world, state.relationships, c.id)}`,
+    `- ${knowsName(state, c.id) ? c.name : `${epithetOf(c)} (플레이어가 아직 이름을 모름 — 이름을 쓰지 말고 외형으로 부른다)`} [${c.id}] — 외형: ${c.appearance} — 플레이어를 대하는 태도: ${stageFor(world, state.relationships, c.id)}`,
     ...canonBlock(world, state, c.id),
   ].join('\n'));
   return [

@@ -52,6 +52,8 @@ export type GameEvent =
   /** 경험치·레벨업 (v0.7). who = 'player' 또는 동료 NPC ID */
   | { type: 'xp_gained'; who: string; amount: number; reason: string }
   | { type: 'level_up'; who: string; sheet: CharacterSheet; hpGain: number; features: string[] }
+  /** 플레이어가 인물의 이름을 알게 됨 (v0.37.5) */
+  | { type: 'names_learned'; ids: EntityId[] }
   /** 하위 직업·능력치 향상·특성 선택 (v0.37). 엔진이 검증하고, 고를 수 없는 선택은 무시된다 */
   | { type: 'build_choice'; who: string; kind: 'subclass' | 'asi' | 'feat'; value: string }
   /** 동료 (v0.5) */

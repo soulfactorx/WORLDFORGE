@@ -80,6 +80,8 @@ export interface GameState {
   playerDead?: boolean;
   /** 죽은 NPC */
   deadNpcs: string[];
+  /** 플레이어가 이름을 아는 인물 (v0.37.5). 없으면(이전 세이브) 모두 아는 것으로 본다 */
+  namesKnown?: EntityId[];
   log: LogEntry[];
 }
 
@@ -109,7 +111,7 @@ export function initialState(): GameState {
 export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState {
   switch (e.type) {
     case 'game_started':
-      return { ...initialState(), packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
+      return { ...initialState(), namesKnown: [], packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
         player: { name: e.playerName, locationId: e.locationId, sheet: e.character ?? legacyCharacter(e.playerName) } };
     case 'player_input':
       return { ...s, turn, log: [...s.log, { turn, kind: 'player', text: e.use ? `${e.text}  [${useLabel(e.use)}]` : e.text }] };
@@ -168,7 +170,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     }
     case 'companion_joined': {
       const { [e.npcId]: _, ...npcLocations } = s.npcLocations;
-      return { ...s, party: { ...s.party, [e.npcId]: e.sheet }, npcLocations,
+      return { ...s, party: { ...s.party, [e.npcId]: e.sheet }, npcLocations, ...(s.namesKnown && !s.namesKnown.includes(e.npcId) ? { namesKnown: [...s.namesKnown, e.npcId] } : {}),
         log: [...s.log, { turn, kind: 'knowledge', text: `${josa(e.sheet.name, '이/가')} 동료가 되었다.` }] };
     }
     case 'companion_left': {
@@ -205,6 +207,8 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: e.sheet } } : s;
       return { ...next, log: [...next.log, { turn, kind: 'progress', text }] };
     }
+    case 'names_learned':
+      return s.namesKnown ? { ...s, namesKnown: [...new Set([...s.namesKnown, ...e.ids])] } : s;
     case 'build_choice': {
       const sheet = e.who === 'player' ? s.player.sheet : s.party[e.who];
       const r = sheet ? applyBuildChoice(sheet, e.kind, e.value) : null;

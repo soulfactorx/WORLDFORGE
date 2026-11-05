@@ -17,7 +17,7 @@ function mock(bad: boolean): LlmClient {
     async stream(req, onText) {
       const user = req.user;
       let t = '당신은 주변을 살핀다. 안개가 낮게 깔려 있다.';
-      if (user.includes('미스트베일')) t = '경비병이 창을 고쳐 쥔다. "여긴 미스트베일이오."';
+      if (user.includes('미스트베일')) t = `${bad ? '브란이' : '경비병이'} 창을 고쳐 쥔다. "여긴 미스트베일이오."`;
       if (!bad && user.includes('말할 수 없네')) t = '장로가 시선을 피한다. "그건 말할 수 없네."';
       if (bad && user.includes('개 짖는 소리가 나는 쪽')) t = '자네는 마을 입구에 닿는다. 등불이 흔들린다.';
       if (bad && user.includes('추궁')) t = '장로가 한숨을 쉰다. "그 제단은 내가 다시 작동시킨 소환진이네."';
@@ -56,6 +56,8 @@ describe('AI 품질 점검 (R9)', () => {
     expect(res.secret!.detail).toContain('소환진');
     expect(res.agency!.pass).toBe(false);
     expect(res['no-invented']!.pass).toBe(false);
+    expect(res.dialogue!.pass).toBe(false);
+    expect(res.dialogue!.detail).toContain('모르는 이름');
     expect(res.move!.pass).toBe(false);
     expect(res.move!.detail).toContain('자네');
     expect(res.injection!.pass).toBe(true);

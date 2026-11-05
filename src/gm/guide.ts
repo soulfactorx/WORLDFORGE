@@ -10,6 +10,7 @@ import { activeQuests } from '../engine/scenario';
 import { josa } from '../engine/text/josa';
 import type { LlmClient } from '../llm/types';
 import { buildNarratorContext, presentCharacters } from './context';
+import { displayName } from '../engine/names';
 import { mentionedImages } from '../engine/assets';
 import { RATING_GUIDE } from '../engine/rating';
 import { genreGuide, genreProfile } from '../engine/genre';
@@ -55,10 +56,10 @@ export function basicGuide(world: WorldPackage, s: GameState): GameEvent {
   const quest = activeQuests(world, s)[0];
   const choices = [
     '주변을 자세히 살펴본다',
-    ...people.slice(0, 2).map((c) => `${c.name}에게 말을 건다`),
+    ...people.slice(0, 2).map((c) => `${displayName(s, c)}에게 말을 건다`),
     ...exits.slice(0, 1).map((n) => `${josa(n, '으로/로')} 가 본다`),
   ].slice(0, 4);
-  const who = people.length ? ` 곁에 있는 사람: ${people.slice(0, 3).map((c) => c.name).join(', ')}${people.length > 3 ? ' 외' : ''}.` : '';
+  const who = people.length ? ` 곁에 있는 사람: ${people.slice(0, 3).map((c) => displayName(s, c)).join(', ')}${people.length > 3 ? ' 외' : ''}.` : '';
   const perception = (SKILL_IDS.includes('perception' as SkillId) ? 'perception' : SKILL_IDS[0]!) as SkillId;
   const summary = `지금 ${loc?.name ?? '어딘가'}에 있다.${who}`;
   const images = mentionedImages(world, summary, `guide${s.turn}`, 3);

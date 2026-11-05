@@ -40,7 +40,12 @@ describe('관계 2.0 — 파급·평판·단계', () => {
     expect(s.reputation['fac/guard']).toBe(9);
     expect(evalCondition(w, s, { reputation: 'fac/guard', gte: 9 })).toBe(true);
     expect(evalCondition(w, s, { stage: 'npc/bran', in: ['아는 사이'] })).toBe(true);
-    expect(s.log.some((l) => l.text.includes('♡ 브란'))).toBe(true);
+    // 아직 이름을 듣지 못했으면 외형 별칭으로 기록된다 (v0.37.5)
+    expect(s.log.some((l) => l.text.includes('♡ 턱수염이 희끗한 중년 경비병'))).toBe(true);
+    expect(s.log.some((l) => l.kind === 'relation' && l.text.startsWith('♡ 브란'))).toBe(false);
+    s = applyEvent(s, { type: 'names_learned', ids: ['npc/bran'] }, 1);
+    const more = relationshipEvents(w, s, bran, { affinity: 2 }, '인사');
+    expect(more[0]).toMatchObject({ type: 'relationship_changed', name: '브란' });
   });
   it('작은 변화는 퍼지지 않는다', () => {
     const w = world();
