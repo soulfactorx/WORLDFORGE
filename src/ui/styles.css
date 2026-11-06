@@ -132,7 +132,10 @@ legend { font-weight: 600; padding: 0 4px; }
 .item-list { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; }
 @media (max-width: 700px) { .item-list { grid-template-columns: minmax(0, 1fr); } }
 .items { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
-.items button { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; }
+.items > * { flex-shrink: 0; }
+.items button { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; line-height: 1.35; }
+.items button .item-id { display: block; font-size: .72rem; opacity: .7; overflow: hidden; text-overflow: ellipsis; }
+.items-filter { flex-shrink: 0; font-size: .85rem; padding: 4px 8px; }
 .item-form { display: flex; flex-direction: column; gap: 10px; }
 textarea.code { font-family: ui-monospace, monospace; font-size: .8rem; }
 .issues ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; }

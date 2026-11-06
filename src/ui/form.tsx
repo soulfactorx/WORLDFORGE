@@ -46,12 +46,20 @@ export function ItemList<T extends { id: string }>({ items, onChange, make, rend
   items: T[]; onChange: (items: T[]) => void; make: (n: number) => T; render: (item: T, set: (patch: Partial<T>) => void) => React.ReactNode; title: string;
 }) {
   const [sel, setSel] = useState(0);
+  const [q, setQ] = useState('');
   const cur = items[sel];
+  // 목록에는 이름(또는 내용 앞부분)과 ID를 함께 보인다 (v0.46.2)
+  const label = (it: T) => { const r = it as unknown as { name?: unknown; statement?: unknown; text?: unknown }; const v = [r.name, r.statement, r.text].find((x) => typeof x === 'string' && x); return (v as string | undefined)?.slice(0, 60); };
+  const shown = items.map((it, i) => [it, i] as const).filter(([it]) => !q || `${it.id} ${label(it) ?? ''}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="item-list">
       <div className="items">
-        {items.map((it, i) => (
-          <button key={i} type="button" className={i === sel ? 'primary' : ''} onClick={() => setSel(i)}>{it.id || '(ID 없음)'}</button>
+        {items.length > 8 && <input className="items-filter" type="search" placeholder={`${title} 찾기 (${items.length}개)`} value={q} onChange={(e) => setQ(e.target.value)} />}
+        {shown.map(([it, i]) => (
+          <button key={i} type="button" className={i === sel ? 'primary' : ''} onClick={() => setSel(i)} title={it.id}>
+            {label(it) ?? (it.id || '(ID 없음)')}
+            {label(it) && <span className="item-id">{it.id || '(ID 없음)'}</span>}
+          </button>
         ))}
         <button type="button" onClick={() => { onChange([...items, make(items.length + 1)]); setSel(items.length); }}>＋ {title} 추가</button>
       </div>
