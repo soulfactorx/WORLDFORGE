@@ -11,6 +11,7 @@ type Set = (patch: Partial<WorldPackage>) => void;
 
 export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
   const chars = [['', '(없음)'], ...w.characters.map((c) => [c.id, c.name] as const)] as const;
+  const claims = [['', '(없음)'], ...w.claims.map((c) => [c.id, c.statement.slice(0, 40)] as const)] as const;
   return (
     <ItemList<Quest> title="임무" items={w.quests ?? []} onChange={(quests) => set({ quests })}
       make={(n) => ({ id: `quest/new-${n}`, name: '새 임무', kind: 'side', start: { all: [] }, stages: [{ objective: '목표', hint: '', complete: { all: [] } }] })}
@@ -23,6 +24,14 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
           <Select label="의뢰인" value={q.giver ?? ''} options={chars} onChange={(giver) => up({ giver: giver || undefined })} />
           <Select label="대상 (죽으면 실패)" value={q.target ?? ''} options={chars} onChange={(target) => up({ target: target || undefined })} />
           <Num label="기한 (일, 비우면 없음)" value={q.timeLimit?.days} onChange={(days) => up({ timeLimit: days ? { days } : undefined })} />
+          <Area label="동기 (왜 해야 하는가 — 수첩·GM)" value={q.motive ?? ''} onChange={(motive) => up({ motive: motive || undefined })} rows={2} />
+          <Select label="숨은 진실 (이 주장을 알게 되면 수첩에 표시)" value={q.truth ?? ''} options={claims} onChange={(truth) => up({ truth: truth || undefined })} />
+          <JsonField label="단서 (주장 ID 목록 — 수첩에 '단서 n/m')" value={q.clues ?? []} rows={2} onChange={(clues) => up({ clues: Array.isArray(clues) && clues.length ? clues : undefined })}
+            help={`예: ["claim/…", "claim/…"] · 주장: ${w.claims.slice(0, 6).map((c) => c.id).join(', ')}${w.claims.length > 6 ? ' …' : ''}`} />
+          <JsonField label="접근법 (여러 길 — GM 힌트)" value={q.approaches ?? []} rows={4} onChange={(approaches) => up({ approaches: Array.isArray(approaches) && approaches.length ? approaches : undefined })}
+            help='예: [{ "hint": "몰래 숨어든다", "skills": ["stealth"], "risk": "들키면 경비가 몰려온다" }, { "hint": "경비대장을 설득한다", "skills": ["persuasion"] }]' />
+          <JsonField label="여러 결과 (임무를 끝낼 때 위에서부터 처음 맞는 것 하나)" value={q.outcomes ?? []} rows={6} onChange={(outcomes) => up({ outcomes: Array.isArray(outcomes) && outcomes.length ? outcomes : undefined })}
+            help='예: [{ "id": "peace", "name": "평화로운 해결", "when": { "flag": "talked_down" }, "text": "피 한 방울 흘리지 않았다.", "effects": [{ "var": "var/safety", "add": 10 }], "rewards": { "xp": "minor" } }, { "id": "force", "name": "힘으로", "when": { "all": [] } }] · 후속 임무는 시작 조건에 { "questOutcome": "quest/…", "is": "peace" }' />
           <ConditionField label="시작 조건" value={q.start} world={w} onChange={(start) => up({ start: start ?? { all: [] } })} />
           <ConditionField label="실패 조건 (언제든)" value={q.fail} world={w} optional onChange={(fail) => up({ fail })} />
           <b>단계</b>

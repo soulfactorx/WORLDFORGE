@@ -1,3 +1,4 @@
+import { varLabel, varValue } from '../engine/scenario';
 import type { StoryEffect, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
@@ -41,6 +42,17 @@ export function effectEvents(world: WorldPackage, state: GameState, effects: Sto
     if ('giveItem' in fx) { push(gainEvent(world, { itemId: fx.giveItem, n: fx.n }, reason)); continue; }
     if ('takeItem' in fx) { push(loseEvent(world, s, { itemId: fx.takeItem, n: fx.n }, reason)); continue; }
     if ('money' in fx) { push(moneyEvent(world, s, fx.money, reason)); continue; }
+    if ('var' in fx) {
+      const def = world.vars?.find((v) => v.id === fx.var);
+      if (!def) continue;
+      const cur = varValue(world, s, def.id);
+      const raw = fx.set !== undefined ? fx.set : cur + (fx.add ?? 0);
+      const value = Math.max(def.min ?? 0, Math.min(def.max ?? 100, raw));
+      if (value === cur) continue;
+      const label = def.visible && def.labels?.length && varLabel(def, value) !== varLabel(def, cur) ? varLabel(def, value) : undefined;
+      push({ type: 'var_changed', varId: def.id, value, name: def.name, ...(label ? { label } : {}) });
+      continue;
+    }
     if ('clock' in fx) {
       const clock = world.clocks?.find((c) => c.id === fx.clock);
       if (!clock) continue;

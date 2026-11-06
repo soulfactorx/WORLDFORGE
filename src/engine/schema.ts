@@ -370,7 +370,11 @@ export type Condition =
   | { questFailed: EntityId }
   | { flag: string }
   | { questDone: EntityId }
-  | { level: number };
+  | { level: number }
+  /** 세계 수치 (설계 v4 E6, 예: 마을 치안) */
+  | { var: string; gte?: number; lte?: number }
+  /** 임무가 어떤 결과로 끝났나 (is 없으면 아무 결과로든 끝남) */
+  | { questOutcome: EntityId; is?: string };
 
 export interface QuestStage {
   /** 플레이어 수첩에 보이는 현재 목표 */
@@ -415,6 +419,39 @@ export interface Quest {
   /** 시작 후 이 날 수 안에 끝내지 못하면 실패 */
   timeLimit?: { days: number };
   rewards?: Rewards;
+  /** 퀘스트 2.1 (설계 v4 E6) — 동기: 왜 해야 하는가 (Director·수첩) */
+  motive?: string;
+  /** 접근법: 여러 길이 있다는 Director 힌트 (판정 기술·위험) */
+  approaches?: { hint: string; skills?: string[]; risk?: string }[];
+  /** 숨은 진실 (주장 ID) — 플레이어가 알게 되면 수첩에 표시 */
+  truth?: EntityId;
+  /** 단서 (주장 ID) — 수첩에 "단서 n/m" */
+  clues?: EntityId[];
+  /** 여러 결과: 임무를 끝낼 때 위에서부터 처음 맞는 것 하나 (효과·추가 보상) */
+  outcomes?: QuestOutcome[];
+}
+
+export interface QuestOutcome {
+  id: string;
+  name: string;
+  when: Condition;
+  /** 플레이어에게 보이는 결과 한 줄 */
+  text?: string;
+  effects?: StoryEffect[];
+  rewards?: Rewards;
+}
+
+/** 세계 수치 (설계 v4 E6): 지역 치안·숲의 위험도 같은 숫자 상태. 이야기 효과로 바뀌고 조건으로 읽힌다 */
+export interface WorldVar {
+  id: string;
+  name: string;
+  initial: number;
+  min?: number;
+  max?: number;
+  /** 단계 이름 (값 이상이면 그 이름, 오름차순) — 예: [[0, "무법"], [40, "불안"], [70, "평온"]] */
+  labels?: [number, string][];
+  /** 플레이어에게 보이는가 (수첩·서술 분위기) */
+  visible?: boolean;
 }
 
 /**
@@ -463,6 +500,8 @@ export type StoryEffect =
   | { setFlag: string }
   | { moveNpc: EntityId; to: EntityId }
   | { killNpc: EntityId }
+  /** 세계 수치 바꾸기 (설계 v4 E6) */
+  | { var: string; add?: number; set?: number }
   /** 플레이어가 이 명제를 알게 된다 (기본 소문) */
   | { reveal: EntityId; state?: 'rumor' | 'partial' | 'confirmed' }
   | { relationship: EntityId; delta: Partial<Record<RelationAxis, number>> }
@@ -594,6 +633,8 @@ export interface WorldPackage {
   factions?: Faction[];
   relations?: NpcRelation[];
   relationBeats?: RelationBeat[];
+  /** 세계 수치 (설계 v4 E6) */
+  vars?: WorldVar[];
   /** 돌발 사건 표 (설계 v4 E5): 이동·휴식 때 엔진이 굴린다. 없으면 기본 표, []면 끔 */
   randomEvents?: RandomEvent[];
   /** 이 세계만의 칭호 (설계 v4 E4): 조건을 채우면 엔진이 준다. renown 기본 5 */

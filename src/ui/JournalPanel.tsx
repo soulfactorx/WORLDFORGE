@@ -6,7 +6,7 @@ import type { WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
 import { allJobs } from '../engine/jobs';
-import { QUEST_TYPE_LABEL } from '../engine/scenario';
+import { QUEST_TYPE_LABEL, varLabel, varValue } from '../engine/scenario';
 
 const LABEL = { rumor: '소문', partial: '들은 이야기', confirmed: '확인됨', mistaken: '잘못 앎', secret: '비밀' } as const;
 
@@ -31,6 +31,9 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
   const todo = todoThree(world, state);
   const todoRows = [todo.main && ['메인', todo.main], todo.side && ['사이드', todo.side], todo.bond && ['관계', todo.bond]].filter((x): x is string[] => !!x);
   const questions = openQuestions(world, state);
+  const knows = (claim: string) => state.beliefs.some((b) => b.holder === 'player' && b.claim === claim && b.state !== 'rumor');
+  const outcomeName = (q: { outcomes?: { id: string; name: string }[] }, id?: string) => (id ? q.outcomes?.find((o) => o.id === id)?.name : undefined);
+  const vars = (world.vars ?? []).filter((v) => v.visible);
   return (
     <aside className="sheet">
       {todoRows.length > 0 && (
@@ -75,7 +78,9 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
                 {q.type && <span className="tag">{QUEST_TYPE_LABEL[q.type]}</span>}{' '}
                 <b>{q.name}</b>
                 {q.giver && <span className="small muted"> · 의뢰인 {world.characters.find((c) => c.id === q.giver)?.name}</span>}
-                {p.done ? <span className={`small ${p.failed ? 'warn-text' : 'muted'}`}> — {p.failed ? '실패' : '완료'}</span> : <div className="small">▸ {q.stages[p.stage]?.objective}{deadline(q.timeLimit?.days, p.startedAt)}</div>}
+                {p.done ? <span className={`small ${p.failed ? 'warn-text' : 'muted'}`}> — {p.failed ? '실패' : '완료'}{outcomeName(q, p.outcome) && ` · ${outcomeName(q, p.outcome)}`}</span> : <div className="small">▸ {q.stages[p.stage]?.objective}{deadline(q.timeLimit?.days, p.startedAt)}</div>}
+                {!p.done && q.motive && <div className="small muted">왜: {q.motive}</div>}
+                {!!q.clues?.length && <div className="small muted">단서 {q.clues.filter(knows).length}/{q.clues.length}{q.truth && knows(q.truth) ? ' · 진실에 닿았다' : ''}</div>}
                 {/* 지난 단계 */}
                 {q.stages.slice(0, p.stage).map((st) => <div key={st.objective} className="small muted past">✓ {st.objective}</div>)}
               </li>
@@ -95,6 +100,12 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
               </li>
             ))}
           </ul>
+        </>
+      )}
+      {vars.length > 0 && (
+        <>
+          <b>이 세계의 상태</b>
+          <ul className="small">{vars.map((v) => <li key={v.id}>{v.name}: <b>{varLabel(v, varValue(world, state, v.id))}</b></li>)}</ul>
         </>
       )}
       {date && <p className="small">오늘: <b>{date.label}</b>{date.countdown && <> · <b className="dday">{date.countdown}</b></>}{date.elapsed > 0 && <span className="muted"> (시작한 지 {date.elapsed}일째)</span>}</p>}

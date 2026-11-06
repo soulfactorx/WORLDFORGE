@@ -12,7 +12,7 @@ import { josa } from '../engine/text/josa';
 import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
-import { activeBeats, activeQuests, flagAllowed, pendingDiscoveries } from '../engine/scenario';
+import { activeBeats, activeQuests, flagAllowed, pendingDiscoveries, varLabel, varValue } from '../engine/scenario';
 import { activeChapters, pacingHint, pendingChoice, upcomingWorldEvents } from '../engine/story';
 import { effectEvents } from './story';
 import { gainEvent, inventoryLine, moneyEvent, pendingGifts, pendingPickups } from './economy';
@@ -484,7 +484,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
   const quests = activeQuests(world, s).map((q) => {
     const left = q.quest.timeLimit && s.quests[q.quest.id]?.startedAt !== undefined ? q.quest.timeLimit.days - (s.worldMinutes - s.quests[q.quest.id]!.startedAt!) / 1440 : undefined;
     const giver = q.quest.giver ? world.characters.find((c) => c.id === q.quest.giver)?.name : undefined;
-    return `- [${q.quest.kind === 'main' ? '메인' : '사이드'}${q.quest.type ? `·${QUEST_TYPE_LABEL[q.quest.type]}` : ''}] ${q.quest.name}${giver ? ` (의뢰인 ${giver})` : ''} — 목표: ${q.stage.objective} / 힌트: ${q.stage.hint}${left !== undefined ? ` / 기한 ${Math.max(0, Math.ceil(left))}일 남음` : ''}`;
+    return `- [${q.quest.kind === 'main' ? '메인' : '사이드'}${q.quest.type ? `·${QUEST_TYPE_LABEL[q.quest.type]}` : ''}] ${q.quest.name}${giver ? ` (의뢰인 ${giver})` : ''} — 목표: ${q.stage.objective} / 힌트: ${q.stage.hint}${left !== undefined ? ` / 기한 ${Math.max(0, Math.ceil(left))}일 남음` : ''}${q.quest.motive ? `\n  동기: ${q.quest.motive}` : ''}${q.quest.approaches?.length ? `\n  접근법 (여러 길이 있다 — 플레이어가 고른 길을 존중한다): ${q.quest.approaches.map((a) => `${a.hint}${a.skills?.length ? ` [${a.skills.join('/')}]` : ''}${a.risk ? ` (위험: ${a.risk})` : ''}`).join(' · ')}` : ''}`;
   });
   const jobs = allJobs(world).filter((j) => s.jobs?.[j.id]?.active).map((j) => `- [의뢰·${QUEST_TYPE_LABEL[j.type]}] ${j.name} — ${j.description}${j.hint ? ` / 힌트: ${j.hint}` : ''} (장소: ${world.locations.find((l) => l.id === j.locationId)?.name ?? j.locationId})`);
   const flags = (world.flags ?? []).filter((f) => flagAllowed(world, s, f.id)).map((f) => `- ${f.id}: ${f.when}`);
@@ -495,6 +495,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
     return `- ${c.name}: ${v}/${c.segments}${next ? ` (${next.segment}칸에서 일이 벌어진다)` : ''} — 징조를 분위기·소문·인물의 행동으로 흘린다`;
   });
   const upcoming = upcomingWorldEvents(world, s).filter((u) => u.inDays <= 7).map((u) => `- ${u.inDays <= 0 ? '오늘' : `${u.inDays}일 뒤`}: ${u.event.name}${u.event.unless ? ' (막을 수 있다)' : ''}`);
+  const vars = (world.vars ?? []).map((v) => `- ${v.name} [${v.id}]: ${varValue(world, s, v.id)}${v.labels?.length ? ` (${varLabel(v, varValue(world, s, v.id))})` : ''}`);
   const pending = pendingChoice(world, s);
   const pace = pacingHint(s);
   const beats = activeBeats(world, s).map((b) => `- ${world.characters.find((c) => c.id === b.npcId)?.name ?? b.npcId} [${b.npcId}] — ${b.name}: ${b.hint}${b.resolveFlag ? ` (장면이 끝나면 플래그 ${b.resolveFlag})` : ''}`);
@@ -507,6 +508,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
     ...(chapters.length ? ['## 진행 중인 줄기 (지금 장의 목표 — 연출 방향)', ...chapters, ''] : []),
     ...(clocks.length ? ['## 진행 시계 (플레이어는 모름 — 시간이 흐르면 찬다)', ...clocks, ''] : []),
     ...(upcoming.length ? ['## 다가오는 사건', ...upcoming, ''] : []),
+    ...(vars.length ? ['## 세계 수치 (이야기 효과 var로 바뀐다 — 분위기에 반영)', ...vars, ''] : []),
     ...(pending ? [`## 결정의 순간 (선택지가 플레이어 화면에 떠 있다): ${pending.prompt}`, '이 결정은 플레이어가 화면의 선택지로 내린다. 대신 결정하거나 플래그로 처리하지 않는다.', ''] : []),
     ...(pace ? [`## 템포: ${pace}`, ''] : []),
     '## 세울 수 있는 플래그', ...(flags.length ? flags : ['(없음)']), '',

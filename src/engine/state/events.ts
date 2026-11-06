@@ -52,6 +52,10 @@ export type GameEvent =
   /** 경험치·레벨업 (v0.7). who = 'player' 또는 동료 NPC ID */
   | { type: 'xp_gained'; who: string; amount: number; reason: string; /** 한 번만 주는 보상의 열쇠 (예: 관계 단계·장 완료) */ key?: string }
   | { type: 'level_up'; who: string; sheet: CharacterSheet; hpGain: number; features: string[] }
+  /** 세계 수치 변화 (v0.43). label: 보이는 수치의 단계가 바뀌면 기록에 남긴다 */
+  | { type: 'var_changed'; varId: string; value: number; name: string; label?: string }
+  /** 임무가 이 결과로 끝났다 (v0.43) */
+  | { type: 'quest_outcome'; questId: EntityId; questName: string; outcomeId: string; name: string; text?: string }
   /** 돌발 사건 (v0.42, 설계 v4 E5) */
   | { type: 'random_event'; eventId: EntityId; name: string; kind: 'ambush' | 'meeting' | 'news' | 'opportunity'; text: string; day: number }
   /** 칭호를 얻음 (v0.41, 설계 v4 E4) */

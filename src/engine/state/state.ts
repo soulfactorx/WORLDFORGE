@@ -63,7 +63,9 @@ export interface GameState {
   /** 결정적 선택: 나타난 턴과 고른 선택지 */
   choices: Record<EntityId, { turn: number; chosen?: string }>;
   /** 퀘스트 진행 (v0.8) */
-  quests: Record<EntityId, { stage: number; done: boolean; failed?: boolean; startedAt?: number }>;
+  quests: Record<EntityId, { stage: number; done: boolean; failed?: boolean; startedAt?: number; outcome?: string }>;
+  /** 세계 수치 (v0.43, 설계 v4 E6) */
+  vars?: Record<string, number>;
   /** 쓰러뜨린 적 (몬스터 ID → 수) */
   kills: Record<string, number>;
   /** 의뢰 (설계 v3 6.3): 끝낸 수·실패 수·진행 중인 것 */
@@ -216,6 +218,13 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const next = e.who === 'player' ? { ...s, player: { ...s.player, sheet: e.sheet } }
         : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: e.sheet } } : s;
       return { ...next, log: [...next.log, { turn, kind: 'progress', text }] };
+    }
+    case 'var_changed':
+      return { ...s, vars: { ...(s.vars ?? {}), [e.varId]: e.value }, log: e.label ? [...s.log, { turn, kind: 'omen', text: `◇ ${e.name}: ${e.label}` }] : s.log };
+    case 'quest_outcome': {
+      const q = s.quests[e.questId];
+      return { ...s, quests: { ...s.quests, [e.questId]: { ...(q ?? { stage: 0, done: true }), outcome: e.outcomeId } },
+        log: [...s.log, { turn, kind: 'quest', text: `◆ ${e.questName} — ${e.name}${e.text ? `: ${e.text}` : ''}` }] };
     }
     case 'random_event':
       return { ...s, randomEvents: { ...(s.randomEvents ?? {}), [e.eventId]: e.day }, lastRandomTurn: turn, log: [...s.log, { turn, kind: 'omen', text: `✦ ${e.text}` }] };

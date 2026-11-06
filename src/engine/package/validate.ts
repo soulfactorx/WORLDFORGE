@@ -125,6 +125,8 @@ export function validateWorld(input: unknown): Issue[] {
   const claimIds = new Set(claims.map((c) => c?.id));
   const encIds = new Set(encounters.map((e) => e?.id));
   const questIds = new Set(quests.map((q) => q?.id));
+  const worldVars = arr<NonNullable<WorldPackage['vars']>[number]>('vars', false);
+  const varIds = new Set(worldVars.map((v) => v?.id));
   const flagIds = new Set(flags.map((f) => f?.id));
   const entityIds = new Set([...locIds, ...charIds]);
 
@@ -260,6 +262,13 @@ export function validateWorld(input: unknown): Issue[] {
     if ('day' in cond) { if (typeof cond.day !== 'number' || cond.day < 0) err(path, 'day는 0 이상의 숫자입니다.'); return; }
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
+    if ('var' in cond) { if (!varIds.has(cond.var)) err(path, `선언되지 않은 세계 수치 "${cond.var}"`); return; }
+    if ('questOutcome' in cond) {
+      const q = quests.find((x) => x.id === cond.questOutcome);
+      if (!q) err(path, `없는 임무 "${cond.questOutcome}"`);
+      else if (cond.is !== undefined && !(q.outcomes ?? []).some((o) => o.id === cond.is)) err(path, `임무 "${cond.questOutcome}"에 없는 결과 "${cond.is}"`);
+      return;
+    }
     if ('level' in cond) { if (typeof cond.level !== 'number') err(path, 'level은 숫자입니다.'); return; }
     err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·chapter·arcDone·clock·choice·day·hasItem·money·defeated·npcAlive·npcAt·questFailed·flag·questDone·level 중 하나를 쓰세요.`);
   };
@@ -272,11 +281,24 @@ export function validateWorld(input: unknown): Issue[] {
       if (x.who !== 'player' && !charIds.has(x.who)) err(`${p}.cards[${j}].who`, `"player" 또는 인물 ID입니다 ("${x.who}")`);
     });
   };
+  const deferredEffects: [unknown, string][] = [];
   quests.forEach((q, i) => {
     const p = `quests[${i}]`;
     text(q.name, `${p}.name`);
     if (q.kind !== 'main' && q.kind !== 'side') err(`${p}.kind`, 'main 또는 side입니다.');
     checkCond(q.start, `${p}.start`);
+    if (q.truth && !claimIds.has(q.truth)) err(`${p}.truth`, `없는 명제 "${q.truth}"`);
+    (q.clues ?? []).forEach((c, j) => { if (!claimIds.has(c)) err(`${p}.clues[${j}]`, `없는 명제 "${c}"`); });
+    (q.approaches ?? []).forEach((a, j) => { text(a.hint, `${p}.approaches[${j}].hint`); });
+    const ocIds = new Set<string>();
+    (q.outcomes ?? []).forEach((o, j) => {
+      const op = `${p}.outcomes[${j}]`;
+      if (!o.id) err(`${op}.id`, 'ID가 필요합니다.'); else if (ocIds.has(o.id)) err(`${op}.id`, `겹치는 결과 ID "${o.id}"`); else ocIds.add(o.id);
+      text(o.name, `${op}.name`);
+      checkCond(o.when, `${op}.when`);
+      if (o.effects) deferredEffects.push([o.effects, `${op}.effects`]);
+      checkRewards(o.rewards, `${op}.rewards`);
+    });
     if (!Array.isArray(q.stages) || !q.stages.length) err(`${p}.stages`, '단계가 하나 이상 필요합니다.');
     else q.stages.forEach((st, j) => { text(st.objective, `${p}.stages[${j}].objective`); text(st.hint, `${p}.stages[${j}].hint`, false); checkCond(st.complete, `${p}.stages[${j}].complete`); if (st.fail) checkCond(st.fail, `${p}.stages[${j}].fail`); });
     if (q.type && !(QUEST_TYPES as readonly string[]).includes(q.type)) err(`${p}.type`, `유형은 ${QUEST_TYPES.join('/')} 중 하나입니다.`);
@@ -307,6 +329,15 @@ export function validateWorld(input: unknown): Issue[] {
     if (isObj(b.condition) && 'all' in b.condition && Array.isArray(b.condition.all) && !b.condition.all.length) warn(`${p}.condition`, '조건이 비어 게임 시작과 함께 열립니다.');
     if (b.resolveFlag && !flagIds.has(b.resolveFlag)) err(`${p}.resolveFlag`, `선언되지 않은 플래그 "${b.resolveFlag}" — 플래그 목록에 추가하세요 (GM이 세울 수 있어야 사건이 닫힙니다).`);
   });
+  // ---- 세계 수치 (설계 v4 E6)
+  const seenVars = new Set<string>();
+  worldVars.forEach((v, i) => {
+    const p = `vars[${i}]`;
+    if (!v.id) err(`${p}.id`, 'ID가 필요합니다.'); else if (seenVars.has(v.id)) err(`${p}.id`, `겹치는 ID "${v.id}"`); else seenVars.add(v.id);
+    text(v.name, `${p}.name`);
+    if (typeof v.initial !== 'number') err(`${p}.initial`, '처음 값은 숫자입니다.');
+    if ((v.labels ?? []).some((l) => !Array.isArray(l) || typeof l[0] !== 'number' || typeof l[1] !== 'string')) err(`${p}.labels`, '단계는 [값, "이름"] 목록입니다.');
+  });
   // ---- 칭호 (설계 v4 E4)
   arr<NonNullable<WorldPackage['titles']>[number]>('titles', false).forEach((t, i) => {
     const p = `titles[${i}]`;
@@ -332,9 +363,11 @@ export function validateWorld(input: unknown): Issue[] {
       if ('giveItem' in fx) { if (!itemIds.has(fx.giveItem as string)) err(p, `없는 아이템 "${String(fx.giveItem)}"`); return; }
       if ('takeItem' in fx) { if (!itemIds.has(fx.takeItem as string)) err(p, `없는 아이템 "${String(fx.takeItem)}"`); return; }
       if ('money' in fx) { if (typeof fx.money !== 'number') err(p, 'money는 숫자입니다.'); return; }
-      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money 중 하나를 쓰세요.');
+      if ('var' in fx) { if (!varIds.has(fx.var as string)) err(p, `선언되지 않은 세계 수치 "${String(fx.var)}"`); if (typeof (fx.add ?? fx.set) !== 'number') err(p, 'add 또는 set 숫자가 필요합니다.'); return; }
+      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money·var 중 하나를 쓰세요.');
     });
   };
+  deferredEffects.forEach(([l, p]) => checkEffects(l, p));
   // ---- 세계만의 적
   customMonsters.forEach((m, i) => {
     const p = `monsters[${i}]`;

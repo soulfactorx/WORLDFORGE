@@ -67,6 +67,8 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('flag' in c) return state.flags.includes(c.flag);
   if ('questDone' in c) return !!state.quests[c.questDone]?.done && !state.quests[c.questDone]?.failed;
   if ('level' in c) return state.player.sheet.level >= c.level;
+  if ('var' in c) { const v = varValue(world, state, c.var); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
+  if ('questOutcome' in c) { const q = state.quests[c.questOutcome]; return !!q?.done && !q.failed && !!q.outcome && (c.is === undefined || q.outcome === c.is); }
   return false;
 }
 
@@ -149,4 +151,13 @@ export function activeQuests(world: WorldPackage, state: GameState) {
 /** 지금 열려 있는 관계 사건 (설계 v3 4.2) */
 export function activeBeats(world: WorldPackage, state: GameState) {
   return (world.relationBeats ?? []).filter((b) => state.beats?.[b.id] && !state.beats[b.id]!.done);
+}
+
+/** 세계 수치 (설계 v4 E6) */
+export function varValue(world: Pick<WorldPackage, 'vars'>, state: GameState, id: string): number {
+  return state.vars?.[id] ?? world.vars?.find((v) => v.id === id)?.initial ?? 0;
+}
+export function varLabel(def: NonNullable<WorldPackage['vars']>[number], value: number): string {
+  const l = [...(def.labels ?? [])].sort((a, b) => a[0] - b[0]).filter(([n]) => value >= n).at(-1);
+  return l ? l[1] : String(value);
 }

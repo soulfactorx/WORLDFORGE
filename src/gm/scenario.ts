@@ -97,6 +97,13 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
     if (t.kind === 'completed') {
       push({ type: 'quest_completed', questId: q.id, name: q.name, stages: q.stages.length });
       rewardEvents(world, s, q.rewards, `임무 완료: ${q.name}`).forEach(push);
+      // 여러 결과 (설계 v4 E6): 위에서부터 처음 맞는 결과 하나 — 효과와 추가 보상
+      const oc = (q.outcomes ?? []).find((o) => evalCondition(world, s, o.when));
+      if (oc) {
+        push({ type: 'quest_outcome', questId: q.id, questName: q.name, outcomeId: oc.id, name: oc.name, ...(oc.text ? { text: oc.text } : {}) });
+        effectEvents(world, s, oc.effects ?? [], `${q.name}: ${oc.name}`).forEach(push);
+        rewardEvents(world, s, oc.rewards, `${q.name}: ${oc.name}`).forEach(push);
+      }
     }
   }
   // 의뢰: 토벌 승리·완료 조건·기한

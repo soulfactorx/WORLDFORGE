@@ -52,7 +52,7 @@ function tabForPath(path: string): Tab {
   if (path.startsWith('factions') || path.startsWith('relations') || path.startsWith('relationBeats')) return 'relations';
   if (path.startsWith('items')) return 'items';
   if (path.startsWith('encounters') || path.startsWith('monsters')) return 'encounters';
-  if (path.startsWith('arcs') || path.startsWith('choices') || path.startsWith('clocks') || path.startsWith('events')) return 'story';
+  if (path.startsWith('arcs') || path.startsWith('vars') || path.startsWith('choices') || path.startsWith('clocks') || path.startsWith('events')) return 'story';
   if (path.startsWith('quests') || path.startsWith('flags') || path.startsWith('endings')) return 'quests';
   return 'json';
 }
@@ -546,6 +546,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             help='예: { "id": "arc/main", "name": "숲의 그림자", "kind": "main", "start": { "all": [] }, "chapters": [{ "name": "낯선 땅", "goal": "GM용 목표", "summary": "수첩에 보이는 한 줄", "complete": { "at": "loc/…" }, "fail": { "flag": "…" } }] } · 2부는 start에 { "arcDone": "arc/main" }' />
           <JsonField label="결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지가 뜬다)" value={w.choices ?? []} onChange={(choices) => set({ choices })} rows={12}
             help='예: { "id": "choice/side", "name": "누구 편인가", "prompt": "누구의 말을 믿을 것인가?", "when": { "knows": "claim/…" }, "locationId": "loc/… (선택)", "options": [{ "id": "a", "text": "장로를 믿는다", "effects": [{ "setFlag": "…" }] }, { "id": "b", "text": "…", "effects": [] }] }' />
+          <JsonField label="세계 수치 (지역 치안·숲의 위험도 같은 숫자 — 효과 var로 바뀌고 조건 var로 읽힌다)" value={w.vars ?? []} rows={6} onChange={(vars) => set({ vars: Array.isArray(vars) && vars.length ? vars : undefined })}
+            help='예: { "id": "var/safety", "name": "마을 치안", "initial": 50, "min": 0, "max": 100, "labels": [[0, "무법"], [40, "불안"], [70, "평온"]], "visible": true } · 효과 { "var": "var/safety", "add": -10 } · 조건 { "var": "var/safety", "gte": 70 }' />
           <JsonField label="진행 시계 (시간·사건으로 차오르고, 정해진 칸에서 일이 벌어진다)" value={w.clocks ?? []} onChange={(clocks) => set({ clocks })} rows={12}
             help='예: { "id": "clock/raid", "name": "도적의 습격 준비", "segments": 6, "tick": [{ "every": "day", "by": 1 }, { "on": { "flag": "warned" }, "by": -2 }], "at": [{ "segment": 3, "omen": "플레이어에게 보이는 징조" }, { "segment": 6, "effects": [{ "setFlag": "raid" }] }] }' />
           <JsonField label="연표 사건 (날짜·날 수·조건에 일어난다. unless가 참이면 막힌다)" value={w.events ?? []} onChange={(events) => set({ events })} rows={12}

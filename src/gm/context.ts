@@ -1,7 +1,7 @@
 import { establishedFactsOf, improvisationOf, protectedTopicsOf } from '../engine/canon';
 import { knowledgeOf } from '../engine/knowledge/knowledge';
 import { AXES, AXIS_NAMES, canShareSecret, joinBlocker, loyaltyOf, OBEY_LOYALTY, relationsOf, relationshipOf, reputationLabel, reputationOf, secretTrustOf, stageFor, stageOf } from '../engine/relationship';
-import { activeBeats } from '../engine/scenario';
+import { activeBeats, varLabel, varValue } from '../engine/scenario';
 import { npcLocationOf } from '../engine/world';
 import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
@@ -201,7 +201,14 @@ export function buildNarratorContext(world: WorldPackage, state: GameState): str
     '## 이 장소에 있는 인물', ...(npcs.length ? npcs : ['(없음)']), '',
     '## 동행 중인 동료', ...partyLines(world, state), '',
     '## 플레이어의 몸 상태', `HP ${state.player.sheet.hp}/${state.player.sheet.maxHp}${state.player.sheet.hp <= state.player.sheet.maxHp / 3 ? ' (심하게 다침)' : ''}`, '',
+    ...worldMood(world, state),
     '## 플레이어가 알고 있는 것', ...playerKnowledge(world, state), '',
     '## 최근 진행', ...recentLog(state),
   ].join('\n');
+}
+
+/** 보이는 세계 수치 — 서술의 분위기 (설계 v4 E6) */
+function worldMood(world: WorldPackage, state: GameState): string[] {
+  const vs = (world.vars ?? []).filter((v) => v.visible);
+  return vs.length ? ['## 세계의 분위기 (서술 톤에 반영)', ...vs.map((v) => `- ${v.name}: ${varLabel(v, varValue(world, state, v.id))}`), ''] : [];
 }
