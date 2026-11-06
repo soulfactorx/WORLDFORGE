@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { validateWorld } from '../../engine/package/validate';
 import { flowWarnings } from '../../engine/package/flow';
 import { simulateWorld } from '../../gm/simulate';
+import { sceneActionEvents } from '../../gm/scene';
+import { startEvents } from '../../gm/turn';
+import { createCharacter, suggestedStandardArray } from '../../engine/character/sheet';
+import { availableScenes, newRun, sceneActions } from '../../engine/scene';
+import { evalCondition } from '../../engine/scenario';
+import type { SceneDef } from '../../engine/schema';
+import type { GameEvent } from '../../engine/state/events';
+import { applyEvent, type GameState, replay } from '../../engine/state/state';
 import { stockDataUrl } from '../stockart';
 import { cheonhaWorld } from './cheonha';
 
@@ -53,4 +61,54 @@ describe('공식 세계: 천하무림', () => {
     expect(r.state.player.locationId).toBe('loc/ruined-sect');
     expect(r.state.arcs['arc/master']).toBeTruthy();
   });
+
+  // ---- 장면 (v0.48)
+  const ch = () => createCharacter({ name: '나', classId: 'fighter', method: 'standard', abilities: suggestedStandardArray('fighter'), skills: ['athletics', 'insight'] });
+  const begin = (seed: number) => replay(startEvents(cheonhaWorld, ch(), seed).map((event, seq) => ({ saveId: 's', seq, turn: 0, event })));
+  const apply = (s: GameState, evs: GameEvent[]) => evs.reduce((st, e) => applyEvent(st, e, st.turn), s);
+  const playOut = (def: SceneDef, seed: number) => {
+    let s: GameState = { ...begin(seed), scene: newRun(def) };
+    for (let i = 0; i <= (def.maxRounds ?? 20) && s.scene; i++) {
+      const opts = sceneActions(def, s.scene, s.player.sheet).filter((a) => a.ok);
+      expect(opts.length, `${def.name} ${i}차례`).toBeGreaterThan(0);
+      s = apply(s, sceneActionEvents(cheonhaWorld, s, opts[(i * 7 + seed) % opts.length]!.action.id));
+    }
+    return s;
+  };
+
+  it('장면 5개: 검사기 통과, 여러 시드로 끝까지 진행되고 결과가 갈린다', () => {
+    const defs = cheonhaWorld.scenes!;
+    expect(defs.map((d) => d.id)).toEqual(['scene/beggar-deal', 'scene/plum-duel', 'scene/ledger-infiltration', 'scene/jiangnan-auction', 'scene/hermit-qi-healing']);
+    expect(validateWorld(cheonhaWorld).filter((i) => i.path.startsWith('scenes'))).toEqual([]);
+    const outcomes = new Set<string>();
+    for (const def of defs) {
+      expect(def.maxRounds, def.id).toBeGreaterThan(0);
+      for (let seed = 1; seed <= 6; seed++) {
+        const s = playOut(def, seed);
+        expect(s.scene, `${def.name} seed ${seed}`).toBeUndefined();
+        const r = s.sceneResults?.[def.id];
+        expect(r, `${def.name} seed ${seed}`).toBeDefined();
+        outcomes.add(r!.outcome);
+      }
+    }
+    expect(outcomes.has('success') && outcomes.has('failure')).toBe(true);
+  });
+
+  it('잠입: 객잔 사건 뒤 총단에서 열리고, 성공하면 장부와 단서를 얻어 다시 열리지 않는다', () => {
+    const w = cheonhaWorld;
+    const def = w.scenes!.find((d) => d.id === 'scene/ledger-infiltration')!;
+    let s = apply(begin(2), [{ type: 'moved', to: 'loc/luoyang' }, { type: 'moved', to: 'loc/alliance' }]);
+    expect(availableScenes(w, s).map((d) => d.id)).not.toContain(def.id);
+    s = apply(s, [{ type: 'quest_started', questId: 'quest/inn-murder', name: '취선객잔의 시체', objective: '' }, { type: 'quest_completed', questId: 'quest/inn-murder', name: '취선객잔의 시체', stages: 3 }]);
+    expect(evalCondition(w, s, { questDone: 'quest/inn-murder' })).toBe(true);
+    expect(availableScenes(w, s).map((d) => d.id)).toContain(def.id);
+    const run = newRun(def);
+    s = { ...s, scene: { ...run, phase: 'inner', gauges: { ...run.gauges, progress: 7 } } };
+    s = apply(s, sceneActionEvents(w, s, 'wait'));
+    expect(s.sceneResults?.[def.id]?.endId).toBe('found');
+    expect(evalCondition(w, s, { hasItem: 'item/jongri-ledger' })).toBe(true);
+    expect(evalCondition(w, s, { knows: 'claim/jongri-ledger', min: 'partial' })).toBe(true);
+    expect(availableScenes(w, s).map((d) => d.id)).not.toContain(def.id);
+  });
 });
+
