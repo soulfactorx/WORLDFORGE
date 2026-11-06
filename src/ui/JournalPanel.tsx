@@ -1,4 +1,5 @@
 import { ZoomImg } from './Lightbox';
+import { openQuestions, todoThree } from '../engine/digest';
 import { knowledgeOf } from '../engine/knowledge/knowledge';
 import { AXES, AXIS_NAMES, HOSTILE_STAGES, loyaltyOf, OBEY_LOYALTY, relationshipOf, reputationLabel, reputationOf, stageFor } from '../engine/relationship';
 import type { WorldPackage } from '../engine/schema';
@@ -27,8 +28,23 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
   const arcs = (world.arcs ?? []).flatMap((arc) => (state.arcs?.[arc.id] ? [{ arc, p: state.arcs[arc.id]! }] : []));
   // 평판이 바뀌었거나, 만난 사람이 속한 세력만 보여준다
   const factions = (world.factions ?? []).filter((f) => (state.reputation ?? {})[f.id] !== undefined || met.some((c) => c.faction === f.id));
+  const todo = todoThree(world, state);
+  const todoRows = [todo.main && ['메인', todo.main], todo.side && ['사이드', todo.side], todo.bond && ['관계', todo.bond]].filter((x): x is string[] => !!x);
+  const questions = openQuestions(world, state);
   return (
     <aside className="sheet">
+      {todoRows.length > 0 && (
+        <>
+          <b>지금 할 일</b>
+          <ul className="todo small">{todoRows.map(([k, v]) => <li key={k}><span className="tag">{k}</span> {v}</li>)}</ul>
+        </>
+      )}
+      {questions.length > 0 && (
+        <>
+          <b>궁금한 것</b> <span className="small muted">— 아직 확인되지 않은 이야기</span>
+          <ul className="small questions">{questions.map((q, i) => <li key={i}>{q}</li>)}</ul>
+        </>
+      )}
       {arcs.length > 0 && (
         <>
           <b>이야기</b>

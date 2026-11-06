@@ -243,7 +243,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'chapter_completed': {
       const a = s.arcs?.[e.arcId] ?? { chapter: 0, done: false };
       return { ...s, arcs: { ...(s.arcs ?? {}), [e.arcId]: { ...a, chapter: e.index + 1 } },
-        log: e.next ? [...s.log, { turn, kind: 'quest', text: `${e.name} — 다음 장: ${e.next}` }] : s.log };
+        log: e.next ? [...s.log, { turn, kind: 'quest', text: `◆ ${e.name} — 장 완료. 다음 장: 「${e.next}」${e.preview ? ` — ${e.preview}` : ''}` }] : s.log };
     }
     case 'arc_ended': {
       const a = s.arcs?.[e.arcId] ?? { chapter: 0, done: false };

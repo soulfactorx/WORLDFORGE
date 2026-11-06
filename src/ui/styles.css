@@ -341,3 +341,21 @@ img.zoomable { cursor: zoom-in; }
 .lightbox img { max-width: 100%; max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); object-fit: contain; border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
 .lightbox-caption { margin: 0; color: #eee; font-size: .9rem; text-align: center; }
 .lightbox-close { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,.5); color: #fff; border-color: rgba(255,255,255,.4); font-size: 1.1rem; }
+
+/* 보상 연출 · 세션 훅 (v0.39) */
+.reward-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); animation: reward-in .35s ease-out; }
+.reward-chip { font-size: .85rem; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
+.reward-chip.big { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.reward-close { margin-left: auto; padding: 0 8px; }
+@keyframes reward-in { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+.modal-back { position: fixed; inset: 0; z-index: 900; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.levelup { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 16px; max-width: 460px; width: 100%; max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; animation: reward-in .4s ease-out; }
+.levelup-title { margin: 0; font-size: 1.6rem; font-weight: 800; color: var(--accent); text-align: center; }
+.levelup-features { margin: 0; padding-left: 18px; }
+.levelup-cards { display: grid; gap: 6px; }
+.levelup-card { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--bg); }
+.recap { border: 1px dashed var(--accent); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.recap-last { margin: 0; color: var(--muted); }
+.todo, .questions { margin: 2px 0 8px; padding-left: 18px; }
+.todo .tag { margin-right: 4px; }
+@media (prefers-reduced-motion: reduce) { .reward-banner, .levelup { animation: none; } }

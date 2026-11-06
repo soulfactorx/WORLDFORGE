@@ -32,6 +32,8 @@ import { checkModifier } from '../engine/character/sheet';
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 import { pickCharacterImage, pickSceneImage } from '../engine/assets';
+import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/digest';
+import { LevelUpDialog, RecapCard, RewardBanner } from './Rewards';
 
 /**
  * 같은 세이브를 두 탭에서 동시에 열면 이벤트 로그가 꼬이므로 Web Locks로 한 탭만 허용한다.
@@ -115,6 +117,21 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     const narr = fresh.filter((l) => l.kind === 'narration').at(-1);
     if (narr) speak(narr.text);
   }, [state?.log.length]);
+  // 보상 연출 · 세션 훅 (설계 v4 E2): 새로 생긴 것만 보여 준다 (처음 불러올 때는 "지난 이야기", 되돌릴 때는 조용히)
+  const prevState = useRef<GameState | null>(null);
+  const [rewards, setRewards] = useState<RewardLine[]>([]);
+  const [levelInfo, setLevelInfo] = useState<ReturnType<typeof levelUpInfo> | null>(null);
+  const [showRecap, setShowRecap] = useState(false);
+  useEffect(() => {
+    if (!state) return;
+    const prev = prevState.current;
+    prevState.current = state;
+    if (!prev) { if (state.turn > 0) setShowRecap(true); return; }
+    if (state.log.length <= prev.log.length) return;
+    const r = rewardDiff(world, prev, state);
+    if (r.length) setRewards(r);
+    if (state.player.sheet.level > prev.player.sheet.level) setLevelInfo(levelUpInfo(prev.player.sheet, state.player.sheet));
+  }, [state]);
   useEffect(() => { setMusic(state ? moodOf(world.genre?.id, !!state.combat) : null); }, [!!state?.combat, world.genre?.id, avTick, !!state]);
   useEffect(() => () => { stopMusic(); stopSpeaking(); }, []);
 
@@ -123,6 +140,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (!state || !text || streaming !== null) return;
     const turnUse = choice !== undefined ? choiceUse : use || undefined;
     if (choice === undefined) setUse('');
+    setRewards([]); setShowRecap(false);
     if (choice === undefined) setInput(''); setError(''); setStreaming(''); setStage('AI에게 보내는 중'); setStartedAt(Date.now());
     abort.current = new AbortController();
     try {
@@ -251,6 +269,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       )}
       </div>
       <div className="log">
+        {showRecap && <RecapCard r={recap(world, state)} rs={rs} onClose={() => setShowRecap(false)} onSheet={() => { setShowRecap(false); setPanel('sheet'); }} />}
         {state.log.map((e, i) => (
           <div key={i} className={`entry-wrap k-${e.kind}`}>
             {e.kind !== 'guide' && e.images && e.images.length > 0 && (
@@ -311,6 +330,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}
           onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
       ) : (
+      <>
+      {rewards.length > 0 && <RewardBanner lines={rewards} onClose={() => setRewards([])} />}
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <select className="use-select" value={use} onChange={(e) => setUse(e.target.value)} title="이 행동에 쓸 기술·능력치 (판정이 필요할 때 이것으로 굴린다)">
           <option value="">🎲 기술·능력 (자동)</option>
@@ -330,7 +351,9 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         />
         <button className="primary" disabled={streaming !== null}>행동</button>
       </form>
+      </>
       )}
+      {levelInfo && <LevelUpDialog info={levelInfo} sheet={state.player.sheet} rs={rs} onClose={() => setLevelInfo(null)} onSheet={() => { setLevelInfo(null); setPanel('sheet'); }} />}
     </section>
     </ReskinContext.Provider>
   );

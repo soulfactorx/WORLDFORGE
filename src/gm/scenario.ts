@@ -79,7 +79,7 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
     if (t.kind === 'chapter') {
       const ch = t.arc.chapters[t.index]!;
       const next = t.arc.chapters[t.index + 1];
-      push({ type: 'chapter_completed', arcId: t.arc.id, index: t.index, name: t.arc.name, ...(next ? { next: next.name } : {}) });
+      push({ type: 'chapter_completed', arcId: t.arc.id, index: t.index, name: t.arc.name, ...(next ? { next: next.name, ...(next.summary ? { preview: next.summary } : {}) } : {}) });
       effectEvents(world, s, ch.effects ?? [], `${t.arc.name}: ${ch.name}`).forEach(push);
       // 장 완료 이정표: 다음 레벨까지 채운다 (세계 상한 안에서, 장마다 한 번)
       progressEvents(s, [{ who: 'player', amount: rewardXp(s.player.sheet, 'chapter', levelCapOf(world)) }], `장 완료: ${t.arc.name} — ${ch.name}`, levelCapOf(world), `chapter:${t.arc.id}:${t.index}`).forEach(push);

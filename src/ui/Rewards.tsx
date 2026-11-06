@@ -1,0 +1,66 @@
+import { useEffect } from 'react';
+import type { CharacterSheet } from '../engine/character/sheet';
+import { CLASSES } from '../engine/character/rules';
+import type { levelUpInfo, Recap, RewardLine } from '../engine/digest';
+
+type Rs = (s: string) => string;
+
+/** 이번 턴에 얻은 것 (설계 v4 E2) */
+export function RewardBanner({ lines, onClose }: { lines: RewardLine[]; onClose: () => void }) {
+  return (
+    <div className="reward-banner" role="status" aria-live="polite">
+      <span className="small muted">이번 턴</span>
+      {lines.map((l, i) => <span key={i} className={`reward-chip${l.icon === '★' ? ' big' : ''}`}>{l.icon} {l.text}</span>)}
+      <button type="button" className="reward-close" aria-label="닫기" onClick={onClose}>✕</button>
+    </div>
+  );
+}
+
+/** 레벨업 화면: 새 능력·새 카드, 고를 것이 있으면 캐릭터 창으로 */
+export function LevelUpDialog({ info, sheet, rs, onClose, onSheet }: { info: ReturnType<typeof levelUpInfo>; sheet: CharacterSheet; rs: Rs; onClose: () => void; onSheet: () => void }) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [onClose]);
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className="levelup" role="dialog" aria-modal="true" aria-label="레벨업" onClick={(e) => e.stopPropagation()}>
+        <p className="levelup-title">★ {sheet.level}레벨</p>
+        <p className="small muted">{rs(CLASSES[sheet.classId]?.name ?? '')} · 최대 HP {sheet.maxHp} (+{info.hpGain})</p>
+        {info.features.length > 0 && (
+          <ul className="levelup-features">{info.features.map((f, i) => <li key={i}>{rs(f)}</li>)}</ul>
+        )}
+        {info.cards.length > 0 && (
+          <div className="levelup-cards">
+            {info.cards.map((c) => (
+              <div key={c.id} className="levelup-card"><b>{rs(c.name)}</b><span className="small">{rs(c.desc)}</span></div>
+            ))}
+          </div>
+        )}
+        <div className="row">
+          {info.pending > 0 && <button type="button" className="primary" onClick={onSheet}>★ 고를 것 {info.pending}개 — 캐릭터 창에서 고르기</button>}
+          <button type="button" onClick={onClose}>계속</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 이어하기: 지난 이야기 */
+export function RecapCard({ r, rs, onClose, onSheet }: { r: Recap; rs: Rs; onClose: () => void; onSheet: () => void }) {
+  const todo = [r.todo.main && ['메인', r.todo.main], r.todo.side && ['사이드', r.todo.side], r.todo.bond && ['관계', r.todo.bond]].filter((x): x is string[] => !!x);
+  return (
+    <div className="recap">
+      <div className="row"><b>📜 지난 이야기</b><span className="small muted">{rs(r.where)} · {r.when}</span><span className="spacer" /><button type="button" className="small" onClick={onClose} aria-label="닫기">✕</button></div>
+      {r.last && <p className="small recap-last">{r.last}</p>}
+      {todo.length > 0 && (
+        <ul className="todo small">{todo.map(([k, v]) => <li key={k}><span className="tag">{k}</span> {rs(v!)}</li>)}</ul>
+      )}
+      {r.questions.length > 0 && (
+        <p className="small"><b>궁금한 것</b> · {r.questions.map((q) => rs(q)).join(' · ')}</p>
+      )}
+      {r.pending > 0 && <button type="button" className="small has-pending" onClick={onSheet}>★ 레벨업 선택 {r.pending}개가 기다린다</button>}
+    </div>
+  );
+}

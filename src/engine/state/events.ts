@@ -76,7 +76,7 @@ export type GameEvent =
   | { type: 'beat_closed'; beatId: EntityId }
   /** 이야기 엔진 (설계 v3 5장) */
   | { type: 'arc_started'; arcId: EntityId; name: string; chapter: string }
-  | { type: 'chapter_completed'; arcId: EntityId; index: number; name: string; next?: string }
+  | { type: 'chapter_completed'; arcId: EntityId; index: number; name: string; next?: string; /** 다음 장 예고 (수첩 한 줄) */ preview?: string }
   | { type: 'arc_ended'; arcId: EntityId; name: string; failed: boolean }
   /** 시계 값 갱신. minutes: 시간 눈금을 마지막으로 잰 시각, onFired: 발동한 조건 눈금 번호 */
   | { type: 'clock_changed'; clockId: EntityId; value: number; minutes: number; onFired?: number[] }
