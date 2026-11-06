@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { loadPlayPrefs, savePlayPrefs } from './playPrefs';
 import { isStandalone, loadOrientation, type OrientationPref, saveOrientation } from './orientation';
 import { type AvSettings, loadAv, playSfx, saveAv, stopSpeaking } from './audio';
 
@@ -7,6 +8,7 @@ export function AvControls({ onChange }: { onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const [orient, setOrient] = useState<OrientationPref>(loadOrientation);
   const [orientNote, setOrientNote] = useState('');
+  const [play, setPlay] = useState(loadPlayPrefs);
   const box = useRef<HTMLSpanElement>(null);
   // 바깥을 누르거나 Esc를 누르면 닫는다
   useEffect(() => {
@@ -30,8 +32,8 @@ export function AvControls({ onChange }: { onChange: () => void }) {
     <span className="av" ref={box}>
       <button type="button" onClick={() => setOpen((o) => !o)} title="효과음·배경 음악·음성" aria-expanded={open} className={open ? 'on' : undefined}>{on ? '🔊' : '🔇'} 소리·화면</button>
       {open && (
-        <div className="av-pop" role="dialog" aria-label="소리·화면 설정">
-          <div className="row"><b className="small">소리·화면 설정</b><span className="spacer" /><button type="button" className="av-close" onClick={() => setOpen(false)} aria-label="닫기">✕</button></div>
+        <div className="av-pop" role="dialog" aria-label="설정">
+          <div className="row"><b className="small">소리 · 화면 · 플레이</b><span className="spacer" /><button type="button" className="av-close" onClick={() => setOpen(false)} aria-label="닫기">✕</button></div>
           <label className="check small"><input type="checkbox" checked={av.sfx} onChange={(e) => set({ sfx: e.target.checked })} /> 효과음 (전투·주사위·보상·징조)</label>
           <label className="check small"><input type="checkbox" checked={av.music} onChange={(e) => set({ music: e.target.checked })} /> 배경 음악 (장르·전투에 맞춰)</label>
           <label className="check small"><input type="checkbox" checked={av.voice} disabled={!hasVoice} onChange={(e) => set({ voice: e.target.checked })} /> 서술 읽어 주기{hasVoice ? '' : ' (이 브라우저는 지원하지 않음)'}</label>
@@ -49,6 +51,7 @@ export function AvControls({ onChange }: { onChange: () => void }) {
             </select>
           </label>
           {orientNote && <p className="small muted">{orientNote}</p>}
+          <label className="check small"><input type="checkbox" checked={play.adaptive} onChange={(e) => { const p = { ...play, adaptive: e.target.checked }; setPlay(p); savePlayPrefs(p); }} /> 적응 난이도 (연달아 지면 조금 쉽게, 연달아 압승하면 정예)</label>
           <p className="small muted">소리는 이 기기에서 바로 만들어 냅니다 (파일·인터넷 필요 없음). 음성은 브라우저에 설치된 한국어 목소리를 씁니다.</p>
         </div>
       )}

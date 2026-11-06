@@ -33,6 +33,7 @@ import { checkModifier } from '../engine/character/sheet';
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 import { pickCharacterImage, pickSceneImage } from '../engine/assets';
 import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/digest';
+import { loadPlayPrefs } from './playPrefs';
 import { LevelUpDialog, LootDialog, RecapCard, RewardBanner } from './Rewards';
 import { effectiveItem, itemDef as itemDefOf } from '../engine/items';
 
@@ -150,7 +151,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     try {
       const t0 = performance.now();
       const { events, rejected } = await runTurn(createLlmClient(settings), world, state, text,
-        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage, turnUse, decision);
+        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage, turnUse, decision, { adaptive: loadPlayPrefs().adaptive });
       metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected });
       const turn = state.turn + 1;
       await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));

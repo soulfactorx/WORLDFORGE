@@ -448,6 +448,19 @@ export function validateWorld(input: unknown): Issue[] {
     checkEffects(a.effects, `${p}.effects`);
   }));
 
+  // ---- 돌발 사건 표 (설계 v4 E5)
+  arr<NonNullable<WorldPackage['randomEvents']>[number]>('randomEvents', false).forEach((e, i) => {
+    const p = `randomEvents[${i}]`;
+    text(e.name, `${p}.name`); text(e.text, `${p}.text`);
+    if (!['ambush', 'meeting', 'news', 'opportunity'].includes(e.kind)) err(`${p}.kind`, '종류는 ambush/meeting/news/opportunity 중 하나입니다.');
+    (e.where ?? []).forEach((id, j) => { if (!locIds.has(id)) err(`${p}.where[${j}]`, `없는 장소 "${id}"`); });
+    if (e.weight !== undefined && !(typeof e.weight === 'number' && e.weight > 0)) err(`${p}.weight`, '가중치는 0보다 큰 숫자입니다.');
+    if (e.cooldownDays !== undefined && !(Number.isInteger(e.cooldownDays) && e.cooldownDays >= 0)) err(`${p}.cooldownDays`, '0 이상의 정수(일)입니다.');
+    if (e.condition) checkCond(e.condition, `${p}.condition`);
+    if (e.effects) checkEffects(e.effects, `${p}.effects`);
+    (e.enemies ?? []).forEach((x, j) => { if (!MT[x.monsterId]) err(`${p}.enemies[${j}]`, `없는 적 "${x.monsterId}"`); });
+  });
+
   arcs.forEach((a, i) => {
     const p = `arcs[${i}]`;
     text(a.name, `${p}.name`);

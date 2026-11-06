@@ -238,6 +238,27 @@ export interface ItemDef {
   acBonus?: number;
 }
 
+/** 돌발 사건 (설계 v4 E5) */
+export interface RandomEvent {
+  id: EntityId;
+  name: string;
+  /** 플레이어에게 보이는 한 줄 + 서술의 재료 */
+  text: string;
+  /** ambush: 적이 나타난다 · meeting: 누군가 다가온다 · news: 소문·소식 · opportunity: 뜻밖의 기회 */
+  kind: 'ambush' | 'meeting' | 'news' | 'opportunity';
+  /** 일어나는 장소 (비우면 어디서나) */
+  where?: EntityId[];
+  /** 위험한 곳(조우가 정해진 장소)에서만 — where가 없을 때 */
+  dangerous?: boolean;
+  weight?: number;
+  /** 같은 사건이 다시 일어나기까지 걸리는 날 (기본 1) */
+  cooldownDays?: number;
+  condition?: Condition;
+  effects?: StoryEffect[];
+  /** ambush의 적 (비우면 이 세계 장르의 적 중 레벨에 맞게) */
+  enemies?: { monsterId: string; zone: number }[];
+}
+
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 export const RARITIES: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 export const RARITY_LABEL: Record<ItemRarity, string> = { common: '일반', uncommon: '고급', rare: '희귀', epic: '영웅', legendary: '유물' };
@@ -573,6 +594,8 @@ export interface WorldPackage {
   factions?: Faction[];
   relations?: NpcRelation[];
   relationBeats?: RelationBeat[];
+  /** 돌발 사건 표 (설계 v4 E5): 이동·휴식 때 엔진이 굴린다. 없으면 기본 표, []면 끔 */
+  randomEvents?: RandomEvent[];
   /** 이 세계만의 칭호 (설계 v4 E4): 조건을 채우면 엔진이 준다. renown 기본 5 */
   titles?: { id: EntityId; name: string; desc?: string; renown?: number; condition: Condition }[];
   /** 지속되는 세계 (설계 v3 7장): 소문 전파 (기본 켜짐) */

@@ -14,7 +14,8 @@ import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
 import { encounterDifficulty, MONSTERS, monsterTable } from '../engine/combat/monsters';
 import { CLASS_KITS } from '../engine/combat/cards';
-import type { Gear } from '../engine/combat/combat';
+import type { EncounterSpec, Gear } from '../engine/combat/combat';
+import { adaptiveMode } from '../engine/randomEvents';
 import { abilityModifier } from '../engine/dice/dice';
 import { equippedAc, gearBonus, itemCards, itemDef, rollLoot } from '../engine/items';
 import { levelSpan } from '../engine/character/progression';
@@ -134,9 +135,23 @@ export function playerGear(world: WorldPackage, state: GameState): Gear {
 }
 
 /** 조우 시작 + (적이 우선권이 빠르면) 플레이어 차례까지 적 행동 진행 */
-export function beginEncounter(world: WorldPackage, state: GameState, encounterId: string, turn: number): GameEvent[] {
+export interface EncounterOptions {
+  /** 적응 난이도 (설계 v4 E5, 기본 켬): 연달아 지면 적이 약해지고, 연달아 압승하면 정예가 나온다 */
+  adaptive?: boolean;
+}
+
+export function beginEncounter(world: WorldPackage, state: GameState, encounterId: string, turn: number, opts: EncounterOptions = {}): GameEvent[] {
   const enc = availableEncounters(world, state).find((e) => e.id === encounterId);
   if (!enc) throw new Error('이 장소에서 시작할 수 없는 조우');
+  return startEncounterSpec(world, state, enc, turn, opts);
+}
+
+/** 정해진 조우가 아닌 즉석 조우 (돌발 사건 기습) */
+export function beginAdhocEncounter(world: WorldPackage, state: GameState, spec: EncounterSpec, turn: number, opts: EncounterOptions = {}): GameEvent[] {
+  return startEncounterSpec(world, state, spec, turn, opts);
+}
+
+function startEncounterSpec(world: WorldPackage, state: GameState, enc: EncounterSpec, turn: number, opts: EncounterOptions): GameEvent[] {
   const rng = createRng(state.rngState);
   const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id], cards: state.grantedCards?.[id] }));
   const combat = startCombat(enc, state.player.sheet, rng, companions, playerGear(world, state), monsterTable(world));
@@ -146,6 +161,15 @@ export function beginEncounter(world: WorldPackage, state: GameState, encounterI
   if (diff.xp <= diff.budget[0] / 2) {
     for (const c of Object.values(combat.combatants)) if (c.side === 'enemy' && c.role !== 'boss') c.fleeAt = Math.max(c.fleeAt ?? 0, 0.6);
     combat.overmatched = true;
+  } else if (opts.adaptive !== false) {
+    // 적응 난이도 (설계 v4 E5)
+    const mode = adaptiveMode(state);
+    for (const c of Object.values(combat.combatants)) {
+      if (c.side !== 'enemy') continue;
+      if (mode === 'easier') { c.maxHp = Math.max(1, Math.round(c.maxHp * 0.75)); c.hp = c.maxHp; }
+      if (mode === 'harder' && c.role !== 'boss') { c.maxHp = Math.round(c.maxHp * 1.25); c.hp = c.maxHp; c.ac += 1; c.xp = Math.round((c.xp ?? 0) * 1.25); c.name = `${c.name} (정예)`; }
+    }
+    if (mode) combat.adaptive = mode;
   }
   const b = new Builder(world, state, turn);
   b.push({ type: 'combat_started', combat, rngState: rng.state() });

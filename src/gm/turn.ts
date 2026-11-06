@@ -23,7 +23,10 @@ import { discoveryXp, hardCheckXp } from '../engine/character/progression';
 import { applyDelta, canShareSecret, joinBlocker, relationshipOf, wantsToLeave } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
 import { improvisationOf, playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
-import { availableEncounters, beginEncounter } from './combat';
+import { availableEncounters, beginAdhocEncounter, beginEncounter } from './combat';
+import { ambushEnemies, rollRandomEvent } from '../engine/randomEvents';
+import { rollLoot } from '../engine/items';
+import { currentDay } from '../engine/world';
 import { contextExpression, expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
 import { basicGuide, gmGuide } from './guide';
 import { buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects } from './context';
@@ -211,6 +214,8 @@ export async function runTurn(
   use?: string,
   /** 결정적 선택 (D4): 기다리던 선택에서 고른 것 */
   decision?: { choiceId: string; optionId: string },
+  /** 플레이 설정 (설계 v4 E5): 적응 난이도 (기본 켬) */
+  play: { adaptive?: boolean } = {},
 ): Promise<TurnResult> {
   if (state.combat) throw new Error('전투 중에는 카드로 행동한다');
   if (state.playerDead) throw new Error('당신은 죽었다. 턴 되돌리기로 이전으로 돌아갈 수 있다.');
@@ -370,14 +375,45 @@ export async function runTurn(
 
   // 조우 / 휴식 (엔진 검증)
   const enc = d.start_encounter && availableEncounters(world, s).find((e) => e.id === d.start_encounter);
+  // 돌발 사건 (설계 v4 E5): 정해진 조우가 없을 때, 이동·휴식하면 엔진이 굴린다
+  let ambushed = false;
+  const trigger = !enc && (moving ? 'move' : d.rest === 'long' || d.rest === 'short' ? 'rest' : null);
+  const rev = trigger ? rollRandomEvent(world, s, createRng((s.rngState ^ Math.imul(turn + 1, 2654435761)) >>> 0), trigger) : null;
+  if (rev) {
+    const rrng = createRng((s.rngState + Math.imul(turn + 7, 40503)) >>> 0);
+    push({ type: 'random_event', eventId: rev.id, name: rev.name, kind: rev.kind, text: rev.text, day: currentDay(s) });
+    effectEvents(world, s, rev.effects ?? [], rev.name).forEach(push);
+    if (rev.kind === 'ambush') {
+      const enemies = rev.enemies?.length ? rev.enemies : ambushEnemies(world, s, rrng);
+      if (enemies.length) {
+        beginAdhocEncounter(world, s, { id: `${rev.id}#${turn}`, enemies }, turn, play).forEach(push);
+        ambushed = true;
+        outcomes.push(`돌발 사건 — 기습 (엔진 확정): ${rev.text} 전투가 시작된다. 서술은 적이 나타나는 순간에서 멈춘다 (결과를 서술하지 않는다).`);
+      }
+    } else {
+      if (rev.kind === 'opportunity' && !rev.effects?.length) {
+        const found = rollLoot(world, rrng, { level: s.player.sheet.level, threatXp: 0, levelSpan: 1, boss: true });
+        if (found) { push({ type: 'item_gained', itemId: found.id, name: found.name, n: 1, reason: rev.name }); outcomes.push(`돌발 사건 (엔진 확정): ${rev.text} — ${found.name}을(를) 얻었다`); }
+      } else if (rev.kind === 'news' && !rev.effects?.length) {
+        const known = new Set(s.beliefs.filter((b) => b.holder === 'player').map((b) => b.claim));
+        const rumors = world.beliefs.filter((b) => b.holder !== 'player' && b.state === 'rumor' && !known.has(b.claim));
+        const pick = rumors[Math.floor(rrng.next() * rumors.length)];
+        const claim = pick && world.claims.find((c) => c.id === pick.claim);
+        if (claim) { push({ type: 'knowledge_revealed', belief: { holder: 'player', claim: claim.id, state: 'rumor', source: 'rumor' }, statement: claim.statement }); outcomes.push(`돌발 사건 (엔진 확정): ${rev.text} — 들린 소문: "${claim.statement}" (소문일 뿐 사실인지 모른다)`); }
+        else outcomes.push(`돌발 사건 (엔진 확정): ${rev.text} (특별한 내용은 없다 — 분위기만)`);
+      } else {
+        outcomes.push(`돌발 사건 (엔진 확정): ${rev.text}${rev.kind === 'meeting' ? ' — 이름 없는 행인은 자유롭게 연출해도 되지만, 세계의 중요한 사실을 새로 만들지 않는다.' : ''}`);
+      }
+    }
+  }
   if (enc) {
-    beginEncounter(world, s, enc.id, turn).forEach(push);
+    beginEncounter(world, s, enc.id, turn, play).forEach(push);
     const foes = Object.values(s.combat?.combatants ?? {}).filter((c) => c.side === 'enemy').map((c) => c.name);
     outcomes.push(`전투 시작: ${enc.name} — ${foes.join(', ')}. 서술은 적이 나타나 전투가 시작되는 순간에서 멈춘다 (결과를 서술하지 않는다).`);
     if (s.log.some((l) => l.turn === turn && l.kind === 'combat' && l.text.includes('→') && !l.text.startsWith('⚔'))) {
       outcomes.push('적이 먼저 움직였다 (전투 기록 참고)');
     }
-  } else if (d.rest === 'long' || d.rest === 'short') {
+  } else if (!ambushed && (d.rest === 'long' || d.rest === 'short')) {
     push({ type: 'rested', kind: d.rest });
     outcomes.push(d.rest === 'long' ? '긴 휴식 완료: 8시간이 지났고 HP와 자원이 회복됨' : '짧은 휴식 완료: 1시간이 지남');
   }

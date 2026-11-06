@@ -412,6 +412,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         <JsonField label="조우" value={w.encounters ?? []} onChange={(encounters) => set({ encounters })} rows={18}
           help={`이 세계의 적: ${monstersOfWorld(w).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건`} />
       )}
+      {tab === 'encounters' && (
+        <JsonField label="돌발 사건 표 (이동·휴식 때 엔진이 굴린다 — 비워 두면 기본 표: 기습·뜻밖의 발견·길손·수군거림. 끄려면 [])" value={w.randomEvents ?? null} rows={6}
+          onChange={(randomEvents) => set({ randomEvents: Array.isArray(randomEvents) ? randomEvents : undefined })}
+          help='예: [{ "id": "rand/merchant", "name": "떠돌이 상인", "kind": "meeting", "text": "짐을 잔뜩 진 상인이 손을 흔든다", "where": ["loc/old-road"], "weight": 2, "cooldownDays": 3 }, { "id": "rand/wolves", "name": "늑대 떼", "kind": "ambush", "text": "덤불 속에서 늑대가 튀어나온다!", "where": ["loc/forest-clearing"], "enemies": [{ "monsterId": "wolf", "zone": 2 }] }] · kind: ambush(기습)·meeting(만남)·news(소문)·opportunity(기회) · effects로 플래그·아이템·돈 등을 줄 수 있다' />
+      )}
       {tab === 'encounters' && (w.encounters ?? []).length > 0 && (
         <ul className="small">
           {(w.encounters ?? []).map((e) => { const d = encounterDifficulty(e.enemies.map((x) => x.monsterId), [1, 1], monsterTable(w)); const d3 = encounterDifficulty(e.enemies.map((x) => x.monsterId), [3, 3], monsterTable(w));

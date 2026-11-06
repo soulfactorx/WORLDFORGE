@@ -121,6 +121,8 @@ export interface Economy {
 export interface CombatState {
   /** 파티가 압도적으로 강한 조우 (설계 v4 E4) — 적이 일찍 달아나고, 서술이 주인공의 기세를 그린다 */
   overmatched?: boolean;
+  /** 적응 난이도로 조정된 조우 (설계 v4 E5) */
+  adaptive?: 'easier' | 'harder';
   encounterId: string;
   round: number;
   order: string[];

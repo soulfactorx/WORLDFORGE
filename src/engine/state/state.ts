@@ -86,6 +86,9 @@ export interface GameState {
   arrivedTurn?: number;
   /** 이미 받은 1회성 경험치 보상 열쇠 (v0.38) */
   xpKeys?: string[];
+  /** 돌발 사건이 마지막으로 일어난 날 (사건별) · 마지막 돌발 사건 턴 (v0.42) */
+  randomEvents?: Record<EntityId, number>;
+  lastRandomTurn?: number;
   /** 얻은 칭호 (v0.41) */
   titles?: string[];
   log: LogEntry[];
@@ -155,7 +158,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const names = Object.values(e.combat.combatants).filter((c) => c.side === 'enemy').map((c) => `${c.name}(${ZONE_NAMES[c.zone]})`).join(', ');
       const order = e.combat.order.map((id) => `${e.combat.combatants[id]!.name} ${e.combat.combatants[id]!.initiative}`).join(' → ');
       return { ...s, combat: e.combat, rngState: e.rngState,
-        log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 시작 — ${names}\n우선권: ${order}${e.combat.overmatched ? '\n적들이 당신의 기세에 움찔한다 — 상대가 되지 않는다는 것을 아는 눈치다.' : ''}` }] };
+        log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 시작 — ${names}\n우선권: ${order}${e.combat.overmatched ? '\n적들이 당신의 기세에 움찔한다 — 상대가 되지 않는다는 것을 아는 눈치다.' : e.combat.adaptive === 'harder' ? '\n이번 적은 만만치 않아 보인다 — 정예다.' : ''}` }] };
     }
     case 'combat_action': {
       if (!s.combat) return s;
@@ -214,6 +217,8 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: e.sheet } } : s;
       return { ...next, log: [...next.log, { turn, kind: 'progress', text }] };
     }
+    case 'random_event':
+      return { ...s, randomEvents: { ...(s.randomEvents ?? {}), [e.eventId]: e.day }, lastRandomTurn: turn, log: [...s.log, { turn, kind: 'omen', text: `✦ ${e.text}` }] };
     case 'title_earned':
       return (s.titles ?? []).includes(e.titleId) ? s : { ...s, titles: [...(s.titles ?? []), e.titleId], log: [...s.log, { turn, kind: 'progress', text: `🏅 칭호: ${e.name} — ${e.desc}` }] };
     case 'names_learned':
