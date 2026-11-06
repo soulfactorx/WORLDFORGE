@@ -19,7 +19,7 @@ import { gainEvent, inventoryLine, moneyEvent, pendingGifts, pendingPickups } fr
 import { itemDef } from '../engine/items';
 import { allJobs } from '../engine/jobs';
 import { QUEST_TYPE_LABEL } from '../engine/scenario';
-import { DISCOVERY_XP } from '../engine/character/progression';
+import { discoveryXp, hardCheckXp } from '../engine/character/progression';
 import { applyDelta, canShareSecret, joinBlocker, relationshipOf, wantsToLeave } from '../engine/relationship';
 import type { LlmClient } from '../llm/types';
 import { improvisationOf, playerStateFromNpc, shareableBelief, validateImprovisedFacts, type ProposedFact } from '../engine/canon';
@@ -251,6 +251,9 @@ export async function runTurn(
     const mode: RollMode = ['advantage', 'disadvantage'].includes(d.check_mode) ? d.check_mode : 'normal';
     const result = d20Test(rng, breakdown.total, DC_TIERS[d.check_dc_tier], mode);
     push({ type: 'check_rolled', skill: breakdown.label, reason: d.check_reason, result, rngState: rng.state(), breakdown, mode });
+    // 어려운 판정 성공은 작은 경험치 (설계 v4 P1 — 잘한 플레이에 보상)
+    const hard = result.success ? hardCheckXp(s.player.sheet.level, result.dc) : 0;
+    if (hard) progressEvents(s, [{ who: 'player', amount: hard }], `어려운 판정 성공 (${breakdown.label} DC ${result.dc})`, levelCapOf(world)).forEach(push);
     outcomes.push(`${breakdown.label} ${result.success ? '성공' : '실패'}${result.natural20 ? ' (자연 20)' : result.natural1 ? ' (자연 1)' : ''}${mode !== 'normal' ? ` [${mode === 'advantage' ? '이점' : '불리점'}]` : ''}`);
   }
   // 발견: 이 장소에서 아직 찾지 않은 것만. 판정이 필요하면 이번 턴의 같은 기술 판정에 성공해야 한다
@@ -394,7 +397,7 @@ export async function runTurn(
   // 처음 알게 된 사실마다 탐험·대화 경험치
   const discoveries = reveals.filter((r) => r.type === 'knowledge_revealed' && !s.beliefs.some((b) => b.holder === 'player' && b.claim === r.belief.claim)).length;
   reveals.forEach(push);
-  if (discoveries) progressEvents(s, [{ who: 'player', amount: DISCOVERY_XP * discoveries }], `새로운 사실 ${discoveries}개`, levelCapOf(world)).forEach(push);
+  if (discoveries) progressEvents(s, [{ who: 'player', amount: discoveryXp(s.player.sheet.level) * discoveries }], `새로운 사실 ${discoveries}개`, levelCapOf(world)).forEach(push);
 
   // 시나리오: 퀘스트 진행·보상·결말 (엔진 판정)
   const sc = scenarioEvents(world, s);

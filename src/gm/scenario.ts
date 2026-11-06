@@ -1,4 +1,5 @@
 import { levelCapOf } from '../engine/genre';
+import { rewardXp } from '../engine/character/progression';
 import { evalCondition, questTransitions, reachedEnding } from '../engine/scenario';
 import type { Rewards, WorldPackage } from '../engine/schema';
 import { jobRewards, jobTransitions } from '../engine/jobs';
@@ -26,7 +27,7 @@ export function rewardEvents(world: WorldPackage, state: GameState, r: Rewards |
   const out: GameEvent[] = [];
   let s = state;
   const push = (e: GameEvent | null) => { if (!e) return; out.push(e); s = applyEvent(s, e, state.turn); };
-  if (r.xp) progressEvents(s, [{ who: 'player', amount: r.xp }], reason, levelCapOf(world)).forEach(push);
+  if (r.xp) progressEvents(s, [{ who: 'player', amount: rewardXp(s.player.sheet, r.xp, levelCapOf(world)) }], reason, levelCapOf(world)).forEach(push);
   if (r.money) push(moneyEvent(world, s, r.money, reason));
   for (const it of r.items ?? []) push(gainEvent(world, it, reason));
   for (const x of r.relationship ?? []) {
@@ -80,6 +81,8 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
       const next = t.arc.chapters[t.index + 1];
       push({ type: 'chapter_completed', arcId: t.arc.id, index: t.index, name: t.arc.name, ...(next ? { next: next.name } : {}) });
       effectEvents(world, s, ch.effects ?? [], `${t.arc.name}: ${ch.name}`).forEach(push);
+      // 장 완료 이정표: 다음 레벨까지 채운다 (세계 상한 안에서, 장마다 한 번)
+      progressEvents(s, [{ who: 'player', amount: rewardXp(s.player.sheet, 'chapter', levelCapOf(world)) }], `장 완료: ${t.arc.name} — ${ch.name}`, levelCapOf(world), `chapter:${t.arc.id}:${t.index}`).forEach(push);
     }
     if (t.kind === 'ended') push({ type: 'arc_ended', arcId: t.arc.id, name: t.arc.name, failed: t.failed });
   }

@@ -84,6 +84,8 @@ export interface GameState {
   namesKnown?: EntityId[];
   /** 지금 장소에 도착한 턴 (v0.37.6). 조우 조건("두 턴 이상 머물면")을 판단할 수 있게 Director에게 보여 준다 */
   arrivedTurn?: number;
+  /** 이미 받은 1회성 경험치 보상 열쇠 (v0.38) */
+  xpKeys?: string[];
   log: LogEntry[];
 }
 
@@ -198,9 +200,10 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const upd = (sh: CharacterSheet) => ({ ...sh, xp: (sh.xp ?? 0) + e.amount });
       const next = e.who === 'player' ? { ...s, player: { ...s.player, sheet: upd(s.player.sheet) } }
         : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: upd(s.party[e.who]!) } } : s;
+      const keyed = e.key ? { ...next, xpKeys: [...(s.xpKeys ?? []), e.key] } : next;
       return e.who === 'player'
-        ? { ...next, log: [...next.log, { turn, kind: 'progress', text: `경험치 +${e.amount} (${e.reason})` }] }
-        : next;
+        ? { ...keyed, log: [...keyed.log, { turn, kind: 'progress', text: `경험치 +${e.amount} (${e.reason})` }] }
+        : keyed;
     }
     case 'level_up': {
       const name = e.who === 'player' ? '당신' : e.sheet.name;

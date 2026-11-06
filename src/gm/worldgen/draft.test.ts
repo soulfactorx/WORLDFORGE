@@ -129,7 +129,7 @@ describe('초안: 임무 유형·의뢰판 (설계 v3 R4b)', () => {
       ] },
     };
     const r = addScenario(world, sc);
-    expect(r.world.quests![0]).toMatchObject({ type: 'escort', giver: 'npc/keeper', target: 'npc/sailor', timeLimit: { days: 3 }, rewards: { xp: 50, money: 30 } });
+    expect(r.world.quests![0]).toMatchObject({ type: 'escort', giver: 'npc/keeper', target: 'npc/sailor', timeLimit: { days: 3 }, rewards: { xp: 'minor', money: 30 } });
     const board = r.world.locations.find((l) => l.id === 'loc/pier')!.board!;
     expect(board.jobs).toEqual([{ id: 'job/wolves', name: '늑대 퇴치', type: 'hunt', description: '늑대를 쫓아라', locationId: 'loc/lighthouse', enemies: [{ monsterId: 'wolf', zone: 2 }] }]);
     expect(validateWorld(r.world).filter((i) => i.level === 'error')).toEqual([]);

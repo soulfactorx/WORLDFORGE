@@ -122,3 +122,17 @@ describe('결정적 선택 (D4)', () => {
     expect(r.state.log.some((l) => l.text.includes('◆ 결정'))).toBe(true);
   });
 });
+
+describe('성장 곡선 (설계 v4 E1): 장 완료 이정표', () => {
+  it('장을 끝내면 다음 레벨까지 채워 레벨이 오른다 (장마다 한 번)', () => {
+    const w = world();
+    let s = start(w);
+    expect(s.player.sheet.level).toBe(1);
+    s = run(w, s, [{ type: 'moved', to: 'loc/village-gate' }]);
+    expect(s.player.sheet.level).toBe(2);
+    expect(s.xpKeys).toContain('chapter:arc/shadow:0');
+    // 같은 열쇠로는 다시 주지 않는다
+    const again = run(w, s);
+    expect(again.player.sheet.xp).toBe(s.player.sheet.xp);
+  });
+});

@@ -422,7 +422,7 @@ export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: Wor
       ...(q.giver && refs.npc(q.giver) ? { giver: refs.npc(q.giver)! } : {}),
       ...(q.target && refs.npc(q.target) ? { target: refs.npc(q.target)! } : {}),
       ...((q.time_limit_days ?? 0) > 0 ? { timeLimit: { days: clamp(q.time_limit_days!, 1, 60) } } : {}),
-      ...(q.reward_xp > 0 || (q.reward_money ?? 0) > 0 ? { rewards: { ...(q.reward_xp > 0 ? { xp: clamp(q.reward_xp, 0, 1000) } : {}), ...((q.reward_money ?? 0) > 0 ? { money: clamp(q.reward_money!, 0, 5000) } : {}) } } : {}),
+      ...(q.reward_xp > 0 || (q.reward_money ?? 0) > 0 ? { rewards: { ...(q.reward_xp > 0 ? { xp: q.kind === 'main' ? 'major' as const : 'minor' as const } : {}), ...((q.reward_money ?? 0) > 0 ? { money: clamp(q.reward_money!, 0, 5000) } : {}) } } : {}),
     });
   }
   const endings: Ending[] = d.endings.map((e) => ({ id: endMap.get(e.key)!, name: e.name, condition: convertCond(e.condition, refs, `결말 "${e.name}"`, notes), epilogue: e.epilogue }));

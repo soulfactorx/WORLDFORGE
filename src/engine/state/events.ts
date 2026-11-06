@@ -50,7 +50,7 @@ export type GameEvent =
   | { type: 'flag_set'; flag: string }
   | { type: 'ending_reached'; endingId: EntityId; name: string }
   /** 경험치·레벨업 (v0.7). who = 'player' 또는 동료 NPC ID */
-  | { type: 'xp_gained'; who: string; amount: number; reason: string }
+  | { type: 'xp_gained'; who: string; amount: number; reason: string; /** 한 번만 주는 보상의 열쇠 (예: 관계 단계·장 완료) */ key?: string }
   | { type: 'level_up'; who: string; sheet: CharacterSheet; hpGain: number; features: string[] }
   /** 플레이어가 인물의 이름을 알게 됨 (v0.37.5) */
   | { type: 'names_learned'; ids: EntityId[] }

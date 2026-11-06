@@ -3,6 +3,10 @@ import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
 import { displayName } from '../engine/names';
+import { HOSTILE_STAGES, type Stage, STAGES } from '../engine/relationship';
+import { relationStageXp } from '../engine/character/progression';
+import { levelCapOf } from '../engine/genre';
+import { progressEvents } from './progression';
 
 /** 기록에 보이는 이름: 플레이어가 이름을 모르면 외형 별칭 */
 const nameFor = (world: WorldPackage, state: GameState, npc: Pick<Character, 'id' | 'name'>) => {
@@ -61,6 +65,14 @@ export function relationshipEvents(
         const ev: GameEvent = { type: 'relation_stage', npcId: e.npcId, name: e.name ?? e.npcId, from: before, to: after };
         out.push(ev);
         s = applyEvent(s, ev, state.turn);
+        // 처음으로 이 단계까지 가까워졌으면 경험치 (설계 v4 P1 — 관계도 성장이다). 파급이 아닌 본인만
+        const closer = STAGES.indexOf(after as Stage) < STAGES.indexOf(before as Stage) && !HOSTILE_STAGES.includes(after as Stage);
+        if (closer && e.npcId === npc.id) {
+          for (const x of progressEvents(s, [{ who: 'player', amount: relationStageXp(s.player.sheet.level) }], `${e.name ?? npc.name}와(과)의 사이: ${after}`, levelCapOf(world), `stage:${e.npcId}:${after}`)) {
+            out.push(x);
+            s = applyEvent(s, x, state.turn);
+          }
+        }
       }
     }
   };

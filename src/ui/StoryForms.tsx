@@ -45,7 +45,10 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
           <button type="button" className="small" onClick={() => up({ stages: [...q.stages, { objective: '다음 목표', hint: '', complete: { all: [] } }] })}>＋ 단계 추가</button>
           <fieldset><legend>보상</legend>
             <div className="ability-grid">
-              <Num label="경험치" value={q.rewards?.xp} onChange={(xp) => up({ rewards: { ...q.rewards, xp } })} />
+              <Select label="경험치 (레벨에 맞춰 계산)" value={typeof q.rewards?.xp === 'number' ? 'num' : q.rewards?.xp ?? 'none'}
+                options={[['none', '없음'], ['minor', '작은 보상 (다음 레벨까지의 15%)'], ['major', '큰 보상 (40%)'], ['num', '직접 입력']] as const}
+                onChange={(v) => up({ rewards: { ...q.rewards, xp: v === 'none' ? undefined : v === 'num' ? (typeof q.rewards?.xp === 'number' ? q.rewards.xp : 100) : v } })} />
+              {typeof q.rewards?.xp === 'number' && <Num label="경험치 (고정 — 레벨이 높으면 최소 10%)" value={q.rewards.xp} onChange={(xp) => up({ rewards: { ...q.rewards, xp } })} />}
               <Num label="돈" value={q.rewards?.money} onChange={(money) => up({ rewards: { ...q.rewards, money } })} />
             </div>
             <JsonField label="그 밖의 보상 (아이템·관계·평판·카드)" value={{ items: q.rewards?.items ?? [], relationship: q.rewards?.relationship ?? [], reputation: q.rewards?.reputation ?? [], cards: q.rewards?.cards ?? [] }}

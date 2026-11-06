@@ -102,3 +102,17 @@ describe('질투 (로맨스 샘플)', () => {
     expect(scenarioEvents(w, s).events).toContainEqual(expect.objectContaining({ type: 'beat_opened', beatId: 'beat/eleanor-jealous' }));
   });
 });
+
+describe('성장 곡선 (설계 v4 E1): 관계 단계 경험치', () => {
+  it('처음으로 가까워진 단계에서만 경험치를 주고, 멀어졌다 다시 가까워져도 또 주지 않는다', () => {
+    const w = world();
+    let s = start(w);
+    s = { ...s, relationships: { 'npc/bran': { affinity: 5, trust: 0, respect: 0, fear: 0, intimacy: 0, grudge: 0 } } };
+    const up = relationshipEvents(w, s, bran, { affinity: 8 }, '도움');
+    expect(up.some((e) => e.type === 'xp_gained' && e.key === 'stage:npc/bran:아는 사이')).toBe(true);
+    for (const e of up) s = applyEvent(s, e, 1);
+    for (const e of relationshipEvents(w, s, bran, { affinity: -10 }, '다툼')) s = applyEvent(s, e, 2);
+    const again = relationshipEvents(w, s, bran, { affinity: 10 }, '화해');
+    expect(again.some((e) => e.type === 'xp_gained')).toBe(false);
+  });
+});

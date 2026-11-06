@@ -352,7 +352,8 @@ export type QuestType = (typeof QUEST_TYPES)[number];
 
 /** 보상 (임무·의뢰 공용). cards: 플레이어나 동료가 얻는 전용 카드 (설계 v3 4.2) */
 export interface Rewards {
-  xp?: number;
+  /** 숫자(고정, 레벨 비율 하한 적용) 또는 'minor'(작은 보상) · 'major'(큰 보상) — 설계 v4 P1 */
+  xp?: number | 'minor' | 'major';
   money?: number;
   items?: ItemStack[];
   relationship?: ({ npcId: EntityId } & Partial<Record<RelationAxis, number>>)[];
