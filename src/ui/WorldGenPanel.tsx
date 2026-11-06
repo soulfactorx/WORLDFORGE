@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { generateWorld, type Size } from '../gm/worldgen/generate';
 import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
@@ -20,6 +20,14 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
   const [withScenario, setWithScenario] = useState(true);
   const [genre, setGenre] = useState('high_fantasy');
   const [stage, setStage] = useState('');
+  // 진행률 (v0.46.3 — 카드 세계 만들기와 같은 방식): 긴 AI 호출 중에는 다음 단계 쪽으로 천천히 차오른다
+  const [pct, setPct] = useState({ at: 0, next: 0, since: 0, start: 0 });
+  const [, tick] = useState(0);
+  useEffect(() => { if (!stage) return; const t = setInterval(() => tick((n) => n + 1), 500); return () => clearInterval(t); }, [stage !== '']);
+  const onStage = (st: string, at?: number, next?: number) => {
+    setStage(st);
+    if (at !== undefined) setPct((p) => ({ at: Math.max(p.at, at), next: Math.max(next ?? at, at), since: Date.now(), start: p.start || Date.now() }));
+  };
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
 
@@ -27,13 +35,14 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
     if (!settings) return;
     setError('');
     abort.current = new AbortController();
+    setPct({ at: 0, next: 2, since: Date.now(), start: Date.now() });
     try {
-      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, genre }, setStage, abort.current.signal);
+      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, genre }, onStage, abort.current.signal);
       onDraft(r.world, r.notes);
     } catch (e) {
       if (!abort.current.signal.aborted) setError((e as Error).message);
     } finally {
-      setStage('');
+      setStage(''); setPct({ at: 0, next: 0, since: 0, start: 0 });
     }
   }
 
@@ -71,9 +80,21 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
       <p className="muted small">AI 호출 {withScenario ? 2 : 1}회 · 설정한 모델과 API 키를 씁니다. 큰 응답이라 시간이 조금 걸립니다.</p>
       <div className="row">
         <button onClick={() => (busy ? abort.current?.abort() : onCancel())}>{busy ? '중단' : '취소'}</button>
-        <button className="primary" disabled={!settings || busy || prompt.trim().length < 10} onClick={run}>{busy ? stage : '초안 만들기'}</button>
+        <button className="primary" disabled={!settings || busy || prompt.trim().length < 10} onClick={run}>{busy ? '만드는 중…' : '초안 만들기'}</button>
         {!busy && prompt.trim().length < 10 && <span className="small muted">설명을 10자 이상 적어 주세요.</span>}
       </div>
+      {busy && (() => {
+        const creep = pct.at + (pct.next - pct.at) * (1 - Math.exp(-(Date.now() - pct.since) / 45000)) * 0.9;
+        const shown = Math.min(100, Math.round(creep));
+        const sec = Math.floor((Date.now() - (pct.start || Date.now())) / 1000);
+        return (
+          <div className="gen-progress" role="status" aria-live="polite">
+            <div className="row"><span className="spinner" /> <b>{shown}%</b> <span className="small">{stage}</span><span className="spacer" /><span className="small muted">{Math.floor(sec / 60)}분 {sec % 60}초</span></div>
+            <div className="progress-bar"><span style={{ width: `${shown}%` }} /></div>
+            <span className="small muted">{withScenario ? '1) 세계 → 2) 임무·결말 → 3) 기본 이미지 → 4) 검사' : '1) 세계 → 2) 기본 이미지 → 3) 검사'} · 큰 응답이라 몇 분 걸릴 수 있습니다. 화면을 떠나지 마세요.</span>
+          </div>
+        );
+      })()}
       {error && <p className="status">❌ {error}</p>}
     </section>
   );

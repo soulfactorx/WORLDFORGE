@@ -31,7 +31,9 @@ export function JsonField<T>({ label, value, onChange, rows = 10, help }: { labe
   if (value !== last) { setLast(value); setText(JSON.stringify(value ?? null, null, 2)); setError(''); }
   return (
     <label>{label}
-      {help && <span className="muted small">{help}</span>}
+      {help && (help.length > 140
+        ? <details className="help-fold"><summary className="small muted">도움말·예시</summary><span className="muted small">{help}</span></details>
+        : <span className="muted small">{help}</span>)}
       <textarea className="code" rows={rows} value={text} spellCheck={false} onChange={(e) => {
         setText(e.target.value);
         try { const v = JSON.parse(e.target.value) as T; setError(''); setLast(v); onChange(v); } catch (er) { setError((er as Error).message); }

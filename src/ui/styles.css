@@ -47,7 +47,7 @@ label.check input { width: auto; }
 .entry.check { color: var(--check); font-family: ui-monospace, monospace; font-size: .85rem; }
 .input-row { display: flex; gap: 8px; align-items: stretch; position: sticky; bottom: 0; background: var(--bg); padding: 8px 0 16px; }
 .input-row button { flex-shrink: 0; }
-fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 legend { font-weight: 600; padding: 0 4px; }
 .ability-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 560px) { .ability-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -416,3 +416,16 @@ img.zoomable { cursor: zoom-in; }
 .play.img-small .guide-faces img { width: 40px; height: 40px; }
 .play.img-large .guide-faces img { width: 80px; height: 80px; }
 .play.img-full .guide-faces img { width: 96px; height: 96px; }
+
+/* 편집기 점검 (v0.46.3) */
+.help-fold > summary { cursor: pointer; width: fit-content; }
+.help-fold[open] > summary { margin-bottom: 4px; }
+.item-form, .form-grid > * { min-width: 0; }
+.cond, .cond-child, .cond-child > .cond, .cond-children, .cond-field { min-width: 0; }
+.cond select, .cond input { min-width: 0; max-width: 100%; }
+.cond-child > button { flex: none; }
+@media (max-width: 600px) {
+  ul.needs li { flex-wrap: wrap; }
+  ul.needs label.file { flex: 1 1 100%; }
+  ul.needs label.file input[type='file'] { max-width: 100%; }
+}

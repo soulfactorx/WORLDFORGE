@@ -93,9 +93,11 @@ export function worldSummary(w: WorldPackage): string {
 }
 
 export async function generateWorld(
-  llm: LlmClient, opts: GenerateOptions, onStage: (stage: string) => void, signal?: AbortSignal,
+  llm: LlmClient, opts: GenerateOptions, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal,
 ): Promise<GenerateResult> {
-  onStage('세계 만드는 중 (장소·인물·비밀)…');
+  // 진행률 (v0.46.3): 단계가 시작할 때 [지금 %, 이 단계가 끝날 때 %]
+  const [worldEnd, scenEnd] = opts.withScenario ? [55, 88] : [85, 85];
+  onStage('세계 만드는 중 (장소·인물·비밀)…', 2, worldEnd);
   const draft = await llm.json<WorldDraft>({
     system: `${WORLD_SYSTEM}\n- ${genreGuide({ genre: { id: opts.genre ?? 'high_fantasy' } })}${genreOf(opts.genre).combat === 'rare' ? '\n- 이 장르는 전투보다 관계·사교가 중심이다. 동료 후보보다 관계가 깊어질 수 있는 인물을 늘린다.' : ''}`,
     user: `## 제작자 요청\n${opts.prompt}\n\n## 장르\n${genreOf(opts.genre).label}\n\n## 규모\n${SIZE_TEXT[opts.size]}\n\n## 콘텐츠 등급\n${RATING_TEXT[opts.contentRating]}`,
@@ -105,16 +107,16 @@ export async function generateWorld(
   let { world, notes } = worldFromDraft(draft, { id, contentRating: opts.contentRating, author: opts.author });
   world = { ...world, genre: { id: genreOf(opts.genre).id } };
   if (opts.withScenario) {
-    const r = await generateScenario(llm, world, onStage, signal);
+    const r = await generateScenario(llm, world, (st) => onStage(st, worldEnd, scenEnd), signal);
     world = r.world;
     notes = [...notes, ...r.notes];
   }
-  onStage('인물·장소에 기본 이미지 고르는 중…');
+  onStage('인물·장소에 기본 이미지 고르는 중…', scenEnd, 97);
   const st = await assignStockImages(world, llm, signal);
   world = { ...world, assets: st.assets };
   if (st.added) notes = [...notes, `인물·장소 ${st.added}곳에 앱 내장 기본 이미지를 붙였습니다. 편집기 이미지 탭에서 바꿀 수 있습니다.`];
   { const nd = imageNeeds(world); if (nd.length) notes = [...notes, `진짜 이미지가 없는 인물·장소 ${nd.length}곳은 편집기 이미지 탭의 "부족한 이미지"에서 그림을 올리거나, 추천 파일 이름(예: ${nd[0]!.fileName})으로 내 기본 이미지에 올리면 자동으로 붙습니다.`]; }
-  onStage('검사 중…');
+  onStage('검사 중…', 98, 100);
   return { world, notes, issues: validateWorld(world) };
 }
 

@@ -177,7 +177,7 @@ export const SCENARIO_DRAFT_SCHEMA = scenarioDraftSchema();
 
 // ---------------------------------------------------------------- 정리
 
-const slug = (s: string) => s.toLowerCase().trim().replace(/^(loc|npc|fact|claim|enc|quest|ending)\//, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
+const slug = (s: string) => String(s ?? '').toLowerCase().trim().replace(/^(loc|npc|fact|claim|enc|quest|ending)\//, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(Number.isFinite(n) ? n : 0)));
 
 /** key → 접두사 붙은 고유 ID 지도 (중복은 -2, -3…) */
@@ -245,7 +245,60 @@ export function convertCond(c: DraftCond | undefined, refs: Refs, where: string,
 }
 
 /** 세계 초안 → 패키지 (시나리오 없음) */
-export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating: WorldPackage['manifest']['contentRating']; author?: string }): { world: WorldPackage; notes: string[] } {
+/** AI 응답에서 빠진 목록은 빈 목록으로 (v0.46.3 — "t.quests is undefined" 같은 오류 방지) */
+const list = <T>(v: unknown): T[] => (Array.isArray(v) ? (v.filter((x) => x && typeof x === 'object') as T[]) : []);
+type Sch = { type?: string | string[]; enum?: unknown[]; properties?: Record<string, Sch>; items?: Sch; anyOf?: Sch[] };
+/** 스키마를 따라 빠진 필드를 안전한 기본값으로 채운다 (문자열 '', 수 0, 목록 [], 열거형은 '' 또는 첫 값) */
+function fill(s: Sch, v: unknown): unknown {
+  if (s.anyOf) return v === undefined || v === null ? fill(s.anyOf[0]!, undefined) : v;
+  if (s.enum) return v !== undefined && v !== null ? v : s.enum.includes('') ? '' : s.enum[0];
+  const t = Array.isArray(s.type) ? s.type[0] : s.type;
+  if (t === 'object') {
+    const o = (v && typeof v === 'object' && !Array.isArray(v) ? { ...(v as Record<string, unknown>) } : {}) as Record<string, unknown>;
+    for (const [k, ps] of Object.entries(s.properties ?? {})) o[k] = fill(ps, o[k]);
+    return o;
+  }
+  if (t === 'array') return Array.isArray(v) ? v.filter((x) => x !== null && x !== undefined).map((x) => fill(s.items ?? {}, x)) : [];
+  if (t === 'integer' || t === 'number') return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+  if (t === 'boolean') return typeof v === 'boolean' ? v : false;
+  if (t === 'string') return typeof v === 'string' ? v : v === undefined || v === null ? '' : String(v);
+  return v;
+}
+const hasCond = (c: unknown) => !!c && typeof c === 'object' && Array.isArray((c as { items?: unknown }).items);
+
+function fixWorldDraft(raw: WorldDraft): WorldDraft {
+  const d = fill(WORLD_DRAFT_SCHEMA as Sch, raw) as WorldDraft;
+  d.locations = list<WorldDraft['locations'][number]>(d.locations).map((l) => ({ ...l, connections: list<string>(l.connections as unknown).filter((x) => typeof x === 'string') }));
+  d.characters = list(d.characters);
+  d.truths = list<WorldDraft['truths'][number]>(d.truths).map((t) => ({ ...t, subjects: Array.isArray(t.subjects) ? t.subjects : [] }));
+  d.claims = list(d.claims);
+  d.knowledge = list(d.knowledge);
+  d.discoveries = list(d.discoveries);
+  return d;
+}
+function fixScenarioDraft(raw0: ScenarioDraft): ScenarioDraft {
+  // 조건이 아예 없는 결말·장은 곧바로 참이 되므로 버린다 (채우기 전에 본다)
+  const raw = { ...(raw0 ?? {}) } as ScenarioDraft;
+  if (Array.isArray(raw.endings)) raw.endings = raw.endings.filter((e) => e && hasCond(e.condition));
+  if (raw.arc && Array.isArray(raw.arc.chapters)) raw.arc = { ...raw.arc, chapters: raw.arc.chapters.filter((c) => c && hasCond(c.complete)) };
+  const d = fill(SCENARIO_DRAFT_SCHEMA as Sch, raw) as ScenarioDraft;
+  if (raw.arc === undefined) delete d.arc;
+  if (raw.board === undefined) delete d.board;
+  d.encounters = list<ScenarioDraft['encounters'][number]>(d.encounters).map((e) => ({ ...e, enemies: list(e.enemies) }));
+  d.flags = list(d.flags);
+  d.quests = list<ScenarioDraft['quests'][number]>(d.quests).map((q) => ({ ...q, stages: list<ScenarioDraft['quests'][number]['stages'][number]>(q.stages) })).filter((q) => q.stages.length);
+  d.endings = list(d.endings);
+  if (d.relation_beats !== undefined) d.relation_beats = list(d.relation_beats);
+  if (d.clocks !== undefined) d.clocks = list<NonNullable<ScenarioDraft['clocks']>[number]>(d.clocks).map((c) => ({ ...c, omens: list(c.omens) }));
+  if (d.choices !== undefined) d.choices = list<NonNullable<ScenarioDraft['choices']>[number]>(d.choices).map((c) => ({ ...c, options: list<{ text: string; effects: DraftEffect[] }>(c.options).map((o) => ({ ...o, effects: list<DraftEffect>(o.effects) })) })).filter((c) => c.options.length);
+  if (d.arc) d.arc = { ...d.arc, chapters: list(d.arc.chapters) };
+  if (d.arc && !d.arc.chapters.length) delete d.arc;
+  if (d.board) d.board = { ...d.board, jobs: list<NonNullable<ScenarioDraft['board']>['jobs'][number]>(d.board.jobs).map((j) => ({ ...j, enemies: list(j.enemies) })) };
+  return d;
+}
+
+export function worldFromDraft(raw: WorldDraft, opts: { id: string; contentRating: WorldPackage['manifest']['contentRating']; author?: string }): { world: WorldPackage; notes: string[] } {
+  const d = fixWorldDraft(raw);
   const notes: string[] = [];
   const taken = new Set<string>();
   const locs = d.locations.length ? d.locations : [{ key: 'start', name: '시작 장소', description: '낯선 곳', connections: [], improvisation: 'minor' as const }];
@@ -369,8 +422,10 @@ export function worldFromDraft(d: WorldDraft, opts: { id: string; contentRating:
 }
 
 /** 시나리오 초안을 기존 세계에 덧붙인다 (기존 ID와 겹치지 않게) */
-export function addScenario(world: WorldPackage, d: ScenarioDraft): { world: WorldPackage; notes: string[] } {
+export function addScenario(world: WorldPackage, raw: ScenarioDraft): { world: WorldPackage; notes: string[] } {
+  const d = fixScenarioDraft(raw);
   const notes: string[] = [];
+  if (!d.quests.length && !d.endings.length && !d.encounters.length) notes.push('AI 응답에 임무·조우·결말이 비어 있었습니다. 편집기에서 "AI로 임무·조우·결말 추가"로 다시 만들 수 있습니다.');
   const MT = monsterTable(world);
   const w: WorldPackage = structuredClone(world);
   const taken = new Set<string>([...w.locations, ...w.characters, ...w.facts, ...w.claims, ...(w.encounters ?? []), ...(w.quests ?? []), ...(w.endings ?? [])].map((x) => x.id));

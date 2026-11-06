@@ -475,8 +475,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         };
         return (
           <>
+            <details className="help-fold">
+              <summary className="small muted">표준 아이템 목록 ({STD_ITEMS.length}개 — 모든 세계에서 쓸 수 있음)</summary>
+              <p className="muted small">{STD_ITEMS.map((i) => `${i.id}(${i.name}·${i.price ?? 0})`).join(', ')}.</p>
+            </details>
             <p className="muted small">
-              표준 아이템(모든 세계에서 쓸 수 있음): {STD_ITEMS.map((i) => `${i.id}(${i.name}·${i.price ?? 0})`).join(', ')}.
               가격은 화폐 단위({w.genre?.currency ?? genreOf(w.genre?.id).currency})로, 팔 때는 절반. 상점에 세력(factionId)을 달면 평판이 좋을수록 싸고 아주 나쁘면 거래를 거절한다.
               전리품은 조우 탭의 <code>{'"loot": { "money": 30, "items": [{ "itemId": "std/gem" }] }'}</code> (없으면 적 경험치에 비례한 돈). 임무 보상은 <code>{'"rewards": { "money": 50, "items": [...] }'}</code>.
             </p>

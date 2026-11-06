@@ -135,3 +135,15 @@ describe('초안: 임무 유형·의뢰판 (설계 v3 R4b)', () => {
     expect(validateWorld(r.world).filter((i) => i.level === 'error')).toEqual([]);
   });
 });
+
+describe('AI 응답에서 목록이 빠져도 (v0.46.3)', () => {
+  it('세계·이야기 초안의 빠진 목록은 빈 목록으로 다룬다 — "t.quests is undefined" 오류가 나지 않는다', () => {
+    const { world } = worldFromDraft({ locations: [{ key: 'a', name: '광장', description: '넓다' }], characters: undefined } as unknown as WorldDraft, { id: 'x', contentRating: 'teen' });
+    expect(world.locations.length).toBe(1);
+    const r = addScenario(world, { encounters: [{ key: 'e', name: '기습', location: 'a', trigger: '갑자기' }], quests: undefined, choices: [{ key: 'c', name: '?', prompt: '?', when: {}, location: '', options: undefined }] } as unknown as ScenarioDraft);
+    expect(r.world.quests ?? []).toEqual([]);
+    expect(r.notes.length).toBeGreaterThanOrEqual(0);
+    const empty = addScenario(world, {} as ScenarioDraft);
+    expect(empty.notes.some((n) => n.includes('비어 있었습니다'))).toBe(true);
+  });
+});
