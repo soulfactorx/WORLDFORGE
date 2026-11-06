@@ -117,3 +117,46 @@ describe('공식 세계의 장면 (v0.47)', () => {
     }
   });
 });
+
+describe('장면 2.0 (v0.48): 수치 판정·반작용·대성공·프리셋', () => {
+  it('수치가 굴림에 더해지고(±max), 반작용이 행동마다 일어나며, 대성공이 따로 있다', async () => {
+    const { gaugeMods, applyReactions, newRun } = await import('../engine/scene');
+    const def: SceneDef = { ...structuredClone(haggle), reactions: [{ delta: { gauges: { patience: -1 }, text: '한숨' } }, { when: { gauge: 'deal', gte: 5 }, chance: 0.5, delta: { gauges: { deal: 1 } } }] };
+    def.actions[1]!.mods = [{ gauge: 'patience', per: 2, max: 4 }, { gauge: 'deal', per: -1 }];
+    const run = { ...newRun(def), gauges: { patience: 3, deal: 2 } };
+    expect(gaugeMods(def, run, def.actions[1]!)).toEqual([{ label: '인내심', value: 4 }, { label: '합의', value: -2 }]);
+    const r1 = applyReactions(def, run);
+    expect(r1.run.gauges.patience).toBe(2);
+    expect(r1.texts).toEqual(['한숨']);
+    const r2 = applyReactions(def, { ...run, gauges: { patience: 3, deal: 6 } }, () => 0.1);
+    expect(r2.run.gauges.deal).toBe(7);
+    // 대성공: DC를 5 이상 넘기면 great
+    const w = world();
+    w.scenes![0]!.actions[1]!.dc = 5;
+    w.scenes![0]!.actions[1]!.great = { gauges: { deal: 7 }, text: '대성공' };
+    let s = apply(start(w), [{ type: 'moved', to: 'loc/village-gate' }, { type: 'moved', to: 'loc/inn' }]);
+    s = apply(s, startSceneEvents(w, s, 'scene/haggle'));
+    s = apply(s, sceneActionEvents(w, s, 'push'));
+    expect(s.log.find((l) => l.text.startsWith('🎭 값 깎기'))!.text).toMatch(/대성공|→ 성공/);
+    expect(validateWorld(w).filter((i) => i.level === 'error')).toEqual([]);
+  });
+  it('프리셋 9개: 검사기 통과, 끝까지 진행된다', async () => {
+    const { SCENE_PRESETS } = await import('../data/scenePresets');
+    const { newRun } = await import('../engine/scene');
+    expect(SCENE_PRESETS.map((p) => p.label)).toEqual(['협상', '추격', '의식', '제작', '심문', '비무', '데이트', '경매', '잠입 경보']);
+    const w = world();
+    w.scenes = SCENE_PRESETS.map((p) => p.make());
+    const issues = validateWorld(w).filter((i) => i.path.startsWith('scenes'));
+    expect(issues).toEqual([]);
+    for (const def of w.scenes) {
+      for (let seed = 1; seed <= 5; seed++) {
+        let s: GameState = { ...replay(startEvents(w, ch(), seed).map((event, seq) => ({ saveId: 's', seq, turn: 0, event }))), scene: newRun(def) };
+        for (let i = 0; i <= (def.maxRounds ?? 20) && s.scene; i++) {
+          const opts = sceneActions(def, s.scene).filter((a) => a.ok);
+          s = apply(s, sceneActionEvents(w, s, opts[(i * 7 + seed) % opts.length]!.action.id));
+        }
+        expect(s.scene, `${def.name} seed ${seed}`).toBeUndefined();
+      }
+    }
+  });
+});

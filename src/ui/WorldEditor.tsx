@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { SKILL_IDS } from '../engine/character/rules';
+import { SceneForms } from './SceneForms';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
@@ -70,6 +71,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
 }) {
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
   const [questView, setQuestView] = useState<'form' | 'json'>('form');
+  const [sceneView, setSceneView] = useState<'form' | 'json'>('form');
   const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
@@ -406,8 +408,12 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             행동은 d20 + 기술 판정(엔진)으로 성공·실패를 가리고 수치를 바꿉니다. 상대의 성향(likes·dislikes 꼬리표)은 판정 이점·불리가 됩니다. 끝에 닿으면 이야기 효과·보상이 일어나고, 조건 <code>{'{ "sceneEnd": "scene/…", "outcome": "success" }'}</code>로 이어지는 임무를 열 수 있습니다.
             상대 인물이 그 자리에 있고 시작 조건이 맞으면 플레이 화면에 🎭 버튼이 뜹니다 (auto면 저절로 시작). 서술 수위는 세계의 콘텐츠 등급을 따릅니다.
           </p>
-          <JsonField label="장면" value={w.scenes ?? []} onChange={(scenes) => set({ scenes: Array.isArray(scenes) && scenes.length ? scenes : undefined })} rows={20}
-            help={`예: { "id": "scene/haggle", "name": "값 흥정", "description": "상인과 값을 두고 흥정한다 (GM용)", "npcId": "npc/…", "start": { "all": [] }, "gauges": [{ "id": "patience", "name": "인내심", "start": 5, "min": 0, "max": 5 }, { "id": "deal", "name": "합의", "start": 0, "max": 10 }], "states": [{ "id": "warm", "name": "호의", "edge": 1 }], "phases": [{ "id": "talk", "name": "탐색" }, { "id": "close", "name": "담판" }], "likes": ["칭찬"], "dislikes": ["위협"], "actions": [{ "id": "praise", "name": "물건 칭찬", "check": "skill:persuasion", "dc": 12, "tags": ["칭찬"], "success": { "gauges": { "deal": 3 }, "addStates": ["warm"] }, "failure": { "gauges": { "patience": -1 } } }, { "id": "final", "name": "마지막 제안", "phases": ["close"], "check": "skill:insight", "dc": 14, "success": { "gauges": { "deal": 5 } }, "failure": { "gauges": { "patience": -2 } } }], "ends": [{ "id": "deal", "name": "거래 성사", "when": { "gauge": "deal", "gte": 10 }, "outcome": "success", "effects": [{ "setFlag": "…" }], "rewards": { "money": 20 } }, { "id": "walk", "name": "결렬", "when": { "gauge": "patience", "lte": 0 }, "outcome": "failure" }], "maxRounds": 8, "timeoutEnd": "walk" } · 판정: skill:${SKILL_IDS.join('/')} 또는 ability:str/dex/con/int/wis/cha · 장면 조건: gauge(gte·lte)·state·phase·round·all·any · 수치 기본 범위 0~100`} />
+          <div className="row"><b>보기:</b>
+            <button type="button" className={sceneView === 'form' ? 'primary' : ''} onClick={() => setSceneView('form')}>폼</button>
+            <button type="button" className={sceneView === 'json' ? 'primary' : ''} onClick={() => setSceneView('json')}>JSON</button>
+          </div>
+          {sceneView === 'form' ? <SceneForms w={w} set={set} /> : <JsonField label="장면" value={w.scenes ?? []} onChange={(scenes) => set({ scenes: Array.isArray(scenes) && scenes.length ? scenes : undefined })} rows={20}
+            help={`예: { "id": "scene/haggle", "name": "값 흥정", "description": "상인과 값을 두고 흥정한다 (GM용)", "npcId": "npc/…", "start": { "all": [] }, "gauges": [{ "id": "patience", "name": "인내심", "start": 5, "min": 0, "max": 5 }, { "id": "deal", "name": "합의", "start": 0, "max": 10 }], "states": [{ "id": "warm", "name": "호의", "edge": 1 }], "phases": [{ "id": "talk", "name": "탐색" }, { "id": "close", "name": "담판" }], "likes": ["칭찬"], "dislikes": ["위협"], "actions": [{ "id": "praise", "name": "물건 칭찬", "check": "skill:persuasion", "dc": 12, "tags": ["칭찬"], "success": { "gauges": { "deal": 3 }, "addStates": ["warm"] }, "failure": { "gauges": { "patience": -1 } } }, { "id": "final", "name": "마지막 제안", "phases": ["close"], "check": "skill:insight", "dc": 14, "success": { "gauges": { "deal": 5 } }, "failure": { "gauges": { "patience": -2 } } }], "ends": [{ "id": "deal", "name": "거래 성사", "when": { "gauge": "deal", "gte": 10 }, "outcome": "success", "effects": [{ "setFlag": "…" }], "rewards": { "money": 20 } }, { "id": "walk", "name": "결렬", "when": { "gauge": "patience", "lte": 0 }, "outcome": "failure" }], "maxRounds": 8, "timeoutEnd": "walk" } · 판정: skill:${SKILL_IDS.join('/')} 또는 ability:str/dex/con/int/wis/cha · 장면 조건: gauge(gte·lte)·state·phase·round·all·any · 수치 기본 범위 0~100`} />}
         </>
       )}
       {tab === 'encounters' && (

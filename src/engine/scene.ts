@@ -55,6 +55,31 @@ export function parseCheck(check?: string): CheckSpec | null {
   return null;
 }
 
+/** 수치가 굴림에 더하는 값 (v0.48) */
+export function gaugeMods(def: SceneDef, run: SceneRun, action: SceneAction): { label: string; value: number }[] {
+  return (action.mods ?? []).flatMap((m) => {
+    const v = run.gauges[m.gauge];
+    if (v === undefined) return [];
+    let value = Math.round(v * m.per);
+    if (m.max !== undefined) value = Math.max(-Math.abs(m.max), Math.min(Math.abs(m.max), value));
+    return value ? [{ label: def.gauges.find((g) => g.id === m.gauge)?.name ?? m.gauge, value }] : [];
+  });
+}
+
+/** 반작용: 조건이 맞는 것 모두, 확률은 rng로 (rng가 없으면 확률 1인 것만) */
+export function applyReactions(def: SceneDef, run: SceneRun, roll?: () => number): { run: SceneRun; texts: string[] } {
+  let r = run;
+  const texts: string[] = [];
+  for (const re of def.reactions ?? []) {
+    if (re.when && !sceneCond(re.when, r)) continue;
+    const p = re.chance ?? 1;
+    if (p < 1 && (!roll || roll() >= p)) continue;
+    r = applyDelta(def, r, re.delta);
+    if (re.delta.text) texts.push(re.delta.text);
+  }
+  return { run: r, texts };
+}
+
 /** 행동마다 쓸 수 있는가와 판정 이점 */
 export function sceneActions(def: SceneDef, run: SceneRun, sheet?: GameState['player']['sheet']) {
   return def.actions.map((action) => {
@@ -62,7 +87,8 @@ export function sceneActions(def: SceneDef, run: SceneRun, sheet?: GameState['pl
       : action.once && run.used.includes(action.id) ? '이미 했다'
       : action.requires && !sceneCond(action.requires, run) ? '아직 때가 아니다' : '';
     const spec = parseCheck(action.check);
-    return { action, ok: !why, why, spec, mode: edgeOf(def, run, action), mod: spec && sheet ? checkModifier(sheet, spec).total : undefined };
+    const gm = gaugeMods(def, run, action).reduce((a, m) => a + m.value, 0);
+    return { action, ok: !why, why, spec, mode: edgeOf(def, run, action), mod: spec && sheet ? checkModifier(sheet, spec).total + gm : undefined, gaugeMod: gm };
   });
 }
 

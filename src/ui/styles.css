@@ -443,3 +443,17 @@ img.zoomable { cursor: zoom-in; }
 .scene-log { margin: 0; padding-left: 1.1em; color: var(--muted); }
 .scene-start { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
 @media (max-width: 600px) { .scene-actions { grid-template-columns: minmax(0, 1fr); } }
+
+/* 장면 폼 편집기 (v0.48) */
+.scene-rows { gap: 6px; }
+.scene-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-bottom: 4px; border-bottom: 1px dashed var(--border); }
+.scene-row > input { flex: 1 1 120px; min-width: 0; }
+.scene-row .id-in { flex: 0 1 110px; font-family: monospace; font-size: .8rem; }
+.delta-num { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; flex: none; }
+.row .delta-num input.num, .delta-num input.num, .delta-num select { width: 64px; flex: none; min-width: 0; }
+.delta-num select { width: auto; }
+.scene-delta .row input:not(.num) { flex: 1 1 160px; }
+.scene-item { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
+.scene-item > summary { cursor: pointer; padding: 4px 0; }
+.scene-item[open] > summary { margin-bottom: 6px; }
+.scene-preset select { flex: 1 1 200px; min-width: 0; max-width: 100%; }

@@ -191,9 +191,16 @@ export interface SceneAction {
   tags?: string[];
   /** 장면에서 한 번만 */
   once?: boolean;
+  /** 지금 수치가 굴림에 더해진다 (v0.48): 값 × per (반올림), ±max로 제한. 예: 상대의 경계 1당 −1 → { gauge: "guard", per: -1 } */
+  mods?: { gauge: string; per: number; max?: number }[];
   success?: SceneDelta;
+  /** 대성공 (난이도를 5 이상 넘기거나 20): 없으면 success (v0.48) */
+  great?: SceneDelta;
   failure?: SceneDelta;
 }
+
+/** 상대·상황의 반작용 (v0.48): 플레이어 행동마다, 조건이 맞으면 (확률로) 수치가 움직인다 */
+export interface SceneReaction { when?: SceneCond; chance?: number; delta: SceneDelta }
 export interface SceneEnd {
   id: string;
   name: string;
@@ -223,6 +230,8 @@ export interface SceneDef {
   /** 단계 이름 (처음 것이 시작 단계) */
   phases?: { id: string; name: string; text?: string }[];
   actions: SceneAction[];
+  /** 행동마다 일어나는 반작용 (위에서부터 모두) */
+  reactions?: SceneReaction[];
   /** 상대의 성향: 이 꼬리표의 행동은 판정 이점(좋아함)·불리(싫어함) */
   likes?: string[];
   dislikes?: string[];

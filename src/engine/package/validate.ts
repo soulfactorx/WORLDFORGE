@@ -396,7 +396,8 @@ export function validateWorld(input: unknown): Issue[] {
       if (a?.dc !== undefined && (typeof a.dc !== 'number' || a.dc < 1 || a.dc > 30)) err(`${ap}.dc`, 'DC는 1~30입니다.');
       (a?.phases ?? []).forEach((ph) => { if (!phases.has(ph)) err(`${ap}.phases`, `없는 단계 "${ph}"`); });
       if (a?.requires) sCond(a.requires, `${ap}.requires`);
-      sDelta(a?.success, `${ap}.success`); sDelta(a?.failure, `${ap}.failure`);
+      sDelta(a?.success, `${ap}.success`); sDelta(a?.failure, `${ap}.failure`); sDelta(a?.great, `${ap}.great`);
+      (a?.mods ?? []).forEach((m, k) => { if (!gauges.has(m?.gauge)) err(`${ap}.mods[${k}]`, `없는 수치 "${String(m?.gauge)}"`); if (typeof m?.per !== 'number') err(`${ap}.mods[${k}].per`, 'per(수치 1당 더할 값)는 숫자입니다.'); });
     });
     const endIds = new Set<string>();
     if (!Array.isArray(sc.ends) || !sc.ends.length) err(`${p}.ends`, '끝이 하나 이상 필요합니다.');
@@ -408,6 +409,11 @@ export function validateWorld(input: unknown): Issue[] {
       sCond(e?.when, `${ep}.when`);
       if (e?.effects) deferredEffects.push([e.effects, `${ep}.effects`]);
       checkRewards(e?.rewards, `${ep}.rewards`);
+    });
+    (sc.reactions ?? []).forEach((re, j) => {
+      if (re?.when) sCond(re.when, `${p}.reactions[${j}].when`);
+      if (re?.chance !== undefined && (typeof re.chance !== 'number' || re.chance <= 0 || re.chance > 1)) err(`${p}.reactions[${j}].chance`, '확률은 0보다 크고 1 이하입니다.');
+      sDelta(re?.delta, `${p}.reactions[${j}].delta`);
     });
     if (sc.timeoutEnd && !endIds.has(sc.timeoutEnd)) err(`${p}.timeoutEnd`, `없는 끝 "${sc.timeoutEnd}"`);
     if (!sc.maxRounds && !(sc.ends ?? []).some((e) => e?.outcome === 'failure')) warn(`${p}`, '실패로 끝나는 길도, 차례 한도(maxRounds)도 없습니다 — 장면이 끝나지 않을 수 있습니다.');

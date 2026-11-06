@@ -6,7 +6,7 @@ import { RATING_GUIDE } from '../engine/rating';
 import { createRng } from '../engine/dice/rng';
 import { d20Test } from '../engine/dice/dice';
 import { checkModifier } from '../engine/character/sheet';
-import { applyDelta, availableScenes, deltaLine, sceneActions, sceneDef, sceneEndOf, newRun } from '../engine/scene';
+import { applyDelta, applyReactions, availableScenes, deltaLine, gaugeMods, sceneActions, sceneDef, sceneEndOf, newRun } from '../engine/scene';
 import type { SceneDef, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
@@ -48,15 +48,23 @@ export function sceneActionEvents(world: WorldPackage, state: GameState, actionI
   const rng = createRng(state.rngState);
   let success = true;
   let rollText = '';
+  let great = false;
   if (opt.spec) {
     const m = checkModifier(state.player.sheet, opt.spec);
-    const t = d20Test(rng, m.total, a.dc ?? 12, opt.mode);
-    success = t.success;
-    rollText = ` — ${m.label} d20(${t.rolls.join('/')}) ${fmt(m.total)} = ${t.total} vs ${t.dc}${opt.mode === 'advantage' ? ' (이점)' : opt.mode === 'disadvantage' ? ' (불리)' : ''} → ${success ? '성공' : '실패'}`;
+    const gm = gaugeMods(def, run, a);
+    const total = m.total + gm.reduce((x, g) => x + g.value, 0);
+    const t = d20Test(rng, total, a.dc ?? 12, opt.mode);
+    success = t.success || t.natural20;
+    great = success && (t.natural20 || t.total >= t.dc + 5);
+    const gmText = gm.map((g) => ` ${g.label}${fmt(g.value)}`).join('');
+    rollText = ` — ${m.label} d20(${t.rolls.join('/')}) ${fmt(m.total)}${gmText} = ${t.total} vs ${t.dc}${opt.mode === 'advantage' ? ' (이점)' : opt.mode === 'disadvantage' ? ' (불리)' : ''} → ${great && a.great ? '대성공' : success ? '성공' : '실패'}`;
   }
-  const delta = success ? a.success : a.failure;
-  const next0 = applyDelta(def, run, delta);
-  const line = `🎭 ${a.name}${rollText}${deltaLine(def, run, next0) ? ` · ${deltaLine(def, run, next0)}` : ''}${delta?.text ? ` — ${delta.text}` : ''}`;
+  const delta = success ? (great && a.great ? a.great : a.success) : a.failure;
+  const acted = applyDelta(def, run, delta);
+  // 상대·상황의 반작용 (v0.48)
+  const re = applyReactions(def, acted, () => rng.next());
+  const next0 = re.run;
+  const line = `🎭 ${a.name}${rollText}${deltaLine(def, run, next0) ? ` · ${deltaLine(def, run, next0)}` : ''}${delta?.text ? ` — ${delta.text}` : ''}${re.texts.length ? ` / ${re.texts.join(' / ')}` : ''}`;
   const next = { ...next0, round: run.round + 1, used: run.used.includes(a.id) ? run.used : [...run.used, a.id], log: [...run.log, line] };
   const ev: GameEvent = { type: 'scene_action', run: next, line, rngState: rng.state() };
   const s1 = applyEvent(state, ev, state.turn);

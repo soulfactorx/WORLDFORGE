@@ -39,11 +39,11 @@ export function ScenePanel({ def, run, sheet, busy, npcName, onAct, onQuit }: {
         <div className="row scene-states">{run.states.map((id) => { const st = def.states?.find((x) => x.id === id); return <span key={id} className={`tag ${st?.edge === 1 ? 'confirmed' : st?.edge === -1 ? 'stage-hostile' : ''}`} title={st?.text}>{rs(st?.name ?? id)}</span>; })}</div>
       )}
       <div className="scene-actions">
-        {acts.map(({ action: a, ok, why, mode, mod }) => (
+        {acts.map(({ action: a, ok, why, mode, mod, gaugeMod }) => (
           <button key={a.id} type="button" disabled={busy || !ok} onClick={() => onAct(a.id)} title={why || rs(a.text ?? '')}>
             <b>{rs(a.name)}</b>
             <span className="small muted">
-              {a.check ? `${checkName(a.check)} ${mod !== undefined ? fmt(mod) : ''} vs ${a.dc ?? 12}` : '판정 없음'}
+              {a.check ? `${checkName(a.check)} ${mod !== undefined ? fmt(mod) : ''}${gaugeMod ? ` (수치 ${fmt(gaugeMod)})` : ''} vs ${a.dc ?? 12}` : '판정 없음'}
               {mode === 'advantage' && <span className="edge up"> ▲이점</span>}{mode === 'disadvantage' && <span className="edge down"> ▼불리</span>}
               {why && ` · ${why}`}
             </span>
