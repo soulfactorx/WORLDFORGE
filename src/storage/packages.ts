@@ -1,6 +1,9 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { sampleWorld } from '../data/sample-world';
 import { romanceSample, wuxiaSample } from '../data/sample-genres';
+import { aetheriaWorld } from '../data/official/aetheria';
+import { cheonhaWorld } from '../data/official/cheonha';
+import { everheartWorld } from '../data/official/everheart';
 import type { WorldPackage } from '../engine/schema';
 import { hasErrors, type Issue, validateWorld } from '../engine/package/validate';
 import { findZipStart, looksLikeCardFile } from '../importers/charx';
@@ -22,7 +25,8 @@ export interface StoredPackage {
   updatedAt: number;
 }
 
-export const BUILTIN: WorldPackage[] = [sampleWorld, wuxiaSample, romanceSample];
+/** 내장: 공식 대형 세계 (설계 v4 E9) + 맛보기 샘플 */
+export const BUILTIN: WorldPackage[] = [aetheriaWorld, cheonhaWorld, everheartWorld, sampleWorld, wuxiaSample, romanceSample];
 export const packageKey = (w: Pick<WorldPackage, 'manifest'>) => `${w.manifest.id}@${w.manifest.version}`;
 
 export async function listPackages(): Promise<{ world: WorldPackage; builtin: boolean; stored?: StoredPackage }[]> {
