@@ -95,6 +95,8 @@ export interface Character {
   portrait?: string;
   /** 성별 (이미지 고르기용, v0.13) */
   gender?: 'M' | 'F';
+  /** 이 인물의 목표 (설계 v4 E7) */
+  goals?: NpcGoal[];
   /** 외부에서 가져온 인물의 출처 (v0.12) */
   source?: { format: 'charx' | 'ccv3' | 'ccv2' | 'ccv1'; name: string; creator?: string; version?: string; importedAt: string };
 }
@@ -146,6 +148,28 @@ export interface RelationBeat {
   /** GM·인물에게 주는 장면 방향 (예: "그가 과거의 비밀을 털어놓는다") */
   hint: string;
   resolveFlag?: string;
+  /** 열렸을 때 그 인물이 다른 곳에 있으면 (설계 v4 E7): visit = 플레이어를 찾아온다(기본), message = 전갈을 보낸다, none = 기다린다 */
+  approach?: 'visit' | 'message' | 'none';
+  /** 전갈 내용 (플레이어에게 보임) */
+  message?: string;
+}
+
+/** NPC 목표 (설계 v4 E7): 인물이 스스로 이루려는 일. 시작하면 날 수가 지나 이뤄지고(효과), 막는 조건이 참이 되면 꺾인다 */
+export interface NpcGoal {
+  /** "goal/…" — 세계 전체에서 유일 */
+  id: EntityId;
+  /** 무엇을 하려는가 (GM·인물 연기에) */
+  text: string;
+  /** 시작 후 이 날 수가 지나면 이뤄진다 */
+  days: number;
+  start?: Condition;
+  /** 이것이 참이 되면 꺾인다 (플레이어가 막을 수 있다) */
+  stop?: Condition;
+  effects?: StoryEffect[];
+  /** 이뤄졌을 때 플레이어에게 보이는 소식 */
+  announce?: string;
+  /** 꺾였을 때 소식 */
+  stopped?: string;
 }
 
 /**
@@ -374,7 +398,9 @@ export type Condition =
   /** 세계 수치 (설계 v4 E6, 예: 마을 치안) */
   | { var: string; gte?: number; lte?: number }
   /** 임무가 어떤 결과로 끝났나 (is 없으면 아무 결과로든 끝남) */
-  | { questOutcome: EntityId; is?: string };
+  | { questOutcome: EntityId; is?: string }
+  /** NPC 목표 (설계 v4 E7): 진행 중·이뤄짐·꺾임 */
+  | { npcGoal: EntityId; is?: 'active' | 'done' | 'stopped' };
 
 export interface QuestStage {
   /** 플레이어 수첩에 보이는 현재 목표 */
@@ -509,7 +535,9 @@ export type StoryEffect =
   | { clock: EntityId; by: number }
   | { giveItem: EntityId; n?: number }
   | { takeItem: EntityId; n?: number }
-  | { money: number };
+  | { money: number }
+  /** 두 인물의 관계가 바뀐다 (설계 v4 E7). kind none = 관계가 끊긴다 */
+  | { npcRelation: EntityId; with: EntityId; kind: NpcRelationKind | 'none'; note?: string };
 
 /** 장 (설계 v3 5.1): 줄기의 큰 단계 */
 export interface Chapter {

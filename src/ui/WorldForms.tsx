@@ -4,7 +4,7 @@
  */
 import { MONSTERS, monsterTable } from '../engine/combat/monsters';
 import { allItems } from '../engine/items';
-import { AXES, AXIS_NAMES } from '../engine/relationship';
+import { AXES, AXIS_NAMES, RELATION_KIND_LABEL } from '../engine/relationship';
 import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import {
   type Arc, type Clock, type CustomMonster, type DecisiveChoice, type ItemDef, type Job, type MonsterAttack, type MonsterSpecial, QUEST_TYPES, type StoryEffect, type WorldEvent, type WorldPackage,
@@ -18,10 +18,10 @@ const opts = (list: { id: string; name?: string; statement?: string }[] | undefi
 
 // ---------------------------------------------------------------- 효과
 
-type FxKind = 'setFlag' | 'moveNpc' | 'killNpc' | 'reveal' | 'relationship' | 'reputation' | 'clock' | 'giveItem' | 'takeItem' | 'money' | 'var';
+type FxKind = 'setFlag' | 'moveNpc' | 'killNpc' | 'reveal' | 'relationship' | 'reputation' | 'clock' | 'giveItem' | 'takeItem' | 'money' | 'var' | 'npcRelation';
 const FX_LABEL: Record<FxKind, string> = {
   setFlag: '플래그 세우기', moveNpc: '인물 옮기기', killNpc: '인물 죽음', reveal: '플레이어가 알게 됨', relationship: '관계 변화', reputation: '세력 평판',
-  clock: '시계 칸 바꾸기', giveItem: '아이템 주기', takeItem: '아이템 빼앗기', money: '돈', var: '세계 수치 바꾸기',
+  clock: '시계 칸 바꾸기', giveItem: '아이템 주기', takeItem: '아이템 빼앗기', money: '돈', var: '세계 수치 바꾸기', npcRelation: '인물끼리 관계 바꾸기',
 };
 const fxKind = (e: StoryEffect): FxKind => (Object.keys(FX_LABEL) as FxKind[]).find((k) => k in e)!;
 function blankFx(k: FxKind, w: WorldPackage): StoryEffect {
@@ -38,6 +38,7 @@ function blankFx(k: FxKind, w: WorldPackage): StoryEffect {
     case 'takeItem': return { takeItem: allItems(w)[0]?.id ?? '' };
     case 'money': return { money: 10 };
     case 'var': return { var: f(w.vars), add: -10 };
+    case 'npcRelation': return { npcRelation: f(w.characters), with: w.characters[1]?.id ?? f(w.characters), kind: 'rival' };
   }
 }
 
@@ -77,6 +78,7 @@ export function EffectsEditor({ label, value, w, onChange }: { label: string; va
               {(k === 'giveItem' || k === 'takeItem') && <><S value={x[k] as string} options={items} onChange={(v) => up(i, { ...x, [k]: v } as StoryEffect)} /> × <N value={(x.n as number) ?? 1} onChange={(v) => up(i, { ...x, n: v } as StoryEffect)} /></>}
               {k === 'money' && <N value={x.money as number} onChange={(v) => up(i, { money: v })} />}
               {k === 'var' && <><S value={x.var as string} options={opts(w.vars)} onChange={(v) => up(i, { ...x, var: v } as StoryEffect)} /><S value={x.set !== undefined ? 'set' : 'add'} options={[['add', '더하기'], ['set', '정하기']]} onChange={(v) => up(i, (v === 'set' ? { var: x.var, set: (x.add as number) ?? 50 } : { var: x.var, add: (x.set as number) ?? 10 }) as StoryEffect)} /><N value={(x.set ?? x.add) as number} onChange={(v) => up(i, (x.set !== undefined ? { var: x.var, set: v ?? 0 } : { var: x.var, add: v ?? 0 }) as StoryEffect)} /></>}
+              {k === 'npcRelation' && <><S value={x.npcRelation as string} options={opts(w.characters)} onChange={(v) => up(i, { ...x, npcRelation: v } as StoryEffect)} /> ↔ <S value={x.with as string} options={opts(w.characters)} onChange={(v) => up(i, { ...x, with: v } as StoryEffect)} /><S value={x.kind as string} options={[...Object.entries(RELATION_KIND_LABEL), ['none', '관계 끊김']] as [string, string][]} onChange={(v) => up(i, { ...x, kind: v } as StoryEffect)} /></>}
             </div>
             <button type="button" className="small" onClick={() => onChange(list.filter((_, j) => j !== i))}>✕</button>
           </div>

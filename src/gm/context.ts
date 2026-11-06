@@ -171,7 +171,7 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
 
 /** 다른 인물과의 관계 + 그 인물과 플레이어의 사이 (파급을 연기에 반영) / 세력 */
 function relationLines(world: WorldPackage, state: GameState, npc: Character): string[] {
-  const rels = relationsOf(world, npc.id).flatMap((r) => {
+  const rels = relationsOf(world, npc.id, state).flatMap((r) => {
     const o = world.characters.find((c) => c.id === r.other);
     if (!o) return [];
     const met = state.relationships[o.id] || state.npcMemory[o.id]?.length;
@@ -186,7 +186,22 @@ function relationLines(world: WorldPackage, state: GameState, npc: Character): s
 
 function beatLines(world: WorldPackage, state: GameState, npc: Character): string[] {
   const mine = activeBeats(world, state).filter((b) => b.npcId === npc.id);
-  return mine.length ? ['## 지금 너의 마음 (때가 무르익었다)', ...mine.map((b) => `- ${b.name}: ${b.hint}`), ''] : [];
+  const came = mine.some((b) => state.beats[b.id]?.approached !== undefined && (b.approach ?? 'visit') === 'visit');
+  const goals = activeGoals(world, state).filter((g) => g.npc.id === npc.id);
+  return [
+    ...(mine.length ? ['## 지금 너의 마음 (때가 무르익었다)', ...mine.map((b) => `- ${b.name}: ${b.hint}`), ...(came ? ['너는 이 낯선 이에게 할 말이 있어 일부러 찾아왔다. 먼저 말을 건다.'] : []), ''] : []),
+    ...(goals.length ? ['## 너의 목표 (네가 스스로 이루려는 일 — 말과 행동에 은근히 드러난다)', ...goals.map((g) => `- ${g.goal.text}`), ''] : []),
+  ];
+}
+
+/** 진행 중인 NPC 목표 (설계 v4 E7) */
+export function activeGoals(world: WorldPackage, state: GameState) {
+  return world.characters.flatMap((npc) => (npc.goals ?? []).flatMap((goal) => {
+    const st = state.npcGoals?.[goal.id];
+    if (!st || st.done || st.stopped) return [];
+    const left = Math.max(0, Math.ceil(goal.days - (state.worldMinutes - st.startedAt) / 1440));
+    return [{ npc, goal, left }];
+  }));
 }
 
 export function buildNarratorContext(world: WorldPackage, state: GameState): string {

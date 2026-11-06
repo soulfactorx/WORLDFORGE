@@ -3,6 +3,8 @@ import type { StoryEffect, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
 import { relationshipEvents, reputationEvent } from './relationship';
+import { currentRelations, RELATION_KIND_LABEL, relationKey } from '../engine/relationship';
+import { epithetOf, knowsName } from '../engine/names';
 import { gainEvent, loseEvent, moneyEvent } from './economy';
 
 /**
@@ -42,6 +44,21 @@ export function effectEvents(world: WorldPackage, state: GameState, effects: Sto
     if ('giveItem' in fx) { push(gainEvent(world, { itemId: fx.giveItem, n: fx.n }, reason)); continue; }
     if ('takeItem' in fx) { push(loseEvent(world, s, { itemId: fx.takeItem, n: fx.n }, reason)); continue; }
     if ('money' in fx) { push(moneyEvent(world, s, fx.money, reason)); continue; }
+    if ('npcRelation' in fx) {
+      const a = world.characters.find((c) => c.id === fx.npcRelation);
+      const b = world.characters.find((c) => c.id === fx.with);
+      if (!a || !b || a.id === b.id) continue;
+      const key = relationKey(a.id, b.id);
+      const cur = currentRelations(world, s).find((r) => relationKey(r.a, r.b) === key);
+      if ((cur?.kind ?? 'none') === fx.kind && (fx.note === undefined || fx.note === cur?.note)) continue;
+      const met = (id: string) => !!(s.relationships[id] || s.npcMemory[id]?.length || s.party[id]);
+      const nm = (c: typeof a) => (knowsName(s, c.id) ? c.name : epithetOf(c));
+      const text = met(a.id) && met(b.id)
+        ? `🔗 ${nm(a)}와(과) ${nm(b)}의 사이가 바뀌었다 — ${fx.kind === 'none' ? '남남이 되었다' : RELATION_KIND_LABEL[fx.kind]}`
+        : undefined;
+      push({ type: 'npc_relation_changed', key, kind: fx.kind, ...(fx.note ? { note: fx.note } : {}), ...(text ? { text } : {}) });
+      continue;
+    }
     if ('var' in fx) {
       const def = world.vars?.find((v) => v.id === fx.var);
       if (!def) continue;

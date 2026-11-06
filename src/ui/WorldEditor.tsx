@@ -265,6 +265,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               {c.portrait && <div className="row"><ZoomImg className="portrait" src={c.portrait} alt={c.name} /><button type="button" onClick={() => up({ portrait: undefined })}>초상화 지우기</button></div>}
               {c.source && <p className="muted small">출처: {c.source.format.toUpperCase()} "{c.source.name}"{c.source.creator && ` · 제작 ${c.source.creator}`} · 가져온 날 {c.source.importedAt.slice(0, 10)}</p>}
               <Select label="있는 곳" value={c.locationId} options={locOptions} onChange={(locationId) => up({ locationId })} />
+              <JsonField label="목표 (이 인물이 스스로 이루려는 일 — 시작하면 날 수가 지나 이뤄지고, 막는 조건이면 꺾인다)" value={c.goals ?? []} onChange={(goals) => up({ goals: Array.isArray(goals) && goals.length ? goals : undefined })} rows={4}
+                help='예: [{ "id": "goal/elder-ritual", "text": "제단 의식을 끝낸다", "days": 5, "start": { "day": 1 }, "stop": { "flag": "altar_broken" }, "effects": [{ "var": "var/safety", "add": -30 }, { "npcRelation": "npc/elder", "with": "npc/ilse", "kind": "enemy" }], "announce": "밤새 제단 쪽에서 붉은 빛이 번졌다.", "stopped": "장로의 의식이 무너졌다는 소문이 돈다." }] · 조건 { "npcGoal": "goal/…", "is": "done" }' />
               <JsonField label="일정 (시각에 따라 있는 곳 — 비우면 늘 위의 장소)" value={c.schedule ?? []} onChange={(schedule) => up({ schedule: Array.isArray(schedule) && schedule.length ? schedule : undefined })} rows={3}
                 help='예: [{ "from": 8, "to": 18, "locationId": "loc/market" }, { "from": 20, "to": 6, "locationId": "loc/inn" }] · 0~24시, from이 to보다 크면 자정을 넘긴다' />
               <Select label="AI 즉흥 설정" value={c.improvisation} options={IMPROV} onChange={(improvisation) => up({ improvisation })} />
@@ -337,7 +339,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           </table>
           {w.characters.length >= 2 && <button type="button" onClick={() => set({ relations: [...(w.relations ?? []), { a: w.characters[0]!.id, b: w.characters[1]!.id, kind: 'ally' }] })}>＋ 관계 추가</button>}
           <JsonField label="관계 사건 (조건이 맞으면 열리는 인물의 결정적 장면)" value={w.relationBeats ?? []} onChange={(relationBeats) => set({ relationBeats })} rows={10}
-            help={`예: { "id": "beat/…", "npcId": "npc/…", "name": "비밀 고백", "condition": { "stage": "npc/…", "in": ["친구", "절친", "연인"] }, "hint": "그가 과거를 털어놓는다", "resolveFlag": "…" } · 단계: ${STAGES.join(', ')} · resolveFlag는 임무 탭의 플래그에 선언해야 한다 (없으면 4턴 뒤 닫힘)`} />
+            help={`예: { "id": "beat/…", "npcId": "npc/…", "name": "비밀 고백", "condition": { "stage": "npc/…", "in": ["친구", "절친", "연인"] }, "hint": "그가 과거를 털어놓는다", "resolveFlag": "…" } · 단계: ${STAGES.join(', ')} · resolveFlag는 임무 탭의 플래그에 선언해야 한다 (없으면 4턴 뒤 닫힘) · 그 인물이 다른 곳에 있으면 "approach": "visit"(기본 — 찾아온다) / "message"(전갈, "message": "…") / "none"(기다린다)`} />
           <JsonField label="이 세계만의 칭호 (조건을 채우면 엔진이 준다 — 명성이 오르고 NPC가 소문으로 안다)" value={w.titles ?? []} onChange={(titles) => set({ titles: Array.isArray(titles) && titles.length ? titles : undefined })} rows={5}
             help='예: [{ "id": "title/mist-hero", "name": "안개 골짜기의 영웅", "desc": "마을을 구했다", "renown": 15, "condition": { "flag": "village_saved" } }] · 기본 칭호(첫 승리·해결사·좋은 벗·이야기의 주인공 등)는 엔진이 알아서 준다' />
         </>

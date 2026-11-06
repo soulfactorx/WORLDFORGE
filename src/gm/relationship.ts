@@ -92,7 +92,7 @@ export function relationshipEvents(
   const romanceable = !!world.characters.find((c) => c.id === npc.id)?.romanceable;
   const jealous = new Set<EntityId>();
   if (romanceable && intimacy >= 2) {
-    for (const r of relationsOf(world, npc.id).filter((x) => x.kind === 'lover')) {
+    for (const r of relationsOf(world, npc.id, state).filter((x) => x.kind === 'lover')) {
       const other = world.characters.find((c) => c.id === r.other);
       if (!other || state.deadNpcs.includes(other.id)) continue;
       jealous.add(other.id);
@@ -103,7 +103,7 @@ export function relationshipEvents(
   if (Math.abs(aff) >= 3 || grudge >= 3) {
     const closer = aff > 0 && grudge <= 0;
     const amount = Math.max(1, Math.ceil(Math.max(Math.abs(aff), grudge) / 3));
-    for (const r of relationsOf(world, npc.id)) {
+    for (const r of relationsOf(world, npc.id, state)) {
       const other = world.characters.find((c) => c.id === r.other);
       if (!other || state.deadNpcs.includes(other.id) || jealous.has(other.id)) continue;
       const hostile = r.kind === 'rival' || r.kind === 'enemy';

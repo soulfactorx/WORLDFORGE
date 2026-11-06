@@ -29,7 +29,7 @@ import { rollLoot } from '../engine/items';
 import { currentDay } from '../engine/world';
 import { contextExpression, expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
 import { basicGuide, gmGuide } from './guide';
-import { buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects } from './context';
+import { activeGoals, buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects } from './context';
 import { displayName, knowsName, namesIn } from '../engine/names';
 
 /**
@@ -496,6 +496,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
   });
   const upcoming = upcomingWorldEvents(world, s).filter((u) => u.inDays <= 7).map((u) => `- ${u.inDays <= 0 ? '오늘' : `${u.inDays}일 뒤`}: ${u.event.name}${u.event.unless ? ' (막을 수 있다)' : ''}`);
   const vars = (world.vars ?? []).map((v) => `- ${v.name} [${v.id}]: ${varValue(world, s, v.id)}${v.labels?.length ? ` (${varLabel(v, varValue(world, s, v.id))})` : ''}`);
+  const goals = activeGoals(world, s).map((g) => `- ${g.npc.name} [${g.npc.id}]: ${g.goal.text} — ${g.left <= 0 ? '곧' : `${g.left}일 뒤`} 이뤄진다${g.goal.stop ? ' (막을 수 있다)' : ''}`);
   const pending = pendingChoice(world, s);
   const pace = pacingHint(s);
   const beats = activeBeats(world, s).map((b) => `- ${world.characters.find((c) => c.id === b.npcId)?.name ?? b.npcId} [${b.npcId}] — ${b.name}: ${b.hint}${b.resolveFlag ? ` (장면이 끝나면 플래그 ${b.resolveFlag})` : ''}`);
@@ -508,6 +509,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
     ...(chapters.length ? ['## 진행 중인 줄기 (지금 장의 목표 — 연출 방향)', ...chapters, ''] : []),
     ...(clocks.length ? ['## 진행 시계 (플레이어는 모름 — 시간이 흐르면 찬다)', ...clocks, ''] : []),
     ...(upcoming.length ? ['## 다가오는 사건', ...upcoming, ''] : []),
+    ...(goals.length ? ['## 인물의 목표 (플레이어는 모름 — 그 인물은 이것을 위해 움직이고, 징조를 흘린다)', ...goals, ''] : []),
     ...(vars.length ? ['## 세계 수치 (이야기 효과 var로 바뀐다 — 분위기에 반영)', ...vars, ''] : []),
     ...(pending ? [`## 결정의 순간 (선택지가 플레이어 화면에 떠 있다): ${pending.prompt}`, '이 결정은 플레이어가 화면의 선택지로 내린다. 대신 결정하거나 플래그로 처리하지 않는다.', ''] : []),
     ...(pace ? [`## 템포: ${pace}`, ''] : []),

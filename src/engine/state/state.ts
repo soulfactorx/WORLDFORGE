@@ -48,7 +48,13 @@ export interface GameState {
   /** 세력 평판 (바뀐 세력만, 설계 v3 4.4) */
   reputation: Record<EntityId, number>;
   /** 관계 사건: 열린 턴과 닫혔는지 */
-  beats: Record<EntityId, { turn: number; done: boolean }>;
+  beats: Record<EntityId, { turn: number; done: boolean; approached?: number }>;
+  /** NPC 목표 (설계 v4 E7) */
+  npcGoals?: Record<EntityId, { startedAt: number; done?: boolean; stopped?: boolean }>;
+  /** 찾아온 인물: 이 턴까지 그 장소에 머문다 */
+  visits?: Record<EntityId, { to: EntityId; until: number }>;
+  /** 바뀐 인물 사이 ("a|b" 정렬 키) — null이면 끊김 */
+  npcRelations?: Record<string, { kind: import('../schema').NpcRelationKind; note?: string } | null>;
   /** 이야기 엔진 (설계 v3 5장): 줄기 진행 (chapter = 끝낸 장 수) */
   arcs: Record<EntityId, { chapter: number; done: boolean; failed?: boolean }>;
   clocks: Record<EntityId, { value: number; minutes: number; onFired: number[]; reached: number[] }>;
@@ -226,6 +232,22 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, quests: { ...s.quests, [e.questId]: { ...(q ?? { stage: 0, done: true }), outcome: e.outcomeId } },
         log: [...s.log, { turn, kind: 'quest', text: `◆ ${e.questName} — ${e.name}${e.text ? `: ${e.text}` : ''}` }] };
     }
+    case 'npc_approached': {
+      const b = s.beats?.[e.beatId] ?? { turn, done: false };
+      return { ...s, beats: { ...(s.beats ?? {}), [e.beatId]: { ...b, approached: turn } },
+        ...(e.to ? { visits: { ...(s.visits ?? {}), [e.npcId]: { to: e.to, until: turn + e.stay } } } : {}),
+        log: [...s.log, { turn, kind: 'relation', text: e.text }] };
+    }
+    case 'goal_started':
+      return { ...s, npcGoals: { ...(s.npcGoals ?? {}), [e.goalId]: { startedAt: s.worldMinutes } } };
+    case 'goal_ended': {
+      const g = s.npcGoals?.[e.goalId] ?? { startedAt: s.worldMinutes };
+      return { ...s, npcGoals: { ...(s.npcGoals ?? {}), [e.goalId]: { ...g, ...(e.outcome === 'done' ? { done: true } : { stopped: true }) } },
+        log: e.announce ? [...s.log, { turn, kind: 'omen', text: e.announce }] : s.log };
+    }
+    case 'npc_relation_changed':
+      return { ...s, npcRelations: { ...(s.npcRelations ?? {}), [e.key]: e.kind === 'none' ? null : { kind: e.kind, ...(e.note ? { note: e.note } : {}) } },
+        log: e.text ? [...s.log, { turn, kind: 'relation', text: e.text }] : s.log };
     case 'random_event':
       return { ...s, randomEvents: { ...(s.randomEvents ?? {}), [e.eventId]: e.day }, lastRandomTurn: turn, log: [...s.log, { turn, kind: 'omen', text: `✦ ${e.text}` }] };
     case 'title_earned':

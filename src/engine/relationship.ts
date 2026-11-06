@@ -1,4 +1,5 @@
-import type { CompanionSpec, EntityId, NpcRelationKind, WorldPackage } from './schema';
+import type { CompanionSpec, EntityId, NpcRelation, NpcRelationKind, WorldPackage } from './schema';
+import type { GameState } from './state/state';
 
 /**
  * NPC → 플레이어 관계 (설계 v3 4.2: 6축)
@@ -93,8 +94,23 @@ export const wantsToLeave = (r: Partial<Relationship>) => ({ ...ZERO, ...r }).af
 export const RELATION_KIND_LABEL: Record<NpcRelationKind, string> = { family: '가족', ally: '동지', rival: '라이벌', lover: '연인', master: '스승·주인', enemy: '원수' };
 
 /** 이 인물이 다른 인물과 맺은 관계 (master는 방향에 따라 제자·스승) */
-export function relationsOf(world: WorldPackage, npcId: EntityId) {
-  return (world.relations ?? []).flatMap((r) => {
+export const relationKey = (a: EntityId, b: EntityId) => [a, b].sort().join('|');
+
+/** 지금의 인물 사이: 세계가 정한 관계 + 이야기로 바뀐 관계 (설계 v4 E7) */
+export function currentRelations(world: WorldPackage, state?: Pick<GameState, 'npcRelations'>): NpcRelation[] {
+  const over = state?.npcRelations ?? {};
+  const base = (world.relations ?? []).filter((r) => !(relationKey(r.a, r.b) in over));
+  const added = Object.entries(over).flatMap(([k, v]) => {
+    if (!v) return [];
+    const orig = (world.relations ?? []).find((r) => relationKey(r.a, r.b) === k);
+    const [a, b] = orig ? [orig.a, orig.b] : k.split('|') as [EntityId, EntityId];
+    return [{ a, b, kind: v.kind, ...(v.note ? { note: v.note } : {}) }];
+  });
+  return [...base, ...added];
+}
+
+export function relationsOf(world: WorldPackage, npcId: EntityId, state?: Pick<GameState, 'npcRelations'>) {
+  return currentRelations(world, state).flatMap((r) => {
     if (r.a === npcId) return [{ other: r.b, kind: r.kind, label: RELATION_KIND_LABEL[r.kind], note: r.note }];
     if (r.b === npcId) return [{ other: r.a, kind: r.kind, label: r.kind === 'master' ? '스승·주인 (나는 제자)' : RELATION_KIND_LABEL[r.kind], note: r.note }];
     return [];

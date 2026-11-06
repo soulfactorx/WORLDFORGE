@@ -12,7 +12,8 @@ import { progressEvents } from './progression';
 import { relationshipEvents, reputationEvent } from './relationship';
 import { arcTransitions, choiceToOffer, clockUpdates, dueWorldEvents } from '../engine/story';
 import { effectEvents } from './story';
-import { currentDay, factionActionsOn, rumorSpreadOn } from '../engine/world';
+import { currentDay, factionActionsOn, npcLocationOf, rumorSpreadOn } from '../engine/world';
+import { epithetOf, knowsName } from '../engine/names';
 import { gainEvent, moneyEvent } from './economy';
 
 /** resolveFlag가 없는 관계 사건은 이 턴 수가 지나면 닫힌다 */
@@ -114,12 +115,45 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
     } else push({ type: 'job_failed', jobId: t.job.id, name: t.job.name, reason: t.reason ?? '' });
   }
   // 관계 사건: 조건이 맞으면 열리고, 해결 플래그가 서거나 시간이 지나면 닫힌다
+  // 먼저 다가오기 (설계 v4 E7): 열렸을 때 그 인물이 다른 곳에 있으면 찾아오거나 전갈을 보낸다 — 보지도 못한 채 닫히지 않게
   for (const b of world.relationBeats ?? []) {
-    const st = s.beats?.[b.id];
-    if (!st) {
+    if (!s.beats?.[b.id]) {
       if (!s.deadNpcs.includes(b.npcId) && evalCondition(world, s, b.condition)) push({ type: 'beat_opened', beatId: b.id, npcId: b.npcId, name: b.name });
-    } else if (!st.done && ((b.resolveFlag && s.flags.includes(b.resolveFlag)) || (!b.resolveFlag && s.turn - st.turn >= BEAT_TURNS) || s.deadNpcs.includes(b.npcId))) {
+      else continue;
+    }
+    const st = s.beats[b.id]!;
+    if (st.done) continue;
+    const npc = world.characters.find((c) => c.id === b.npcId);
+    const mode = b.approach ?? 'visit';
+    if (npc && st.approached === undefined && mode !== 'none' && !s.combat && !s.deadNpcs.includes(npc.id) && !s.party[npc.id] && npcLocationOf(s, npc) !== s.player.locationId) {
+      const nm = knowsName(s, npc.id) ? npc.name : epithetOf(npc);
+      push(mode === 'visit'
+        ? { type: 'npc_approached', beatId: b.id, npcId: npc.id, mode, to: s.player.locationId, stay: BEAT_TURNS + 1, text: `👤 ${nm}이(가) 당신을 찾아왔다.` }
+        : { type: 'npc_approached', beatId: b.id, npcId: npc.id, mode, stay: 0, text: `✉ ${nm}에게서 전갈이 왔다: ${b.message ?? '만나서 할 이야기가 있다고 한다.'}` });
+      continue;
+    }
+    const since = s.turn - (s.beats[b.id]!.approached ?? st.turn);
+    const limit = mode === 'message' && st.approached !== undefined ? BEAT_TURNS * 3 : BEAT_TURNS;
+    if ((b.resolveFlag && s.flags.includes(b.resolveFlag)) || (!b.resolveFlag && since >= limit) || s.deadNpcs.includes(b.npcId)) {
       push({ type: 'beat_closed', beatId: b.id });
+    }
+  }
+  // NPC 목표 (설계 v4 E7): 시작 → 날 수가 지나면 이뤄진다 / 막는 조건·죽음이면 꺾인다
+  for (const c of world.characters) {
+    for (const g of c.goals ?? []) {
+      const st = s.npcGoals?.[g.id];
+      const dead = s.deadNpcs.includes(c.id);
+      if (!st) {
+        if (!dead && (!g.start || evalCondition(world, s, g.start))) push({ type: 'goal_started', goalId: g.id, npcId: c.id });
+        continue;
+      }
+      if (st.done || st.stopped) continue;
+      if (dead || (g.stop && evalCondition(world, s, g.stop))) {
+        push({ type: 'goal_ended', goalId: g.id, npcId: c.id, outcome: 'stopped', ...(g.stopped && !dead ? { announce: g.stopped } : {}) });
+      } else if ((s.worldMinutes - st.startedAt) / 1440 >= g.days) {
+        push({ type: 'goal_ended', goalId: g.id, npcId: c.id, outcome: 'done', ...(g.announce ? { announce: g.announce } : {}) });
+        effectEvents(world, s, g.effects ?? [], `${c.name}의 목표: ${g.text}`).forEach(push);
+      }
     }
   }
   // 칭호 (설계 v4 E4): 기록에서 엔진이 준다

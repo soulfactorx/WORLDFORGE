@@ -16,6 +16,8 @@ export function scheduledLocation(c: Pick<Character, 'schedule'>, hour: number):
 /** 인물의 지금 위치: 동료면 플레이어 곁 → 이야기·이탈로 옮긴 곳 → 일정 → 기본 위치 */
 export function npcLocationOf(state: GameState, c: Character): EntityId {
   if (state.party[c.id]) return state.player.locationId;
+  const visit = state.visits?.[c.id];
+  if (visit && state.turn <= visit.until) return visit.to;
   const moved = state.npcLocations[c.id];
   if (moved) return moved;
   return scheduledLocation(c, Math.floor(state.worldMinutes / 60) % 24) ?? c.locationId;
@@ -52,7 +54,7 @@ export function rumorSpreadOn(world: WorldPackage, state: GameState, day: number
   const candidates: Belief[] = [];
   for (const a of alive) {
     const near = new Set([
-      ...relationsOf(world, a.id).filter((r) => SPREAD_KINDS.has(r.kind)).map((r) => r.other),
+      ...relationsOf(world, a.id, state).filter((r) => SPREAD_KINDS.has(r.kind)).map((r) => r.other),
       ...(a.faction ? alive.filter((o) => o.faction === a.faction && o.id !== a.id).map((o) => o.id) : []),
     ]);
     for (const b of [...known.values()].filter((x) => x.holder === a.id && x.state !== 'secret' && !secretFact(x.claim))) {

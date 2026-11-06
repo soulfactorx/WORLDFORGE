@@ -10,15 +10,17 @@ import type { Condition, WorldPackage } from '../engine/schema';
 
 type Kind =
   | 'all' | 'any' | 'not' | 'knows' | 'at' | 'cleared' | 'inParty' | 'relationship' | 'stage' | 'reputation' | 'flag' | 'questDone' | 'questFailed'
-  | 'level' | 'chapter' | 'arcDone' | 'clock' | 'choice' | 'day' | 'hasItem' | 'money' | 'defeated' | 'npcAlive' | 'npcAt' | 'var' | 'questOutcome';
+  | 'level' | 'chapter' | 'arcDone' | 'clock' | 'choice' | 'day' | 'hasItem' | 'money' | 'defeated' | 'npcAlive' | 'npcAt' | 'var' | 'questOutcome' | 'npcGoal';
 
 export const KIND_LABEL: Record<Kind, string> = {
   all: '모두 참 (그리고)', any: '하나라도 참 (또는)', not: '아니다', knows: '플레이어가 안다', at: '플레이어가 그 장소에', cleared: '조우를 이겼다',
   inParty: '동료로 함께', relationship: '관계 수치', stage: '관계 단계', reputation: '세력 평판', flag: '플래그가 섰다', questDone: '임무 성공',
   questFailed: '임무 실패', level: '레벨 이상', chapter: '줄기의 장 진행', arcDone: '줄기가 끝남', clock: '시계 칸', choice: '결정적 선택',
   day: '며칠이 지남', hasItem: '아이템을 가짐', money: '돈 이상', defeated: '적을 쓰러뜨린 수', npcAlive: '인물이 살아 있다', npcAt: '인물이 그 장소에',
-  var: '세계 수치', questOutcome: '임무의 결과',
+  var: '세계 수치', questOutcome: '임무의 결과', npcGoal: '인물의 목표',
 };
+
+const goals = (w: WorldPackage) => w.characters.flatMap((c) => (c.goals ?? []).map((g) => [g.id, `${c.name}: ${g.text.slice(0, 30)}`] as const));
 
 export function kindOf(c: Condition): Kind {
   // 키가 겹치는 종류(npcAt의 at 등)를 먼저 본다
@@ -55,6 +57,7 @@ function blank(kind: Kind, w: WorldPackage): Condition {
     case 'npcAt': return { npcAt: first(w.characters), at: first(w.locations) };
     case 'var': return { var: first(w.vars), gte: 50 };
     case 'questOutcome': return { questOutcome: first(w.quests) };
+    case 'npcGoal': return { npcGoal: goals(w)[0]?.[0] ?? '' };
   }
 }
 
@@ -92,6 +95,7 @@ export function describeCondition(c: Condition, w: WorldPackage): string {
     case 'npcAlive': return `${name(w.characters, x.npcAlive as string)} 생존`;
     case 'npcAt': return `${name(w.characters, x.npcAt as string)}이(가) ${name(w.locations, x.at as string)}에`;
     case 'var': return `${name(w.vars, x.var as string)}${x.gte !== undefined ? ` ≥ ${x.gte}` : ''}${x.lte !== undefined ? ` ≤ ${x.lte}` : ''}`;
+    case 'npcGoal': return `${goals(w).find(([id]) => id === x.npcGoal)?.[1] ?? x.npcGoal} ${({ active: '진행 중', done: '이뤄짐', stopped: '꺾임' } as Record<string, string>)[(x.is as string) ?? 'done']}`;
     case 'questOutcome': return `${name(w.quests, x.questOutcome as string)} 결과${x.is ? ` = ${w.quests?.find((q) => q.id === x.questOutcome)?.outcomes?.find((o) => o.id === x.is)?.name ?? x.is}` : ' (무엇이든)'}`;
   }
 }
@@ -161,6 +165,7 @@ export function ConditionEditor({ value, world: w, onChange, depth = 0 }: { valu
       case 'hasItem': return <><Sel value={x.hasItem as string} options={allItems(w).map((i) => [i.id, `${i.name} (${i.id})`] as const)} onChange={(v) => set({ hasItem: v })} /> × <NumIn value={x.n as number} placeholder="1" onChange={(v) => set({ n: v })} /></>;
       case 'money': return <NumIn value={x.money as number} onChange={(v) => set({ money: v ?? 0 })} />;
       case 'var': return <><Sel value={x.var as string} options={opts(w.vars)} onChange={(v) => set({ var: v })} /> ≥ <NumIn value={x.gte as number} placeholder="(없음)" onChange={(v) => set({ gte: v })} /> ≤ <NumIn value={x.lte as number} placeholder="(없음)" onChange={(v) => set({ lte: v })} /></>;
+      case 'npcGoal': return <><Sel value={x.npcGoal as string} options={goals(w)} onChange={(v) => set({ npcGoal: v })} /><Sel value={(x.is as string) ?? 'done'} options={[['done', '이뤄짐'], ['active', '진행 중'], ['stopped', '꺾임']]} onChange={(v) => set({ is: v })} /></>;
       case 'questOutcome': {
         const q = w.quests?.find((y) => y.id === x.questOutcome);
         return <><Sel value={x.questOutcome as string} options={opts(w.quests)} onChange={(v) => set({ questOutcome: v })} /><Sel value={(x.is as string) ?? ''} options={[['', '(어떤 결과든)'], ...(q?.outcomes ?? []).map((o) => [o.id, o.name] as const)]} onChange={(v) => onChange(v ? { ...x, is: v } as Condition : (({ is: _i, ...r }) => r)(x) as Condition)} /></>;
