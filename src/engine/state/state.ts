@@ -72,6 +72,8 @@ export interface GameState {
   quests: Record<EntityId, { stage: number; done: boolean; failed?: boolean; startedAt?: number; outcome?: string }>;
   /** 세계 수치 (v0.43, 설계 v4 E6) */
   vars?: Record<string, number>;
+  /** 가 본 장소 (설계 v4 E8 도감) */
+  visited?: EntityId[];
   /** 쓰러뜨린 적 (몬스터 ID → 수) */
   kills: Record<string, number>;
   /** 의뢰 (설계 v3 6.3): 끝낸 수·실패 수·진행 중인 것 */
@@ -128,7 +130,7 @@ export function initialState(): GameState {
 export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState {
   switch (e.type) {
     case 'game_started':
-      return { ...initialState(), namesKnown: [], arrivedTurn: 0, packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
+      return { ...initialState(), namesKnown: [], arrivedTurn: 0, visited: [e.locationId], packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
         player: { name: e.playerName, locationId: e.locationId, sheet: e.character ?? legacyCharacter(e.playerName) } };
     case 'player_input':
       return { ...s, turn, log: [...s.log, { turn, kind: 'player', text: e.use ? `${e.text}  [${useLabel(e.use)}]` : e.text }] };
@@ -146,7 +148,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'narration':
       return { ...s, log: [...s.log, { turn, kind: 'narration', text: e.text, ...(e.images?.length ? { images: e.images } : {}) }] };
     case 'moved':
-      return { ...s, player: { ...s.player, locationId: e.to }, arrivedTurn: turn };
+      return { ...s, player: { ...s.player, locationId: e.to }, arrivedTurn: turn, visited: (s.visited ?? []).includes(e.to) ? s.visited : [...(s.visited ?? []), e.to] };
     case 'knowledge_revealed': {
       const rest = s.beliefs.filter((b) => !(b.holder === e.belief.holder && b.claim === e.belief.claim));
       const log = e.statement ? [...s.log, { turn, kind: 'knowledge' as const, text: `알게 된 것 (${KNOWLEDGE_LABEL[e.belief.state]}): ${e.statement}` }] : s.log;

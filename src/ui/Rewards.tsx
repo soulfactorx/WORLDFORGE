@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { CharacterSheet } from '../engine/character/sheet';
+import { XP_FOR_LEVEL } from '../engine/character/progression';
 import { CLASSES } from '../engine/character/rules';
 import type { levelUpInfo, Recap, RewardLine } from '../engine/digest';
 import { type ItemDef, RARITY_LABEL } from '../engine/schema';
@@ -84,5 +85,17 @@ export function LootDialog({ item, rs, canEquip, onEquip, onClose }: { item: Ite
         </div>
       </div>
     </div>
+  );
+}
+
+/** 게임형 표시 (설계 v4 E8): 레벨과 다음 레벨까지의 경험치 막대 */
+export function XpBar({ sheet }: { sheet: CharacterSheet }) {
+  const cur = XP_FOR_LEVEL[sheet.level] ?? 0;
+  const next = XP_FOR_LEVEL[sheet.level + 1];
+  const pct = next ? Math.max(0, Math.min(100, Math.round((((sheet.xp ?? 0) - cur) / (next - cur)) * 100))) : 100;
+  return (
+    <span className="xp-bar small nowrap" title={next ? `경험치 ${sheet.xp ?? 0} / ${next}` : '최고 레벨'}>
+      Lv {sheet.level} <span className="xp-track" aria-hidden="true"><span style={{ width: `${pct}%` }} /></span> {next ? `${pct}%` : 'MAX'}
+    </span>
   );
 }

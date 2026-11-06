@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { endingsSeen } from './collection';
 import { useState } from 'react';
 import type { CharacterSheet } from '../engine/character/sheet';
 import { hasErrors, validateWorld } from '../engine/package/validate';
@@ -85,7 +86,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
         <select value={selected ? packageKey(selected.world) : ''} onChange={(e) => setSelectedKey(e.target.value)}>
           {packages?.map((p) => (
             <option key={packageKey(p.world)} value={packageKey(p.world)}>
-              {p.world.manifest.name} v{p.world.manifest.version}{p.builtin ? ' (내장)' : ''}{p.world.manifest.aiAssisted ? ' ✦AI' : ''}
+              {p.world.manifest.name} v{p.world.manifest.version}{p.builtin ? ' (내장)' : ''}{p.world.manifest.aiAssisted ? ' ✦AI' : ''}{p.world.endings?.length ? ` · 결말 ${p.world.endings.filter((e) => endingsSeen(p.world.manifest.id).includes(e.id)).length}/${p.world.endings.length}` : ''}
             </option>
           ))}
         </select>

@@ -34,6 +34,9 @@ const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 import { pickCharacterImage, pickSceneImage } from '../engine/assets';
 import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/digest';
 import { loadPlayPrefs } from './playPrefs';
+import { CodexPanel } from './CodexPanel';
+import { recordEnding } from './collection';
+import { XpBar } from './Rewards';
 import { LevelUpDialog, LootDialog, RecapCard, RewardBanner } from './Rewards';
 import { effectiveItem, itemDef as itemDefOf } from '../engine/items';
 
@@ -93,7 +96,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const [startedAt, setStartedAt] = useState(0);
   const [, tick] = useState(0);
   useEffect(() => { if (streaming === null) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [streaming !== null]);
-  const [panel, setPanel] = useState<'none' | 'sheet' | 'journal' | 'items' | 'shop' | 'board'>('none');
+  const [panel, setPanel] = useState<'none' | 'sheet' | 'journal' | 'codex' | 'items' | 'shop' | 'board'>('none');
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -129,8 +132,11 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (!state) return;
     const prev = prevState.current;
     prevState.current = state;
-    if (!prev) { if (state.turn > 0) setShowRecap(true); return; }
+    if (!prev) { if (state.ending) recordEnding(world.manifest.id, state.ending); if (state.turn > 0) setShowRecap(true); return; }
     if (state.log.length <= prev.log.length) return;
+    if (state.ending && state.ending !== prev.ending) recordEnding(world.manifest.id, state.ending);
+    // 표시 수준 (설계 v4 E8): 몰입형은 알림·창 없이 기록에만 남긴다
+    if (loadPlayPrefs().display === 'immersive') return;
     const r = rewardDiff(world, prev, state);
     if (r.length) setRewards(r);
     const good = r.find((l) => l.itemId && (l.rarity === 'rare' || l.rarity === 'epic' || l.rarity === 'legendary'));
@@ -232,6 +238,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         <b>{loc?.name}</b>
         {Object.keys(state.party).length > 0 && <span className="small muted">동행: {Object.values(state.party).map((c) => c.name).join(', ')}</span>}
         {date && <span className="small date">{date.label}{date.countdown && <b className={date.daysLeft !== undefined && date.daysLeft <= 7 ? 'dday urgent' : 'dday'}> · {date.countdown}</b>}</span>}
+        {loadPlayPrefs().display === 'game' && <XpBar sheet={state.player.sheet} />}
         <span className="muted small nowrap">{String(Math.floor(state.worldMinutes / 60) % 24).padStart(2, '0')}:{String(state.worldMinutes % 60).padStart(2, '0')} · 턴 {state.turn}</span>
       </div>
       {/* 도구 줄: 넓은 화면은 한 줄, 휴대폰은 4칸 격자 (v0.37.7) */}
@@ -244,6 +251,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           return [
             tab('sheet', `👤 캐릭터${pending ? ` ★${pending}` : ''}`, pending ? 'has-pending' : ''),
             tab('journal', '📖 수첩'),
+            tab('codex', '📚 도감'),
             tab('items', '🎒 소지품'),
             ...(shop && !state.combat ? [tab('shop', `🛒 ${rs(shop.name)}`)] : []),
             ...(board && !state.combat ? [tab('board', `📜 ${rs(board.name)}`)] : []),
@@ -267,6 +275,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         <div className="head-panel">
           {panel === 'sheet' && <CharacterPanel sheet={state.player.sheet} party={state.party} world={world} state={state} disabled={streaming !== null || !!state.playerDead} onChoose={(kind, value) => commitEvents(() => [{ type: 'build_choice', who: 'player', kind, value }])} />}
           {panel === 'journal' && <JournalPanel world={world} state={state} />}
+          {panel === 'codex' && <CodexPanel world={world} state={state} />}
           {panel === 'items' && <InventoryPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.combat || !!state.playerDead} />}
           {panel === 'board' && (board && !state.combat ? <BoardPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.playerDead} /> : <p className="muted small">여기에는 의뢰판이 없다.</p>)}
           {panel === 'shop' && (shop && !state.combat ? <ShopPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.playerDead} /> : <p className="muted small">여기에는 상점이 없다.</p>)}

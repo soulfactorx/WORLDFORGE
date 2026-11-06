@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { loadPlayPrefs, savePlayPrefs } from './playPrefs';
+import { type DisplayLevel, loadPlayPrefs, savePlayPrefs } from './playPrefs';
 import { isStandalone, loadOrientation, type OrientationPref, saveOrientation } from './orientation';
 import { type AvSettings, loadAv, playSfx, saveAv, stopSpeaking } from './audio';
 
@@ -51,6 +51,13 @@ export function AvControls({ onChange }: { onChange: () => void }) {
             </select>
           </label>
           {orientNote && <p className="small muted">{orientNote}</p>}
+          <label className="small av-vol">표시 수준
+            <select value={play.display} onChange={(e) => { const p = { ...play, display: e.target.value as DisplayLevel }; setPlay(p); savePlayPrefs(p); onChange(); }}>
+              <option value="immersive">몰입형 (숫자·알림 최소 — 기록에만)</option>
+              <option value="standard">기본</option>
+              <option value="game">게임형 (경험치 막대까지)</option>
+            </select>
+          </label>
           <label className="check small"><input type="checkbox" checked={play.adaptive} onChange={(e) => { const p = { ...play, adaptive: e.target.checked }; setPlay(p); savePlayPrefs(p); }} /> 적응 난이도 (연달아 지면 조금 쉽게, 연달아 압승하면 정예)</label>
           <p className="small muted">소리는 이 기기에서 바로 만들어 냅니다 (파일·인터넷 필요 없음). 음성은 브라우저에 설치된 한국어 목소리를 씁니다.</p>
         </div>
