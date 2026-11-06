@@ -50,6 +50,12 @@ export const GENRES: GenreProfile[] = [
     tone: '장르: 로맨스. 인물들과의 감정과 관계 변화가 이야기의 중심이다. 시선·말끝·거리감·망설임 같은 작은 변화를 섬세하게 묘사하고, 설렘·긴장·질투·화해의 순간을 놓치지 않는다. 전투는 드물게, 사교·대화·선택에 무게를 둔다.',
     terms: {}, currency: '골드', levelCap: 3, combat: 'rare', artTags: ['romance'],
   },
+  {
+    id: 'fighting', label: '현대 격투', description: '격투 대회와 라이벌. 대결은 장면 엔진의 턴제 격투로 진행한다.',
+    tone: '장르: 현대 격투. 지하 격투장과 세계 대회, 라이벌·사제·숙적, 기술 하나하나의 무게. 대결은 턴제 격투 장면으로 진행되고, 서술은 격투 만화처럼 짧고 힘 있게 — 타격음, 숨소리, 관중의 함성, 링 위의 긴장. 무기와 마법은 없다. 승부욕·자존심·우정·복수가 이야기의 동력이다.',
+    terms: { 파이터: '스트라이커', 로그: '테크니션', 클레릭: '트레이너', 위저드: '전략가', 바드: '쇼맨', 레인저: '스카우트', 팔라딘: '수호자', 워락: '계약 파이터' },
+    currency: '원', levelCap: 5, combat: 'sometimes', artTags: [],
+  },
 ];
 
 export const genreOf = (id?: string): GenreProfile => GENRES.find((g) => g.id === id) ?? GENRES[0]!;

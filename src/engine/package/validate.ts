@@ -373,11 +373,12 @@ export function validateWorld(input: unknown): Issue[] {
     const sCond = (c: unknown, path: string): void => {
       if (!isObj(c)) { err(path, '장면 조건은 객체입니다.'); return; }
       if ('all' in c || 'any' in c) { const l = (c as { all?: unknown; any?: unknown }).all ?? (c as { any?: unknown }).any; if (!Array.isArray(l)) err(path, '목록이어야 합니다.'); else l.forEach((x, k) => sCond(x, `${path}[${k}]`)); return; }
+      if ('not' in c) { sCond(c.not, `${path}.not`); return; }
       if ('gauge' in c) { if (!gauges.has(c.gauge as string)) err(path, `없는 수치 "${String(c.gauge)}"`); return; }
       if ('state' in c) { if (!states.has(c.state as string)) err(path, `없는 상태 "${String(c.state)}"`); return; }
       if ('phase' in c) { if (!phases.has(c.phase as string)) err(path, `없는 단계 "${String(c.phase)}"`); return; }
       if ('round' in c) { if (typeof c.round !== 'number') err(path, 'round는 숫자입니다.'); return; }
-      err(path, '알 수 없는 장면 조건입니다. gauge·state·phase·round·all·any 중 하나를 쓰세요.');
+      err(path, '알 수 없는 장면 조건입니다. gauge·state·phase·round·all·any·not 중 하나를 쓰세요.');
     };
     const sDelta = (d: unknown, path: string) => {
       if (d === undefined) return;

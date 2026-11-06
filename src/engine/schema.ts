@@ -166,7 +166,8 @@ export type SceneCond =
   | { phase: string }
   | { round: number }
   | { all: SceneCond[] }
-  | { any: SceneCond[] };
+  | { any: SceneCond[] }
+  | { not: SceneCond };
 export interface SceneDelta {
   gauges?: Record<string, number>;
   addStates?: string[];

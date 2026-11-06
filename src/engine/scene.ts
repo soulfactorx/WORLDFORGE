@@ -21,6 +21,7 @@ export function sceneCond(c: SceneCond | undefined, run: SceneRun): boolean {
   if (!c) return true;
   if ('all' in c) return (c.all ?? []).every((x) => sceneCond(x, run));
   if ('any' in c) return (c.any ?? []).some((x) => sceneCond(x, run));
+  if ('not' in c) return !sceneCond(c.not, run);
   if ('gauge' in c) { const v = run.gauges[c.gauge] ?? 0; return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('state' in c) return run.states.includes(c.state);
   if ('phase' in c) return run.phase === c.phase;

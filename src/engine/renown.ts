@@ -58,6 +58,7 @@ const LADDERS: Record<string, { label: string; ranks: string[] }> = {
   default: { label: '모험가 등급', ranks: ['F급', 'E급', 'D급', 'C급', 'B급', 'A급', 'S급'] },
   wuxia: { label: '무공 경지', ranks: ['삼류', '이류', '일류', '절정', '초절정', '화경', '현경', '생사경'] },
   romance: { label: '사교계 평판', ranks: ['무명', '화제의 인물', '사교계의 신성', '사교계의 꽃', '사교계의 전설'] },
+  fighting: { label: '파이터 랭크', ranks: ['루키', '브론즈', '실버', '골드', '플래티넘', '다이아몬드', '챔피언'] },
 };
 /** 등급 점수 상한 (레벨 10 + 명성 60) */
 const MAX_SCORE = 150;

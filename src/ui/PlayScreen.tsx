@@ -146,7 +146,9 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (good) setLoot(good.itemId!);
     if (state.player.sheet.level > prev.player.sheet.level) setLevelInfo(levelUpInfo(prev.player.sheet, state.player.sheet));
   }, [state]);
-  useEffect(() => { setMusic(state ? moodOf(world.genre?.id, !!state.combat) : null); }, [!!state?.combat, world.genre?.id, avTick, !!state]);
+  // 격투 장르는 장면(턴제 격투) 중에도 전투 음악 (v0.49)
+  const fightingNow = !!state?.combat || (world.genre?.id === 'fighting' && !!state?.scene);
+  useEffect(() => { setMusic(state ? moodOf(world.genre?.id, fightingNow) : null); }, [fightingNow, world.genre?.id, avTick, !!state]);
   useEffect(() => () => { stopMusic(); stopSpeaking(); }, []);
 
   async function submit(choice?: string, choiceUse?: string, decision?: { choiceId: string; optionId: string }) {
