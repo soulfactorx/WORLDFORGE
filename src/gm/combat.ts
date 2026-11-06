@@ -12,7 +12,7 @@ import type { LlmClient } from '../llm/types';
 import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
-import { MONSTERS, monsterTable } from '../engine/combat/monsters';
+import { encounterDifficulty, MONSTERS, monsterTable } from '../engine/combat/monsters';
 import { CLASS_KITS } from '../engine/combat/cards';
 import type { Gear } from '../engine/combat/combat';
 import { abilityModifier } from '../engine/dice/dice';
@@ -140,6 +140,13 @@ export function beginEncounter(world: WorldPackage, state: GameState, encounterI
   const rng = createRng(state.rngState);
   const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id], cards: state.grantedCards?.[id] }));
   const combat = startCombat(enc, state.player.sheet, rng, companions, playerGear(world, state), monsterTable(world));
+  // 예전에 힘들던 적 (설계 v4 E4): 파티에게 아주 쉬운 조우면 적이 기세에 눌려 일찍 달아난다
+  const levels = [state.player.sheet.level, ...companions.map((c) => c.sheet.level)];
+  const diff = encounterDifficulty(enc.enemies.map((e) => e.monsterId), levels, monsterTable(world));
+  if (diff.xp <= diff.budget[0] / 2) {
+    for (const c of Object.values(combat.combatants)) if (c.side === 'enemy' && c.role !== 'boss') c.fleeAt = Math.max(c.fleeAt ?? 0, 0.6);
+    combat.overmatched = true;
+  }
   const b = new Builder(world, state, turn);
   b.push({ type: 'combat_started', combat, rngState: rng.state() });
   runEnemies(b, rng);

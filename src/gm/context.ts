@@ -7,6 +7,7 @@ import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
 import { epithetOf, knowsName } from '../engine/names';
+import { allTitles, rankOf, renownOf, renownTier } from '../engine/renown';
 
 const dateLabel = (world: WorldPackage, minutes: number) => { const d = calendarDate(world, minutes); return d ? `${d.label}${d.countdown ? ` (${d.countdown})` : ''} ` : ''; };
 
@@ -103,6 +104,17 @@ export function buildDirectorContext(world: WorldPackage, state: GameState): str
 
 const MAX_ACTOR_CLAIMS = 80;
 
+/** 명성 (설계 v4 E4): 이름이 알려졌으면 NPC가 소문으로 안다 — "당신이 늑대를 잡은 그 사람이군요" */
+function fameLines(world: WorldPackage, state: GameState): string[] {
+  const renown = renownOf(world, state);
+  if (renown < 5) return [];
+  const defs = new Map(allTitles(world).map((t) => [t.id, t]));
+  const titles = (state.titles ?? []).map((id) => defs.get(id)).filter((t) => !!t).sort((a, b) => b!.renown - a!.renown).slice(0, 3).map((t) => `${t!.name}(${t!.desc})`);
+  const rank = rankOf(world, state);
+  return ['## 이 낯선 이에 대해 들은 소문', `명성: ${renownTier(renown)} · ${rank.label} ${rank.name}${titles.length ? ` · 알려진 이야기: ${titles.join(', ')}` : ''}`,
+    '소문이 맞는지는 모른다. 명성이 높을수록 존중하거나, 경계하거나, 부탁하고 싶어 한다 (네 성격대로).', ''];
+}
+
 export function buildActorContext(world: WorldPackage, state: GameState, npc: Character): string {
   const rel = relationshipOf(world, state.relationships, npc.id);
   const knows = knowledgeOf(world, state.beliefs, npc.id);
@@ -135,6 +147,7 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     ...canonBlock(world, state, npc.id, ''), '',
     `## 지금 있는 곳: ${loc?.name}`, '',
     '## 네가 아는 것 (이 목록 밖의 세계 사실은 모른다)', ...(claimLines.length ? claimLines : ['(특별히 아는 것 없음)']), '',
+    ...fameLines(world, state),
     `## 이 낯선 이에 대한 너의 감정: ${stageOf(rel, !!npc.romanceable)}`,
     AXES.map((a) => `${AXIS_NAMES[a]} ${rel[a]}`).join(' · ') + '  (-100 ~ 100)',
     `비밀을 털어놓으려면 신뢰 ${secretTrustOf(world, npc.id)} 이상이 필요하다.`,

@@ -338,6 +338,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           {w.characters.length >= 2 && <button type="button" onClick={() => set({ relations: [...(w.relations ?? []), { a: w.characters[0]!.id, b: w.characters[1]!.id, kind: 'ally' }] })}>＋ 관계 추가</button>}
           <JsonField label="관계 사건 (조건이 맞으면 열리는 인물의 결정적 장면)" value={w.relationBeats ?? []} onChange={(relationBeats) => set({ relationBeats })} rows={10}
             help={`예: { "id": "beat/…", "npcId": "npc/…", "name": "비밀 고백", "condition": { "stage": "npc/…", "in": ["친구", "절친", "연인"] }, "hint": "그가 과거를 털어놓는다", "resolveFlag": "…" } · 단계: ${STAGES.join(', ')} · resolveFlag는 임무 탭의 플래그에 선언해야 한다 (없으면 4턴 뒤 닫힘)`} />
+          <JsonField label="이 세계만의 칭호 (조건을 채우면 엔진이 준다 — 명성이 오르고 NPC가 소문으로 안다)" value={w.titles ?? []} onChange={(titles) => set({ titles: Array.isArray(titles) && titles.length ? titles : undefined })} rows={5}
+            help='예: [{ "id": "title/mist-hero", "name": "안개 골짜기의 영웅", "desc": "마을을 구했다", "renown": 15, "condition": { "flag": "village_saved" } }] · 기본 칭호(첫 승리·해결사·좋은 벗·이야기의 주인공 등)는 엔진이 알아서 준다' />
         </>
       )}
 

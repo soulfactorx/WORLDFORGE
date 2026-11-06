@@ -573,6 +573,8 @@ export interface WorldPackage {
   factions?: Faction[];
   relations?: NpcRelation[];
   relationBeats?: RelationBeat[];
+  /** 이 세계만의 칭호 (설계 v4 E4): 조건을 채우면 엔진이 준다. renown 기본 5 */
+  titles?: { id: EntityId; name: string; desc?: string; renown?: number; condition: Condition }[];
   /** 지속되는 세계 (설계 v3 7장): 소문 전파 (기본 켜짐) */
   simulation?: { rumors?: boolean };
   /** 이야기 엔진 (설계 v3 5장) */

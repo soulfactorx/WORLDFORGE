@@ -1,5 +1,6 @@
 import { levelCapOf } from '../engine/genre';
 import { rewardXp } from '../engine/character/progression';
+import { newTitles } from '../engine/renown';
 import { evalCondition, questTransitions, reachedEnding } from '../engine/scenario';
 import type { Rewards, WorldPackage } from '../engine/schema';
 import { jobRewards, jobTransitions } from '../engine/jobs';
@@ -114,6 +115,8 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
       push({ type: 'beat_closed', beatId: b.id });
     }
   }
+  // 칭호 (설계 v4 E4): 기록에서 엔진이 준다
+  for (const t of newTitles(world, s)) push({ type: 'title_earned', titleId: t.id, name: t.name, desc: t.desc });
   const ending = reachedEnding(world, s);
   if (ending) push({ type: 'ending_reached', endingId: ending.id, name: ending.name });
   return { events, ending: ending?.epilogue ?? null };

@@ -1,4 +1,7 @@
 import { useRs } from './reskin';
+import type { WorldPackage } from '../engine/schema';
+import type { GameState } from '../engine/state/state';
+import { allTitles, rankOf, renownOf, renownTier } from '../engine/renown';
 import { ABILITIES, ABILITY_NAMES, CLASSES, SKILL_IDS, SKILLS, proficiencyBonus } from '../engine/character/rules';
 import { type CharacterSheet, checkModifier } from '../engine/character/sheet';
 import { abilityModifier } from '../engine/dice/dice';
@@ -24,6 +27,27 @@ function XpBar({ sheet }: { sheet: CharacterSheet }) {
   );
 }
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+/** 명성·등급·칭호 (설계 v4 E4) */
+function FameBox({ world, state }: { world: WorldPackage; state: GameState }) {
+  const rs = useRs();
+  const rank = rankOf(world, state);
+  const renown = renownOf(world, state);
+  const defs = new Map(allTitles(world).map((t) => [t.id, t]));
+  const mine = (state.titles ?? []).map((id) => defs.get(id)).filter((t) => !!t);
+  return (
+    <div className="fame">
+      <div className="row small">
+        <b>♛ {rs(rank.label)} {rs(rank.name)}</b>
+        {rank.next && <span className="hpbar fame-bar" title={`다음: ${rank.next}`}><span style={{ width: `${Math.round(rank.progress * 100)}%`, background: 'var(--accent)' }} /></span>}
+        {rank.next && <span className="muted">다음 {rs(rank.next)}</span>}
+        <span className="spacer" />
+        <span className="muted">명성 {renown} · {renownTier(renown)}</span>
+      </div>
+      {mine.length > 0 && <p className="small titles">{mine.map((t) => <span key={t!.id} className="tag" title={t!.desc}>🏅 {rs(t!.name)}</span>)}</p>}
+    </div>
+  );
+}
 
 /** 하위 직업·능력치 향상/특성 고르기 (플레이어 레벨업 뒤, 고를 때까지 대기) */
 function BuildChoices({ sheet, onChoose, disabled }: { sheet: CharacterSheet; onChoose: (kind: BuildChoiceKind, value: string) => void; disabled?: boolean }) {
@@ -59,7 +83,7 @@ function BuildChoices({ sheet, onChoose, disabled }: { sheet: CharacterSheet; on
   );
 }
 
-export function CharacterPanel({ sheet, party = {}, onChoose, disabled }: { sheet: CharacterSheet; party?: Record<string, CharacterSheet>; onChoose?: (kind: BuildChoiceKind, value: string) => void; disabled?: boolean }) {
+export function CharacterPanel({ sheet, party = {}, onChoose, disabled, world, state }: { sheet: CharacterSheet; party?: Record<string, CharacterSheet>; onChoose?: (kind: BuildChoiceKind, value: string) => void; disabled?: boolean; world?: WorldPackage; state?: GameState }) {
   const rs = useRs();
   const subFeatures = sheet.subclass ? Object.entries(SUBCLASSES[sheet.subclass]?.features ?? {}).filter(([lv]) => Number(lv) <= sheet.level).flatMap(([, f]) => f) : [];
   return (
@@ -81,6 +105,7 @@ export function CharacterPanel({ sheet, party = {}, onChoose, disabled }: { shee
       {subFeatures.length > 0 && <p className="small muted">{rs(SUBCLASSES[sheet.subclass!]!.name)}: {subFeatures.map(rs).join(' · ')}</p>}
       {(sheet.feats?.length ?? 0) > 0 && <p className="small muted">특성: {sheet.feats!.map((f) => FEATS[f]?.name ?? f).join(' · ')}</p>}
       {onChoose && <BuildChoices sheet={sheet} onChoose={onChoose} disabled={disabled} />}
+      {world && state && <FameBox world={world} state={state} />}
       <div className="ability-grid">
         {ABILITIES.map((a) => (
           <div key={a} className="stat">

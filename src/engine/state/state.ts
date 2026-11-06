@@ -86,6 +86,8 @@ export interface GameState {
   arrivedTurn?: number;
   /** 이미 받은 1회성 경험치 보상 열쇠 (v0.38) */
   xpKeys?: string[];
+  /** 얻은 칭호 (v0.41) */
+  titles?: string[];
   log: LogEntry[];
 }
 
@@ -153,7 +155,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const names = Object.values(e.combat.combatants).filter((c) => c.side === 'enemy').map((c) => `${c.name}(${ZONE_NAMES[c.zone]})`).join(', ');
       const order = e.combat.order.map((id) => `${e.combat.combatants[id]!.name} ${e.combat.combatants[id]!.initiative}`).join(' → ');
       return { ...s, combat: e.combat, rngState: e.rngState,
-        log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 시작 — ${names}\n우선권: ${order}` }] };
+        log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 시작 — ${names}\n우선권: ${order}${e.combat.overmatched ? '\n적들이 당신의 기세에 움찔한다 — 상대가 되지 않는다는 것을 아는 눈치다.' : ''}` }] };
     }
     case 'combat_action': {
       if (!s.combat) return s;
@@ -212,6 +214,8 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: e.sheet } } : s;
       return { ...next, log: [...next.log, { turn, kind: 'progress', text }] };
     }
+    case 'title_earned':
+      return (s.titles ?? []).includes(e.titleId) ? s : { ...s, titles: [...(s.titles ?? []), e.titleId], log: [...s.log, { turn, kind: 'progress', text: `🏅 칭호: ${e.name} — ${e.desc}` }] };
     case 'names_learned':
       return s.namesKnown ? { ...s, namesKnown: [...new Set([...s.namesKnown, ...e.ids])] } : s;
     case 'build_choice': {

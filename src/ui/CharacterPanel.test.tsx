@@ -22,3 +22,17 @@ describe('캐릭터 창: 하위 직업·특성 고르기', () => {
     expect(after).toContain('특성: 저격수');
   });
 });
+
+import { sampleWorld } from '../data/sample-world';
+import { replay } from '../engine/state/state';
+import { startEvents } from '../gm/turn';
+describe('캐릭터 창: 명성·등급·칭호', () => {
+  it('등급 사다리와 칭호를 보여 준다', () => {
+    const sheet = createCharacter({ name: '나', classId: 'fighter', method: 'standard', abilities: suggestedStandardArray('fighter'), skills: ['athletics', 'perception'] as never });
+    const st = { ...replay(startEvents(sampleWorld, sheet, 7).map((event, seq) => ({ saveId: 's', seq, turn: 0, event }))), titles: ['title/first-win'] };
+    const html = renderToStaticMarkup(<CharacterPanel sheet={st.player.sheet} world={sampleWorld} state={st} />);
+    expect(html).toContain('모험가 등급 F급');
+    expect(html).toContain('🏅 첫 승리');
+    expect(html).toContain('명성 2');
+  });
+});

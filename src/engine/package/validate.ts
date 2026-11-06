@@ -307,6 +307,14 @@ export function validateWorld(input: unknown): Issue[] {
     if (isObj(b.condition) && 'all' in b.condition && Array.isArray(b.condition.all) && !b.condition.all.length) warn(`${p}.condition`, '조건이 비어 게임 시작과 함께 열립니다.');
     if (b.resolveFlag && !flagIds.has(b.resolveFlag)) err(`${p}.resolveFlag`, `선언되지 않은 플래그 "${b.resolveFlag}" — 플래그 목록에 추가하세요 (GM이 세울 수 있어야 사건이 닫힙니다).`);
   });
+  // ---- 칭호 (설계 v4 E4)
+  arr<NonNullable<WorldPackage['titles']>[number]>('titles', false).forEach((t, i) => {
+    const p = `titles[${i}]`;
+    text(t.name, `${p}.name`);
+    if (!t.id || typeof t.id !== 'string') err(`${p}.id`, 'ID가 필요합니다.');
+    if (t.renown !== undefined && (typeof t.renown !== 'number' || t.renown < 0 || t.renown > 50)) err(`${p}.renown`, '명성은 0~50입니다.');
+    checkCond(t.condition, `${p}.condition`);
+  });
   // ---- 이야기 엔진 (설계 v3 5장)
   const checkEffects = (list: unknown, path: string) => {
     if (list === undefined) return;

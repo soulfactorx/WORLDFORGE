@@ -17,6 +17,7 @@ import type { ItemRarity, WorldPackage } from './schema';
 import { awakenStage, effectiveItem, itemDef, rarityOf } from './items';
 import type { GameState } from './state/state';
 import { allJobs } from './jobs';
+import { allTitles, rankOf } from './renown';
 import { calendarDate } from './calendar';
 
 export interface RewardLine { icon: string; text: string; rarity?: ItemRarity; itemId?: string }
@@ -46,6 +47,11 @@ export function rewardDiff(world: WorldPackage, before: GameState, after: GameSt
   if (known > 0) out.push({ icon: '📖', text: `알게 된 것 ${known}` });
   const titlesBefore = new Set(before.xpKeys ?? []);
   for (const k of after.xpKeys ?? []) if (!titlesBefore.has(k) && k.startsWith('stage:')) out.push({ icon: '♡', text: k.split(':')[2]! });
+  // 칭호·등급 (설계 v4 E4)
+  const defs = new Map(allTitles(world).map((t) => [t.id, t]));
+  for (const id of after.titles ?? []) if (!(before.titles ?? []).includes(id)) out.push({ icon: '🏅', text: defs.get(id)?.name ?? id });
+  const rb = rankOf(world, before), ra = rankOf(world, after);
+  if (ra.index > rb.index) out.push({ icon: '♛', text: `${ra.label}: ${ra.name}`, rarity: 'epic' });
   for (const [id, q] of Object.entries(after.quests)) if (q.done && !q.failed && !before.quests[id]?.done) out.push({ icon: '◆', text: `완료: ${world.quests?.find((x) => x.id === id)?.name ?? id}` });
   return out;
 }

@@ -370,3 +370,8 @@ img.zoomable { cursor: zoom-in; }
 @media (prefers-color-scheme: dark) { .rarity-uncommon { color: #6cc97a; } .rarity-rare { color: #6ea8ef; } .rarity-epic { color: #c08bf0; } .rarity-legendary { color: #f0c05a; } }
 .rarity-chip { border-color: currentColor; font-weight: 600; }
 .loot.rarity-border-rare { border-color: #3b78c4; } .loot.rarity-border-epic { border-color: #9152c6; } .loot.rarity-border-legendary { border-color: #c8901e; box-shadow: 0 0 24px rgba(200,144,30,.35); }
+
+/* 명성·등급·칭호 (v0.41) */
+.fame { border-top: 1px solid var(--border); padding-top: 6px; margin: 6px 0; }
+.fame-bar { width: 80px; display: inline-block; }
+.titles { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0; }
