@@ -264,6 +264,13 @@ export function validateWorld(input: unknown): Issue[] {
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('var' in cond) { if (!varIds.has(cond.var)) err(path, `선언되지 않은 세계 수치 "${cond.var}"`); return; }
+    if ('sceneEnd' in cond) {
+      const sd = ((input as unknown as WorldPackage).scenes ?? []).find((x) => x?.id === cond.sceneEnd);
+      if (!sd) err(path, `없는 장면 "${cond.sceneEnd}"`);
+      else if (cond.is !== undefined && !(sd.ends ?? []).some((e) => e.id === cond.is)) err(path, `장면 "${sd.name}"에 없는 끝 "${cond.is}"`);
+      if (cond.outcome !== undefined && !['success', 'failure', 'neutral'].includes(cond.outcome)) err(path, 'outcome은 success/failure/neutral입니다.');
+      return;
+    }
     if ('npcGoal' in cond) { if (!goalIds.has(cond.npcGoal)) err(path, `없는 인물 목표 "${cond.npcGoal}"`); if (cond.is !== undefined && !['active', 'done', 'stopped'].includes(cond.is)) err(path, 'is는 active/done/stopped입니다.'); return; }
     if ('questOutcome' in cond) {
       const q = quests.find((x) => x.id === cond.questOutcome);
@@ -343,6 +350,67 @@ export function validateWorld(input: unknown): Issue[] {
     if (b.approach !== undefined && !['visit', 'message', 'none'].includes(b.approach)) err(`${p}.approach`, 'approach는 visit/message/none입니다.');
     text(b.message, `${p}.message`, false);
     if (b.resolveFlag && !flagIds.has(b.resolveFlag)) err(`${p}.resolveFlag`, `선언되지 않은 플래그 "${b.resolveFlag}" — 플래그 목록에 추가하세요 (GM이 세울 수 있어야 사건이 닫힙니다).`);
+  });
+  // ---- 장면 (v0.47)
+  const sceneIds = new Set<string>();
+  arr<NonNullable<WorldPackage['scenes']>[number]>('scenes', false).forEach((sc, i) => {
+    const p = `scenes[${i}]`;
+    if (!sc.id || typeof sc.id !== 'string') err(`${p}.id`, 'ID가 필요합니다.'); else if (sceneIds.has(sc.id)) err(`${p}.id`, `겹치는 장면 ID "${sc.id}"`); else sceneIds.add(sc.id);
+    text(sc.name, `${p}.name`); text(sc.description, `${p}.description`);
+    if (sc.npcId && !charIds.has(sc.npcId)) err(`${p}.npcId`, `없는 인물 "${sc.npcId}"`);
+    if (sc.locationId && !locIds.has(sc.locationId)) err(`${p}.locationId`, `없는 장소 "${sc.locationId}"`);
+    if (sc.start) checkCond(sc.start, `${p}.start`);
+    const gauges = new Set<string>(); const states = new Set<string>(); const phases = new Set<string>();
+    if (!Array.isArray(sc.gauges) || !sc.gauges.length) err(`${p}.gauges`, '수치가 하나 이상 필요합니다.');
+    (Array.isArray(sc.gauges) ? sc.gauges : []).forEach((g, j) => {
+      if (!g?.id) err(`${p}.gauges[${j}].id`, 'ID가 필요합니다.'); else gauges.add(g.id);
+      text(g?.name, `${p}.gauges[${j}].name`);
+      if (typeof g?.start !== 'number') err(`${p}.gauges[${j}].start`, '시작값(숫자)이 필요합니다.');
+      if ((g?.min ?? 0) >= (g?.max ?? 100)) err(`${p}.gauges[${j}]`, 'min은 max보다 작아야 합니다.');
+    });
+    (sc.states ?? []).forEach((st, j) => { if (!st?.id) err(`${p}.states[${j}].id`, 'ID가 필요합니다.'); else states.add(st.id); text(st?.name, `${p}.states[${j}].name`); });
+    (sc.phases ?? []).forEach((ph, j) => { if (!ph?.id) err(`${p}.phases[${j}].id`, 'ID가 필요합니다.'); else phases.add(ph.id); text(ph?.name, `${p}.phases[${j}].name`); });
+    const sCond = (c: unknown, path: string): void => {
+      if (!isObj(c)) { err(path, '장면 조건은 객체입니다.'); return; }
+      if ('all' in c || 'any' in c) { const l = (c as { all?: unknown; any?: unknown }).all ?? (c as { any?: unknown }).any; if (!Array.isArray(l)) err(path, '목록이어야 합니다.'); else l.forEach((x, k) => sCond(x, `${path}[${k}]`)); return; }
+      if ('gauge' in c) { if (!gauges.has(c.gauge as string)) err(path, `없는 수치 "${String(c.gauge)}"`); return; }
+      if ('state' in c) { if (!states.has(c.state as string)) err(path, `없는 상태 "${String(c.state)}"`); return; }
+      if ('phase' in c) { if (!phases.has(c.phase as string)) err(path, `없는 단계 "${String(c.phase)}"`); return; }
+      if ('round' in c) { if (typeof c.round !== 'number') err(path, 'round는 숫자입니다.'); return; }
+      err(path, '알 수 없는 장면 조건입니다. gauge·state·phase·round·all·any 중 하나를 쓰세요.');
+    };
+    const sDelta = (d: unknown, path: string) => {
+      if (d === undefined) return;
+      if (!isObj(d)) { err(path, '객체여야 합니다.'); return; }
+      for (const k of Object.keys((d.gauges as object) ?? {})) if (!gauges.has(k)) err(`${path}.gauges`, `없는 수치 "${k}"`);
+      for (const k of [...((d.addStates as string[]) ?? []), ...((d.removeStates as string[]) ?? [])]) if (!states.has(k)) err(path, `없는 상태 "${k}"`);
+      if (d.phase !== undefined && !phases.has(d.phase as string)) err(`${path}.phase`, `없는 단계 "${String(d.phase)}"`);
+    };
+    const actIds = new Set<string>();
+    if (!Array.isArray(sc.actions) || !sc.actions.length) err(`${p}.actions`, '행동이 하나 이상 필요합니다.');
+    (Array.isArray(sc.actions) ? sc.actions : []).forEach((a, j) => {
+      const ap = `${p}.actions[${j}]`;
+      if (!a?.id) err(`${ap}.id`, 'ID가 필요합니다.'); else if (actIds.has(a.id)) err(`${ap}.id`, `겹치는 행동 ID "${a.id}"`); else actIds.add(a.id);
+      text(a?.name, `${ap}.name`);
+      if (a?.check) { const [k, id] = a.check.split(':'); if (!((k === 'skill' && SKILL_IDS.includes(id as never)) || (k === 'ability' && ['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(id ?? '')))) err(`${ap}.check`, '판정은 "skill:기술ID" 또는 "ability:str|dex|con|int|wis|cha"입니다.'); }
+      if (a?.dc !== undefined && (typeof a.dc !== 'number' || a.dc < 1 || a.dc > 30)) err(`${ap}.dc`, 'DC는 1~30입니다.');
+      (a?.phases ?? []).forEach((ph) => { if (!phases.has(ph)) err(`${ap}.phases`, `없는 단계 "${ph}"`); });
+      if (a?.requires) sCond(a.requires, `${ap}.requires`);
+      sDelta(a?.success, `${ap}.success`); sDelta(a?.failure, `${ap}.failure`);
+    });
+    const endIds = new Set<string>();
+    if (!Array.isArray(sc.ends) || !sc.ends.length) err(`${p}.ends`, '끝이 하나 이상 필요합니다.');
+    (Array.isArray(sc.ends) ? sc.ends : []).forEach((e, j) => {
+      const ep = `${p}.ends[${j}]`;
+      if (!e?.id) err(`${ep}.id`, 'ID가 필요합니다.'); else if (endIds.has(e.id)) err(`${ep}.id`, `겹치는 끝 ID "${e.id}"`); else endIds.add(e.id);
+      text(e?.name, `${ep}.name`);
+      if (!['success', 'failure', 'neutral'].includes(e?.outcome)) err(`${ep}.outcome`, 'outcome은 success/failure/neutral입니다.');
+      sCond(e?.when, `${ep}.when`);
+      if (e?.effects) deferredEffects.push([e.effects, `${ep}.effects`]);
+      checkRewards(e?.rewards, `${ep}.rewards`);
+    });
+    if (sc.timeoutEnd && !endIds.has(sc.timeoutEnd)) err(`${p}.timeoutEnd`, `없는 끝 "${sc.timeoutEnd}"`);
+    if (!sc.maxRounds && !(sc.ends ?? []).some((e) => e?.outcome === 'failure')) warn(`${p}`, '실패로 끝나는 길도, 차례 한도(maxRounds)도 없습니다 — 장면이 끝나지 않을 수 있습니다.');
   });
   // ---- 세계 수치 (설계 v4 E6)
   const seenVars = new Set<string>();

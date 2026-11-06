@@ -1,6 +1,7 @@
 import { levelCapOf } from '../engine/genre';
 import { rewardXp } from '../engine/character/progression';
 import { newTitles } from '../engine/renown';
+import { availableScenes, newRun } from '../engine/scene';
 import { evalCondition, questTransitions, reachedEnding } from '../engine/scenario';
 import type { Rewards, WorldPackage } from '../engine/schema';
 import { jobRewards, jobTransitions } from '../engine/jobs';
@@ -155,6 +156,11 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
         effectEvents(world, s, g.effects ?? [], `${c.name}의 목표: ${g.text}`).forEach(push);
       }
     }
+  }
+  // 장면 (v0.47): 저절로 시작하는 장면
+  if (!s.scene && !s.combat) {
+    const auto = availableScenes(world, s, { auto: true })[0];
+    if (auto) push({ type: 'scene_started', sceneId: auto.id, name: auto.name, run: newRun(auto) });
   }
   // 칭호 (설계 v4 E4): 기록에서 엔진이 준다
   for (const t of newTitles(world, s)) push({ type: 'title_earned', titleId: t.id, name: t.name, desc: t.desc });

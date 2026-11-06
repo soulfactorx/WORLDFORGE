@@ -34,6 +34,9 @@ const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 import { pickCharacterImage, pickSceneImage } from '../engine/assets';
 import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/digest';
 import { loadPlayPrefs } from './playPrefs';
+import { ScenePanel } from './ScenePanel';
+import { availableScenes, sceneDef } from '../engine/scene';
+import { abandonSceneEvents, narrateScene, sceneActionEvents, startSceneEvents } from '../gm/scene';
 import { CodexPanel } from './CodexPanel';
 import { recordEnding } from './collection';
 import { XpBar } from './Rewards';
@@ -202,6 +205,39 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     await reload();
   }
 
+  /** 장면 (v0.47): 행동은 엔진만, 끝나면 서술 AI가 한 번 서술한다 */
+  async function commitScene(make: (s: GameState) => GameEvent[]) {
+    if (!state || streaming !== null) return;
+    setError('');
+    const sceneId = state.scene?.sceneId;
+    const log = state.scene?.log ?? [];
+    let events: GameEvent[];
+    try { events = make(state); } catch (e) { setError((e as Error).message); return; }
+    await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn: state.turn, event })));
+    const all = await loadEvents(saveId);
+    const after = replay(all);
+    const def = sceneId ? sceneDef(world, sceneId) : undefined;
+    if (sceneId && !after.scene && def && settings) {
+      let seq = (all.at(-1)?.seq ?? -1) + 1;
+      const lastLog = [...log, ...events.flatMap((e) => (e.type === 'scene_action' ? [e.line] : []))];
+      setStreaming(''); setStage('장면을 서술하는 중'); setStartedAt(Date.now());
+      abort.current = new AbortController();
+      let text: string;
+      try {
+        text = await narrateScene(createLlmClient(settings), world, after, def, lastLog, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
+      } catch (e) {
+        setError(`장면 서술 실패: ${(e as Error).message}`);
+        text = '장면이 끝났다.';
+      }
+      await appendEvents(saveId, [
+        { saveId, seq: seq++, turn: after.turn, event: { type: 'narration', text } },
+        { saveId, seq: seq++, turn: after.turn, event: basicGuide(world, after) },
+      ]);
+      setStreaming(null);
+    }
+    await reload();
+  }
+
   /** 소지품·상점: 이벤트를 현재 턴에 이어 저장한다 (AI 호출 없음) */
   async function commitEvents(make: (s: GameState) => GameEvent[]) {
     if (!state || streaming !== null) return;
@@ -226,7 +262,9 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const imgSize = loadPlayPrefs().images;
   const lastGuide = state.log.findLastIndex((l) => l.kind === 'guide');
   const decisive = !state.combat && !state.ending && !state.playerDead ? pendingChoice(world, state) : undefined;
-  const canAct = streaming === null && !state.combat && !state.playerDead;
+  const canAct = streaming === null && !state.combat && !state.scene && !state.playerDead;
+  const sceneNow = state.scene ? sceneDef(world, state.scene.sceneId) : undefined;
+  const scenesHere = canAct && !state.ending ? availableScenes(world, state, { auto: false }) : [];
   const shop = shopHere(world, state);
   const board = boardHere(world, state);
 
@@ -345,9 +383,19 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           onOrder={(npcId: string, order: PartyOrder) => commitCombat((s) => setPartyOrder(s, npcId, order))}
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}
           onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
+      ) : state.scene && sceneNow ? (
+        <ScenePanel def={sceneNow} run={state.scene} sheet={state.player.sheet} busy={streaming !== null}
+          npcName={sceneNow.npcId ? world.characters.find((c) => c.id === sceneNow.npcId)?.name : undefined}
+          onAct={(id) => commitScene((s) => sceneActionEvents(world, s, id))}
+          onQuit={() => commitScene((s) => abandonSceneEvents(world, s))} />
       ) : (
       <>
       {rewards.length > 0 && <RewardBanner lines={rewards} onClose={() => setRewards([])} />}
+      {scenesHere.length > 0 && (
+        <div className="scene-start">{scenesHere.map((d) => (
+          <button key={d.id} type="button" className="has-pending" title={d.description} onClick={() => commitScene((s) => startSceneEvents(world, s, d.id))}>🎭 {rs(d.name)}</button>
+        ))}</div>
+      )}
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <select className="use-select" value={use} onChange={(e) => setUse(e.target.value)} title="이 행동에 쓸 기술·능력치 (판정이 필요할 때 이것으로 굴린다)">
           <option value="">🎲 기술·능력 (자동)</option>

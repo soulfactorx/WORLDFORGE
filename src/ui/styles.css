@@ -429,3 +429,17 @@ img.zoomable { cursor: zoom-in; }
   ul.needs label.file { flex: 1 1 100%; }
   ul.needs label.file input[type='file'] { max-width: 100%; }
 }
+
+/* 장면 패널 (v0.47) */
+.scene-panel { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+.scene-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.scene-gauge { display: flex; flex-direction: column; gap: 3px; }
+.scene-states { gap: 4px; flex-wrap: wrap; }
+.scene-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+.scene-actions button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; min-width: 0; }
+.scene-actions button > * { max-width: 100%; overflow-wrap: anywhere; }
+.scene-act-text { color: var(--muted); }
+.edge.up { color: #4f9a5a; } .edge.down { color: #b3412c; }
+.scene-log { margin: 0; padding-left: 1.1em; color: var(--muted); }
+.scene-start { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+@media (max-width: 600px) { .scene-actions { grid-template-columns: minmax(0, 1fr); } }

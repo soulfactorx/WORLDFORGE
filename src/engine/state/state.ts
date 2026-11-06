@@ -21,6 +21,8 @@ export interface LogEntry {
   choiceSkills?: string[];
 }
 
+export interface SceneRun { sceneId: EntityId; gauges: Record<string, number>; states: string[]; phase?: string; round: number; used: string[]; log: string[] }
+
 export interface GameState {
   packageId: string;
   packageVersion: string;
@@ -72,6 +74,10 @@ export interface GameState {
   quests: Record<EntityId, { stage: number; done: boolean; failed?: boolean; startedAt?: number; outcome?: string }>;
   /** 세계 수치 (v0.43, 설계 v4 E6) */
   vars?: Record<string, number>;
+  /** 진행 중인 장면 (v0.47) */
+  scene?: SceneRun;
+  /** 끝난 장면: 결과 */
+  sceneResults?: Record<EntityId, { endId: string; outcome: string; turn: number; times: number }>;
   /** 가 본 장소 (설계 v4 E8 도감) */
   visited?: EntityId[];
   /** 쓰러뜨린 적 (몬스터 ID → 수) */
@@ -239,6 +245,16 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, beats: { ...(s.beats ?? {}), [e.beatId]: { ...b, approached: turn } },
         ...(e.to ? { visits: { ...(s.visits ?? {}), [e.npcId]: { to: e.to, until: turn + e.stay } } } : {}),
         log: [...s.log, { turn, kind: 'relation', text: e.text }] };
+    }
+    case 'scene_started':
+      return { ...s, scene: e.run, log: [...s.log, { turn, kind: 'combat', text: `🎭 장면 시작 — ${e.name}` }] };
+    case 'scene_action':
+      return { ...s, scene: e.run, rngState: e.rngState, log: [...s.log, { turn, kind: 'check', text: e.line }] };
+    case 'scene_ended': {
+      const prev = s.sceneResults?.[e.sceneId];
+      const { scene: _s, ...rest } = s;
+      return { ...rest, sceneResults: { ...(s.sceneResults ?? {}), [e.sceneId]: { endId: e.endId, outcome: e.outcome, turn, times: (prev?.times ?? 0) + 1 } },
+        log: [...s.log, { turn, kind: 'quest', text: `🎭 장면 끝 — ${e.name}${e.text ? `: ${e.text}` : ''}` }] };
     }
     case 'goal_started':
       return { ...s, npcGoals: { ...(s.npcGoals ?? {}), [e.goalId]: { startedAt: s.worldMinutes } } };

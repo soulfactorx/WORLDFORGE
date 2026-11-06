@@ -13,6 +13,7 @@ import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
 import { activeBeats, activeQuests, flagAllowed, pendingDiscoveries, varLabel, varValue } from '../engine/scenario';
+import { availableScenes } from '../engine/scene';
 import { activeChapters, pacingHint, pendingChoice, upcomingWorldEvents } from '../engine/story';
 import { effectEvents } from './story';
 import { gainEvent, inventoryLine, moneyEvent, pendingGifts, pendingPickups } from './economy';
@@ -496,6 +497,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
   });
   const upcoming = upcomingWorldEvents(world, s).filter((u) => u.inDays <= 7).map((u) => `- ${u.inDays <= 0 ? '오늘' : `${u.inDays}일 뒤`}: ${u.event.name}${u.event.unless ? ' (막을 수 있다)' : ''}`);
   const vars = (world.vars ?? []).map((v) => `- ${v.name} [${v.id}]: ${varValue(world, s, v.id)}${v.labels?.length ? ` (${varLabel(v, varValue(world, s, v.id))})` : ''}`);
+  const scenes = availableScenes(world, s, { auto: false }).map((d) => `- ${d.name}${d.npcId ? ` (상대 ${world.characters.find((c) => c.id === d.npcId)?.name})` : ''} — ${d.description}`);
   const goals = activeGoals(world, s).map((g) => `- ${g.npc.name} [${g.npc.id}]: ${g.goal.text} — ${g.left <= 0 ? '곧' : `${g.left}일 뒤`} 이뤄진다${g.goal.stop ? ' (막을 수 있다)' : ''}`);
   const pending = pendingChoice(world, s);
   const pace = pacingHint(s);
@@ -509,6 +511,7 @@ function scenarioBlock(world: WorldPackage, s: GameState): string {
     ...(chapters.length ? ['## 진행 중인 줄기 (지금 장의 목표 — 연출 방향)', ...chapters, ''] : []),
     ...(clocks.length ? ['## 진행 시계 (플레이어는 모름 — 시간이 흐르면 찬다)', ...clocks, ''] : []),
     ...(upcoming.length ? ['## 다가오는 사건', ...upcoming, ''] : []),
+    ...(scenes.length ? ['## 지금 열 수 있는 장면 (플레이어 화면에 "🎭 장면" 버튼이 있다 — 상황이 그쪽으로 흐르면 버튼을 눌러 보라고 GM 안내에서 권한다. 장면의 결과를 대신 정하지 않는다)', ...scenes, ''] : []),
     ...(goals.length ? ['## 인물의 목표 (플레이어는 모름 — 그 인물은 이것을 위해 움직이고, 징조를 흘린다)', ...goals, ''] : []),
     ...(vars.length ? ['## 세계 수치 (이야기 효과 var로 바뀐다 — 분위기에 반영)', ...vars, ''] : []),
     ...(pending ? [`## 결정의 순간 (선택지가 플레이어 화면에 떠 있다): ${pending.prompt}`, '이 결정은 플레이어가 화면의 선택지로 내린다. 대신 결정하거나 플래그로 처리하지 않는다.', ''] : []),

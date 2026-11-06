@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { SKILL_IDS } from '../engine/character/rules';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
@@ -32,10 +33,10 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'quests' | 'story' | 'images' | 'json';
+type Tab = 'basic' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
   ['basic', '기본'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
-  ['encounters', '조우'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
+  ['encounters', '조우'], ['scenes', '장면'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
 const STATES = [['rumor', '소문'], ['partial', '들은 이야기'], ['confirmed', '확인됨'], ['mistaken', '잘못 앎'], ['secret', '비밀']] as const;
@@ -52,6 +53,7 @@ function tabForPath(path: string): Tab {
   if (path.startsWith('factions') || path.startsWith('relations') || path.startsWith('relationBeats')) return 'relations';
   if (path.startsWith('items')) return 'items';
   if (path.startsWith('encounters') || path.startsWith('monsters')) return 'encounters';
+  if (path.startsWith('scenes')) return 'scenes';
   if (path.startsWith('arcs') || path.startsWith('vars') || path.startsWith('choices') || path.startsWith('clocks') || path.startsWith('events')) return 'story';
   if (path.startsWith('quests') || path.startsWith('flags') || path.startsWith('endings')) return 'quests';
   return 'json';
@@ -397,6 +399,17 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         </>
       )}
 
+      {tab === 'scenes' && (
+        <>
+          <p className="muted small">
+            <b>장면</b>은 전투처럼 차례와 판정으로 진행하는 비전투 상호작용입니다 — 협상·추격·의식·제작·심문·비무·데이트·경매 등. <b>수치·상태·단계·행동·끝을 직접 이름 붙여</b> 만듭니다.
+            행동은 d20 + 기술 판정(엔진)으로 성공·실패를 가리고 수치를 바꿉니다. 상대의 성향(likes·dislikes 꼬리표)은 판정 이점·불리가 됩니다. 끝에 닿으면 이야기 효과·보상이 일어나고, 조건 <code>{'{ "sceneEnd": "scene/…", "outcome": "success" }'}</code>로 이어지는 임무를 열 수 있습니다.
+            상대 인물이 그 자리에 있고 시작 조건이 맞으면 플레이 화면에 🎭 버튼이 뜹니다 (auto면 저절로 시작). 서술 수위는 세계의 콘텐츠 등급을 따릅니다.
+          </p>
+          <JsonField label="장면" value={w.scenes ?? []} onChange={(scenes) => set({ scenes: Array.isArray(scenes) && scenes.length ? scenes : undefined })} rows={20}
+            help={`예: { "id": "scene/haggle", "name": "값 흥정", "description": "상인과 값을 두고 흥정한다 (GM용)", "npcId": "npc/…", "start": { "all": [] }, "gauges": [{ "id": "patience", "name": "인내심", "start": 5, "min": 0, "max": 5 }, { "id": "deal", "name": "합의", "start": 0, "max": 10 }], "states": [{ "id": "warm", "name": "호의", "edge": 1 }], "phases": [{ "id": "talk", "name": "탐색" }, { "id": "close", "name": "담판" }], "likes": ["칭찬"], "dislikes": ["위협"], "actions": [{ "id": "praise", "name": "물건 칭찬", "check": "skill:persuasion", "dc": 12, "tags": ["칭찬"], "success": { "gauges": { "deal": 3 }, "addStates": ["warm"] }, "failure": { "gauges": { "patience": -1 } } }, { "id": "final", "name": "마지막 제안", "phases": ["close"], "check": "skill:insight", "dc": 14, "success": { "gauges": { "deal": 5 } }, "failure": { "gauges": { "patience": -2 } } }], "ends": [{ "id": "deal", "name": "거래 성사", "when": { "gauge": "deal", "gte": 10 }, "outcome": "success", "effects": [{ "setFlag": "…" }], "rewards": { "money": 20 } }, { "id": "walk", "name": "결렬", "when": { "gauge": "patience", "lte": 0 }, "outcome": "failure" }], "maxRounds": 8, "timeoutEnd": "walk" } · 판정: skill:${SKILL_IDS.join('/')} 또는 ability:str/dex/con/int/wis/cha · 장면 조건: gauge(gte·lte)·state·phase·round·all·any · 수치 기본 범위 0~100`} />
+        </>
+      )}
       {tab === 'encounters' && (
         <>
           <h4>이 세계만의 적 (기본 적에 더한다 — 규칙 패키지로 주고받을 수 있다)</h4>

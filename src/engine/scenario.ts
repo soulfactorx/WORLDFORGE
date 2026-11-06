@@ -68,6 +68,10 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('questDone' in c) return !!state.quests[c.questDone]?.done && !state.quests[c.questDone]?.failed;
   if ('level' in c) return state.player.sheet.level >= c.level;
   if ('var' in c) { const v = varValue(world, state, c.var); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
+  if ('sceneEnd' in c) {
+    const r = state.sceneResults?.[c.sceneEnd];
+    return !!r && r.outcome !== 'abandoned' && (c.is === undefined || r.endId === c.is) && (c.outcome === undefined || r.outcome === c.outcome);
+  }
   if ('npcGoal' in c) {
     const g = state.npcGoals?.[c.npcGoal];
     if (!g) return false;

@@ -812,4 +812,33 @@ export const cheonhaWorld: WorldPackage = {
     art('snow', 26, { locationId: 'loc/north' }, '장성 폐보'), art('desert', 27, { locationId: 'loc/western' }, '돈황 사막'), art('battlefield', 28, { locationId: 'loc/bloodwind' }, '마교 진채'),
     art('snow', 29, { locationId: 'loc/tianshan' }, '천산 금역'), art('cave', 30, { locationId: 'loc/sword-tomb' }, '검총'),
   ],
+  // 장면 (v0.47): 사용자 정의 수치로 진행하는 비전투 상호작용
+  scenes: [{
+    id: 'scene/beggar-deal', name: '개방의 소식 흥정', npcId: 'npc/hongchil',
+    description: '개방 낙양분타의 홍칠에게서 무림맹 내부 배신자에 대한 소식을 얻어 내는 흥정. 홍칠은 의리와 술을 좋아하고, 위협과 돈 자랑을 싫어한다.',
+    start: { any: [{ knows: 'claim/murders' }, { knows: 'claim/traitor-exists' }] },
+    gauges: [{ id: 'patience', name: '홍칠의 인내심', start: 4, min: 0, max: 5 }, { id: 'trust', name: '신용', start: 2, min: 0, max: 10 }],
+    states: [{ id: 'read', name: '속내를 읽음', text: '홍칠이 무엇을 두려워하는지 안다', edge: 1 }, { id: 'sour', name: '언짢음', edge: -1 }],
+    likes: ['의리', '술'], dislikes: ['위협', '돈자랑'],
+    actions: [
+      { id: 'drink', name: '술 한 동이', text: '객잔에서 들고 온 죽엽청을 내민다', tags: ['술'], once: true, success: { gauges: { trust: 2 }, text: '홍칠이 껄껄 웃으며 잔을 받는다' } },
+      { id: 'honor', name: '협의를 말하다', text: '억울하게 죽은 이들의 이야기를 꺼낸다', check: 'skill:persuasion', dc: 13, tags: ['의리'],
+        success: { gauges: { trust: 3 } }, failure: { gauges: { patience: -1 }, text: '"말로는 누구나 협객이지."' } },
+      { id: 'probe', name: '넌지시 떠보기', text: '말끝과 눈빛에서 숨긴 것을 읽는다', check: 'skill:insight', dc: 12,
+        success: { addStates: ['read'], removeStates: ['sour'] }, failure: { gauges: { patience: -1 } } },
+      { id: 'silver', name: '은자 내밀기', text: '묵직한 은자 주머니를 탁자에 올린다', tags: ['돈자랑'], once: true,
+        success: { gauges: { trust: 1, patience: -1 }, addStates: ['sour'], text: '홍칠이 은자는 챙기면서도 입을 비죽인다' } },
+      { id: 'threat', name: '으름장', text: '칼자루에 손을 얹고 낮게 말한다', check: 'skill:intimidation', dc: 16, tags: ['위협'],
+        success: { gauges: { trust: 2, patience: -1 } }, failure: { gauges: { patience: -3 }, addStates: ['sour'] } },
+    ],
+    ends: [
+      { id: 'told', name: '소식을 얻다', when: { gauge: 'trust', gte: 10 }, outcome: 'success', text: '홍칠이 목소리를 낮춰 무림맹 안에 사파와 내통하는 자가 있다고 털어놓는다.',
+        effects: [{ reveal: 'claim/traitor-exists', state: 'confirmed' }, { reputation: 'fac/beggars', delta: 5 }] },
+      { id: 'refused', name: '문전박대', when: { gauge: 'patience', lte: 0 }, outcome: 'failure', text: '홍칠이 깡통을 걷어차며 자리를 뜬다.',
+        effects: [{ relationship: 'npc/hongchil', delta: { grudge: 4, trust: -3 } }] },
+      { id: 'hint', name: '반쯤 들은 이야기', when: { round: 99 }, outcome: 'neutral', text: '홍칠은 "맹 안을 조심하라"는 말만 남긴다.',
+        effects: [{ reveal: 'claim/traitor-exists', state: 'rumor' }] },
+    ],
+    maxRounds: 8, timeoutEnd: 'hint',
+  }],
 };

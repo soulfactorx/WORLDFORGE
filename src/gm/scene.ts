@@ -1,0 +1,92 @@
+/**
+ * 장면 엔진 이벤트 (v0.47): 시작 · 행동(판정) · 끝(효과·보상) · 서술.
+ */
+import { genreGuide, reskinner } from '../engine/genre';
+import { RATING_GUIDE } from '../engine/rating';
+import { createRng } from '../engine/dice/rng';
+import { d20Test } from '../engine/dice/dice';
+import { checkModifier } from '../engine/character/sheet';
+import { applyDelta, availableScenes, deltaLine, sceneActions, sceneDef, sceneEndOf, newRun } from '../engine/scene';
+import type { SceneDef, WorldPackage } from '../engine/schema';
+import type { GameEvent } from '../engine/state/events';
+import { applyEvent, type GameState } from '../engine/state/state';
+import type { LlmClient } from '../llm/types';
+import { rewardEvents, scenarioEvents } from './scenario';
+import { effectEvents } from './story';
+import { buildNarratorContext } from './context';
+
+const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+export function startSceneEvents(world: WorldPackage, state: GameState, sceneId: string): GameEvent[] {
+  const def = availableScenes(world, state).find((d) => d.id === sceneId);
+  if (!def) throw new Error('지금은 이 장면을 시작할 수 없다');
+  return [{ type: 'scene_started', sceneId: def.id, name: def.name, run: newRun(def) }];
+}
+
+/** 끝 처리: 결과 + 효과 + 보상 (상태를 이어 받으며) */
+function endEvents(world: WorldPackage, s0: GameState, def: SceneDef, endId: string): GameEvent[] {
+  const end = def.ends.find((e) => e.id === endId);
+  if (!end) return [];
+  const out: GameEvent[] = [];
+  let s = s0;
+  const push = (e: GameEvent) => { out.push(e); s = applyEvent(s, e, s.turn); };
+  push({ type: 'scene_ended', sceneId: def.id, endId: end.id, name: def.name, outcome: end.outcome, text: end.text ?? end.name });
+  effectEvents(world, s, end.effects ?? [], `${def.name}: ${end.name}`).forEach(push);
+  rewardEvents(world, s, end.rewards, `${def.name}: ${end.name}`).forEach(push);
+  scenarioEvents(world, s).events.forEach(push);
+  return out;
+}
+
+export function sceneActionEvents(world: WorldPackage, state: GameState, actionId: string): GameEvent[] {
+  const run = state.scene;
+  const def = run && sceneDef(world, run.sceneId);
+  if (!run || !def) throw new Error('진행 중인 장면이 없다');
+  const opt = sceneActions(def, run, state.player.sheet).find((a) => a.action.id === actionId);
+  if (!opt) throw new Error('없는 행동이다');
+  if (!opt.ok) throw new Error(opt.why);
+  const a = opt.action;
+  const rng = createRng(state.rngState);
+  let success = true;
+  let rollText = '';
+  if (opt.spec) {
+    const m = checkModifier(state.player.sheet, opt.spec);
+    const t = d20Test(rng, m.total, a.dc ?? 12, opt.mode);
+    success = t.success;
+    rollText = ` — ${m.label} d20(${t.rolls.join('/')}) ${fmt(m.total)} = ${t.total} vs ${t.dc}${opt.mode === 'advantage' ? ' (이점)' : opt.mode === 'disadvantage' ? ' (불리)' : ''} → ${success ? '성공' : '실패'}`;
+  }
+  const delta = success ? a.success : a.failure;
+  const next0 = applyDelta(def, run, delta);
+  const line = `🎭 ${a.name}${rollText}${deltaLine(def, run, next0) ? ` · ${deltaLine(def, run, next0)}` : ''}${delta?.text ? ` — ${delta.text}` : ''}`;
+  const next = { ...next0, round: run.round + 1, used: run.used.includes(a.id) ? run.used : [...run.used, a.id], log: [...run.log, line] };
+  const ev: GameEvent = { type: 'scene_action', run: next, line, rngState: rng.state() };
+  const s1 = applyEvent(state, ev, state.turn);
+  const end = sceneEndOf(def, next);
+  return [ev, ...(end ? endEvents(world, s1, def, end.id) : [])];
+}
+
+/** 그만두기: 효과 없이 끝난다 (다시 할 수 있는 장면이 아니면 다시 열리지 않는다) */
+export function abandonSceneEvents(world: WorldPackage, state: GameState): GameEvent[] {
+  const def = state.scene && sceneDef(world, state.scene.sceneId);
+  if (!state.scene || !def) return [];
+  return [{ type: 'scene_ended', sceneId: def.id, endId: 'abandoned', name: def.name, outcome: 'abandoned', text: '그만두었다' }];
+}
+
+/** 끝난 장면 서술 — 확정된 기록만 넘긴다. 수위는 세계의 콘텐츠 등급을 따른다 */
+export async function narrateScene(
+  llm: LlmClient, world: WorldPackage, after: GameState, def: SceneDef, log: string[], onText: (d: string) => void, signal?: AbortSignal,
+): Promise<string> {
+  const rs = reskinner(world);
+  const npc = def.npcId ? world.characters.find((c) => c.id === def.npcId) : undefined;
+  const res = after.sceneResults?.[def.id];
+  const end = def.ends.find((e) => e.id === res?.endId);
+  return llm.stream({
+    system: `너는 1인칭 TRPG의 서술자다. 한국어 2인칭("당신은 …")으로, 방금 끝난 장면을 2~4문단으로 생생하게 요약한다.
+- 장면 기록의 판정 결과와 끝(결과)을 그대로 따른다. 결과를 바꾸거나 새 사건을 만들지 않는다.
+- 수치(주사위, 게이지 숫자)는 서술에 쓰지 않는다. 게이지 이름은 분위기로 녹인다.
+- 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
+- ${genreGuide(world)}
+- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
+    user: `${buildNarratorContext(world, after)}\n\n## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}\n\n## 장면 기록\n${log.map(rs).join('\n')}\n\n## 끝\n${res?.outcome === 'abandoned' ? '플레이어가 도중에 그만두었다.' : `${end?.name ?? ''}${end?.text ? ` — ${end.text}` : ''}`}`,
+    maxTokens: 2500,
+  }, onText, signal);
+}

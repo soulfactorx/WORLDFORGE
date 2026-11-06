@@ -58,6 +58,9 @@ export type GameEvent =
   | { type: 'quest_outcome'; questId: EntityId; questName: string; outcomeId: string; name: string; text?: string }
   | { type: 'npc_approached'; beatId: EntityId; npcId: EntityId; mode: 'visit' | 'message'; to?: EntityId; stay: number; text: string }
   | { type: 'goal_started'; goalId: EntityId; npcId: EntityId }
+  | { type: 'scene_started'; sceneId: EntityId; name: string; run: import('./state').SceneRun }
+  | { type: 'scene_action'; run: import('./state').SceneRun; line: string; rngState: number }
+  | { type: 'scene_ended'; sceneId: EntityId; endId: string; name: string; outcome: 'success' | 'failure' | 'neutral' | 'abandoned'; text?: string }
   | { type: 'goal_ended'; goalId: EntityId; npcId: EntityId; outcome: 'done' | 'stopped'; announce?: string }
   | { type: 'npc_relation_changed'; key: string; kind: import('../schema').NpcRelationKind | 'none'; note?: string; text?: string }
   /** 돌발 사건 (v0.42, 설계 v4 E5) */

@@ -154,6 +154,85 @@ export interface RelationBeat {
   message?: string;
 }
 
+/**
+ * 장면 (v0.47): 제작자가 정한 수치·상태·단계·행동으로 진행하는 비전투 상호작용 — 협상·추격·의식·제작·심문·데이트 등.
+ * 판정은 d20 + 기술(엔진), 결과는 이야기 효과·보상으로 이어진다. 서술 수위는 세계의 콘텐츠 등급을 따른다.
+ */
+export interface SceneGauge { id: string; name: string; start: number; min?: number; max?: number; /** 플레이어에게 보이는가 (기본 예) */ visible?: boolean }
+export interface SceneStateDef { id: string; name: string; text?: string; /** 1 = 판정 이점, -1 = 불리 */ edge?: 1 | -1 }
+export type SceneCond =
+  | { gauge: string; gte?: number; lte?: number }
+  | { state: string }
+  | { phase: string }
+  | { round: number }
+  | { all: SceneCond[] }
+  | { any: SceneCond[] };
+export interface SceneDelta {
+  gauges?: Record<string, number>;
+  addStates?: string[];
+  removeStates?: string[];
+  /** 이 단계로 넘어간다 */
+  phase?: string;
+  /** 기록에 남는 한 줄 */
+  text?: string;
+}
+export interface SceneAction {
+  id: string;
+  name: string;
+  /** 무엇을 하는가 (버튼 설명 · 서술 재료) */
+  text?: string;
+  /** 판정: "skill:persuasion" · "ability:wis" (비우면 판정 없이 성공) */
+  check?: string;
+  dc?: number;
+  /** 이 단계에서만 */
+  phases?: string[];
+  requires?: SceneCond;
+  /** 상대의 성향과 맞춰 보는 꼬리표 (예: 칭찬, 위협) */
+  tags?: string[];
+  /** 장면에서 한 번만 */
+  once?: boolean;
+  success?: SceneDelta;
+  failure?: SceneDelta;
+}
+export interface SceneEnd {
+  id: string;
+  name: string;
+  when: SceneCond;
+  outcome: 'success' | 'failure' | 'neutral';
+  text?: string;
+  effects?: StoryEffect[];
+  rewards?: Rewards;
+}
+export interface SceneDef {
+  id: EntityId;
+  name: string;
+  /** GM에게: 어떤 장면인가 · 언제 열리는가 */
+  description: string;
+  /** 상대 인물 (그 인물이 있어야 열린다) */
+  npcId?: EntityId;
+  /** 이 장소에서만 */
+  locationId?: EntityId;
+  /** 열리는 조건 (기본 항상) */
+  start?: Condition;
+  /** 조건이 맞으면 저절로 시작 (기본: 플레이어가 버튼으로) */
+  auto?: boolean;
+  /** 끝난 뒤 다시 할 수 있는가 */
+  repeatable?: boolean;
+  gauges: SceneGauge[];
+  states?: SceneStateDef[];
+  /** 단계 이름 (처음 것이 시작 단계) */
+  phases?: { id: string; name: string; text?: string }[];
+  actions: SceneAction[];
+  /** 상대의 성향: 이 꼬리표의 행동은 판정 이점(좋아함)·불리(싫어함) */
+  likes?: string[];
+  dislikes?: string[];
+  /** 위에서부터 처음 맞는 끝 */
+  ends: SceneEnd[];
+  /** 이 차례가 지나면 끝 (timeoutEnd, 없으면 마지막 끝) */
+  maxRounds?: number;
+  timeoutEnd?: string;
+}
+
 /** NPC 목표 (설계 v4 E7): 인물이 스스로 이루려는 일. 시작하면 날 수가 지나 이뤄지고(효과), 막는 조건이 참이 되면 꺾인다 */
 export interface NpcGoal {
   /** "goal/…" — 세계 전체에서 유일 */
@@ -400,7 +479,9 @@ export type Condition =
   /** 임무가 어떤 결과로 끝났나 (is 없으면 아무 결과로든 끝남) */
   | { questOutcome: EntityId; is?: string }
   /** NPC 목표 (설계 v4 E7): 진행 중·이뤄짐·꺾임 */
-  | { npcGoal: EntityId; is?: 'active' | 'done' | 'stopped' };
+  | { npcGoal: EntityId; is?: 'active' | 'done' | 'stopped' }
+  /** 장면 결과 (v0.47): 끝났다 / 이 끝으로 / 이 결과(success·failure·neutral)로 */
+  | { sceneEnd: EntityId; is?: string; outcome?: 'success' | 'failure' | 'neutral' };
 
 export interface QuestStage {
   /** 플레이어 수첩에 보이는 현재 목표 */
@@ -663,6 +744,8 @@ export interface WorldPackage {
   relationBeats?: RelationBeat[];
   /** 세계 수치 (설계 v4 E6) */
   vars?: WorldVar[];
+  /** 장면 (v0.47) */
+  scenes?: SceneDef[];
   /** 돌발 사건 표 (설계 v4 E5): 이동·휴식 때 엔진이 굴린다. 없으면 기본 표, []면 끔 */
   randomEvents?: RandomEvent[];
   /** 이 세계만의 칭호 (설계 v4 E4): 조건을 채우면 엔진이 준다. renown 기본 5 */
