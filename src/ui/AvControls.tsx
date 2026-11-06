@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { type DisplayLevel, loadPlayPrefs, savePlayPrefs } from './playPrefs';
+import { type DisplayLevel, IMAGE_SIZES, type ImageSize, loadPlayPrefs, savePlayPrefs } from './playPrefs';
 import { isStandalone, loadOrientation, type OrientationPref, saveOrientation } from './orientation';
 import { type AvSettings, loadAv, playSfx, saveAv, stopSpeaking } from './audio';
 
@@ -51,6 +51,11 @@ export function AvControls({ onChange }: { onChange: () => void }) {
             </select>
           </label>
           {orientNote && <p className="small muted">{orientNote}</p>}
+          <label className="small av-vol">이미지 크기
+            <select value={play.images} onChange={(e) => { const p = { ...play, images: e.target.value as ImageSize }; setPlay(p); savePlayPrefs(p); onChange(); }}>
+              {IMAGE_SIZES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
           <label className="small av-vol">표시 수준
             <select value={play.display} onChange={(e) => { const p = { ...play, display: e.target.value as DisplayLevel }; setPlay(p); savePlayPrefs(p); onChange(); }}>
               <option value="immersive">몰입형 (숫자·알림 최소 — 기록에만)</option>

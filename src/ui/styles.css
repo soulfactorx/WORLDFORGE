@@ -387,3 +387,29 @@ img.zoomable { cursor: zoom-in; }
 .xp-bar { display: inline-flex; align-items: center; gap: 4px; }
 .xp-track { display: inline-block; width: 64px; height: 6px; border-radius: 3px; background: rgba(127, 127, 127, 0.3); overflow: hidden; }
 .xp-track > span { display: block; height: 100%; background: var(--accent); }
+
+/* 대화 속 이미지 크기 (v0.46.1 — 설정 창). 기본 그림(SVG)은 고유 크기가 작아서 폭을 직접 정한다 */
+.play .scene-images figure { width: 260px; max-width: 100%; }
+.play .scene-images img { width: 100%; height: auto; }
+.play.img-small .scene-images figure { width: 130px; }
+.play.img-small .scene-images img { max-height: 170px; }
+.play.img-large .scene-images figure { width: 480px; }
+.play.img-large .scene-images img { max-height: 560px; }
+.play.img-full .scene-images figure { width: 100%; }
+.play.img-full .scene-images img { max-height: 85vh; }
+@media (max-width: 600px) {
+  .play .scene-images figure { width: 62%; max-width: 62%; }
+  .play.img-small .scene-images figure { width: 34%; max-width: 34%; }
+  .play.img-large .scene-images figure, .play.img-full .scene-images figure { width: 100%; max-width: 100%; }
+  .play.img-large .scene-images img { max-height: 70vh; }
+}
+.scene-images-fold { margin: 0 0 6px; }
+.scene-images-fold > summary { cursor: pointer; list-style: none; display: inline-block; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; }
+.scene-images-fold > summary::-webkit-details-marker { display: none; }
+.scene-images-fold[open] > summary { margin-bottom: 6px; }
+.play.img-small .loc-thumb { width: 32px; height: 32px; }
+.play.img-large .loc-thumb { width: 56px; height: 56px; }
+.play.img-full .loc-thumb { width: 64px; height: 64px; }
+.play.img-small .guide-faces img { width: 40px; height: 40px; }
+.play.img-large .guide-faces img { width: 80px; height: 80px; }
+.play.img-full .guide-faces img { width: 96px; height: 96px; }

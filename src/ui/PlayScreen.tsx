@@ -223,6 +223,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const locImage = loc ? pickSceneImage(world, loc.id, '', 'bar') : undefined;
   const date = calendarDate(world, state.worldMinutes);
   const rs = reskinner(world);
+  const imgSize = loadPlayPrefs().images;
   const lastGuide = state.log.findLastIndex((l) => l.kind === 'guide');
   const decisive = !state.combat && !state.ending && !state.playerDead ? pendingChoice(world, state) : undefined;
   const canAct = streaming === null && !state.combat && !state.playerDead;
@@ -231,7 +232,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
 
   return (
     <ReskinContext.Provider value={rs}>
-    <section className="play">
+    <section className={`play img-${imgSize}`}>
       <div className="play-head">
       <div className="scene-bar">
         {locImage && <AssetImage pkg={world.manifest.id} id={locImage.id} alt={loc?.name ?? ''} className="loc-thumb" zoom />}
@@ -286,14 +287,15 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         {showRecap && <RecapCard r={recap(world, state)} rs={rs} onClose={() => setShowRecap(false)} onSheet={() => { setShowRecap(false); setPanel('sheet'); }} />}
         {state.log.map((e, i) => (
           <div key={i} className={`entry-wrap k-${e.kind}`}>
-            {e.kind !== 'guide' && e.images && e.images.length > 0 && (
-              <div className="scene-images">
-                {e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} zoom /><figcaption>{im.caption}</figcaption></figure>)}
-              </div>
-            )}
+            {e.kind !== 'guide' && e.images && e.images.length > 0 && imgSize !== 'hidden' && (() => {
+              const figs = <div className="scene-images">{e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} zoom /><figcaption>{im.caption}</figcaption></figure>)}</div>;
+              return imgSize === 'collapsed'
+                ? <details className="scene-images-fold"><summary className="small muted">🖼 {e.images.map((im) => im.caption).join(' · ')}</summary>{figs}</details>
+                : figs;
+            })()}
             {e.kind === 'guide' ? (
               <div className={`guide ${i === lastGuide ? 'current' : 'past'}`}>
-                {e.images && e.images.length > 0 && i === lastGuide && (
+                {e.images && e.images.length > 0 && i === lastGuide && imgSize !== 'hidden' && imgSize !== 'collapsed' && (
                   <div className="guide-faces">{e.images.map((im) => <span key={im.id} className="face"><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} zoom /><small>{im.caption}</small></span>)}</div>
                 )}
                 <p><b>🎲 GM</b> {e.text}</p>
