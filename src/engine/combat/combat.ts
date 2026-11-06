@@ -89,6 +89,10 @@ export interface Combatant {
   aura?: number;
   /** 하위 직업·특성 효과 (v0.37) */
   traits?: Trait[];
+  /** 마법 장비: 무기(주문이 아닌) 공격 명중·피해, 모든 내성 (설계 v4 E3) */
+  gearAttack?: number;
+  gearDamage?: number;
+  gearSave?: number;
   /** 우선권 보너스 (경계 특성·추적자) */
   initBonus?: number;
   /** 이 전투원만 가진 카드 정의 (소지품 물약·세계만의 적 기술 등, 설계 v3 6.4) */
@@ -197,6 +201,10 @@ export function playerCombatant(sheet: CharacterSheet, gear: Gear = {}): Combata
 export interface Gear {
   ac?: number;
   cards?: string[];
+  /** 마법 장비 보너스 (설계 v4 E3): 무기 공격 명중·피해, 모든 내성 */
+  attackBonus?: number;
+  damageBonus?: number;
+  saveBonus?: number;
   items?: { card: CardDef; n: number }[];
 }
 
@@ -217,6 +225,7 @@ export function sheetCombatant(sheet: CharacterSheet, id: string, name: string, 
   const initBonus = (feats.includes('alert') ? pb : 0) + (sc === 'tracker' ? abilityModifier(sheet.abilities.wis) : 0);
   return {
     ...(traits.length ? { traits } : {}), ...(initBonus ? { initBonus } : {}),
+    ...(gear.attackBonus ? { gearAttack: gear.attackBonus } : {}), ...(gear.damageBonus ? { gearDamage: gear.damageBonus } : {}), ...(gear.saveBonus ? { gearSave: gear.saveBonus } : {}),
     id, name, side: 'party', isPlayer, zone,
     hp: sheet.hp, maxHp: sheet.maxHp, ac: (gear.ac ?? (kit.ac(dex) + (kit.shield ? 2 : 0))) + acBonus, level: sheet.level, abilities: { ...sheet.abilities },
     profBonus: pb, saveProfs: [...sheet.saveProficiencies],
@@ -314,7 +323,7 @@ export const conditionsOf = (c: Combatant) => Object.entries(c.conditions ?? {})
 function saveTest(rng: Rng, t: Combatant, save: Ability, dc: number, cs?: CombatState): { kept: number; mod: number; total: number; success: number | boolean; note: string } {
   // 보호의 오라: 같은 존에 서 있는 (쓰러지지 않은) 팔라딘
   const aura = cs ? Math.max(0, ...Object.values(cs.combatants).filter((o) => o.side === t.side && o.aura && o.hp > 0 && o.zone === t.zone).map((o) => o.aura!)) : 0;
-  const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0) + aura;
+  const sb = mod(t, save) + (t.saveProfs.includes(save) ? t.profBonus : 0) + aura + (t.gearSave ?? 0);
   if (hasCondition(t, 'stunned') && (save === 'str' || save === 'dex')) return { kept: 0, mod: sb, total: 0, success: false, note: '기절 — 자동 실패' };
   const mode = combineMode(hasTrait(t, 'war_caster') && save === 'con', hasCondition(t, 'restrained') && save === 'dex');
   const r = d20Test(rng, sb, dc, mode);
@@ -461,7 +470,8 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
   const spec = at.attack;
   const effects: CombatEffect[] = [];
   const abil = attackAbilityMod(a, spec.ability);
-  const toHit = spec.toHit ?? abil + a.profBonus;
+  const magic = spec.toHit === undefined && spec.ability !== 'spell';
+  const toHit = spec.toHit ?? abil + a.profBonus + (magic ? a.gearAttack ?? 0 : 0);
   const pack = !!a.packTactics && Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
   const proneMelee = !!t.prone && spec.kind === 'melee';
   const proneRanged = !!t.prone && spec.kind === 'ranged';
@@ -479,7 +489,7 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
   const head = `${a.name}의 ${cardName} → ${t.name}: d20(${r.rolls.join(', ')})${modeText} ${toHit >= 0 ? '+' : ''}${toHit} = ${r.total} vs AC ${t.ac}`;
   if (t.marked) effects.push({ kind: 'flag', target: t.id, marked: false });
   if (!hit) return { effects, line: `${head} → ${r.natural1 ? '대실패' : '빗나감'}`, damage: 0 };
-  const dmgBonus = spec.damageBonus ?? (spec.ability === 'spell' ? (hasTrait(a, 'evoker') ? spellMod(a) : 0) : abil);
+  const dmgBonus = spec.damageBonus ?? (spec.ability === 'spell' ? (hasTrait(a, 'evoker') ? spellMod(a) : 0) : abil + (magic ? a.gearDamage ?? 0 : 0));
   const dmg = rollDamage(rng, damage, crit);
   let total = Math.max(0, dmg.total + dmgBonus);
   let extra = '';

@@ -26,6 +26,24 @@ export const STD_ITEMS: ItemDef[] = [
   { id: 'std/scale-mail', name: '비늘 갑옷', description: '금속 비늘을 엮은 갑옷. AC 14 + 민첩(최대 2).', kind: 'armor', price: 50, armor: { base: 14, dexMax: 2 } },
   { id: 'std/chain-mail', name: '체인 메일', description: '무거운 사슬 갑옷. AC 16.', kind: 'armor', price: 75, armor: { base: 16, dexMax: 0 } },
   { id: 'std/shield', name: '방패', description: 'AC +2.', kind: 'shield', price: 10, acBonus: 2 },
+  // 마법 장비 (설계 v4 E3 — SRD 5.2.1 마법 물품을 이 게임에 맞게 줄였다)
+  { id: 'std/longsword-1', name: '+1 롱소드', description: '희미하게 빛나는 칼날. 명중·피해 +1.', kind: 'weapon', rarity: 'uncommon', price: 500, card: 'weapon/longsword', bonus: { attack: 1, damage: 1 } },
+  { id: 'std/shortsword-1', name: '+1 숏소드', description: '가볍고 날카롭다. 명중·피해 +1.', kind: 'weapon', rarity: 'uncommon', price: 500, card: 'weapon/shortsword', bonus: { attack: 1, damage: 1 } },
+  { id: 'std/dagger-1', name: '+1 대거', description: '손에 착 붙는 단검. 명중·피해 +1.', kind: 'weapon', rarity: 'uncommon', price: 400, card: 'weapon/dagger', bonus: { attack: 1, damage: 1 } },
+  { id: 'std/mace-1', name: '+1 메이스', description: '머리에 룬이 새겨진 철퇴. 명중·피해 +1.', kind: 'weapon', rarity: 'uncommon', price: 500, card: 'weapon/mace', bonus: { attack: 1, damage: 1 } },
+  { id: 'std/shortbow-1', name: '+1 숏보우', description: '시위가 노래하듯 우는 활. 명중·피해 +1.', kind: 'weapon', rarity: 'uncommon', price: 500, card: 'weapon/shortbow', bonus: { attack: 1, damage: 1 } },
+  { id: 'std/cloak-protection', name: '보호의 망토', description: '두르면 몸이 가벼워진다. AC +1, 모든 내성 +1.', kind: 'trinket', rarity: 'uncommon', price: 600, bonus: { ac: 1, save: 1 } },
+  { id: 'std/shield-1', name: '+1 방패', description: '문장이 새겨진 방패. AC +3.', kind: 'shield', rarity: 'uncommon', price: 500, acBonus: 3 },
+  { id: 'std/longsword-2', name: '+2 롱소드', description: '이름 모를 대장장이의 걸작. 명중·피해 +2.', kind: 'weapon', rarity: 'rare', price: 2000, card: 'weapon/longsword', bonus: { attack: 2, damage: 2 } },
+  { id: 'std/flame-tongue', name: '화염의 검', description: '휘두르면 칼날을 따라 불길이 인다. 명중 +1, "불꽃 베기" 카드.', kind: 'weapon', rarity: 'rare', price: 2500, card: 'weapon/longsword', bonus: { attack: 1 }, cards: ['weapon/flame_tongue'] },
+  { id: 'std/ring-protection', name: '보호의 반지', description: '은빛 반지. AC +1, 모든 내성 +1.', kind: 'trinket', rarity: 'rare', price: 2000, bonus: { ac: 1, save: 1 } },
+  { id: 'std/chain-1', name: '+1 체인 메일', description: '가볍게 느껴지는 사슬 갑옷. AC 17.', kind: 'armor', rarity: 'rare', price: 1500, armor: { base: 17, dexMax: 0 } },
+  { id: 'std/dragon-scale', name: '용린 갑옷', description: '용의 비늘로 엮었다. AC 17 + 민첩(최대 2), 모든 내성 +1.', kind: 'armor', rarity: 'epic', price: 8000, armor: { base: 17, dexMax: 2 }, bonus: { save: 1 } },
+  { id: 'std/storm-blade', name: '폭풍의 검', description: '천둥이 잠든 칼. 명중·피해 +2, "벼락 일섬" 카드.', kind: 'weapon', rarity: 'epic', price: 9000, card: 'weapon/longsword', bonus: { attack: 2, damage: 2 }, cards: ['weapon/storm_strike'] },
+  // 비급·주문서 (익히면 카드를 영구히 얻는다)
+  { id: 'std/manual-heavy-blow', name: '비급: 붕산격', description: '산을 무너뜨린다는 일격의 요결. 익히면 "붕산격" 카드.', kind: 'scroll', rarity: 'uncommon', price: 300, teaches: 'tech/heavy_blow' },
+  { id: 'std/manual-twin-strike', name: '비급: 쌍비연격', description: '두 번 연달아 베는 쾌검의 요결. 익히면 "쌍비연격" 카드.', kind: 'scroll', rarity: 'uncommon', price: 300, teaches: 'tech/twin_strike' },
+  { id: 'std/manual-sure-shot', name: '비급: 관혈탄', description: '빈틈을 꿰뚫는 사격의 요결. 익히면 "관혈탄" 카드.', kind: 'scroll', rarity: 'rare', price: 800, teaches: 'tech/sure_shot' },
   // 보물
   { id: 'std/gem', name: '보석', description: '팔면 값이 꽤 나가는 작은 보석.', kind: 'treasure', price: 50 },
 ];

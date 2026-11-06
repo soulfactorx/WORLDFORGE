@@ -161,6 +161,14 @@ export const sampleWorld: WorldPackage = {
       trigger: '고블린 둘이 덤불 뒤에 숨어 있다. 플레이어가 길을 따라 더 들어가거나 부러진 화살을 조사하면 습격한다. 플레이어가 은신에 성공하면 먼저 발견할 수도 있다.',
     },
   ],
+  // 성장하는 유물 (설계 v4 E3): 이야기가 진행될수록 깨어난다
+  items: [{
+    id: 'item/mist-charm', name: '빛바랜 부적', description: '브란이 고블린 소굴에서 찾아 준 낡은 돌 부적. 안개처럼 흐린 문양이 새겨져 있다.', kind: 'trinket', price: 0,
+    awaken: [
+      { condition: { knows: 'claim/altar-fresh-ash' }, name: '깨어난 안개 부적', text: '제단의 재를 본 뒤로 부적의 문양이 희미하게 빛난다. 모든 내성 +1.', bonus: { save: 1 } },
+      { condition: { level: 4 }, name: '안개 수호자의 부적', text: '부적이 몸을 감싸는 안개를 부른다. AC +1, 모든 내성 +1.', bonus: { ac: 1 } },
+    ],
+  }],
   quests: [
     {
       id: 'quest/why-am-i-here', name: '낯선 하늘 아래', kind: 'main',
@@ -180,7 +188,7 @@ export const sampleWorld: WorldPackage = {
       stages: [
         { objective: '낡은 숲길의 고블린을 처치한다.', hint: '고블린 둘이 낡은 숲길 덤불에 숨어 있다. 브란은 이 일이라면 함께 간다.', complete: { cleared: 'enc/road-goblins' } },
       ],
-      rewards: { xp: 100, money: 30, relationship: [{ npcId: 'npc/bran', trust: 8, respect: 5 }] },
+      rewards: { xp: 100, money: 30, items: [{ itemId: 'item/mist-charm' }], relationship: [{ npcId: 'npc/bran', trust: 8, respect: 5 }] },
     },
     {
       id: 'quest/ilse-scar', name: '일제의 화상', kind: 'side', type: 'bond', giver: 'npc/ilse', target: 'npc/ilse',

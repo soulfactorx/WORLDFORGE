@@ -90,7 +90,7 @@ export type GameEvent =
   | { type: 'item_gained'; itemId: EntityId; name: string; n: number; reason: string; key?: string }
   | { type: 'item_lost'; itemId: EntityId; name: string; n: number; reason: string }
   | { type: 'money_changed'; delta: number; reason: string; currency?: string }
-  | { type: 'item_equipped'; slot: 'weapon' | 'armor' | 'shield'; itemId?: EntityId; name?: string }
+  | { type: 'item_equipped'; slot: 'weapon' | 'armor' | 'shield' | 'trinket'; itemId?: EntityId; name?: string }
   /** 전투 밖에서 소모품 사용 (HP 회복은 이벤트에 확정값으로) */
   | { type: 'item_used'; itemId: EntityId; name: string; heal: number; cures?: string[]; rngState: number }
   /** 휴식 (v0.4). 짧은 휴식 1시간, 긴 휴식 8시간 */

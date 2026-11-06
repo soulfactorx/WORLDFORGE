@@ -16,7 +16,8 @@ import { MONSTERS, monsterTable } from '../engine/combat/monsters';
 import { CLASS_KITS } from '../engine/combat/cards';
 import type { Gear } from '../engine/combat/combat';
 import { abilityModifier } from '../engine/dice/dice';
-import { equippedAc, itemCards, itemDef } from '../engine/items';
+import { equippedAc, gearBonus, itemCards, itemDef, rollLoot } from '../engine/items';
+import { levelSpan } from '../engine/character/progression';
 import { currencyName } from './economy';
 import { jobEncounters } from '../engine/jobs';
 
@@ -79,6 +80,14 @@ function finishIfOver(b: Builder) {
       const def = itemDef(b.world, it.itemId);
       if (def) b.push({ type: 'item_gained', itemId: def.id, name: def.name, n: it.n ?? 1, reason: '전리품' });
     }
+    // 제작자가 정한 전리품 아이템이 없으면 굴린다 (설계 v4 E3) — 같은 상태에서는 늘 같은 결과
+    if (!enc?.loot?.items?.length && beaten > 0) {
+      const boss = Object.values(cs.combatants).some((c) => c.side === 'enemy' && c.hp <= 0 && !c.escaped && c.role === 'boss');
+      const level = b.state.player.sheet.level;
+      const rng = createRng(((b.state.rngState ^ Math.imul(b.state.turn + 1, 7919)) + beaten) >>> 0);
+      const drop = rollLoot(b.world, rng, { level, threatXp: beaten, levelSpan: levelSpan(level), boss });
+      if (drop) b.push({ type: 'item_gained', itemId: drop.id, name: drop.name, n: 1, reason: boss ? '보스 전리품' : '전리품' });
+    }
   }
   // 함께 싸워 이긴 동료는 신뢰와 존경이 오르고, 버려두고 도망치면 실망한다
   for (const id of Object.keys(party)) {
@@ -115,9 +124,11 @@ export function playerGear(world: WorldPackage, state: GameState): Gear {
   const sheet = state.player.sheet;
   const kit = CLASS_KITS[sheet.classId] ?? CLASS_KITS.none!;
   const weapon = state.equipped?.weapon ? itemDef(world, state.equipped.weapon)?.card : undefined;
+  const gb = gearBonus(world, state);
   return {
     ac: equippedAc(world, state, abilityModifier(sheet.abilities.dex), kit.ac, !!kit.shield),
-    cards: [...(weapon ? [weapon] : []), ...(state.grantedCards?.player ?? [])],
+    cards: [...(weapon ? [weapon] : []), ...gb.cards, ...(state.grantedCards?.player ?? [])],
+    ...(gb.attack ? { attackBonus: gb.attack } : {}), ...(gb.damage ? { damageBonus: gb.damage } : {}), ...(gb.save ? { saveBonus: gb.save } : {}),
     items: itemCards(world, state),
   };
 }

@@ -59,7 +59,7 @@ describe('규칙 패키지 (R7)', () => {
     const target = { ...sampleWorld, genre: { id: 'high_fantasy', terms: { 롱소드: '장검' } } };
     expect(planImport(target, pack).warnings.some((w) => w.includes('롱소드'))).toBe(true);
     const r = applyPack(target, pack);
-    expect(r.world.items?.map((i) => i.id)).toEqual(['item/jade']);
+    expect(r.world.items?.map((i) => i.id)).toEqual(['item/mist-charm', 'item/jade']); // 샘플 세계의 유물 + 옮겨 온 것
     expect(r.world.genre?.terms).toEqual({ 롱소드: '장검', 메이스: '쇠도리깨' });
     expect(r.world.genre?.currency).toBeUndefined();
     expect(applyPack(target, pack, { applyGenreSettings: true }).world.genre).toMatchObject({ currency: '전', levelCap: 4 });

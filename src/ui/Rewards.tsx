@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import type { CharacterSheet } from '../engine/character/sheet';
 import { CLASSES } from '../engine/character/rules';
 import type { levelUpInfo, Recap, RewardLine } from '../engine/digest';
+import { type ItemDef, RARITY_LABEL } from '../engine/schema';
+import { rarityOf } from '../engine/items';
+import { bonusLine, KIND_LABEL } from './InventoryPanel';
 
 type Rs = (s: string) => string;
 
@@ -10,7 +13,7 @@ export function RewardBanner({ lines, onClose }: { lines: RewardLine[]; onClose:
   return (
     <div className="reward-banner" role="status" aria-live="polite">
       <span className="small muted">이번 턴</span>
-      {lines.map((l, i) => <span key={i} className={`reward-chip${l.icon === '★' ? ' big' : ''}`}>{l.icon} {l.text}</span>)}
+      {lines.map((l, i) => <span key={i} className={`reward-chip${l.icon === '★' ? ' big' : ''}${l.rarity && l.rarity !== 'common' ? ` rarity-${l.rarity} rarity-chip` : ''}`}>{l.icon} {l.text}</span>)}
       <button type="button" className="reward-close" aria-label="닫기" onClick={onClose}>✕</button>
     </div>
   );
@@ -61,6 +64,25 @@ export function RecapCard({ r, rs, onClose, onSheet }: { r: Recap; rs: Rs; onClo
         <p className="small"><b>궁금한 것</b> · {r.questions.map((q) => rs(q)).join(' · ')}</p>
       )}
       {r.pending > 0 && <button type="button" className="small has-pending" onClick={onSheet}>★ 레벨업 선택 {r.pending}개가 기다린다</button>}
+    </div>
+  );
+}
+
+/** 좋은 전리품 (희귀 이상) — 설명·보너스와 바로 장비하기 */
+export function LootDialog({ item, rs, canEquip, onEquip, onClose }: { item: ItemDef & { stage?: number }; rs: Rs; canEquip: boolean; onEquip: () => void; onClose: () => void }) {
+  const r = rarityOf(item);
+  return (
+    <div className="modal-back" onClick={onClose}>
+      <div className={`levelup loot rarity-border-${r}`} role="dialog" aria-modal="true" aria-label="전리품" onClick={(e) => e.stopPropagation()}>
+        <p className="small muted" style={{ textAlign: 'center', margin: 0 }}>{RARITY_LABEL[r]} · {KIND_LABEL[item.kind]}</p>
+        <p className={`levelup-title rarity-${r}`}>{rs(item.name)}</p>
+        <p className="small">{rs(item.description)}</p>
+        {bonusLine(item) && <p className="small item-bonus">{rs(bonusLine(item))}</p>}
+        <div className="row">
+          {canEquip && <button type="button" className="primary" onClick={onEquip}>바로 장비하기</button>}
+          <button type="button" onClick={onClose}>계속</button>
+        </div>
+      </div>
     </div>
   );
 }

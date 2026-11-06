@@ -57,7 +57,7 @@ export interface GameState {
   /** 소지품·소지금·장비 (설계 v3 6.4) */
   inventory: Record<EntityId, number>;
   money: number;
-  equipped: { weapon?: EntityId; armor?: EntityId; shield?: EntityId };
+  equipped: { weapon?: EntityId; armor?: EntityId; shield?: EntityId; trinket?: EntityId };
   /** 이미 주운 것·받은 것 ("loc/…#0", "npc/…#1") */
   taken: string[];
   /** 결정적 선택: 나타난 턴과 고른 선택지 */
@@ -321,7 +321,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       if (left) inv[e.itemId] = left; else delete inv[e.itemId];
       // 다 잃은 장비는 벗겨진다
       const eq = { ...(s.equipped ?? {}) };
-      if (!left) for (const k of ['weapon', 'armor', 'shield'] as const) if (eq[k] === e.itemId) delete eq[k];
+      if (!left) for (const k of ['weapon', 'armor', 'shield', 'trinket'] as const) if (eq[k] === e.itemId) delete eq[k];
       return { ...s, inventory: inv, equipped: eq,
         log: e.reason ? [...s.log, { turn, kind: 'progress', text: `잃음: ${e.name}${e.n > 1 ? ` ×${e.n}` : ''} (${e.reason})` }] : s.log };
     }

@@ -4,7 +4,7 @@
  */
 import { CLASSES, SKILL_IDS } from '../character/rules';
 import { STD_ITEMS } from '../../data/items';
-import { QUEST_TYPES, type Rewards } from '../schema';
+import { QUEST_TYPES, RARITIES, type Rewards } from '../schema';
 import { ALL_CARDS } from '../combat/combat';
 import { STAGES } from '../relationship';
 import { encounterDifficulty, MONSTERS, monsterTable } from '../combat/monsters';
@@ -117,7 +117,7 @@ export function validateWorld(input: unknown): Issue[] {
   const ownItems = arr<NonNullable<WorldPackage['items']>[number]>('items', false);
   ownItems.forEach((it, i) => register(it?.id, `items[${i}]`));
   const itemIds = new Set([...ownItems.map((x) => x?.id), ...STD_ITEMS.map((x) => x.id)]);
-  const ITEM_KINDS = ['consumable', 'weapon', 'armor', 'shield', 'key', 'treasure', 'misc'];
+  const ITEM_KINDS = ['consumable', 'weapon', 'armor', 'shield', 'trinket', 'scroll', 'key', 'treasure', 'misc'];
 
   const locIds = new Set(locations.map((l) => l?.id));
   const charIds = new Set(characters.map((c) => c?.id));
@@ -377,6 +377,16 @@ export function validateWorld(input: unknown): Issue[] {
     if (it.heal && !/^\d*d\d+([+-]\d+)?$/.test(it.heal)) err(`${p}.heal`, '회복은 주사위 식입니다 (예: 2d4+2).');
     if (it.card && !CARD_IDS.has(it.card)) err(`${p}.card`, `없는 카드 "${it.card}"`);
     if (it.kind === 'armor' && !it.armor) warn(`${p}.armor`, '갑옷이면 armor: { base, dexMax }를 정하세요.');
+    if (it.rarity !== undefined && !RARITIES.includes(it.rarity)) err(`${p}.rarity`, `등급은 ${RARITIES.join('/')} 중 하나입니다.`);
+    for (const [k, v] of Object.entries(it.bonus ?? {})) if (typeof v !== 'number' || Math.abs(v) > 5) err(`${p}.bonus.${k}`, '보너스는 -5~5 사이 숫자입니다.');
+    (it.cards ?? []).forEach((c, j) => { if (!CARD_IDS.has(c)) err(`${p}.cards[${j}]`, `없는 카드 "${c}"`); });
+    if (it.teaches && !CARD_IDS.has(it.teaches)) err(`${p}.teaches`, `없는 카드 "${it.teaches}"`);
+    if (it.kind === 'scroll' && !it.teaches) warn(`${p}.teaches`, '비급·주문서는 익힐 카드(teaches)를 정하세요.');
+    (it.awaken ?? []).forEach((a, j) => {
+      text(a.name, `${p}.awaken[${j}].name`);
+      checkCond(a.condition, `${p}.awaken[${j}].condition`);
+      (a.cards ?? []).forEach((c, k) => { if (!CARD_IDS.has(c)) err(`${p}.awaken[${j}].cards[${k}]`, `없는 카드 "${c}"`); });
+    });
   });
   locations.forEach((l, i) => {
     checkStacks(l.pickups, `locations[${i}].pickups`);

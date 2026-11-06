@@ -74,7 +74,7 @@ describe('세계만의 적', () => {
     expect(pack.monsters?.map((m) => m.id)).toEqual(['mon/sand-wraith']);
     const into = applyPack(sampleWorld, pack);
     expect(into.world.monsters?.map((m) => m.id)).toEqual(['mon/sand-wraith']);
-    expect(planImport(into.world, pack).conflicts).toEqual([{ kind: '적', id: 'mon/sand-wraith', existing: '모래 망령', incoming: '모래 망령' }]);
+    expect(planImport(into.world, pack).conflicts.filter((c) => c.kind === '적')).toEqual([{ kind: '적', id: 'mon/sand-wraith', existing: '모래 망령', incoming: '모래 망령' }]);
     const again = applyPack(into.world, pack);
     expect(again.world.monsters?.map((m) => m.id)).toEqual(['mon/sand-wraith', 'mon/sand-wraith-2']);
   });

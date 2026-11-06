@@ -6,7 +6,7 @@ import { replay, type GameState } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
 import { metrics } from '../llm/metrics';
 import { pendingChoice } from '../engine/story';
-import { shopHere } from '../gm/economy';
+import { equipItem, shopHere } from '../gm/economy';
 import { BoardPanel, InventoryPanel, ShopPanel } from './InventoryPanel';
 import { boardHere } from '../engine/jobs';
 import { narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
@@ -33,7 +33,8 @@ import { checkModifier } from '../engine/character/sheet';
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 import { pickCharacterImage, pickSceneImage } from '../engine/assets';
 import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/digest';
-import { LevelUpDialog, RecapCard, RewardBanner } from './Rewards';
+import { LevelUpDialog, LootDialog, RecapCard, RewardBanner } from './Rewards';
+import { effectiveItem, itemDef as itemDefOf } from '../engine/items';
 
 /**
  * 같은 세이브를 두 탭에서 동시에 열면 이벤트 로그가 꼬이므로 Web Locks로 한 탭만 허용한다.
@@ -122,6 +123,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const [rewards, setRewards] = useState<RewardLine[]>([]);
   const [levelInfo, setLevelInfo] = useState<ReturnType<typeof levelUpInfo> | null>(null);
   const [showRecap, setShowRecap] = useState(false);
+  const [loot, setLoot] = useState<string | null>(null);
   useEffect(() => {
     if (!state) return;
     const prev = prevState.current;
@@ -130,6 +132,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (state.log.length <= prev.log.length) return;
     const r = rewardDiff(world, prev, state);
     if (r.length) setRewards(r);
+    const good = r.find((l) => l.itemId && (l.rarity === 'rare' || l.rarity === 'epic' || l.rarity === 'legendary'));
+    if (good) setLoot(good.itemId!);
     if (state.player.sheet.level > prev.player.sheet.level) setLevelInfo(levelUpInfo(prev.player.sheet, state.player.sheet));
   }, [state]);
   useEffect(() => { setMusic(state ? moodOf(world.genre?.id, !!state.combat) : null); }, [!!state?.combat, world.genre?.id, avTick, !!state]);
@@ -353,6 +357,13 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       </form>
       </>
       )}
+      {loot && !levelInfo && (() => {
+        const raw = itemDefOf(world, loot);
+        if (!raw) return null;
+        const item = effectiveItem(world, state, raw);
+        const canEquip = ['weapon', 'armor', 'shield', 'trinket'].includes(item.kind) && !state.combat && !Object.values(state.equipped ?? {}).includes(loot);
+        return <LootDialog item={item} rs={rs} canEquip={canEquip} onClose={() => setLoot(null)} onEquip={() => { setLoot(null); commitEvents((s) => equipItem(world, s, loot)); }} />;
+      })()}
       {levelInfo && <LevelUpDialog info={levelInfo} sheet={state.player.sheet} rs={rs} onClose={() => setLevelInfo(null)} onSheet={() => { setLevelInfo(null); setPanel('sheet'); }} />}
     </section>
     </ReskinContext.Provider>

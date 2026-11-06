@@ -10,7 +10,8 @@ import {
   type Arc, type Clock, type CustomMonster, type DecisiveChoice, type ItemDef, type Job, type MonsterAttack, type MonsterSpecial, QUEST_TYPES, type StoryEffect, type WorldEvent, type WorldPackage,
 } from '../engine/schema';
 import { ConditionField } from './ConditionEditor';
-import { Area, ItemList, Num, Select, Text } from './form';
+import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { ALL_CARDS } from '../engine/combat/combat';
 
 type Set = (patch: Partial<WorldPackage>) => void;
 const opts = (list: { id: string; name?: string; statement?: string }[] | undefined) => (list ?? []).map((i) => [i.id, `${i.name ?? i.statement?.slice(0, 30) ?? ''} (${i.id})`] as const);
@@ -219,7 +220,9 @@ export function EventForms({ w, set }: { w: WorldPackage; set: Set }) {
 
 // ---------------------------------------------------------------- 아이템
 
-const KIND_OPTS = [['consumable', '소모품'], ['weapon', '무기'], ['armor', '갑옷'], ['shield', '방패'], ['key', '중요한 물건'], ['treasure', '보물'], ['misc', '잡동사니']] as const;
+const KIND_OPTS = [['consumable', '소모품'], ['weapon', '무기'], ['armor', '갑옷'], ['shield', '방패'], ['trinket', '장신구'], ['scroll', '비급·주문서'], ['key', '중요한 물건'], ['treasure', '보물'], ['misc', '잡동사니']] as const;
+const PLAYER_CARDS = Object.values(ALL_CARDS).filter((c) => c.kind !== 'monster' && c.kind !== 'item' && c.kind !== 'basic');
+const RARITY_OPTS = [['common', '일반'], ['uncommon', '고급'], ['rare', '희귀'], ['epic', '영웅'], ['legendary', '유물']] as const;
 const WEAPON_CARDS = ['weapon/longsword', 'weapon/shortsword', 'weapon/dagger', 'weapon/mace', 'weapon/shortbow', 'weapon/javelin'];
 
 export function ItemForms({ w, set }: { w: WorldPackage; set: Set }) {
@@ -242,6 +245,20 @@ export function ItemForms({ w, set }: { w: WorldPackage; set: Set }) {
           {it.kind === 'weapon' && <Select label="전투 카드" value={it.card ?? ''} options={[['', '(없음)'], ...WEAPON_CARDS.map((c) => [c, c] as const)] as const} onChange={(card) => up({ card: card || undefined })} />}
           {it.kind === 'armor' && <><Num label="갑옷 AC 기본" value={it.armor?.base} onChange={(base) => up({ armor: { ...it.armor, base: base ?? 11 } })} /><Num label="민첩 상한 (비우면 없음)" value={it.armor?.dexMax} onChange={(dexMax) => up({ armor: { base: it.armor?.base ?? 11, ...(dexMax !== undefined ? { dexMax } : {}) } })} /></>}
           {it.kind === 'shield' && <Num label="AC 보너스" value={it.acBonus} onChange={(acBonus) => up({ acBonus })} />}
+          <Select label="등급 (전리품 굴림·색)" value={it.rarity ?? 'common'} options={RARITY_OPTS} onChange={(rarity) => up({ rarity: rarity === 'common' ? undefined : rarity })} />
+          {['weapon', 'armor', 'shield', 'trinket'].includes(it.kind) && (
+            <fieldset className="stage-box"><legend>장비 보너스</legend><div className="ability-grid">
+              {it.kind === 'weapon' && <Num label="명중" value={it.bonus?.attack} onChange={(attack) => up({ bonus: { ...it.bonus, attack } })} />}
+              {it.kind === 'weapon' && <Num label="피해" value={it.bonus?.damage} onChange={(damage) => up({ bonus: { ...it.bonus, damage } })} />}
+              <Num label="AC" value={it.bonus?.ac} onChange={(ac) => up({ bonus: { ...it.bonus, ac } })} />
+              <Num label="모든 내성" value={it.bonus?.save} onChange={(save) => up({ bonus: { ...it.bonus, save } })} />
+            </div></fieldset>
+          )}
+          {['weapon', 'armor', 'shield', 'trinket'].includes(it.kind) && <Select label="장비하면 얻는 카드" value={it.cards?.[0] ?? ''} options={[['', '(없음)'], ...PLAYER_CARDS.map((c) => [c.id, `${c.name} (${c.id})`] as const)] as const} onChange={(c) => up({ cards: c ? [c] : undefined })} />}
+          {it.kind === 'scroll' && <Select label="익히면 얻는 카드" value={it.teaches ?? ''} options={[['', '(없음)'], ...PLAYER_CARDS.map((c) => [c.id, `${c.name} (${c.id})`] as const)] as const} onChange={(teaches) => up({ teaches: teaches || undefined })} />}
+          <JsonField label="유물 각성 (조건이 맞을 때마다 한 단계씩 — 비우면 일반 물건)" value={it.awaken ?? []} rows={4}
+            help='예: [{ "condition": { "questDone": "quest/x" }, "name": "깨어난 검", "text": "칼날에 빛이 돈다", "bonus": { "attack": 1, "damage": 1 } }, { "condition": { "level": 5 }, "name": "이름을 되찾은 검", "cards": ["weapon/storm_strike"] }]'
+            onChange={(a) => up({ awaken: Array.isArray(a) && a.length ? a : undefined })} />
         </div>
       )} />
   );

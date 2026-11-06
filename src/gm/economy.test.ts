@@ -15,7 +15,7 @@ import { runTurn, startEvents } from './turn';
 const world = (): WorldPackage => {
   const w = structuredClone(sampleWorld);
   w.factions = [...(w.factions ?? []), { id: 'fac/village', name: '마을', description: '' }];
-  w.items = [{ id: 'item/amulet', name: '은 부적', description: '장로가 준 부적', kind: 'key' }];
+  w.items = [...(w.items ?? []), { id: 'item/amulet', name: '은 부적', description: '장로가 준 부적', kind: 'key' }];
   const gate = w.locations.find((l) => l.id === 'loc/village-gate')!;
   gate.shop = { name: '행상', items: ['std/potion-healing', 'std/chain-shirt', 'std/shield'], factionId: 'fac/village' };
   gate.pickups = [{ itemId: 'std/rope', hint: '성문 옆에 밧줄 한 묶음이 걸려 있다' }];

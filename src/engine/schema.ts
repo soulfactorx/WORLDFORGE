@@ -213,7 +213,17 @@ export interface ItemDef {
   id: EntityId;
   name: string;
   description: string;
-  kind: 'consumable' | 'weapon' | 'armor' | 'shield' | 'key' | 'treasure' | 'misc';
+  kind: 'consumable' | 'weapon' | 'armor' | 'shield' | 'trinket' | 'scroll' | 'key' | 'treasure' | 'misc';
+  /** 등급 (설계 v4 E3): 없으면 일반. 전리품 굴림·색 표시에 쓴다 */
+  rarity?: ItemRarity;
+  /** 장비하고 있을 때의 보너스: 무기 공격 명중·피해, AC, 모든 내성 */
+  bonus?: ItemBonus;
+  /** 장비하고 있을 때 손패에 들어오는 카드 */
+  cards?: string[];
+  /** 비급·주문서 (kind 'scroll'): 익히면 이 카드를 영구히 얻는다 (아이템은 사라진다) */
+  teaches?: string;
+  /** 성장하는 유물: 조건이 맞을 때마다 한 단계씩 깨어난다 (앞에서부터, 효과는 쌓인다) */
+  awaken?: { condition: Condition; name: string; text?: string; bonus?: ItemBonus; cards?: string[] }[];
   /** 기본 가격 (상점은 평판으로 보정, 팔 때는 절반) */
   price?: number;
   /** 소모품: 사용하면 HP 회복 (주사위 식, 예: 2d4+2) */
@@ -227,6 +237,11 @@ export interface ItemDef {
   /** 방패 등: AC 보너스 */
   acBonus?: number;
 }
+
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export const RARITIES: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+export const RARITY_LABEL: Record<ItemRarity, string> = { common: '일반', uncommon: '고급', rare: '희귀', epic: '영웅', legendary: '유물' };
+export interface ItemBonus { attack?: number; damage?: number; ac?: number; save?: number }
 
 /** 아이템 묶음 */
 export interface ItemStack { itemId: EntityId; n?: number }

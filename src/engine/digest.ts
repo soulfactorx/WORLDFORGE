@@ -13,12 +13,13 @@ import { knowledgeOf } from './knowledge/knowledge';
 import { displayName } from './names';
 import { HOSTILE_STAGES, stageFor } from './relationship';
 import { activeBeats, activeQuests } from './scenario';
-import type { WorldPackage } from './schema';
+import type { ItemRarity, WorldPackage } from './schema';
+import { awakenStage, effectiveItem, itemDef, rarityOf } from './items';
 import type { GameState } from './state/state';
 import { allJobs } from './jobs';
 import { calendarDate } from './calendar';
 
-export interface RewardLine { icon: string; text: string }
+export interface RewardLine { icon: string; text: string; rarity?: ItemRarity; itemId?: string }
 
 /** 두 상태 사이에 플레이어가 얻은 것 (한 턴 전후) */
 export function rewardDiff(world: WorldPackage, before: GameState, after: GameState): RewardLine[] {
@@ -30,7 +31,15 @@ export function rewardDiff(world: WorldPackage, before: GameState, after: GameSt
   if (money > 0) out.push({ icon: '💰', text: `+${money}` });
   for (const [id, n] of Object.entries(after.inventory)) {
     const d = n - (before.inventory[id] ?? 0);
-    if (d > 0) out.push({ icon: '🎒', text: `${world.items?.find((i) => i.id === id)?.name ?? itemName(id)}${d > 1 ? ` ×${d}` : ''}` });
+    const def = itemDef(world, id);
+    if (d > 0) out.push({ icon: '🎒', text: `${def?.name ?? itemName(id)}${d > 1 ? ` ×${d}` : ''}`, rarity: rarityOf(def), itemId: id });
+  }
+  // 유물이 깨어났다
+  for (const id of Object.keys(after.inventory)) {
+    const def = itemDef(world, id);
+    if (!def?.awaken?.length) continue;
+    const b = awakenStage(world, before, def), a = awakenStage(world, after, def);
+    if (a > b) out.push({ icon: '⚔', text: `${effectiveItem(world, after, def).name} — 깨어났다`, rarity: 'legendary', itemId: id });
   }
   for (const card of after.grantedCards?.player ?? []) if (!(before.grantedCards?.player ?? []).includes(card)) out.push({ icon: '🃏', text: ALL_CARDS[card]?.name ?? card });
   const known = after.beliefs.filter((b) => b.holder === 'player').length - before.beliefs.filter((b) => b.holder === 'player').length;

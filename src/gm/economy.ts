@@ -6,6 +6,7 @@ import { genreOf } from '../data/genres';
 import { createRng } from '../engine/dice/rng';
 import { rollDamage } from '../engine/combat/combat';
 import { buyPrice, currencyOf, itemCount, itemDef, moneyOf, priceFactor, sellPrice } from '../engine/items';
+import { ALL_CARDS } from '../engine/combat/combat';
 import { evalCondition } from '../engine/scenario';
 import type { EntityId, ItemStack, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
@@ -73,14 +74,29 @@ export function useItem(world: WorldPackage, state: GameState, itemId: EntityId)
   ];
 }
 
-export function equipItem(world: WorldPackage, state: GameState, itemId: EntityId | null, slot?: 'weapon' | 'armor' | 'shield'): GameEvent[] {
+export function equipItem(world: WorldPackage, state: GameState, itemId: EntityId | null, slot?: 'weapon' | 'armor' | 'shield' | 'trinket'): GameEvent[] {
   if (state.combat) throw new Error('전투 중에는 장비를 바꿀 수 없다');
   if (itemId === null) return slot ? [{ type: 'item_equipped', slot }] : [];
   const def = itemDef(world, itemId);
   if (!def || itemCount(state, itemId) <= 0) throw new Error('가진 물건이 아니다');
-  const s = def.kind === 'weapon' ? 'weapon' : def.kind === 'armor' ? 'armor' : def.kind === 'shield' ? 'shield' : null;
+  const s = def.kind === 'weapon' ? 'weapon' : def.kind === 'armor' ? 'armor' : def.kind === 'shield' ? 'shield' : def.kind === 'trinket' ? 'trinket' : null;
   if (!s) throw new Error('장비할 수 없는 물건이다');
   return [{ type: 'item_equipped', slot: s, itemId: def.id, name: def.name }];
+}
+
+/** 비급·주문서 익히기: 카드를 영구히 얻고 아이템은 사라진다 (설계 v4 E3) */
+export function learnItem(world: WorldPackage, state: GameState, itemId: EntityId): GameEvent[] {
+  if (state.combat) throw new Error('전투 중에는 익힐 수 없다');
+  const def = itemDef(world, itemId);
+  if (!def || def.kind !== 'scroll' || !def.teaches || itemCount(state, itemId) <= 0) throw new Error('익힐 수 있는 것이 아니다');
+  const card = ALL_CARDS[def.teaches];
+  if (!card) throw new Error('알 수 없는 기술');
+  if ((state.grantedCards?.player ?? []).includes(card.id)) throw new Error('이미 익힌 기술이다');
+  return [
+    { type: 'card_granted', who: 'player', whoName: '당신', cardId: card.id, name: card.name },
+    { type: 'item_lost', itemId: def.id, name: def.name, n: 1, reason: '익혔다' },
+    { type: 'time_advanced', minutes: 60 },
+  ];
 }
 
 /** 이 장소에서 아직 줍지 않은 것 (Director 힌트용) */
