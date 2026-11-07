@@ -634,3 +634,17 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
   .play.img-large .placed-narration .scene-images.inline figure { width: 56%; max-width: 56%; }
   .play.img-full .placed-narration .scene-images.inline figure { width: 80%; max-width: 80%; }
 }
+
+/* 그림 고르기 (v0.60) */
+.img-pick { display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
+.img-pick .img-pick-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; }
+.img-pick .row > button { flex: none; }
+.img-pick-pop { border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+.img-pick-kinds { gap: 4px; flex-wrap: wrap; }
+.img-pick-kinds button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.img-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; max-height: 360px; overflow: auto; }
+.img-pick-cell { display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 4px; text-align: left; min-width: 0; }
+.img-pick-cell.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.img-pick-cell img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; display: block; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.img-pick-cap { font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.img-pick-sub { font-size: .65rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

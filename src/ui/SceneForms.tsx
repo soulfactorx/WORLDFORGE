@@ -8,7 +8,7 @@ import { SCENE_PRESETS } from '../data/scenePresets';
 import { ConditionField } from './ConditionEditor';
 import { EffectsEditor } from './WorldForms';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
-import { AssetImage } from './AssetImage';
+import { ImagePicker } from './ImagePicker';
 import { autoSceneArt, SCENE_FX } from '../data/sceneArt';
 
 type Set = (patch: Partial<WorldPackage>) => void;
@@ -17,23 +17,8 @@ const CHECKS: [string, string][] = [['', '판정 없음 (항상 성공)'], ...SK
 const csv = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
 const uniq = (base: string, taken: string[]) => { let id = base; for (let n = 2; taken.includes(id); n++) id = `${base}-${n}`; return id; };
 
-/** 그림 고르기 (v0.50): 내장 장면 그림 + 이 세계의 이미지 */
-function ImagePick({ label, value, w, onChange }: { label: string; value: string | undefined; w: WorldPackage; onChange: (v: string | undefined) => void }) {
-  const known = !value || SCENE_FX.some((f) => `stock.${f.id}` === value) || (w.assets ?? []).some((a) => a.id === value);
-  return (
-    <label className="img-pick">{label}
-      <span className="row">
-        <select value={value ?? ''} onChange={(e) => onChange(e.target.value || undefined)}>
-          <option value="">(그림 없음)</option>
-          {!known && <option value={value}>{value}</option>}
-          <optgroup label="장면 그림 (내장)">{SCENE_FX.map((f) => <option key={f.id} value={`stock.${f.id}`}>{f.label}</option>)}</optgroup>
-          {(w.assets ?? []).length > 0 && <optgroup label="이 세계의 이미지">{(w.assets ?? []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>}
-        </select>
-        {value && <AssetImage pkg={w.manifest.id} id={value} alt={label} className="img-pick-thumb" zoom />}
-      </span>
-    </label>
-  );
-}
+/** 그림 고르기: 검색·종류별 거르기·썸네일 격자 (v0.60) */
+const ImagePick = ImagePicker;
 
 /** 작은 행 목록 (수치·상태·단계·보정) */
 function Rows<T>({ title, items, make, onChange, render }: { title: string; items: T[]; make: () => T; onChange: (v: T[]) => void; render: (it: T, up: (p: Partial<T>) => void) => React.ReactNode }) {
