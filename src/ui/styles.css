@@ -669,3 +669,12 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .lib-from { color: var(--check); }
 .library .library-foot { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .lib-basket { margin: 4px 0; padding-left: 18px; max-height: 120px; overflow: auto; }
+/* 만계서고 (v0.64) */
+.multiverse-title { font-size: 1.05rem; letter-spacing: .02em; }
+.universes { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.universe { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; min-width: 140px; max-width: 200px; text-align: left; }
+.universe b { font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.universe span { font-size: .68rem; color: var(--muted); }
+.universe.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.lib-group { min-width: 56px; }
+.lib-icon { font-size: 1.1rem; display: flex; align-items: center; gap: 4px; }

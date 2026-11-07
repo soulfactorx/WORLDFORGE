@@ -73,15 +73,38 @@ describe('세계 간 재사용 (v0.63)', () => {
 });
 
 describe('모든 내장 세계에서 전부 가져오기', () => {
-  it('빈 세계에 모든 내장 세계의 인물·장소·장면·아이템·세력·직업을 가져와도 검사기 오류가 없다', async () => {
+  it('빈 세계에 모든 내장 세계의 모든 것(임무·이야기 줄기·결말 포함)을 가져와도 검사기 오류가 없다', async () => {
     const { BUILTIN, blankWorld } = await import('../storage/packages');
     let w = blankWorld();
     w.manifest.contentRating = 'mature';
     for (const src of BUILTIN) {
-      const picks = catalogOf(src).filter((e) => e.kind !== 'knowledge' && e.kind !== 'image').map((e) => ({ kind: e.kind, id: e.id }));
+      const picks = catalogOf(src).filter((e) => e.kind !== 'image').map((e) => ({ kind: e.kind, id: e.id }));
       w = borrow(w, src, picks, { linkTo: w.start.locationId }).world;
     }
     expect(errors(w).slice(0, 5)).toEqual([]);
     expect(w.characters.length).toBe(BUILTIN.reduce((n, s) => n + s.characters.length, 0));
+  });
+});
+
+describe('임무·이야기 흐름 (v0.64)', () => {
+  it('이야기 줄기 하나를 고르면 가리키는 임무·인물·장소·플래그를 끝까지 함께 가져온다', async () => {
+    const { blankWorld } = await import('../storage/packages');
+    const { dependencies } = await import('./borrow');
+    const arc = aetheriaWorld.arcs![0]!;
+    const deps = dependencies(aetheriaWorld, [{ kind: 'arc', id: arc.id }]);
+    expect(deps.length).toBeGreaterThan(0);
+    const r = borrow(blankWorld(), aetheriaWorld, [{ kind: 'arc', id: arc.id }]);
+    expect(r.world.arcs!.map((a) => a.name)).toContain(arc.name);
+    expect(r.world.arcs!.find((a) => a.name === arc.name)!.chapters.length).toBe(arc.chapters.length);
+    expect(r.notes.join(' ')).toContain('함께 가져온 것');
+    expect(errors(r.world)).toEqual([]);
+    expect(r.world.manifest.crossover).toEqual([{ id: aetheriaWorld.manifest.id, name: aetheriaWorld.manifest.name }]);
+  });
+  it('임무를 같은 세계에 또 가져오면 ID를 바꾸고 안의 참조도 새 ID로', () => {
+    const q = aetheriaWorld.quests![0]!;
+    const r = borrow(aetheriaWorld, aetheriaWorld, [{ kind: 'quest', id: q.id }]);
+    const copy = r.world.quests!.at(-1)!;
+    expect(copy.id).not.toBe(q.id);
+    expect(errors(r.world)).toEqual([]);
   });
 });

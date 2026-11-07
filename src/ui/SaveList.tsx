@@ -151,6 +151,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
             {w.manifest.private && <span className="need-badge" title={PRIVATE_NOTE}>🔒 개인용</span>}
             {!w.manifest.private && shareBlocked(w) && <span className="need-badge" title={MATURE_NOTE}>🔞 성인</span>}
             {src.length > 0 && <span className="need-badge" title={src.map((x) => x.name).join(' · ')}>출처 카드 {src.length}장</span>}
+            {w.manifest.crossover?.length ? <span className="need-badge" title={`크로스오버: ${w.manifest.crossover.map((c) => c.name).join(' · ')}`}>🌌 크로스오버 {w.manifest.crossover.length}</span> : null}
             {n > 0 && <span className="need-badge" title="진짜 이미지가 없는 인물·장소 — 편집 → 이미지 탭, 또는 내 기본 이미지에 추천 파일 이름으로 올리면 자동으로 붙습니다">🖼 이미지 부족 {n}</span>}
           </span>
         </span>
@@ -246,7 +247,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
             <Menu label="＋ 만들기 ▾" className="primary-menu">
               <button onClick={() => onEdit(null)}>＋ 빈 세계관에서 직접 만들기</button>
               <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
-              <button onClick={() => onEdit(null, true)}>📚 만들어 둔 세계에서 골라 만들기 (AI 없이)</button>
+              <button onClick={() => onEdit(null, true)}>🌌 만계서고에서 골라 크로스오버 세계 만들기 (AI 없이)</button>
               <label className="file">✦ 캐릭터 카드로 만들기 (.charx · .risum · .png · .json — 모듈 등 여러 파일을 함께 골라도 된다)
                 <input type="file" multiple accept=".charx,.risum,.png,.json,application/json,image/png,application/zip" onChange={(e) => {
                   const fs = [...(e.target.files ?? [])];
@@ -263,7 +264,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
               </label>
               <button onClick={() => setReceiving(true)} title="다른 기기에서 만든 개인용 세계를 AI 없이 이어받기">📲 옮겨 온 세계 받기 (.wfmove)</button>
             </Menu>
-            <button onClick={() => onEdit(null, true)} title="모든 세계의 인물·장소·장면·이미지를 한곳에서 찾아 골라 새 세계를 만든다">📚 자료실</button>
+            <button onClick={() => onEdit(null, true)} title="만계서고 — 모든 세계(우주)의 인물·장소·임무·이야기 흐름·이미지를 한곳에서 찾아 골라 크로스오버 세계를 만든다">🌌 만계서고</button>
             <button onClick={onUserArt}>🖼 내 기본 이미지</button>
             {(packages?.length ?? 0) > 6 && <input className="grow filter" type="search" placeholder="세계관 찾기" value={filter} onChange={(e) => setFilter(e.target.value)} />}
           </div>

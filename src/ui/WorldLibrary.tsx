@@ -1,9 +1,11 @@
 /**
- * 자료실 (v0.63): 만들어 둔 모든 세계의 인물·장소·아이템·장면·지식·이미지를 한곳에서 찾아 골라 담고,
- * 새 세계를 만들거나 기존 세계에 넣는다. AI를 다시 쓰지 않는다.
+ * 🌌 만계서고(萬界書庫) — 멀티버스 아카이브 (v0.63 자료실 → v0.64).
+ * 만들어 둔 모든 세계(우주)의 존재·사물(인물·장소·아이템…)과 서사·법칙(임무·이야기 줄기·결말…)을 한곳에서 찾아 담고,
+ * 새 크로스오버 세계를 만들거나 기존 세계로 불러온다. AI를 다시 쓰지 않는다.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BORROW_LABEL, type BorrowKind, type BorrowPick, borrow, type CatalogEntry, catalogOf } from '../engine/borrow';
+import { BORROW_LABEL, type BorrowKind, type BorrowPick, borrow, type CatalogEntry, catalogOf, dependencies } from '../engine/borrow';
+import { genreOf } from '../data/genres';
 import type { WorldPackage } from '../engine/schema';
 import { assetBlob, storeAssets } from '../storage/assets';
 import { listPackages, packageKey } from '../storage/packages';
@@ -11,8 +13,11 @@ import { AssetImage } from './AssetImage';
 import { confirmAdult } from './adult';
 
 type Src = { key: string; world: WorldPackage; builtin: boolean };
-const KINDS: BorrowKind[] = ['character', 'location', 'scene', 'item', 'monster', 'faction', 'class', 'knowledge', 'image'];
+/** 존재·사물 / 서사·법칙 */
+const BEINGS: BorrowKind[] = ['character', 'location', 'item', 'monster', 'faction', 'class', 'knowledge', 'image'];
+const LORE: BorrowKind[] = ['arc', 'quest', 'scene', 'choice', 'ending', 'encounter', 'clock', 'event', 'flag', 'var'];
 const PAGE = 60;
+const ICON: Record<BorrowKind, string> = { character: '👤', location: '🗺', item: '🎒', monster: '👹', faction: '🏰', class: '🎓', knowledge: '💡', image: '🖼', arc: '📜', quest: '📌', scene: '🎭', choice: '⚖', ending: '🏁', encounter: '⚔', clock: '⏳', event: '📅', flag: '🚩', var: '📊' };
 
 export function WorldLibrary({ target, onApply, onClose, title }: {
   /** 넣을 세계 (편집 중인 것) */
@@ -46,6 +51,14 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
   }, [srcs, catalogs, from, kind, q]);
   const countOf = (k: BorrowKind) => srcs.filter((s) => from === 'all' || from === s.key).reduce((n, s) => n + (catalogs.get(s.key) ?? []).filter((e) => e.kind === k).length, 0);
   const bkey = (src: string, k: BorrowKind, id: string) => `${src}|${k}|${id}`;
+  // 서사를 담으면 그것이 가리키는 것도 함께 온다 — 미리 보여 준다
+  const depPreview = useMemo(() => {
+    const by = new Map<string, BorrowPick[]>();
+    for (const b of basket.values()) by.set(b.src, [...(by.get(b.src) ?? []), { kind: b.kind, id: b.id }]);
+    const counts: Partial<Record<BorrowKind, number>> = {};
+    for (const [k, picks] of by) { const s = srcs.find((x) => x.key === k); if (!s) continue; for (const d of dependencies(s.world, picks)) counts[d.kind] = (counts[d.kind] ?? 0) + 1; }
+    return Object.entries(counts).map(([k, n]) => `${BORROW_LABEL[k as BorrowKind]} ${n}`).join(' · ');
+  }, [basket, srcs]);
   const toggle = (src: Src, e: CatalogEntry) => setBasket((b) => { const n = new Map(b); const k = bkey(src.key, e.kind, e.id); if (n.has(k)) n.delete(k); else n.set(k, { src: src.key, kind: e.kind, id: e.id, name: e.name }); return n; });
   const matureSrc = [...new Set([...basket.values()].map((b) => b.src))].map((k) => srcs.find((s) => s.key === k)!).filter((s) => s?.world.manifest.contentRating === 'mature');
   const privateSrc = [...new Set([...basket.values()].map((b) => b.src))].map((k) => srcs.find((s) => s.key === k)!).filter((s) => s?.world.manifest.private);
@@ -70,7 +83,7 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
       let i = 0;
       for (const [k, picks] of bySrc) {
         const src = srcs.find((s) => s.key === k)!;
-        setBusy(`${src.world.manifest.name}에서 가져오는 중… (${++i}/${bySrc.size})`);
+        setBusy(`「${src.world.manifest.name}」에서 불러오는 중… (${++i}/${bySrc.size})`);
         const r = borrow(w, src.world, picks, { withKnowledge: opts.withKnowledge, withImages: opts.withImages, withFaction: opts.withFaction, ...(opts.link ? { linkTo: w.start.locationId } : {}) });
         w = r.world;
         copies.push(...r.copies);
@@ -97,26 +110,39 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
   const shown = rows.slice(0, limit);
   return (
     <div className="dialog library">
-      <div className="row"><b>📚 {title ?? '자료실 — 다른 세계에서 가져오기'}</b><span className="spacer" /><button type="button" onClick={onClose} disabled={!!busy}>닫기</button></div>
-      <p className="small muted">만들어 둔 세계의 인물·장소·장면·아이템·지식·이미지를 골라 담아 <b>{target.manifest.name}</b>에 넣습니다. AI를 다시 쓰지 않습니다. 겹치는 ID는 새로 붙이고, 인물의 이미지·아는 지식·세력처럼 딸린 것도 함께 옮깁니다.</p>
+      <div className="row"><b className="multiverse-title">🌌 {title ?? '만계서고 萬界書庫'}</b><span className="small muted">멀티버스 아카이브 — 모든 세계가 만나는 곳</span><span className="spacer" /><button type="button" onClick={onClose} disabled={!!busy}>닫기</button></div>
+      <p className="small muted">만들어 둔 세계(우주)들의 <b>존재·사물</b>(인물·장소·아이템…)과 <b>서사·법칙</b>(이야기 줄기·임무·결말…)을 골라 담아 <b>{target.manifest.name}</b>(으)로 불러옵니다. AI를 다시 쓰지 않습니다. 겹치는 ID는 새로 붙이고, 딸린 것과 서사가 가리키는 것(인물·장소·플래그·조우…)도 함께 옮깁니다.</p>
+      <div className="universes">
+        <button type="button" className={`universe${from === 'all' ? ' on' : ''}`} onClick={() => { setFrom('all'); setLimit(PAGE); }}><b>✦ 모든 우주</b><span>{srcs.length}개 세계</span></button>
+        {srcs.map((s) => (
+          <button key={s.key} type="button" className={`universe${from === s.key ? ' on' : ''}`} onClick={() => { setFrom(s.key); setLimit(PAGE); }} title={s.world.overview ?? ''}>
+            <b>{s.world.manifest.name}</b>
+            <span>{genreOf(s.world.genre?.id).label}{s.builtin ? ' · 내장' : ''}{s.world.manifest.private ? ' · 🔒' : ''}{s.world.manifest.contentRating === 'mature' ? ' · 🔞' : ''}</span>
+            <span>인물 {s.world.characters.length} · 장소 {s.world.locations.length} · 임무 {s.world.quests?.length ?? 0}{s.world.manifest.crossover?.length ? ` · 🌌${s.world.manifest.crossover.length}` : ''}</span>
+          </button>
+        ))}
+      </div>
       <div className="row">
         <label>세계
           <select value={from} onChange={(e) => { setFrom(e.target.value); setLimit(PAGE); }}>
-            <option value="all">모든 세계 ({srcs.length})</option>
+            <option value="all">모든 우주 ({srcs.length})</option>
             {srcs.map((s) => <option key={s.key} value={s.key}>{s.world.manifest.name}{s.builtin ? ' (내장)' : ''}{s.world.manifest.private ? ' 🔒' : ''}{s.world.manifest.contentRating === 'mature' ? ' 🔞' : ''}</option>)}
           </select>
         </label>
         <input type="search" className="grow" placeholder="🔍 이름·설명·태그·세계 이름으로 찾기" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
       </div>
-      <div className="row lib-kinds">
-        {KINDS.map((k) => <button key={k} type="button" className={`small${kind === k ? ' on' : ''}`} onClick={() => { setKind(k); setLimit(PAGE); }}>{BORROW_LABEL[k]} {countOf(k)}</button>)}
+      <div className="row lib-kinds"><span className="small muted lib-group">존재·사물</span>
+        {BEINGS.map((k) => <button key={k} type="button" className={`small${kind === k ? ' on' : ''}`} onClick={() => { setKind(k); setLimit(PAGE); }}>{BORROW_LABEL[k]} {countOf(k)}</button>)}
+      </div>
+      <div className="row lib-kinds"><span className="small muted lib-group">서사·법칙</span>
+        {LORE.map((k) => <button key={k} type="button" className={`small${kind === k ? ' on' : ''}`} disabled={!countOf(k)} onClick={() => { setKind(k); setLimit(PAGE); }}>{BORROW_LABEL[k]} {countOf(k)}</button>)}
       </div>
       <div className="lib-grid">
         {shown.map(({ src, e }) => {
           const on = basket.has(bkey(src.key, e.kind, e.id));
           return (
             <button key={`${src.key}|${e.id}`} type="button" className={`lib-cell${on ? ' on' : ''}`} onClick={() => toggle(src, e)} title={`${e.name}\n${e.sub}\n${src.world.manifest.name} · ${e.id}`}>
-              {e.portrait ? <img src={e.portrait} alt="" /> : e.thumb ? <AssetImage pkg={src.world.manifest.id} id={e.thumb} alt="" /> : <span className="lib-ph">{BORROW_LABEL[e.kind].slice(0, 1)}</span>}
+              {e.portrait ? <img src={e.portrait} alt="" /> : e.thumb ? <AssetImage pkg={src.world.manifest.id} id={e.thumb} alt="" /> : <span className="lib-icon" aria-hidden>{ICON[e.kind]} <span className="small muted">{BORROW_LABEL[e.kind]}</span></span>}
               <span className="lib-name">{on ? '✓ ' : ''}{e.name}</span>
               <span className="lib-sub">{e.sub}</span>
               <span className="lib-from">{src.world.manifest.name}{src.world.manifest.private ? ' 🔒' : ''}{src.world.manifest.contentRating === 'mature' ? ' 🔞' : ''}</span>
@@ -140,6 +166,7 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
           <label className="check"><input type="checkbox" checked={opts.withFaction} onChange={(e) => setOpts({ ...opts, withFaction: e.target.checked })} /> 인물의 소속 세력도</label>
           <label className="check"><input type="checkbox" checked={opts.link} onChange={(e) => setOpts({ ...opts, link: e.target.checked })} /> 가져온 장소를 시작 장소와 잇기</label>
         </div>
+        {depPreview && <p className="small">🔗 담은 서사가 가리켜 함께 올 것: {depPreview}</p>}
         {privateSrc.length > 0 && <p className="small warn-text">🔒 개인용 세계({privateSrc.map((s) => s.world.manifest.name).join(', ')})의 것을 담았습니다 — 넣는 세계도 개인용이 됩니다 (내보내기·공유 불가, 기기 간 이동 때 원본 카드 필요).</p>}
         {matureSrc.length > 0 && target.manifest.contentRating !== 'mature' && <p className="small warn-text">🔞 성인 등급 세계의 것은 성인 등급 세계로만 넣을 수 있습니다.</p>}
         {error && <p className="small status">❌ {error}</p>}
@@ -147,7 +174,7 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
         <div className="row">
           {basket.size > 0 && !busy && <button type="button" className="small" onClick={() => setBasket(new Map())}>모두 비우기</button>}
           <span className="spacer" />
-          <button type="button" className="primary" disabled={!basket.size || !!busy} onClick={apply}>{busy ? '가져오는 중…' : `담은 것 ${basket.size}개 넣기`}</button>
+          <button type="button" className="primary" disabled={!basket.size || !!busy} onClick={apply}>{busy ? '불러오는 중…' : `🌌 담은 것 ${basket.size}개 불러오기`}</button>
         </div>
       </div>
     </div>

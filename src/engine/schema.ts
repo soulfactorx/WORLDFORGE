@@ -25,6 +25,8 @@ export interface PackageManifest {
   private?: { source: string; note: string; /** 원본 카드 지문 (기기 간 이동용, v0.19) */ cardHash?: string };
   /** 이 세계에 쓴 다른 사람의 카드 파일 (v0.53): 출처 관리·제거·기기 이동 확인 */
   sources?: SourceCard[];
+  /** 크로스오버 (v0.64): 만계서고에서 가져온 원래 세계들 */
+  crossover?: { id: string; name: string }[];
   /** 이 세계에 넣은 콘텐츠 패키지 (설계 v3 10장 · R7) */
   includes?: { id: string; version: string; type: 'character' | 'rules'; name: string }[];
 }

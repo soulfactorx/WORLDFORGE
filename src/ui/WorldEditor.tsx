@@ -148,8 +148,9 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
     <section className="panel editor">
       <div className="row">
         <h2>세계관 제작 — {w.manifest.name}</h2>
+        {w.manifest.crossover?.length ? <span className="small muted" title="만계서고에서 불러온 원래 세계">🌌 크로스오버: {w.manifest.crossover.map((c) => c.name).join(' · ')}</span> : null}
         <span className="spacer" />
-        <button onClick={() => setLibrary((v) => !v)} title="만들어 둔 다른 세계의 인물·장소·장면·이미지 등을 AI 없이 가져온다">📚 자료실에서 가져오기</button>
+        <button onClick={() => setLibrary((v) => !v)} title="만들어 둔 다른 세계(우주)의 인물·장소·임무·이야기 흐름·이미지 등을 AI 없이 불러온다">🌌 만계서고에서 불러오기</button>
         <button onClick={onDone}>닫기</button>
         {w.manifest.private ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용 (내보내기 불가)</span>
           : shareBlocked(w) ? <span className="small muted" title={MATURE_NOTE}>🔞 성인 등급 (내보내기 불가)</span> : <button onClick={exportFile}>.wpk 내보내기</button>}
@@ -159,7 +160,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         <WorldLibrary target={w} onClose={() => setLibrary(false)} onApply={(nw, notes) => {
           setW(nw);
           setLibrary(false);
-          setStatus(`자료실에서 가져왔습니다 — ${notes.join(' / ')} · 저장을 눌러야 반영됩니다.`);
+          setStatus(`🌌 만계서고에서 불러왔습니다 — ${notes.join(' / ')} · 저장을 눌러야 반영됩니다.`);
         }} />
       )}
       {status && <p className="status small">{status}</p>}

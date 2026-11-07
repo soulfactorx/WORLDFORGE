@@ -13,10 +13,56 @@ import type { AssetMeta, Character, Claim, Fact, Rewards, SceneDef, WorldPackage
 import { addSource, sourcesOf } from './sources';
 import { validateWorld } from './package/validate';
 
-export type BorrowKind = 'character' | 'location' | 'item' | 'monster' | 'scene' | 'faction' | 'knowledge' | 'class' | 'image';
+export type BorrowKind = 'character' | 'location' | 'item' | 'monster' | 'scene' | 'faction' | 'knowledge' | 'class' | 'image'
+  | 'quest' | 'arc' | 'choice' | 'clock' | 'event' | 'ending' | 'flag' | 'var' | 'encounter';
 export const BORROW_LABEL: Record<BorrowKind, string> = {
   character: '인물', location: '장소', item: '아이템', monster: '몬스터', scene: '장면', faction: '세력', knowledge: '지식', class: '직업', image: '이미지',
+  quest: '임무', arc: '이야기 줄기', choice: '결정적 선택', clock: '진행 시계', event: '연표 사건', ending: '결말', flag: '플래그', var: '세계 수치', encounter: '조우',
 };
+/** 이야기 장치 (v0.64): 다른 것을 많이 가리키므로, 가리키는 것을 끝까지 따라가 함께 가져온다 */
+const LOGIC = { quest: 'quests', arc: 'arcs', choice: 'choices', clock: 'clocks', event: 'events', ending: 'endings', flag: 'flags', var: 'vars', encounter: 'encounters' } as const;
+type LogicKind = keyof typeof LOGIC;
+const isLogic = (k: BorrowKind): k is LogicKind => k in LOGIC;
+const listOf = (w: WorldPackage, k: LogicKind) => ((w as unknown as Record<string, { id: string }[] | undefined>)[LOGIC[k]] ?? []);
+
+/** 원래 세계의 모든 ID → 종류 */
+function indexOf(w: WorldPackage): Map<string, BorrowKind> {
+  const m = new Map<string, BorrowKind>();
+  const put = (k: BorrowKind, list: { id: string }[] | undefined) => { for (const x of list ?? []) if (!m.has(x.id)) m.set(x.id, k); };
+  put('character', w.characters); put('location', w.locations); put('item', w.items); put('monster', w.monsters); put('scene', w.scenes);
+  put('faction', w.factions); put('knowledge', w.claims); put('knowledge', w.facts); put('class', w.classes);
+  for (const k of Object.keys(LOGIC) as LogicKind[]) put(k, listOf(w, k));
+  return m;
+}
+/** 객체 안의 모든 글 값 */
+function strings(v: unknown, out: string[] = []): string[] {
+  if (typeof v === 'string') out.push(v);
+  else if (Array.isArray(v)) v.forEach((x) => strings(x, out));
+  else if (v && typeof v === 'object') Object.values(v).forEach((x) => strings(x, out));
+  return out;
+}
+/** 고른 이야기 장치가 가리키는 것을 끝까지 모은다 (인물·장소 등은 그 자체의 딸린 것 규칙을 따른다) */
+export function dependencies(source: WorldPackage, picks: BorrowPick[]): BorrowPick[] {
+  const idx = indexOf(source);
+  const have = new Set(picks.map((p) => `${p.kind}|${p.id}`));
+  const out: BorrowPick[] = [];
+  const queue = picks.filter((p) => isLogic(p.kind));
+  while (queue.length) {
+    const p = queue.shift()!;
+    const obj = listOf(source, p.kind as LogicKind).find((x) => x.id === p.id);
+    if (!obj) continue;
+    for (const s of strings(obj)) {
+      if (s === p.id) continue;
+      const k = idx.get(s);
+      if (!k || have.has(`${k}|${s}`)) continue;
+      have.add(`${k}|${s}`);
+      const np = { kind: k, id: s };
+      out.push(np);
+      if (isLogic(k)) queue.push(np);
+    }
+  }
+  return out;
+}
 
 export interface CatalogEntry {
   kind: BorrowKind;
@@ -58,6 +104,23 @@ export function catalogOf(w: WorldPackage): CatalogEntry[] {
   for (const c of w.claims) out.push({ kind: 'knowledge', id: c.id, name: cut(c.statement, 40), sub: `주장·소문 (${c.truth === 'true' ? '참' : c.truth === 'false' ? '거짓' : '반쯤 참'}) · 아는 인물 ${w.beliefs.filter((b) => b.claim === c.id && b.holder !== 'player').length}`, hay: [c.statement, c.id].join(' ') });
   for (const f of w.facts) out.push({ kind: 'knowledge', id: f.id, name: cut(f.statement, 40), sub: `사실 · 비밀 등급 ${f.secrecy}`, hay: [f.statement, f.id].join(' ') });
   for (const c of w.classes ?? []) out.push({ kind: 'class', id: c.id, name: c.name, sub: [c.base, c.strengths ?? ''].filter(Boolean).join(' · '), hay: [c.name, c.id, c.blurb ?? '', c.strengths ?? ''].join(' ') });
+  const logicSub: Record<LogicKind, (x: Record<string, unknown>) => string> = {
+    quest: (x) => `${x.kind === 'main' ? '메인' : '사이드'} 임무 · 단계 ${(x.stages as unknown[] | undefined)?.length ?? 0}`,
+    arc: (x) => `장 ${(x.chapters as unknown[] | undefined)?.length ?? 0}개 · ${(x.chapters as { name: string }[] | undefined)?.map((c) => c.name).slice(0, 3).join(' → ') ?? ''}`,
+    choice: (x) => cut(x.prompt as string, 50),
+    clock: (x) => `${x.segments ?? '?'}칸`,
+    event: (x) => cut((x.announce as string) ?? '', 50),
+    ending: (x) => cut(x.epilogue as string, 50),
+    flag: (x) => cut(x.when as string, 50),
+    var: (x) => `처음 ${x.initial ?? 0}`,
+    encounter: (x) => cut(x.trigger as string, 50),
+  };
+  for (const k of Object.keys(LOGIC) as LogicKind[]) {
+    for (const x of listOf(w, k) as unknown as Record<string, unknown>[]) {
+      const name = String(x.name ?? x.id);
+      out.push({ kind: k, id: String(x.id), name, sub: logicSub[k](x), hay: [name, String(x.id), logicSub[k](x)].join(' ') });
+    }
+  }
   for (const a of w.assets ?? []) {
     const who = a.characterId ? w.characters.find((c) => c.id === a.characterId)?.name : a.locationId ? w.locations.find((l) => l.id === a.locationId)?.name : '';
     out.push({ kind: 'image', id: a.id, name: a.name, sub: [who, a.tags.slice(0, 3).join('·')].filter(Boolean).join(' · '), hay: [a.name, a.id, who ?? '', ...a.tags].join(' '), thumb: a.id });
@@ -88,7 +151,8 @@ export interface BorrowResult {
 }
 
 /** source의 picks를 target으로 가져온다 (target은 바꾸지 않고 새 객체를 돌려준다) */
-export function borrow(target: WorldPackage, source: WorldPackage, picks: BorrowPick[], opts: BorrowOptions = {}): BorrowResult {
+export function borrow(target: WorldPackage, source: WorldPackage, picksIn: BorrowPick[], opts: BorrowOptions = {}): BorrowResult {
+  let picks = picksIn;
   const o = { withKnowledge: true, withImages: true, withFaction: true, ...opts };
   if (source.manifest.contentRating === 'mature' && target.manifest.contentRating !== 'mature') {
     throw new Error(`"${source.manifest.name}"은(는) 성인 등급 세계라 성인 등급 세계로만 가져올 수 있습니다.`);
@@ -102,9 +166,18 @@ export function borrow(target: WorldPackage, source: WorldPackage, picks: Borrow
   const taken = new Set<string>([
     ...w.characters.map((x) => x.id), ...w.locations.map((x) => x.id), ...w.items.map((x) => x.id), ...w.monsters.map((x) => x.id), ...w.scenes.map((x) => x.id),
     ...w.factions.map((x) => x.id), ...w.claims.map((x) => x.id), ...w.facts.map((x) => x.id), ...(w.classes ?? []).map((x) => x.id), ...w.assets.map((x) => x.id), ...STD_IDS,
+    ...(Object.keys(LOGIC) as LogicKind[]).flatMap((k) => listOf(w, k).map((x) => x.id)),
   ]);
   const idMap = new Map<string, string>();
-  const fresh = (id: string) => { let n = id; for (let i = 2; taken.has(n); i++) n = `${id}-${i}`; taken.add(n); idMap.set(id, n); return n; };
+  const fresh = (id: string, sep = '-') => { let n = id; for (let i = 2; taken.has(n); i++) n = `${id}${sep}${i}`; taken.add(n); idMap.set(id, n); return n; };
+  // 이야기 장치가 가리키는 것을 함께 (v0.64)
+  const deps = dependencies(source, picks);
+  if (deps.length) {
+    const by: Partial<Record<BorrowKind, number>> = {};
+    for (const d of deps) by[d.kind] = (by[d.kind] ?? 0) + 1;
+    notes.push(`고른 임무·이야기 장치가 가리켜 함께 가져온 것: ${Object.entries(by).map(([k, n]) => `${BORROW_LABEL[k as BorrowKind]} ${n}`).join(' · ')}`);
+    picks = [...picks, ...deps];
+  }
   const want = (k: BorrowKind) => new Set(picks.filter((p) => p.kind === k).map((p) => p.id));
 
   // ---- 딸려 오는 것 모으기
@@ -140,6 +213,7 @@ export function borrow(target: WorldPackage, source: WorldPackage, picks: Borrow
   for (const s of scenes) fresh(s.id);
   for (const id of want('class')) fresh(id);
   for (const id of assetIds) fresh(id);
+  for (const k of Object.keys(LOGIC) as LogicKind[]) for (const id of want(k)) if (listOf(source, k).some((x) => x.id === id)) fresh(id, k === 'flag' ? '_' : '-');
   const map = (id: string | undefined) => (id ? idMap.get(id) : undefined);
   // 보상 안의 인물·세력·아이템: 새 ID로, 이 세계에 없는 것은 뺀다
   const fixRewards = (r: Rewards): Rewards => {
@@ -238,6 +312,16 @@ export function borrow(target: WorldPackage, source: WorldPackage, picks: Borrow
   if (!w.assets.length) delete w.assets;
   if (!w.relations.length) delete w.relations;
 
+  // ---- 이야기 장치: 통째로 복사하고, 안의 ID를 모두 새 ID로 (v0.64)
+  const remap = (v: unknown): unknown => (typeof v === 'string' ? idMap.get(v) ?? v : Array.isArray(v) ? v.map(remap) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, remap(x)])) : v);
+  for (const k of Object.keys(LOGIC) as LogicKind[]) {
+    const ids = want(k);
+    if (!ids.size) continue;
+    const key = LOGIC[k];
+    const list = ((w as unknown as Record<string, unknown[] | undefined>)[key] ??= []);
+    for (const x of listOf(source, k)) if (ids.has(x.id)) { list.push(remap(structuredClone(x))); count(k); }
+  }
+
   // ---- 정리: 가져온 것 안에서 이 세계에 없는 것(임무·조우·선택·플래그…)을 가리키는 부분을 뺀다
   pruneDangling(w, base, notes);
 
@@ -253,13 +337,18 @@ export function borrow(target: WorldPackage, source: WorldPackage, picks: Borrow
     out = { ...out, manifest: { ...out.manifest, private: { ...(out.manifest.private ?? { note: source.manifest.private?.note ?? '' }), source: names.join(' · ') || source.manifest.private?.source || source.manifest.name, ...(out.manifest.private?.cardHash ? {} : srcCards[0] ? { cardHash: srcCards[0].hash } : {}) } } };
     notes.push(`"${source.manifest.name}"은(는) 다른 사람의 작품으로 만든 개인용 세계라, 이 세계도 개인용이 됩니다 (내보내기·공유 불가, 기기 간 이동 때 원본 카드 파일 필요).`);
   }
+  // 크로스오버 기록 (v0.64): 어느 세계에서 왔는가
+  if (Object.keys(added).length && source.manifest.id !== out.manifest.id) {
+    const cross = out.manifest.crossover ?? [];
+    if (!cross.some((c) => c.id === source.manifest.id)) out = { ...out, manifest: { ...out.manifest, crossover: [...cross, { id: source.manifest.id, name: source.manifest.name }] } };
+  }
   const renamed = [...idMap.entries()].filter(([a, b]) => a !== b).length;
   if (renamed) notes.push(`ID가 겹친 ${renamed}개는 새 ID를 붙였습니다 (예: ${[...idMap.entries()].find(([a, b]) => a !== b)!.join(' → ')}).`);
   return { world: out, copies, notes: [...new Set(notes)], added };
 }
 
-const COLLS = ['characters', 'locations', 'items', 'monsters', 'scenes', 'factions', 'classes', 'claims', 'facts', 'assets'] as const;
-const COLL_LABEL: Record<string, string> = { characters: '인물', locations: '장소', items: '아이템', monsters: '몬스터', scenes: '장면', factions: '세력', classes: '직업', claims: '지식', facts: '지식', assets: '이미지' };
+const COLLS = ['characters', 'locations', 'items', 'monsters', 'scenes', 'factions', 'classes', 'claims', 'facts', 'assets', 'quests', 'arcs', 'choices', 'clocks', 'events', 'endings', 'flags', 'vars', 'encounters'] as const;
+const COLL_LABEL: Record<string, string> = { characters: '인물', locations: '장소', items: '아이템', monsters: '몬스터', scenes: '장면', factions: '세력', classes: '직업', claims: '지식', facts: '지식', assets: '이미지', quests: '임무', arcs: '이야기 줄기', choices: '결정적 선택', clocks: '진행 시계', events: '연표 사건', endings: '결말', flags: '플래그', vars: '세계 수치', encounters: '조우' };
 
 /** 검사기 오류 중 새로 가져온 항목 안의 것: 그 부분(가장 가까운 목록 칸, 없으면 그 속성)을 지운다 */
 function pruneDangling(w: WorldPackage, base: Record<string, number>, notes: string[]) {
