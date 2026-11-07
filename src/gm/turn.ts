@@ -9,6 +9,8 @@ import { RATING_GUIDE } from '../engine/rating';
 import { applyEvent, type GameState, initialState, MAX_PARTY } from '../engine/state/state';
 import { companionSheet } from '../engine/character/sheet';
 import { companionClass } from '../engine/classes';
+import { traceImages } from '../engine/assets';
+import { debugNote, imageNote } from '../debug/trace';
 import { josa } from '../engine/text/josa';
 import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
@@ -431,7 +433,9 @@ export async function runTurn(
     },
     onNarration, signal,
   );
-  const images = turnImages(world, s, d.scene_image ?? '', actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '' })), moving, turn, narration);
+  const imgWhy: string[] = [];
+  const { result: images, picks: imgPicks } = traceImages(() => turnImages(world, s, d.scene_image ?? '', actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '' })), moving, turn, narration, imgWhy));
+  debugNote('이미지 선택 — 서술', imageNote(images, imgWhy, imgPicks, { 'GM 판단 장면 태그(scene_image)': d.scene_image ?? '', '말한 인물 표정(Actor expression)': actorResults.map((r) => `${r.npc.name}: ${r.out.expression || '(없음)'}`).join(', ') || '(말한 인물 없음)', '장소 이동': moving ? '예' : '아니오' }));
   push({ type: 'narration', text: narration, ...(images.length ? { images } : {}) });
   // 처음 알게 된 사실마다 탐험·대화 경험치
   const discoveries = reveals.filter((r) => r.type === 'knowledge_revealed' && !s.beliefs.some((b) => b.holder === 'player' && b.claim === r.belief.claim)).length;
@@ -596,30 +600,33 @@ function expressionBlock(world: WorldPackage, npcId: string): string {
 }
 
 /** 이번 턴에 보여줄 이미지: 장면(태그 또는 이동한 장소) + 말한 인물의 표정 */
-function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speakers: { id: string; name: string; expression: string }[], moved: boolean, turn: number, narration = '') {
-  if (!world.assets?.length) return [];
+function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speakers: { id: string; name: string; expression: string }[], moved: boolean, turn: number, narration = '', why: string[] = []) {
+  if (!world.assets?.length) { why.push('이 세계에 이미지가 없음'); return []; }
   const out: { id: string; caption: string }[] = [];
+  const add = (img: { id: string; caption: string }, reason: string) => { out.push(img); why.push(reason); };
   const loc = world.locations.find((l) => l.id === s.player.locationId);
   const scene = sceneTag || moved ? pickSceneImage(world, s.player.locationId, sceneTag, String(turn)) : undefined;
-  if (scene) out.push({ id: scene.id, caption: loc?.name ?? '' });
+  if (scene) add({ id: scene.id, caption: loc?.name ?? '' }, sceneTag ? `장소: GM 판단 AI가 장면 태그 "${sceneTag}"를 고름` : '장소: 다른 장소로 옮겨 그 장소 이미지');
+  else why.push(sceneTag || moved ? `(장소 이미지 없음${sceneTag ? ` — 태그 "${sceneTag}"` : ''})` : '(장소 이미지 생략 — 이동도 장면 태그도 없음)');
   for (const sp of speakers) {
     // 말한 인물: Actor가 고른 표정 → 없으면 서술에서 그 인물이 나온 문장의 분위기
     const img = pickCharacterImage(world, sp.id, sp.expression || contextExpression(narration, [sp.name], expressionTags(world, sp.id)), String(turn));
-    if (img && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: sp.name });
+    if (img && !out.some((o) => o.id === img.id)) add({ id: img.id, caption: sp.name }, sp.expression ? `말한 인물: NPC 연기 AI가 표정 "${sp.expression}"을 고름` : '말한 인물: 표정은 서술 문맥으로 짐작');
   }
   // 서술에 나온 인물 (말하지 않았어도 이름·직함이 나오면)
   const shown = new Set(out.map((o) => o.caption));
-  for (const m of mentionedImages(world, narration, String(turn), 5, out.map((o) => o.id))) if (!shown.has(m.caption)) { out.push(m); shown.add(m.caption); }
+  for (const m of mentionedImages(world, narration, String(turn), 5, out.map((o) => o.id))) if (!shown.has(m.caption)) { add(m, '서술에 이름·직함이 나온 인물 (표정은 그 문장으로 짐작)'); shown.add(m.caption); }
   // 이름을 모르는 인물은 서술이 외형으로만 부르므로, 이 장면에 있는 인물·동료도 함께 보여준다 (인물 이미지 3장까지 채움)
   const people = [...presentCharacters(world, s), ...world.characters.filter((c) => s.party[c.id])];
   for (const c of people) {
     if (out.filter((o) => o.caption !== loc?.name).length >= 3) break;
     if (shown.has(c.name)) continue;
     const img = pickCharacterImage(world, c.id, contextExpression(narration, [c.name], expressionTags(world, c.id)), String(turn));
-    if (img && !out.some((o) => o.id === img.id)) { out.push({ id: img.id, caption: c.name }); shown.add(c.name); }
+    if (img && !out.some((o) => o.id === img.id)) { add({ id: img.id, caption: c.name }, s.party[c.id] ? '함께 다니는 동료 (인물 이미지 3장까지 채움)' : '이 장소에 있는 인물 (인물 이미지 3장까지 채움)'); shown.add(c.name); }
   }
   // 매 턴 한 장은 보여준다: 이 장소의 인물·동료 → 장소 이미지 → 지도 → 표지
-  if (!out.length) { const f = fallbackImage(world, s, String(turn)); if (f) out.push(f); }
+  if (!out.length) { const f = fallbackImage(world, s, String(turn)); if (f) add(f, '고른 것이 없어 대체 이미지 (이 장소 인물 → 장소 → 지도 → 표지 순)'); }
+  if (out.length > 6) why.push(`(6장까지만 보여 줌 — ${out.length - 6}장 생략)`);
   return out.slice(0, 6);
 }
 

@@ -6,6 +6,7 @@
  */
 import type { GameEvent } from '../engine/state/events';
 import type { GameState } from '../engine/state/state';
+import type { ImagePick } from '../engine/assets';
 
 export interface DebugAttempt {
   at: number;
@@ -60,7 +61,7 @@ export interface DebugEntry {
   events?: GameEvent[];
   rejected?: string[];
   diff?: DebugDiff[];
-  newLog?: { kind: string; text: string }[];
+  newLog?: { kind: string; text: string; images?: { id: string; caption: string }[] }[];
   ms?: number;
   error?: string;
   done?: boolean;
@@ -113,7 +114,7 @@ export async function endDebug(e: DebugEntry | null, r: { events?: GameEvent[]; 
   if (r.before && r.after) {
     e.turn = r.after.turn;
     e.diff = diffState(r.before, r.after);
-    e.newLog = r.after.log.slice(r.before.log.length).map((l) => ({ kind: l.kind, text: l.text }));
+    e.newLog = r.after.log.slice(r.before.log.length).map((l) => ({ kind: l.kind, text: l.text, ...(l.images?.length ? { images: l.images } : {}) }));
   }
   if (current === e) current = null;
   await persist(e);
@@ -207,4 +208,19 @@ export async function clearDebug(saveId?: string) {
   const { db } = await import('../storage/db');
   if (saveId) await db.debug.where('saveId').equals(saveId).delete(); else await db.debug.clear();
   notify();
+}
+
+/** 이미지 선택 기록: 고른 이미지마다 근거와 세부 과정 (v0.57.4) */
+export interface ImageNote { kind: 'images'; inputs?: Record<string, string>; chosen: { id: string; caption: string; why: string; detail?: string }[]; skipped: string[]; steps: ImagePick[] }
+export function imageNote(images: { id: string; caption: string }[], why: string[], picks: ImagePick[], inputs?: Record<string, string>): ImageNote {
+  const reasons = why.filter((w) => !w.startsWith('('));
+  return {
+    kind: 'images', ...(inputs ? { inputs } : {}),
+    chosen: images.map((im, i) => {
+      const p = picks.find((x) => x.step !== '서술 언급' && x.chosen === im.id);
+      return { id: im.id, caption: im.caption, why: reasons[i] ?? '', ...(p ? { detail: `${p.rule}${p.wanted && !p.rule.includes(`"${p.wanted}"`) ? ` · 원한 태그 "${p.wanted}"` : ''}${p.resolved && p.resolved !== p.wanted && !p.rule.includes(`"${p.resolved}"`) ? ` → 맞춘 태그 "${p.resolved}"` : ''}` } : {}) };
+    }),
+    skipped: why.filter((w) => w.startsWith('(')),
+    steps: picks,
+  };
 }

@@ -11,7 +11,8 @@ import { josa } from '../engine/text/josa';
 import type { LlmClient } from '../llm/types';
 import { buildNarratorContext, presentCharacters } from './context';
 import { displayName } from '../engine/names';
-import { mentionedImages } from '../engine/assets';
+import { mentionedImages, traceImages } from '../engine/assets';
+import { debugNote, imageNote } from '../debug/trace';
 import { RATING_GUIDE } from '../engine/rating';
 import { genreGuide, genreProfile } from '../engine/genre';
 import { SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
@@ -62,7 +63,7 @@ export function basicGuide(world: WorldPackage, s: GameState): GameEvent {
   const who = people.length ? ` 곁에 있는 사람: ${people.slice(0, 3).map((c) => displayName(s, c)).join(', ')}${people.length > 3 ? ' 외' : ''}.` : '';
   const perception = (SKILL_IDS.includes('perception' as SkillId) ? 'perception' : SKILL_IDS[0]!) as SkillId;
   const summary = `지금 ${loc?.name ?? '어딘가'}에 있다.${who}`;
-  const images = mentionedImages(world, summary, `guide${s.turn}`, 3);
+  const images = guideImages(world, summary, `guide${s.turn}`, '기본 안내');
   return {
     type: 'gm_guide',
     ...(images.length ? { images } : {}),
@@ -87,6 +88,13 @@ export async function gmGuide(llm: LlmClient, world: WorldPackage, s: GameState,
     .map((c) => ({ text: cut(String(c?.text ?? '').trim(), 60), skill: SKILL_IDS.includes(c?.skill as SkillId) ? c.skill : '' })).filter((c) => c.text).slice(0, 4);
   if (!out?.summary || !raw.length) return basicGuide(world, s);
   const summary = cut(out.summary.trim(), 500), suggestion = cut((out.suggestion ?? '').trim(), 200);
-  const images = mentionedImages(world, `${summary} ${suggestion} ${raw.map((c) => c.text).join(' ')}`, `guide${s.turn}`, 3);
+  const images = guideImages(world, `${summary} ${suggestion} ${raw.map((c) => c.text).join(' ')}`, `guide${s.turn}`, 'AI 안내');
   return { type: 'gm_guide', summary, suggestion, choices: raw.map((c) => c.text), ...(raw.some((c) => c.skill) ? { choiceSkills: raw.map((c) => c.skill) } : {}), ...(images.length ? { images } : {}) };
+}
+
+/** GM 안내 이미지: 안내 글에 이름·직함이 나온 인물 (디버그에 근거를 남긴다, v0.57.4) */
+function guideImages(world: WorldPackage, text: string, salt: string, kind: string) {
+  const { result, picks } = traceImages(() => mentionedImages(world, text, salt, 3));
+  debugNote(`이미지 선택 — GM 안내 (${kind})`, imageNote(result, result.map(() => '안내 글(상황·제안·선택지)에 이름·직함이 나온 인물 — 최대 3명'), picks, { '안내 글': text.slice(0, 300) }));
+  return result;
 }

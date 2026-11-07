@@ -9,6 +9,8 @@ import { replay, type GameState } from '../engine/state/state';
 import { ROLE_LABEL, type Role } from '../llm/metrics';
 import { db, loadEvents } from '../storage/db';
 import type { StoredEvent } from '../engine/state/events';
+import type { ImageNote } from '../debug/trace';
+import { AssetImage } from './AssetImage';
 
 export function useDebugOn(): boolean { return useSyncExternalStore(subscribeDebug, debugOn); }
 
@@ -97,9 +99,34 @@ function CallView({ c, i }: { c: DebugCall; i: number }) {
   );
 }
 
+// ---------------------------------------------------------------- 이미지 선택 근거 (v0.57.4)
+
+function ImageNoteView({ label, note, pkg }: { label: string; note: ImageNote; pkg?: string }) {
+  return (
+    <details className="dbg-block" open>
+      <summary><b>🖼 {label}</b> <span className="muted small">{note.chosen.length}장</span></summary>
+      {note.inputs && <ul className="small dbg-log">{Object.entries(note.inputs).map(([k, v]) => <li key={k}><span className="muted">{k}:</span> {v || '(없음)'}</li>)}</ul>}
+      {note.chosen.length === 0 && <p className="small muted">고른 이미지 없음</p>}
+      <table className="dbg-diff small dbg-imgtable"><tbody>
+        {note.chosen.map((c, i) => (
+          <tr key={i}>
+            <td className="dbg-thumb">{pkg ? <AssetImage pkg={pkg} id={c.id} alt={c.caption} zoom /> : null}</td>
+            <td><b>{c.caption || '(이름 없음)'}</b><br /><code>{c.id}</code></td>
+            <td>{c.why}{c.detail && <><br /><span className="muted">{c.detail}</span></>}</td>
+          </tr>
+        ))}
+      </tbody></table>
+      {note.skipped.length > 0 && <p className="small muted">{note.skipped.join(' · ')}</p>}
+      <details className="dbg-block"><summary className="small">고른 과정 전체 ({note.steps.length}단계)</summary>
+        <ol className="small dbg-stages">{note.steps.map((p, i) => <li key={i}><b>{p.step}</b> {p.target}: {p.rule}{p.wanted ? ` · 원한 "${p.wanted}"` : ''}{p.resolved ? ` · 맞춘 "${p.resolved}"` : ''}{p.chosen ? <> → <code>{p.chosen}</code></> : null}</li>)}</ol>
+      </details>
+    </details>
+  );
+}
+
 // ---------------------------------------------------------------- 한 턴
 
-function EntryView({ e, saveId }: { e: DebugEntry; saveId?: string }) {
+function EntryView({ e, saveId, pkg }: { e: DebugEntry; saveId?: string; pkg?: string }) {
   const [tab, setTab] = useState<'sum' | 'calls' | 'events' | 'diff' | 'state'>('sum');
   const [snap, setSnap] = useState<GameState | null | 'loading'>(null);
   const tokens = e.calls.reduce((s, c) => ({ i: s.i + (c.usage?.input ?? 0), o: s.o + (c.usage?.output ?? 0) }), { i: 0, o: 0 });
@@ -140,9 +167,11 @@ function EntryView({ e, saveId }: { e: DebugEntry; saveId?: string }) {
           {e.rejected?.length ? <ul className="small warn-list">{e.rejected.map((r, i) => <li key={i}>{r}</li>)}</ul> : <p className="small muted">없음</p>}
           {e.newLog && e.newLog.length > 0 && (
             <><b className="small">새로 생긴 기록 ({e.newLog.length})</b>
-              <ul className="small dbg-log">{e.newLog.map((l, i) => <li key={i}><code>{l.kind}</code> {l.text.length > 300 ? `${l.text.slice(0, 300)}…` : l.text}</li>)}</ul></>
+              <ul className="small dbg-log">{e.newLog.map((l, i) => <li key={i}><code>{l.kind}</code> {l.text.length > 300 ? `${l.text.slice(0, 300)}…` : l.text}{l.images?.length ? <span className="dbg-imgs"> 🖼 {l.images.map((im) => `${im.caption || '(이름 없음)'} [${im.id}]`).join(', ')}</span> : null}</li>)}</ul></>
           )}
-          {e.notes.map((n, i) => <details key={i} className="dbg-block"><summary><b>{n.label}</b></summary><JsonTree value={n.data} open /></details>)}
+          {e.notes.map((n, i) => ((n.data as ImageNote)?.kind === 'images'
+            ? <ImageNoteView key={i} label={n.label} note={n.data as ImageNote} pkg={pkg} />
+            : <details key={i} className="dbg-block"><summary><b>{n.label}</b></summary><JsonTree value={n.data} open /></details>))}
         </div>
       )}
       {tab === 'calls' && (e.calls.length ? e.calls.map((c, i) => <CallView key={c.id} c={c} i={i} />) : <p className="muted small">이 동작은 AI를 부르지 않았습니다 (엔진만).</p>)}
@@ -234,7 +263,7 @@ export function DebugPanel({ saveId, world, state, onClose }: { saveId?: string;
                 ))}
               </ul>
             </div>
-            <div className="dbg-detail">{selected ? <EntryView e={selected} saveId={saveId} /> : null}</div>
+            <div className="dbg-detail">{selected ? <EntryView e={selected} saveId={saveId} {...(world ? { pkg: world.manifest.id } : {})} /> : null}</div>
           </div>
         )}
         {tab === 'state' && state && (
