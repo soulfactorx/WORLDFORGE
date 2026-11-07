@@ -501,3 +501,41 @@ img.zoomable { cursor: zoom-in; }
 .portrait-grid button { padding: 0; border-radius: 6px; overflow: hidden; aspect-ratio: 1; }
 .portrait-grid button.mine { outline: 2px solid var(--accent); }
 .portrait-grid img, .portrait-grid .asset-ph { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* 메인 화면 (v0.55): 탭 + 펼침 메뉴 */
+.home-tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: 4px; }
+.home-tabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.home-tabs .count { font-size: .75rem; opacity: .7; margin-left: 2px; }
+.home .grow { flex: 1; min-width: 0; }
+.home .saves li { align-items: center; }
+.home .saves li.current { border-color: var(--accent); }
+.home .badges { display: block; }
+.home .badges:empty { display: none; }
+.home .badges .need-badge { margin: 0 6px 0 0; }
+.home .new-game { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.home .world-blurb { margin: 0; font-size: .88rem; line-height: 1.5; white-space: pre-wrap; }
+.home details.world-blurb > summary { cursor: pointer; list-style: none; }
+.home details.world-blurb[open] > summary { display: none; }
+.home .toolbar .filter { flex: 1 1 160px; }
+.home .home-message { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.home details.fold > summary { cursor: pointer; list-style: none; }
+.home details.fold > summary::-webkit-details-marker { display: none; }
+.home details.fold > summary h2 { display: inline; }
+.home details.fold > summary::before { content: '▸ '; color: var(--muted); }
+.home details.fold[open] > summary::before { content: '▾ '; }
+.home details.fold[open] > summary { margin-bottom: 8px; }
+.menu { position: relative; display: inline-block; }
+.menu.primary-menu > button { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.menu-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 220px; max-width: min(320px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgb(0 0 0 / .18); white-space: normal; }
+.toolbar .menu-pop { left: 0; right: auto; }
+.menu-pop > button, .menu-pop > label.file { text-align: left; border: none; padding: 8px 10px; border-radius: 6px; font-size: .9rem; }
+.menu-pop > button:hover, .menu-pop > label.file:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.menu-pop > span { padding: 4px 10px; }
+.menu-pop button.danger { color: #c0392b; }
+.menu-pop label.file { cursor: pointer; }
+.home .new-game p { margin: 0; }
+.home details.world-blurb .more { color: var(--check); font-size: .8rem; white-space: nowrap; }
+.menu-pop label.file { position: relative; }
+.menu-pop label.file input[type='file'] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+label.file-btn { position: relative; display: inline-flex; flex-direction: row; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 1rem; }
+label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
