@@ -1124,3 +1124,40 @@ everheartWorld.scenes = everheartWorld.scenes?.map(autoSceneArt);
 // 세계 개요·GM 메모 (v0.54)
 everheartWorld.overview = '귀족과 평민, 상인과 예술가, 마법사와 기사가 함께 사는 도시국가 에버하트. 왕립 아카데미, 베아트리스 백작부인의 살롱, 장미 정원, 상업 지구, 예술가 거리, 왕궁, 마법 연구소가 도시의 무대다. 소문은 칼보다 빠르고, 사교계의 평판이 사람의 자리를 정한다.\n\n건국 기념 무도회가 다가온다. 그날까지 누가 누구의 손을 잡을지, 어떤 소문이 사실로 굳어질지에 도시 전체가 귀를 기울인다.\n\n플레이어는 전학생, 귀족의 후계자, 평민 출신 모험가, 왕실의 보좌관 중 하나로 이 계절을 시작한다. 관계는 서두르지 않는다 — 오해와 실망과 화해를 지나야 깊어진다.';
 everheartWorld.gmNotes = '아카데미 장학생 리아는 병약하다고 알려진 제1왕녀 아스텔리아다. 세드릭 대공은 왕녀를 이웃 왕국과 정략혼시키려 하고, 로즈벨 가문은 파산 직전이라 세라피나와 루시앙의 약혼이 걸려 있다. 회색 장미(익명 화가)는 세라피나다. 3년 전 연구소 폭주 사고는 엘리안의 실험 때문이 아니다. 결말은 무도회에서 누구의 손을 잡느냐로 갈린다 (주연마다 하나 + 나의 계절).';
+
+// ------------------------------------------------------------ 성향 (v0.70): 온기·대담함이 사교계의 결말을 가른다
+{
+  const opt = (cid: string, oid: string) => everheartWorld.choices!.find((c) => c.id === cid)!.options.find((o) => o.id === oid)!;
+  opt('choice/princess-secret', 'keep').effects.push({ trait: 'warmth', add: 6 });
+  opt('choice/princess-secret', 'encourage').effects.push({ trait: 'warmth', add: 3 }, { trait: 'boldness', add: 6 });
+  opt('choice/princess-secret', 'reveal').effects.push({ trait: 'warmth', add: -8 });
+  opt('choice/ball-hand', 'mirela').effects.push({ trait: 'boldness', add: 5 });
+  opt('choice/ball-hand', 'alone').effects.push({ trait: 'warmth', add: -3 });
+  everheartWorld.choices!.push(
+    {
+      id: 'choice/throne-word', name: '알현실의 직언', locationId: 'loc/throne-room',
+      prompt: '병색이 짙은 국왕이 지팡이를 짚고 멈춰 선다. 당신의 대담한 소문을 들은 듯, 그가 묻는다. "그대라면 이 왕도에서 무엇을 바꾸겠는가?" 대공의 시선이 등 뒤에서 차갑게 꽂힌다.',
+      when: { all: [{ at: 'loc/throne-room' }, { trait: 'boldness', gte: 40 }] },
+      options: [
+        { id: 'speak', text: '대공 앞에서도 거리낌 없이 직언한다', effects: [{ trait: 'boldness', add: 6 }, { reputation: 'fac/royal', delta: 10 }, { var: 'var/gossip', add: 10 }] },
+        { id: 'bow', text: '고개를 숙이고 의례적인 찬사로 넘긴다', effects: [{ trait: 'boldness', add: -5 }, { reputation: 'fac/society', delta: 5 }] },
+      ],
+    },
+    {
+      id: 'choice/salon-thorns', name: '살롱의 가시', locationId: 'loc/salon',
+      prompt: '살롱의 귀부인들이 부채 너머로 속삭인다. "얼음 같은 분이라던데, 정말 그런가요?" 누군가 당신이 외면했던 일을 들먹이며 웃는다. 대답은 당신의 몫이다.',
+      when: { all: [{ at: 'loc/salon' }, { trait: 'warmth', lte: -40 }] },
+      options: [
+        { id: 'freeze', text: '차갑게 웃으며 그 귀부인의 비밀을 하나 꺼내 놓는다', effects: [{ trait: 'warmth', add: -6 }, { var: 'var/gossip', add: 15 }, { reputation: 'fac/society', delta: -5 }] },
+        { id: 'thaw', text: '잠시 침묵하다가, 그때의 일을 진심으로 사과한다', effects: [{ trait: 'warmth', add: 8 }, { reputation: 'fac/society', delta: 5 }] },
+      ],
+    },
+  );
+  everheartWorld.endings = [
+    { id: 'ending/ice-crown', name: '얼음의 왕관', condition: { all: [{ questDone: 'quest/festival-night' }, { choice: 'choice/ball-hand', is: 'alone' }, { trait: 'warmth', lte: -50 }] },
+      epilogue: '테라스의 찬바람 아래, 플레이어는 누구의 손도 잡지 않았다. 다음 날부터 사교계는 그 이름을 두려움과 동경으로 부른다 — 누구에게도 마음을 주지 않는 이, 그래서 누구도 휘두를 수 없는 이. 화려한 승리와 텅 빈 저녁 식탁을 나란히 비추며, 언젠가 녹을지도 모를 마음의 여지를 아주 조금 남기고 맺는다.' },
+    { id: 'ending/ballroom-revolt', name: '무도회의 반란', condition: { all: [{ questDone: 'quest/festival-night' }, { choice: 'choice/ball-hand', is: 'alone' }, { trait: 'boldness', gte: 60 }] },
+      epilogue: '첫 곡이 끝나자 플레이어는 테라스가 아니라 악단 앞으로 걸어가 곡을 바꾼다. 평민의 춤곡이 왕궁 대회랑을 울리고, 장학생과 하인과 젊은 귀족들이 하나둘 손을 잡는다. 다음 날의 추문, 왕녀의 몰래 웃는 얼굴, 그리고 왕도에 처음 생긴 "아무나 춤추는 밤"이라는 전통으로 유쾌하게 맺는다.' },
+    ...everheartWorld.endings!,
+  ];
+}

@@ -1004,3 +1004,40 @@ cheonhaWorld.scenes = cheonhaWorld.scenes?.map(autoSceneArt);
 // 세계 개요·GM 메모 (v0.54)
 cheonhaWorld.overview = '대명제국 천순 연간, 황실의 질서와 강호의 질서가 따로 흐르는 천하. 소림·무당·화산·개방·사천당문 같은 정파와 마교·혈도문 같은 사파가 수십 년 전 맺은 협약으로 겨우 평화를 지켜 왔고, 무림맹이 그 균형을 지킨다. 무공의 경지와 문파의 이름이 곧 신분이다.\n\n그런데 요즘 정체불명의 무공으로 사람이 죽어 나가고, 마교가 중원으로 내려온다는 소문이 돈다. 황실 금의위는 무림을 길들일 핑계를 찾고 있다.\n\n플레이어는 낙양의 객잔에서 깨어난 이방인, 멸문한 청하검문의 생존자, 또는 개방의 신참 거지로 시작한다. 협(俠)과 의리, 은원과 복수가 강호를 움직인다.';
 cheonhaWorld.gmNotes = "무림맹 총관 종리휘가 내부의 배신자다(장부가 증거). 청하검문 멸문의 진실과 '얼어붙은 무공'은 천산 금역과 천하제일검총으로 이어진다. 마교의 진군(시계)이 차오르면 협약이 무너진다. 결말: 혈겁·새로운 협약·정사대전·검은 얼음 속에. 사부와 원수의 줄기(매설영의 복수 등)를 은근히 엮을 것.";
+
+// ------------------------------------------------------------ 성향 (v0.70): 정사·의리가 강호의 길을 가른다
+{
+  const opt = (cid: string, oid: string) => cheonhaWorld.choices!.find((c) => c.id === cid)!.options.find((o) => o.id === oid)!;
+  opt('choice/ledger', 'alliance').effects.push({ trait: 'justice', add: 5 }, { trait: 'loyalty', add: 3 });
+  opt('choice/ledger', 'court').effects.push({ trait: 'loyalty', add: -6 });
+  opt('choice/ledger', 'beggars').effects.push({ trait: 'loyalty', add: 6 });
+  opt('choice/pact', 'renew').effects.push({ trait: 'justice', add: 5 }, { trait: 'loyalty', add: 5 });
+  opt('choice/pact', 'break').effects.push({ trait: 'justice', add: 6 }, { trait: 'loyalty', add: -4 });
+  cheonhaWorld.choices!.push(
+    {
+      id: 'choice/demon-letter', name: '마교의 밀서',
+      prompt: '객잔 탁자 위에 누가 두고 갔는지 모를 밀서 한 통. 붉은 인장에 마교의 문양이 선명하다. "그대의 칼은 정파의 위선과 닮지 않았다. 혈풍령의 문은 열려 있다."',
+      when: { trait: 'justice', lte: -40 },
+      options: [
+        { id: 'accept', text: '밀서를 품에 넣는다 — 혈풍령으로 가는 길을 열어 둔다', effects: [{ trait: 'justice', add: -8 }, { reputation: 'fac/cult', delta: 20 }, { reputation: 'fac/alliance', delta: -10 }] },
+        { id: 'burn', text: '밀서를 촛불에 태운다', effects: [{ trait: 'justice', add: 5 }] },
+      ],
+    },
+    {
+      id: 'choice/sworn-oath', name: '결의의 술잔', locationId: 'loc/inn',
+      prompt: '취선객잔의 늦은 밤, 함께 사선을 넘은 개방의 사내가 술잔 두 개를 채운다. "형님이라 불러도 되겠소? 오늘부터 그대의 원수는 내 원수요."',
+      when: { all: [{ at: 'loc/inn' }, { trait: 'loyalty', gte: 40 }] },
+      options: [
+        { id: 'swear', text: '잔을 부딪쳐 의형제를 맺는다', effects: [{ trait: 'loyalty', add: 6 }, { reputation: 'fac/beggars', delta: 15 }] },
+        { id: 'decline', text: '웃으며 잔만 비운다 — 강호에서 맹세는 짐이 된다', effects: [{ trait: 'loyalty', add: -4 }] },
+      ],
+    },
+  );
+  cheonhaWorld.endings = [
+    { id: 'ending/demon-path', name: '사파의 패왕', condition: { all: [{ arcDone: 'arc/main' }, { trait: 'justice', lte: -60 }] },
+      epilogue: '협약이 어떻게 되었든, 강호는 이제 주인공의 이름을 사파의 패왕으로 부른다. 혈풍령의 깃발 아래 모인 무인들, 정파의 원망과 두려움이 뒤섞인 시선. 주인공이 걸어온 길의 대가와 그 자리의 고독을 무협 소설의 결말처럼 장중하게 그린다.' },
+    { id: 'ending/great-hero', name: '천하제일협', condition: { all: [{ arcDone: 'arc/main' }, { flag: 'pact_renewed' }, { trait: 'justice', gte: 50 }, { trait: 'loyalty', gte: 40 }] },
+      epilogue: '협약을 다시 이은 이는 정파의 대협이자 의리를 저버린 적 없는 사내(혹은 여협)였다. 무림대회에서 각 문파의 장문인들이 차례로 포권하고, 개방의 거지들이 길가에서 이름을 외친다. 의형제·사부·동료와의 술자리로 따뜻하고 호쾌하게 맺는다.' },
+    ...cheonhaWorld.endings!,
+  ];
+}

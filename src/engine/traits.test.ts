@@ -8,7 +8,10 @@ import type { LlmClient } from '../llm/types';
 import { borrow, catalogOf } from './borrow';
 import { createCharacter, legacyCharacter, suggestedStandardArray } from './character/sheet';
 import { validateWorld } from './package/validate';
-import { evalCondition } from './scenario';
+import { evalCondition, reachedEnding } from './scenario';
+import { aetheriaWorld } from '../data/official/aetheria';
+import { cheonhaWorld } from '../data/official/cheonha';
+import { everheartWorld } from '../data/official/everheart';
 import type { WorldPackage } from './schema';
 import { applyEvent, replay } from './state/state';
 import { traitLabel, traitsFor, traitValue } from './traits';
@@ -78,5 +81,34 @@ describe('주인공 성향 (v0.69)', () => {
     expect(traitsFor(r2.world).some((t) => t.id === 'warmth')).toBe(true);
     expect(r2.world.endings!.find((e) => e.name === '얼음 여왕')!.condition).toEqual({ trait: 'warmth', lte: -60 });
     expect(validateWorld(r2.world).filter((i) => i.level === 'error')).toEqual([]);
+  });
+});
+
+describe('공식 세계 성향 갈림길 (v0.70)', () => {
+  const worlds = [aetheriaWorld, cheonhaWorld, everheartWorld];
+  it('세 공식 세계가 성향 조건·효과를 쓰고도 검사기를 통과한다', () => {
+    for (const w of worlds) {
+      expect(validateWorld(w).filter((i) => i.level === 'error')).toEqual([]);
+      const json = JSON.stringify([w.choices, w.endings]);
+      expect(json).toContain('"trait"');
+    }
+  });
+
+  it('에테리아: 같은 봉인 결말도 성향이 뚜렷하면 다른 결말로', () => {
+    const at = (good: number) => {
+      const s = structuredClone(start(aetheriaWorld, { good, law: 0 }));
+      s.flags.push('seal_rewoven');
+      s.quests['quest/fate'] = { ...(s.quests['quest/fate'] ?? { stage: 0 }), done: true } as never;
+      return reachedEnding(aetheriaWorld, s)?.id;
+    };
+    expect(at(60)).toBe('ending/saint-weaver');
+    expect(at(10)).not.toBe('ending/saint-weaver');
+    expect(at(10)).toBeTruthy();
+  });
+
+  it('성향이 기울어야 열리는 선택', () => {
+    const c = cheonhaWorld.choices!.find((x) => x.id === 'choice/demon-letter')!;
+    expect(evalCondition(cheonhaWorld, start(cheonhaWorld, { justice: -50, loyalty: 0 }), c.when!)).toBe(true);
+    expect(evalCondition(cheonhaWorld, start(cheonhaWorld, { justice: 0, loyalty: 0 }), c.when!)).toBe(false);
   });
 });

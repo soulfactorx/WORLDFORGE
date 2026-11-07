@@ -1214,3 +1214,45 @@ aetheriaWorld.scenes = aetheriaWorld.scenes?.map(autoSceneArt);
 // 세계 개요·GM 메모 (v0.54)
 aetheriaWorld.overview = '마나가 흐르는 대륙 아르카디아. 인간의 루미나 왕국과 대륙 통일을 노리는 바르가스 제국이 회색 관문을 사이에 두고 맞서 있고, 아르켄 마도도시의 마법사 협회와 성광 교단, 모험가 길드가 저마다의 질서를 지킨다. 엘프·드워프·수인·드래곤 혈족이 함께 살아간다.\n\n오래전 대륙 곳곳에 봉인된 고대의 존재들이 있었고, 요즘 그 봉인이 약해지고 있다는 징조가 이어진다 — 마수의 숲의 실종 사건, 심연의 균열에서 새어 나오는 기운, 별이 떨어진 언덕의 소환진. 자유도시 벨로스는 이방인과 모험가가 가장 먼저 모여드는 곳이다.\n\n플레이어는 별무덤 언덕의 소환진에서 깨어난 이방인(또는 벨로스의 신참 모험가)으로 시작한다. 마법은 실재하고, 신분과 출신보다 길드의 등급과 명성이 사람을 말해 준다.';
 aetheriaWorld.gmNotes = '봉인의 균열(진행 시계)이 차오를수록 언데드와 이상 현상이 늘어난다. 세레스 바일은 흑월단과 손잡고 마법사 협회를 찬탈하려 하고, 제국과도 비밀 거래를 하고 있다. 플레이어의 소환은 우연이 아니다 — 잊힌 신들의 대성전에 봉인된 존재와 이어져 있다. 결말은 봉인의 운명(다시 엮기·희생·해방·파괴)에 대한 선택으로 갈린다. 국경 긴장·봉인의 안정도·벨로스 치안 수치를 분위기로 드러낼 것.';
+
+// ------------------------------------------------------------ 성향 (v0.70): 선악·질서가 갈림길을 가른다
+{
+  const opt = (cid: string, oid: string) => aetheriaWorld.choices!.find((c) => c.id === cid)!.options.find((o) => o.id === oid)!;
+  opt('choice/children-truth', 'expose').effects.push({ trait: 'law', add: 8 });
+  opt('choice/children-truth', 'spare').effects.push({ trait: 'good', add: 6 }, { trait: 'law', add: -4 });
+  opt('choice/raven-fate', 'capture').effects.push({ trait: 'law', add: 6 });
+  opt('choice/raven-fate', 'mina').effects.push({ trait: 'law', add: -6 });
+  opt('choice/seal-fate', 'reweave').effects.push({ trait: 'good', add: 10 });
+  opt('choice/seal-fate', 'sacrifice').effects.push({ trait: 'good', add: -8 }, { trait: 'law', add: 8 });
+  opt('choice/seal-fate', 'embrace').effects.push({ trait: 'good', add: -15 }, { trait: 'law', add: -10 });
+  aetheriaWorld.choices!.push(
+    {
+      id: 'choice/kneeling-cultist', name: '무릎 꿇은 신도', locationId: 'loc/forest-sanctum',
+      prompt: '석실의 잔해 속, 살아남은 흑월단의 젊은 신도가 떨며 무릎을 꿇는다. "시킨 대로 했을 뿐입니다…" 당신이 지금껏 보여 온 자비를 아는 듯, 그는 당신의 눈을 올려다본다.',
+      when: { all: [{ cleared: 'enc/sanctum-cultists' }, { at: 'loc/forest-sanctum' }, { trait: 'good', gte: 30 }] },
+      options: [
+        { id: 'forgive', text: '용서하고, 월주에 대해 아는 것을 털어놓게 한다', effects: [{ trait: 'good', add: 6 }, { reputation: 'fac/blackmoon', delta: 5 }, { reputation: 'fac/church', delta: -5 }] },
+        { id: 'law', text: '왕국의 법에 넘긴다 — 용서는 재판관의 몫이다', effects: [{ trait: 'law', add: 6 }, { reputation: 'fac/lumina', delta: 5 }] },
+      ],
+    },
+    {
+      id: 'choice/moon-bargain', name: '검은 달의 거래', locationId: 'loc/vellos-alley',
+      prompt: '등불 없는 골목, 그림자 속에서 흑월단의 사자가 속삭인다. "당신이 손을 더럽히는 걸 봤소. 우리 편에 서면, 이 도시의 밤을 통째로 주겠소."',
+      when: { all: [{ at: 'loc/vellos-alley' }, { trait: 'good', lte: -40 }] },
+      options: [
+        { id: 'join', text: '손을 잡는다 — 밤의 주인이 되겠다', effects: [{ trait: 'good', add: -8 }, { reputation: 'fac/blackmoon', delta: 20 }, { reputation: 'fac/guild', delta: -10 }] },
+        { id: 'refuse', text: '사자를 밀쳐 내고 골목을 떠난다', effects: [{ trait: 'good', add: 5 }] },
+      ],
+    },
+  );
+  // 같은 결말 상황에서 성향이 뚜렷하면 이쪽이 먼저 (결말은 목록 순서대로 처음 맞는 것)
+  aetheriaWorld.endings = [
+    { id: 'ending/saint-weaver', name: '빛을 엮은 성자', condition: { all: [{ flag: 'seal_rewoven' }, { questDone: 'quest/fate' }, { trait: 'good', gte: 60 }] },
+      epilogue: '봉인이 다시 엮이는 순간, 균열에서 쏟아지던 어둠이 플레이어가 지나온 길 — 살려 보낸 적, 용서한 죄인, 나눠 준 빵 — 을 비추는 빛으로 바뀐다. 사람들은 하늘 밖에서 온 이를 성자라 부르기 시작하지만, 플레이어는 그 이름을 부끄러워한다. 카엘과 동료들이 웃으며 그 칭호를 놀리는 장면, 그리고 교단이 처음으로 "용서"를 교리에 적는 장면으로 따뜻하게 맺는다.' },
+    { id: 'ending/iron-seal', name: '철의 봉인', condition: { all: [{ flag: 'seal_sacrificed' }, { questDone: 'quest/fate' }, { trait: 'law', gte: 50 }] },
+      epilogue: '교리대로, 법대로. 플레이어는 봉인의 수호자로 교단과 왕국의 법정에 이름을 올리고, 대륙에는 천 년 만의 엄격한 평화가 찾아온다. 질서는 지켜졌지만, 제단의 금빛 눈을 기억하는 이는 플레이어뿐이다. 법이 정의가 되는 순간과 그렇지 않은 순간을 담담하게 비추며 차갑고 장엄하게 맺는다.' },
+    { id: 'ending/abyss-tyrant', name: '심연의 폭군', condition: { all: [{ flag: 'god_embraced' }, { questDone: 'quest/fate' }, { trait: 'good', lte: -50 }] },
+      epilogue: '녹테라의 힘은 망설임 없는 혼을 그릇으로 고른다. 플레이어가 걸어온 냉혹한 길이 그대로 왕좌로 이어지고, 흑월단은 새 주인 앞에 엎드린다. 두 나라의 군대가 한밤에 무기를 내려놓는 장면 — 경외인지 공포인지 알 수 없는 침묵 — 으로, 잔혹한 묘사 없이 불길하고 장엄하게 맺는다.' },
+    ...aetheriaWorld.endings!,
+  ];
+}
