@@ -31,6 +31,8 @@ export interface CharacterSheet {
   /** 주인공 정보 (v0.68): 성별·나이·외모 등 세계 양식에 따라 */
   gender?: string;
   profile?: Record<string, string>;
+  /** 주인공 성향 (v0.69): 축 ID → -100~100 */
+  traits?: Record<string, number>;
 }
 
 export type CheckSpec =
@@ -74,6 +76,7 @@ export interface CreationInput {
   role?: { id: string; name: string; skillOptions?: SkillId[] };
   gender?: string;
   profile?: Record<string, string>;
+  traits?: Record<string, number>;
 }
 
 /** 캐릭터 생성 규칙 검증. 오류 메시지 목록을 반환한다 (빈 배열 = 유효). */
@@ -114,6 +117,7 @@ export function createCharacter(input: CreationInput): CharacterSheet {
     resources: classResources(cls.id, 1),
     ...(input.role ? { role: input.role.id, roleName: input.role.name } : {}),
     ...(input.gender ? { gender: input.gender } : {}),
+    ...(input.traits && Object.keys(input.traits).length ? { traits: { ...input.traits } } : {}),
     ...(input.profile && Object.values(input.profile).some((v) => v.trim()) ? { profile: Object.fromEntries(Object.entries(input.profile).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v)) } : {}),
   };
 }

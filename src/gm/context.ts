@@ -10,6 +10,7 @@ import { epithetOf, knowsName } from '../engine/names';
 import { allTitles, rankOf, renownOf, renownTier } from '../engine/renown';
 import { classesFor, classLabel, subclassLabel } from '../engine/classes';
 import { profileLine } from '../engine/profile';
+import { traitImpression, traitLines } from '../engine/traits';
 import { reskinner } from '../engine/genre';
 
 const dateLabel = (world: WorldPackage, minutes: number) => { const d = calendarDate(world, minutes); return d ? `${d.label}${d.countdown ? ` (${d.countdown})` : ''} ` : ''; };
@@ -110,7 +111,7 @@ export function playerLines(world: WorldPackage, state: GameState): string[] {
   const wc = classesFor(world).find((c) => (sh.role ? c.id === sh.role : c.base === sh.classId));
   const desc = wc ? [wc.strengths && `잘하는 것: ${wc.strengths}`, wc.blurb].filter(Boolean).join(' — ') : '';
   const pl = profileLine(world, sh);
-  return ['## 주인공', `${sh.name} — ${classLabel(world, sh, reskinner(world))}${sh.subclass ? `·${subclassLabel(world, sh, reskinner(world))}` : ''} ${sh.level}레벨${desc ? ` (${desc})` : ''}`, ...(pl ? [pl, '서술할 때 주인공의 성별·외모를 이 정보에 맞춘다 (플레이어가 정한 것이다).'] : []), ''];
+  return ['## 주인공의 성향 (행동이 쌓여 바뀐다 — 이야기 갈림길이 이것을 읽는다)', ...traitLines(world, sh), '', '## 주인공', `${sh.name} — ${classLabel(world, sh, reskinner(world))}${sh.subclass ? `·${subclassLabel(world, sh, reskinner(world))}` : ''} ${sh.level}레벨${desc ? ` (${desc})` : ''}`, ...(pl ? [pl, '서술할 때 주인공의 성별·외모를 이 정보에 맞춘다 (플레이어가 정한 것이다).'] : []), ''];
 }
 
 export function buildDirectorContext(world: WorldPackage, state: GameState): string {
@@ -176,6 +177,7 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     '## 네가 아는 것 (이 목록 밖의 세계 사실은 모른다)', ...(claimLines.length ? claimLines : ['(특별히 아는 것 없음)']), '',
     ...fameLines(world, state),
     ...((v) => (v ? ['## 이 낯선 이의 겉모습 (네 눈에 보이는 것)', v, ''] : []))(profileLine(world, state.player.sheet, true)),
+    ...((v) => (v ? ['## 이 낯선 이에게서 받는 인상 (행동에서 드러난 성향)', `${v} — 이 인상에 네 성격대로 반응한다`, ''] : []))(traitImpression(world, state.player.sheet)),
     `## 이 낯선 이에 대한 너의 감정: ${stageOf(rel, !!npc.romanceable)}`,
     AXES.map((a) => `${AXIS_NAMES[a]} ${rel[a]}`).join(' · ') + '  (-100 ~ 100)',
     `비밀을 털어놓으려면 신뢰 ${secretTrustOf(world, npc.id)} 이상이 필요하다.`,

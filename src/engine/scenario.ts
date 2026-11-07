@@ -7,6 +7,7 @@ export const QUEST_TYPE_LABEL: Record<QuestType, string> = {
   rescue: '구출', defend: '방어', negotiate: '협상', survive: '생존', duel: '결투', bond: '관계',
 };
 import type { GameState } from './state/state';
+import { traitValue } from './traits';
 
 /**
  * 시나리오 엔진 (설계 리뷰 4.3절, 설계서 PART 13).
@@ -67,6 +68,7 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('flag' in c) return state.flags.includes(c.flag);
   if ('questDone' in c) return !!state.quests[c.questDone]?.done && !state.quests[c.questDone]?.failed;
   if ('level' in c) return state.player.sheet.level >= c.level;
+  if ('trait' in c) { const v = traitValue(world as WorldPackage, state.player.sheet, c.trait); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('var' in c) { const v = varValue(world, state, c.var); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('sceneEnd' in c) {
     const r = state.sceneResults?.[c.sceneEnd];

@@ -12,6 +12,8 @@ import { companionClass } from '../engine/classes';
 import { paragraphOf, titleOf, traceImages } from '../engine/assets';
 import type { NarrationImage } from '../engine/state/events';
 import { fmtMinutes, TIME_STEPS, type TimeSpent, turnMinutes } from '../engine/time';
+import { MAX_SHIFT, traitsFor } from '../engine/traits';
+import { traitShift } from '../engine/traitShift';
 import { debugNote, imageNote } from '../debug/trace';
 import { josa } from '../engine/text/josa';
 import { relationshipEvents } from './relationship';
@@ -69,12 +71,14 @@ interface DirectorOutput {
   scene_image?: string;
   /** v0.58: 이 행동에 걸린 시간 */
   time_spent?: TimeSpent;
+  /** v0.69: 이 행동이 주인공 성향을 분명히 드러냈을 때 */
+  trait_shift?: { trait: string; delta: number; reason: string }[];
 }
 
 const DIRECTOR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to', 'speakers', 'start_encounter', 'rest', 'discover', 'set_flags', 'take_items', 'scene_image', 'time_spent'],
+  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to', 'speakers', 'start_encounter', 'rest', 'discover', 'set_flags', 'take_items', 'scene_image', 'time_spent', 'trait_shift'],
   properties: {
     action_summary: { type: 'string', description: '플레이어가 하려는 행동 요약' },
     check_kind: { type: 'string', enum: ['none', 'skill', 'ability', 'save'], description: '결과가 불확실하고 실패에 의미가 있을 때만 판정. skill=기술 판정, ability=기술 없는 능력 판정, save=내성 굴림' },
@@ -89,6 +93,11 @@ const DIRECTOR_SCHEMA = {
     take_items: { type: 'array', items: { type: 'string' }, description: '"주울 수 있는 것" 중 플레이어가 이번 행동으로 실제로 집어 든 것의 key. 없으면 []' },
     set_flags: { type: 'array', items: { type: 'string' }, description: '"세울 수 있는 플래그" 중 이번 턴에 조건이 충족된 것의 ID' },
     rest: { type: 'string', enum: ['none', 'short', 'long'], description: '플레이어가 쉬려고 할 때만. 짧은 휴식=1시간, 긴 휴식=8시간 잠' },
+    trait_shift: {
+      type: 'array', maxItems: 2,
+      description: `이 행동이 "주인공의 성향" 축 중 하나를 분명히 드러냈을 때만 (도덕적 선택·결단·잔혹함·자비·배신·의리 등). 평범한 행동은 []. delta는 -${MAX_SHIFT}~${MAX_SHIFT} (작은 기울임 ±2~4, 뚜렷한 결단 ±5~10)`,
+      items: { type: 'object', additionalProperties: false, required: ['trait', 'delta', 'reason'], properties: { trait: { type: 'string', description: '성향 축 ID' }, delta: { type: 'integer' }, reason: { type: 'string', description: '플레이어에게 보이는 짧은 이유 (예: "다친 적을 살려 보냈다")' } } },
+    },
     time_spent: { type: 'string', enum: Object.keys(TIME_STEPS), description: `이 행동에 게임 속 시간이 얼마나 걸리는가 (이동·휴식 시간은 엔진이 따로 더한다). ${Object.entries(TIME_STEPS).map(([k, v]) => `${k}=${v.label}(${v.desc})`).join(', ')}` },
     scene_image: { type: 'string', description: '"장면 이미지 태그" 목록 중 이번 장면에 가장 어울리는 것. 목록이 없거나 어울리는 것이 없으면 ""' },
     speakers: {
@@ -188,6 +197,8 @@ const DIRECTOR_SYSTEM = `너는 1인칭 TRPG의 게임 마스터 판단 모듈�
 - 발견은 플레이어가 실제로 그곳을 살피거나 조사할 때만 넣는다. 판정이 필요한 발견은 check_kind=skill로 그 기술을 요청한다.
 - 플래그는 플레이어가 그 결정을 분명히 했을 때만 세운다.
 - 플레이어가 과감하거나 엉뚱한 행동(도발·무례·금기 깨기·훔치기·대담한 제안 등)을 하면 무난하게 흘려보내지 않는다. 결과가 불확실하면 판정을 걸고, 반응할 만한 인물을 speakers에 넣어 파장이 생기게 한다. 이 세계에서 정말 불가능한 일만 막는다.
+- 주인공의 성향은 소문처럼 퍼진다: 뚜렷한 성향이면 인물·사건이 그에 맞게 반응하도록 연출 방향을 고른다 (자비로운 이에게 도움을 청하는 사람, 냉혹한 이를 피하는 사람).
+- trait_shift: 행동이 "주인공의 성향" 축을 분명히 드러낼 때만 그 축을 움직인다 (말뿐인 다짐보다 실제 행동). 플레이어의 성향이 이야기 갈림길에 쓰이므로 공정하게 판단한다.
 - time_spent: 이 행동이 게임 속에서 실제로 걸리는 시간을 고른다. 말 몇 마디는 moment, 살펴보기·흥정은 short, 꼼꼼한 수색·긴 대화·식사는 long, 하루 일과·긴 기다림은 hours. 이동·휴식 시간은 엔진이 따로 더한다.`;
 
 const NARRATOR_SYSTEM = `너는 1인칭 TRPG의 서술자이자 NPC 연기자다. 한국어 2인칭("당신은 …")으로 장면을 서술한다.
@@ -384,6 +395,14 @@ export async function runTurn(
   if (moving) {
     push({ type: 'moved', to: d.move_to });
     outcomes.push(`이동 완료 → ${world.locations.find((l) => l.id === d.move_to)?.name}`);
+  }
+  // 성향 (v0.69): GM 판단 AI가 고른 기울임 — 엔진이 축·크기를 검증한다 (한 턴 축마다 ±10)
+  for (const sh of (Array.isArray(d.trait_shift) ? d.trait_shift : []).slice(0, 2)) {
+    const delta = Math.max(-MAX_SHIFT, Math.min(MAX_SHIFT, Math.round(Number(sh?.delta) || 0)));
+    const evs = traitShift(world, s.player.sheet, String(sh?.trait ?? ''), delta, String(sh?.reason ?? '').slice(0, 60));
+    if (!evs.length && sh?.trait && !traitsFor(world).some((t) => t.id === sh.trait)) rejected.push(`없는 성향 축: ${sh.trait}`);
+    evs.forEach(push);
+    for (const e of evs) if (e.type === 'trait_changed') outcomes.push(`주인공 성향: ${e.name} ${e.delta > 0 ? '+' : ''}${e.delta} (${e.label})`);
   }
   // 시간 흐름 (v0.58): 행동의 길이 + 이동. 휴식은 아래에서 따로
   {

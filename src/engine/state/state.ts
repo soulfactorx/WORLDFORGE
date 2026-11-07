@@ -235,6 +235,11 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         : s.party[e.who] ? { ...s, party: { ...s.party, [e.who]: e.sheet } } : s;
       return { ...next, log: [...next.log, { turn, kind: 'progress', text }] };
     }
+    case 'trait_changed': {
+      const sheet = s.player.sheet;
+      return { ...s, player: { ...s.player, sheet: { ...sheet, traits: { ...(sheet.traits ?? {}), [e.trait]: e.value } } },
+        log: [...s.log, { turn, kind: 'progress', text: `◐ ${e.name} ${e.delta > 0 ? '+' : ''}${e.delta} → ${e.label}${e.reason ? ` — ${e.reason}` : ''}` }] };
+    }
     case 'var_changed':
       return { ...s, vars: { ...(s.vars ?? {}), [e.varId]: e.value }, log: e.label ? [...s.log, { turn, kind: 'omen', text: `◇ ${e.name}: ${e.label}` }] : s.log };
     case 'quest_outcome': {

@@ -715,3 +715,14 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .profile-line { margin: 2px 0 6px; }
 .profile-editor { display: flex; flex-direction: column; gap: 10px; }
 .profile-editor .profile-field { border-radius: 8px; }
+/* 성향 (v0.69) */
+.trait-pick { gap: 6px; align-items: center; }
+.trait-bars { display: flex; flex-direction: column; gap: 3px; margin: 2px 0 8px; }
+.trait-bar { display: grid; grid-template-columns: 3.5em 1fr 3.5em auto; gap: 6px; align-items: center; }
+.trait-bar .muted:first-child { text-align: right; }
+.trait-track { position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, color-mix(in srgb, var(--dialogue) 45%, transparent), var(--border), color-mix(in srgb, var(--check) 45%, transparent)); }
+.trait-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted); }
+.trait-dot { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+.trait-bar b { font-size: .75rem; min-width: 5em; }
+.traits-editor .trait-row { border-top: 1px dashed var(--border); padding-top: 6px; margin-top: 6px; }
+.lib-bulk { gap: 6px; align-items: center; }

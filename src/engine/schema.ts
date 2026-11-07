@@ -518,6 +518,8 @@ export type Condition =
   | { level: number }
   /** 세계 수치 (설계 v4 E6, 예: 마을 치안) */
   | { var: string; gte?: number; lte?: number }
+  /** 주인공 성향 (v0.69): -100(낮은 쪽) ~ 100(높은 쪽) */
+  | { trait: string; gte?: number; lte?: number }
   /** 임무가 어떤 결과로 끝났나 (is 없으면 아무 결과로든 끝남) */
   | { questOutcome: EntityId; is?: string }
   /** NPC 목표 (설계 v4 E7): 진행 중·이뤄짐·꺾임 */
@@ -651,6 +653,8 @@ export type StoryEffect =
   | { killNpc: EntityId }
   /** 세계 수치 바꾸기 (설계 v4 E6) */
   | { var: string; add?: number; set?: number }
+  /** 주인공 성향을 움직인다 (v0.69) */
+  | { trait: string; add: number }
   /** 플레이어가 이 명제를 알게 된다 (기본 소문) */
   | { reveal: EntityId; state?: 'rumor' | 'partial' | 'confirmed' }
   | { relationship: EntityId; delta: Partial<Record<RelationAxis, number>> }
@@ -824,6 +828,8 @@ export interface WorldPackage {
   /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경·분위기·규칙. 모든 AI가 참고하고 수첩 "세계 소개"에 보인다 */
   /** 시간 흐름 규칙 (v0.58) — 비우면 AI가 행동마다 걸린 시간을 고른다 */
   time?: TimeRules;
+  /** 주인공 성향 축 (v0.69): 행동에 따라 움직이고 조건이 읽는다 — 비우면 장르 기본 */
+  traits?: TraitAxis[];
   /** 주인공 정보 양식 (v0.68): 시작할 때 고르거나 적는 성별·나이·외모 등 — 비우면 장르 기본 */
   playerProfile?: PlayerProfile;
   /** 이 세계의 직업 목록 (v0.56) — 비우면 장르 기본 프리셋. 규칙은 base(엔진 직업)를 따르고 이름·설명·기술만 바꾼다 */
@@ -892,4 +898,19 @@ export interface ProfileField {
   required?: boolean;
   /** NPC가 겉으로 보고 알 수 있는 것 (외모·옷차림·종족 등) — NPC 연기 AI에게도 알린다 */
   visible?: boolean;
+}
+
+/** 주인공 성향 축 (v0.69): -100 = low 쪽 끝, +100 = high 쪽 끝 */
+export interface TraitAxis {
+  id: string;
+  /** 축 이름 (예: 선악) */
+  name: string;
+  /** 낮은 쪽 이름 (예: 악) */
+  low: string;
+  /** 높은 쪽 이름 (예: 선) */
+  high: string;
+  /** 처음 값 (기본 0) */
+  initial?: number;
+  /** 시작할 때 플레이어가 기울기를 고른다 (기본 예) */
+  choose?: boolean;
 }

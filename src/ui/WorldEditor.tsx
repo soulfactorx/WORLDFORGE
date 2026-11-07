@@ -58,7 +58,7 @@ function tabForPath(path: string): Tab {
   if (path.startsWith('time')) return 'basic';
   if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style') || path.startsWith('overview') || path.startsWith('gmNotes')) return 'basic';
   if (path.startsWith('classes')) return 'classes';
-  if (path.startsWith('playerProfile')) return 'player';
+  if (path.startsWith('playerProfile') || path.startsWith('traits')) return 'player';
   if (path.startsWith('assets')) return 'images';
   if (path.startsWith('locations')) return 'locations';
   if (path.startsWith('characters')) return 'characters';
@@ -500,7 +500,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
 
       {tab === 'classes' && <ClassEditor world={w} onChange={(classes) => set({ classes })} />}
-      {tab === 'player' && <ProfileEditor world={w} onChange={(playerProfile) => set({ playerProfile })} />}
+      {tab === 'player' && <ProfileEditor world={w} onChange={(playerProfile) => set({ playerProfile })} onTraits={(traits) => set({ traits })} />}
       {tab === 'scenes' && (
         <>
           <p className="muted small">

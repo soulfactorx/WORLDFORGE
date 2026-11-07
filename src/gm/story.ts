@@ -1,3 +1,4 @@
+import { traitShift } from '../engine/traitShift';
 import { varLabel, varValue } from '../engine/scenario';
 import type { StoryEffect, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
@@ -57,6 +58,10 @@ export function effectEvents(world: WorldPackage, state: GameState, effects: Sto
         ? `🔗 ${nm(a)}와(과) ${nm(b)}의 사이가 바뀌었다 — ${fx.kind === 'none' ? '남남이 되었다' : RELATION_KIND_LABEL[fx.kind]}`
         : undefined;
       push({ type: 'npc_relation_changed', key, kind: fx.kind, ...(fx.note ? { note: fx.note } : {}), ...(text ? { text } : {}) });
+      continue;
+    }
+    if ('trait' in fx) {
+      for (const e of traitShift(world, s.player.sheet, fx.trait, fx.add, reason)) push(e);
       continue;
     }
     if ('var' in fx) {

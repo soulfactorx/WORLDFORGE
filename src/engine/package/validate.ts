@@ -13,6 +13,7 @@ import { GENRES } from '../../data/genres';
 import { stockDataUrl } from '../../data/stockart';
 import { MAX_LEVEL } from '../character/progression';
 import { classesFor } from '../classes';
+import { traitsFor } from '../traits';
 import { subclassesOf } from '../character/build';
 import { isAlwaysTrue, isUnset } from '../scenario';
 
@@ -132,6 +133,7 @@ export function validateWorld(input: unknown): Issue[] {
   const goalIds = new Set(characters.flatMap((c) => (Array.isArray(c?.goals) ? c.goals.map((g) => g?.id) : [])));
   const worldVars = arr<NonNullable<WorldPackage['vars']>[number]>('vars', false);
   const varIds = new Set(worldVars.map((v) => v?.id));
+  const traitIds = new Set((Array.isArray((input as Record<string, unknown>).traits) || (input as Record<string, unknown>).traits === undefined ? traitsFor(input as unknown as WorldPackage) : []).map((t) => t?.id).filter(Boolean));
   const flagIds = new Set(flags.map((f) => f?.id));
   const entityIds = new Set([...locIds, ...charIds]);
 
@@ -272,6 +274,7 @@ export function validateWorld(input: unknown): Issue[] {
     if ('day' in cond) { if (typeof cond.day !== 'number' || cond.day < 0) err(path, 'day는 0 이상의 숫자입니다.'); return; }
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
+    if ('trait' in cond) { if (!traitIds.has(cond.trait)) err(path, `없는 성향 축 "${cond.trait}" (${[...traitIds].join(', ')})`); return; }
     if ('var' in cond) { if (!varIds.has(cond.var)) err(path, `선언되지 않은 세계 수치 "${cond.var}"`); return; }
     if ('sceneEnd' in cond) {
       const sd = ((input as unknown as WorldPackage).scenes ?? []).find((x) => x?.id === cond.sceneEnd);
@@ -385,6 +388,25 @@ export function validateWorld(input: unknown): Issue[] {
           else if (!(typeof v === 'number' && v >= 0)) err(`time.steps.${k}`, '0 이상 숫자(분)입니다.');
         }
         if (typeof t.maxPerTurn === 'number' && t.maxPerTurn > 1440) warn('time.maxPerTurn', '한 턴에 하루 넘게 흐르면 일정·시계가 한꺼번에 지나갈 수 있습니다.');
+      }
+    }
+  }
+  // ---- 주인공 성향 축 (v0.69)
+  {
+    const tr = (input as Record<string, unknown>).traits;
+    if (tr !== undefined) {
+      if (!Array.isArray(tr)) err('traits', '성향 축 목록이어야 합니다.');
+      else {
+        const seen = new Set<string>();
+        tr.forEach((t0, i) => {
+          const t = t0 as Record<string, unknown>;
+          const p = `traits[${i}]`;
+          if (typeof t?.id !== 'string' || !/^[a-z0-9_]+$/.test(t.id)) err(`${p}.id`, 'ID는 영문 소문자·숫자·_ 입니다.');
+          else if (seen.has(t.id)) err(`${p}.id`, `ID "${t.id}"가 겹칩니다.`);
+          else seen.add(t.id);
+          for (const k of ['name', 'low', 'high'] as const) if (typeof t?.[k] !== 'string' || !(t[k] as string).trim()) err(`${p}.${k}`, '이름이 필요합니다.');
+          if (t?.initial !== undefined && !(typeof t.initial === 'number' && t.initial >= -100 && t.initial <= 100)) err(`${p}.initial`, '-100 ~ 100 숫자입니다.');
+        });
       }
     }
   }
@@ -565,6 +587,7 @@ export function validateWorld(input: unknown): Issue[] {
       if ('giveItem' in fx) { if (!itemIds.has(fx.giveItem as string)) err(p, `없는 아이템 "${String(fx.giveItem)}"`); return; }
       if ('takeItem' in fx) { if (!itemIds.has(fx.takeItem as string)) err(p, `없는 아이템 "${String(fx.takeItem)}"`); return; }
       if ('money' in fx) { if (typeof fx.money !== 'number') err(p, 'money는 숫자입니다.'); return; }
+      if ('trait' in fx) { if (!traitIds.has(fx.trait as string)) err(p, `없는 성향 축 "${String(fx.trait)}"`); if (typeof fx.add !== 'number') err(p, 'add 숫자가 필요합니다.'); return; }
       if ('var' in fx) { if (!varIds.has(fx.var as string)) err(p, `선언되지 않은 세계 수치 "${String(fx.var)}"`); if (typeof (fx.add ?? fx.set) !== 'number') err(p, 'add 또는 set 숫자가 필요합니다.'); return; }
       err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money·var·npcRelation 중 하나를 쓰세요.');
     });

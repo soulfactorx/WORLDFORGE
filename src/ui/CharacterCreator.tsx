@@ -1,7 +1,8 @@
 import { useRs } from './reskin';
 import { useMemo, useState } from 'react';
 import { recommendedSkills, skillOptionsOf } from '../engine/classes';
-import type { PlayerProfile, WorldClass } from '../engine/schema';
+import type { PlayerProfile, TraitAxis, WorldClass } from '../engine/schema';
+import { TRAIT_START } from '../engine/traits';
 import { gendersOf, profileErrors } from '../engine/profile';
 import { abilityModifier } from '../engine/dice/dice';
 import { ABILITIES, ABILITY_NAMES, CLASSES, POINT_BUY_BUDGET, POINT_BUY_COST, SKILLS, STANDARD_ARRAY, type SkillId } from '../engine/character/rules';
@@ -14,11 +15,12 @@ const POINT_VALUES = Object.keys(POINT_BUY_COST).map(Number);
 
 const DEFAULT_CLASSES: WorldClass[] = Object.values(CLASSES).map((c) => ({ id: c.id, name: c.name, base: c.id, blurb: c.blurb }));
 
-export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES, profile: form = { fields: [] } }: { onCreate: (c: CharacterSheet) => void; onCancel: () => void; classes?: WorldClass[]; /** 주인공 정보 양식 (v0.68) */ profile?: PlayerProfile }) {
+export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES, profile: form = { fields: [] }, traits: axes = [] }: { onCreate: (c: CharacterSheet) => void; onCancel: () => void; classes?: WorldClass[]; /** 주인공 정보 양식 (v0.68) */ profile?: PlayerProfile; /** 성향 축 (v0.69) */ traits?: TraitAxis[] }) {
   const list = classes.filter((c) => CLASSES[c.base]);
   const [name, setName] = useState('');
   const genders = gendersOf(form);
   const [gender, setGender] = useState('');
+  const [lean, setLean] = useState<Record<string, number>>(() => Object.fromEntries(axes.map((t) => [t.id, t.initial ?? 0])));
   const [info, setInfo] = useState<Record<string, string>>(() => Object.fromEntries((form.fields ?? []).filter((f) => f.kind === 'select' && f.required && f.options?.length).map((f) => [f.id, f.options![0]!])));
   const rs = useRs();
   const [roleId, setRoleId] = useState(list[0]?.id ?? 'fighter');
@@ -32,7 +34,7 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
   // 기본 8직업이 아니면 시트에 역할 이름을 남긴다
   const custom = !(role.id === role.base && role.name === cls.name);
 
-  const input = { name: name.trim() || '이방인', classId, method, abilities, skills, ...(custom ? { role: { id: role.id, name: role.name, skillOptions: options } } : {}), ...(gender ? { gender } : {}), profile: info };
+  const input = { name: name.trim() || '이방인', classId, method, abilities, skills, ...(custom ? { role: { id: role.id, name: role.name, skillOptions: options } } : {}), ...(gender ? { gender } : {}), profile: info, ...(axes.length ? { traits: lean } : {}) };
   const errors = useMemo(() => [...profileErrors(form, gender, info), ...validateCreation(input)], [name, roleId, method, abilities, skills, gender, info]);
 
   function changeClass(id: string) {
@@ -61,7 +63,7 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
       <h2>주인공 만들기</h2>
       <p className="muted small">당신은 이 세계에 소환된 이방인입니다. 몸과 기술은 기억하지만, 이 세계에 대해서는 아무것도 모릅니다.</p>
       <label>이름<input value={name} placeholder="이방인" onChange={(e) => setName(e.target.value)} /></label>
-      {(genders.length > 0 || (form.fields ?? []).length > 0) && (
+      {(genders.length > 0 || (form.fields ?? []).length > 0 || axes.length > 0) && (
         <fieldset className="profile-form">
           <legend>주인공 정보</legend>
           {genders.length > 0 && (
@@ -70,6 +72,16 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
               {genders.map((g) => <button key={g} type="button" role="radio" aria-checked={gender === g} className={gender === g ? 'primary' : ''} onClick={() => setGender(g)}>{g}</button>)}
             </div>
           )}
+          {axes.filter((t) => t.choose !== false).map((t) => (
+            <div key={t.id} className="row trait-pick" role="radiogroup" aria-label={t.name}>
+              <span className="small">성향 · {t.name}</span>
+              {TRAIT_START.map(([v, which]) => {
+                const label = which === 'low' ? `${t.low} 쪽` : which === 'high' ? `${t.high} 쪽` : '중간';
+                return <button key={which} type="button" role="radio" aria-checked={lean[t.id] === v} className={lean[t.id] === v ? 'primary' : ''} onClick={() => setLean((p) => ({ ...p, [t.id]: v }))}>{label}</button>;
+              })}
+            </div>
+          ))}
+          {axes.some((t) => t.choose !== false) && <p className="small muted">성향은 플레이하며 행동에 따라 움직이고, 이야기 갈림길(임무·선택·결말)이 이것을 봅니다.</p>}
           {(form.fields ?? []).map((f) => (
             <label key={f.id}>{f.label}{f.required ? ' *' : ''}{f.visible ? <span className="small muted"> · 사람들이 보고 아는 것</span> : null}
               {f.kind === 'select'

@@ -1,11 +1,12 @@
 /** 주인공 정보 양식 편집 (v0.68): 시작할 때 고르거나 적는 성별·나이·종족·신분·외모… */
 import { genreOf } from '../data/genres';
 import { DEFAULT_GENDERS, PROFILE_PRESETS, profileFor } from '../engine/profile';
-import type { PlayerProfile, ProfileField, WorldPackage } from '../engine/schema';
+import type { PlayerProfile, ProfileField, TraitAxis, WorldPackage } from '../engine/schema';
+import { TRAIT_PRESETS, traitsFor } from '../engine/traits';
 
 const KINDS: [ProfileField['kind'], string][] = [['text', '한 줄'], ['long', '여러 줄'], ['select', '고르기']];
 
-export function ProfileEditor({ world, onChange }: { world: WorldPackage; onChange: (p: PlayerProfile | undefined) => void }) {
+export function ProfileEditor({ world, onChange, onTraits }: { world: WorldPackage; onChange: (p: PlayerProfile | undefined) => void; onTraits: (t: TraitAxis[] | undefined) => void }) {
   const own = world.playerProfile;
   const p = profileFor(world);
   const fields = p.fields ?? [];
@@ -61,7 +62,52 @@ export function ProfileEditor({ world, onChange }: { world: WorldPackage; onChan
           </div>
         </fieldset>
       ))}
+      <TraitsEditor world={world} onChange={onTraits} />
+      <h4>주인공 정보 항목</h4>
       <button type="button" onClick={() => { let n = fields.length + 1; while (fields.some((f) => f.id === `field${n}`)) n++; put({ fields: [...fields, { id: `field${n}`, label: '새 항목', kind: 'text' }] }); }}>＋ 항목 추가</button>
     </div>
+  );
+}
+
+/** 성향 축 (v0.69): 행동에 따라 움직이고, 조건(임무·줄기·선택·결말)이 읽는다 */
+function TraitsEditor({ world, onChange }: { world: WorldPackage; onChange: (t: TraitAxis[] | undefined) => void }) {
+  const axes = traitsFor(world);
+  const own = !!world.traits;
+  const set = (i: number, patch: Partial<TraitAxis>) => onChange(axes.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+  return (
+    <fieldset className="traits-editor">
+      <legend>성향 축 — 행동에 따라 움직이고 이야기 갈림길이 읽는다</legend>
+      <p className="small muted">
+        GM 판단 AI가 행동마다 축을 움직입니다 (한 턴 ±10까지). 임무·이야기 줄기·결정적 선택·결말의 조건에서 <b>주인공 성향</b>으로 읽고, 효과로 움직일 수도 있습니다. NPC는 뚜렷한 성향을 "인상"으로 느낍니다.
+        {!own && <> 지금은 장르({genreOf(world.genre?.id).label}) 기본 축을 씁니다.</>}
+      </p>
+      <div className="row">
+        {own && <button type="button" className="small" onClick={() => confirm('이 세계 전용 성향 축을 지우고 장르 기본 축을 쓸까요?') && onChange(undefined)}>장르 기본으로 되돌리기</button>}
+        <label className="small">다른 장르 축으로 채우기
+          <select value="" onChange={(e) => { const k = e.target.value; if (k && TRAIT_PRESETS[k] && (!own || confirm('지금 축을 바꿀까요?'))) onChange(structuredClone(TRAIT_PRESETS[k])); }}>
+            <option value="">(고르기)</option>
+            {Object.keys(TRAIT_PRESETS).map((k) => <option key={k} value={k}>{genreOf(k).label}</option>)}
+          </select>
+        </label>
+        <label className="check small"><input type="checkbox" checked={own && axes.length === 0} onChange={(e) => onChange(e.target.checked ? [] : undefined)} /> 이 세계는 성향을 쓰지 않는다</label>
+      </div>
+      {axes.map((t, i) => (
+        <div key={i} className="trait-row">
+          <div className="form-grid">
+            <label>축 이름<input value={t.name} onChange={(e) => set(i, { name: e.target.value })} /></label>
+            <label>ID (영문)<input value={t.id} onChange={(e) => set(i, { id: e.target.value.replace(/[^a-z0-9_]/gi, '').toLowerCase() })} /></label>
+            <label>낮은 쪽 (-100)<input value={t.low} onChange={(e) => set(i, { low: e.target.value })} /></label>
+            <label>높은 쪽 (+100)<input value={t.high} onChange={(e) => set(i, { high: e.target.value })} /></label>
+            <label>처음 값 (-100~100)<input type="number" min={-100} max={100} value={t.initial ?? 0} onChange={(e) => set(i, { initial: Math.max(-100, Math.min(100, Number(e.target.value) || 0)) || undefined })} /></label>
+          </div>
+          <div className="row">
+            <label className="check small"><input type="checkbox" checked={t.choose !== false} onChange={(e) => set(i, { choose: e.target.checked ? undefined : false })} /> 시작할 때 플레이어가 기울기를 고른다</label>
+            <span className="spacer" />
+            <button type="button" className="small" onClick={() => onChange(axes.filter((_, j) => j !== i))}>삭제</button>
+          </div>
+        </div>
+      ))}
+      <button type="button" className="small" onClick={() => { let n = axes.length + 1; while (axes.some((t) => t.id === `trait${n}`)) n++; onChange([...axes, { id: `trait${n}`, name: '새 성향', low: '낮음', high: '높음' }]); }}>＋ 성향 축 추가</button>
+    </fieldset>
   );
 }

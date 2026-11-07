@@ -1,5 +1,6 @@
 import { classLabel, subclassLabel, subclassOptions } from '../engine/classes';
 import { profileLine } from '../engine/profile';
+import { traitLabel, traitsFor, traitValue } from '../engine/traits';
 import { useRs } from './reskin';
 import type { WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
@@ -97,6 +98,18 @@ export function CharacterPanel({ sheet, party = {}, onChoose, disabled, world, s
         <span>HP {sheet.hp}/{sheet.maxHp}</span>
       </div>
       {(sheet.gender || sheet.profile) && world && <p className="small muted profile-line">{profileLine(world, sheet)}</p>}
+      {world && traitsFor(world).length > 0 && (
+        <div className="trait-bars">
+          {traitsFor(world).map((t) => { const v = traitValue(world, sheet, t.id); return (
+            <div key={t.id} className="trait-bar small" title={`${t.name}: ${v > 0 ? '+' : ''}${v}`}>
+              <span className="muted">{t.low}</span>
+              <span className="trait-track"><span className="trait-mid" /><span className="trait-dot" style={{ left: `${(v + 100) / 2}%` }} /></span>
+              <span className="muted">{t.high}</span>
+              <b>{traitLabel(t, v)}</b>
+            </div>
+          ); })}
+        </div>
+      )}
       <div className="row small">
         <XpBar sheet={sheet} />
         <span className="spacer" />

@@ -11,12 +11,14 @@ import { STD_ITEMS } from '../data/items';
 import { classesFor } from './classes';
 import type { AssetMeta, Character, Claim, Fact, Rewards, SceneDef, WorldPackage } from './schema';
 import { addSource, sourcesOf } from './sources';
+import { profileFor } from './profile';
+import { traitsFor } from './traits';
 import { validateWorld } from './package/validate';
 
-export type BorrowKind = 'character' | 'location' | 'item' | 'monster' | 'scene' | 'faction' | 'knowledge' | 'class' | 'image'
+export type BorrowKind = 'character' | 'location' | 'item' | 'monster' | 'scene' | 'faction' | 'knowledge' | 'class' | 'image' | 'profile'
   | 'quest' | 'arc' | 'choice' | 'clock' | 'event' | 'ending' | 'flag' | 'var' | 'encounter';
 export const BORROW_LABEL: Record<BorrowKind, string> = {
-  character: '인물', location: '장소', item: '아이템', monster: '몬스터', scene: '장면', faction: '세력', knowledge: '지식', class: '직업', image: '이미지',
+  character: '인물', location: '장소', item: '아이템', monster: '몬스터', scene: '장면', faction: '세력', knowledge: '지식', class: '직업', image: '이미지', profile: '주인공 양식·성향',
   quest: '임무', arc: '이야기 줄기', choice: '결정적 선택', clock: '진행 시계', event: '연표 사건', ending: '결말', flag: '플래그', var: '세계 수치', encounter: '조우',
 };
 /** 이야기 장치 (v0.64): 다른 것을 많이 가리키므로, 가리키는 것을 끝까지 따라가 함께 가져온다 */
@@ -120,6 +122,12 @@ export function catalogOf(w: WorldPackage): CatalogEntry[] {
       const name = String(x.name ?? x.id);
       out.push({ kind: k, id: String(x.id), name, sub: logicSub[k](x), hay: [name, String(x.id), logicSub[k](x)].join(' ') });
     }
+  }
+  {
+    // 주인공 양식·성향 (v0.69): 세계마다 하나 (세계가 정하지 않았으면 장르 기본)
+    const pf = profileFor(w), tr = traitsFor(w);
+    const sub = [`항목 ${(pf.fields ?? []).map((f) => f.label).join('·') || '없음'}`, `성향 ${tr.map((t) => `${t.low}↔${t.high}`).join(', ') || '없음'}`, w.playerProfile || w.traits ? '' : '(장르 기본)'].filter(Boolean).join(' · ');
+    out.push({ kind: 'profile', id: 'profile', name: '주인공 양식·성향', sub, hay: ['주인공 성향 성별', sub].join(' ') });
   }
   for (const a of w.assets ?? []) {
     const who = a.characterId ? w.characters.find((c) => c.id === a.characterId)?.name : a.locationId ? w.locations.find((l) => l.id === a.locationId)?.name : '';
@@ -328,6 +336,32 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
     const key = LOGIC[k];
     const list = ((w as unknown as Record<string, unknown[] | undefined>)[key] ??= []);
     for (const x of listOf(source, k)) if (ids.has(x.id)) { list.push(remap(structuredClone(x))); count(k); }
+  }
+
+  // ---- 주인공 양식·성향 (v0.69)
+  if (want('profile').size || o.whole) {
+    const blankT = isBlankWorld(target);
+    if (blankT && o.whole) {
+      // 빈 새 세계를 통째로: 원래 세계의 양식·축 그대로 (장르 기본이면 장르를 따라온다)
+      if (source.playerProfile) w.playerProfile = structuredClone(source.playerProfile); else delete w.playerProfile;
+      if (source.traits) w.traits = structuredClone(source.traits); else delete w.traits;
+    } else {
+      const srcP = profileFor(source), myP = profileFor(w);
+      const fields = [...(myP.fields ?? [])];
+      for (const f of srcP.fields ?? []) if (!fields.some((x) => x.id === f.id)) fields.push(structuredClone(f));
+      const genders = srcP.genders?.length || myP.genders?.length ? [...new Set([...(myP.genders ?? []), ...(srcP.genders ?? [])])] : undefined;
+      w.playerProfile = { ...structuredClone(myP), fields, ...(genders ? { genders } : {}) };
+      const axes = [...traitsFor(w)];
+      for (const t of traitsFor(source)) if (!axes.some((x) => x.id === t.id)) axes.push(structuredClone(t));
+      if (JSON.stringify(axes) !== JSON.stringify(traitsFor(w))) w.traits = axes;
+    }
+    count('profile');
+  }
+  // 가져온 이야기 장치가 쓰는 성향 축은 함께 (없으면 조건이 깨진다)
+  {
+    const srcAxes = traitsFor(source), have = new Set(traitsFor(w).map((t) => t.id));
+    const used = new Set(strings([w.quests, w.arcs, w.choices, w.endings, w.events, w.scenes, w.characters, w.factions]).filter((x) => srcAxes.some((t) => t.id === x) && !have.has(x)));
+    if (used.size) { w.traits = [...traitsFor(w), ...srcAxes.filter((t) => used.has(t.id)).map((t) => structuredClone(t))]; notes.push(`가져온 것이 쓰는 성향 축도 함께 넣었습니다: ${srcAxes.filter((t) => used.has(t.id)).map((t) => t.name).join(', ')}`); }
   }
 
   // ---- 세계 통째로 (v0.67): 세계 설정과 나머지 장치

@@ -17,10 +17,10 @@ import { assetUrl } from '../storage/assets';
 
 type Src = { key: string; world: WorldPackage; builtin: boolean };
 /** 존재·사물 / 서사·법칙 */
-const BEINGS: BorrowKind[] = ['character', 'location', 'item', 'monster', 'faction', 'class', 'knowledge', 'image'];
+const BEINGS: BorrowKind[] = ['character', 'location', 'item', 'monster', 'faction', 'class', 'profile', 'knowledge', 'image'];
 const LORE: BorrowKind[] = ['arc', 'quest', 'scene', 'choice', 'ending', 'encounter', 'clock', 'event', 'flag', 'var'];
 const PAGE = 60;
-const ICON: Record<BorrowKind, string> = { character: '👤', location: '🗺', item: '🎒', monster: '👹', faction: '🏰', class: '🎓', knowledge: '💡', image: '🖼', arc: '📜', quest: '📌', scene: '🎭', choice: '⚖', ending: '🏁', encounter: '⚔', clock: '⏳', event: '📅', flag: '🚩', var: '📊' };
+const ICON: Record<BorrowKind, string> = { profile: '🧭', character: '👤', location: '🗺', item: '🎒', monster: '👹', faction: '🏰', class: '🎓', knowledge: '💡', image: '🖼', arc: '📜', quest: '📌', scene: '🎭', choice: '⚖', ending: '🏁', encounter: '⚔', clock: '⏳', event: '📅', flag: '🚩', var: '📊' };
 
 export function WorldLibrary({ target, onApply, onClose, title }: {
   /** 넣을 세계 (편집 중인 것) */
@@ -154,6 +154,17 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
       <div className="row lib-kinds"><span className="small muted lib-group">서사·법칙</span>
         {LORE.map((k) => <button key={k} type="button" className={`small${kind === k ? ' on' : ''}`} disabled={!countOf(k)} onClick={() => { setKind(k); setLimit(PAGE); }}>{BORROW_LABEL[k]} {countOf(k)}</button>)}
       </div>
+      {rows.length > 0 && (() => {
+        const inB = rows.filter(({ src, e }) => basket.has(bkey(src.key, e.kind, e.id)) || basket.has(wholeKey(src.key))).length;
+        return (
+          <div className="row small lib-bulk">
+            <span className="muted">{q.trim() ? `"${q.trim()}" ` : ''}{BORROW_LABEL[kind]} {rows.length.toLocaleString()}개{from !== 'all' ? ` · ${srcs.find((x) => x.key === from)?.world.manifest.name}` : ' · 모든 우주'}{inB ? ` · 담음 ${inB}` : ''}</span>
+            <span className="spacer" />
+            <button type="button" className="small" disabled={inB === rows.length} onClick={() => setBasket((b) => { const n = new Map(b); for (const { src, e } of rows) { if (n.has(wholeKey(src.key))) continue; n.set(bkey(src.key, e.kind, e.id), { src: src.key, kind: e.kind, id: e.id, name: e.name }); } return n; })}>＋ 이 결과 {rows.length.toLocaleString()}개 모두 담기</button>
+            <button type="button" className="small" disabled={!inB} onClick={() => setBasket((b) => { const n = new Map(b); for (const { src, e } of rows) n.delete(bkey(src.key, e.kind, e.id)); return n; })}>− 이 결과 모두 빼기</button>
+          </div>
+        );
+      })()}
       <div className="lib-grid">
         {shown.map(({ src, e }) => {
           const on = basket.has(bkey(src.key, e.kind, e.id)) || basket.has(wholeKey(src.key));

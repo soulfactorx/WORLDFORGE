@@ -54,6 +54,8 @@ export type GameEvent =
   | { type: 'level_up'; who: string; sheet: CharacterSheet; hpGain: number; features: string[] }
   /** 세계 수치 변화 (v0.43). label: 보이는 수치의 단계가 바뀌면 기록에 남긴다 */
   | { type: 'var_changed'; varId: string; value: number; name: string; label?: string }
+  /** 주인공 성향 (v0.69) */
+  | { type: 'trait_changed'; trait: string; value: number; delta: number; name: string; label: string; reason?: string }
   /** 임무가 이 결과로 끝났다 (v0.43) */
   | { type: 'quest_outcome'; questId: EntityId; questName: string; outcomeId: string; name: string; text?: string }
   | { type: 'npc_approached'; beatId: EntityId; npcId: EntityId; mode: 'visit' | 'message'; to?: EntityId; stay: number; text: string }
