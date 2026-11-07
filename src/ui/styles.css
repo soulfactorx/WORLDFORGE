@@ -726,3 +726,16 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .trait-bar b { font-size: .75rem; min-width: 5em; }
 .traits-editor .trait-row { border-top: 1px dashed var(--border); padding-top: 6px; margin-top: 6px; }
 .lib-bulk { gap: 6px; align-items: center; }
+
+/* 장면 시험 플레이 (v0.71) */
+.scene-tester { position: fixed; inset: 0; z-index: 900; background: rgba(0,0,0,.6); display: flex; justify-content: center; align-items: flex-start; overflow: auto; padding: 16px; }
+.scene-tester-box { background: var(--surface); color: var(--text); border-radius: 10px; padding: 14px; width: min(760px, 100%); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+.scene-tester-opts { flex-wrap: wrap; gap: 8px; }
+.scene-tester-issues { margin: 0; padding-left: 18px; }
+.scene-tester-issues .err, .scene-tester .err { color: #c0392b; }
+.scene-tester .warn { color: #b9770e; }
+.scene-tester-result { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid rgba(127,127,127,.35); border-radius: 8px; }
+.scene-tester-sim ul { list-style: none; padding: 0; margin: 6px 0 0; }
+.scene-tester-sim li { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.scene-tester-sim .sim-name { min-width: 7em; }
+.scene-tester-sim .sim-bar { flex: 1; max-width: 260px; }

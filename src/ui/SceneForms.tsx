@@ -10,6 +10,7 @@ import { EffectsEditor } from './WorldForms';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { ImagePicker } from './ImagePicker';
 import { autoSceneArt, SCENE_FX } from '../data/sceneArt';
+import { SceneTester } from './SceneTester';
 
 type Set = (patch: Partial<WorldPackage>) => void;
 
@@ -164,6 +165,7 @@ function EndForm({ e, def, w, up }: { e: SceneEnd; def: SceneDef; w: WorldPackag
 export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
   const scenes = w.scenes ?? [];
   const [preset, setPreset] = useState(SCENE_PRESETS[0]!.key);
+  const [testing, setTesting] = useState<string | null>(null);
   const chars = [['', '(없음 — 상대 없는 장면)'], ...w.characters.map((c) => [c.id, c.name] as const)] as const;
   const locs = [['', '(어디서나)'], ...w.locations.map((l) => [l.id, l.name] as const)] as const;
   const save = (list: SceneDef[]) => set({ scenes: list.length ? list : undefined });
@@ -172,17 +174,23 @@ export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
       <div className="row scene-preset">
         <b>프리셋으로 추가:</b>
         <select value={preset} onChange={(e) => setPreset(e.target.value)}>{SCENE_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label} — {p.desc}</option>)}</select>
-        <button type="button" onClick={() => {
-          const d = SCENE_PRESETS.find((p) => p.key === preset)!.make();
-          save([...scenes, { ...d, id: uniq(d.id, scenes.map((s) => s.id)) }]);
-        }}>＋ 추가</button>
+        {[false, true].map((test) => (
+          <button key={String(test)} type="button" onClick={() => {
+            const d = SCENE_PRESETS.find((p) => p.key === preset)!.make();
+            const id = uniq(d.id, scenes.map((s) => s.id));
+            save([...scenes, { ...d, id }]);
+            if (test) setTesting(id);
+          }}>{test ? '＋ 추가하고 바로 테스트' : '＋ 추가'}</button>
+        ))}
       </div>
+      {testing && (w.scenes ?? []).some((s) => s.id === testing) && <SceneTester w={w} sceneId={testing} onClose={() => setTesting(null)} />}
       <ItemList<SceneDef> title="장면" items={scenes} onChange={save}
         make={(n) => ({ id: `scene/new-${n}`, name: '새 장면', description: '', gauges: [{ id: 'progress', name: '진척', start: 0, min: 0, max: 10 }],
           actions: [{ id: 'try', name: '시도', check: 'skill:persuasion', dc: 12, success: { gauges: { progress: 3 } } }],
           ends: [{ id: 'done', name: '성공', when: { gauge: 'progress', gte: 10 }, outcome: 'success' }, { id: 'timeout', name: '시간 초과', when: { round: 99 }, outcome: 'failure' }], maxRounds: 8, timeoutEnd: 'timeout' })}
         render={(d, up) => (
           <div className="form-grid scene-form">
+            <div className="row"><button type="button" className="primary" onClick={() => setTesting(d.id)}>▶ 바로 테스트</button><span className="small muted">저장하지 않고 지금 내용 그대로 돌려 보기 · 자동 200회 시뮬레이션</span></div>
             <Text label="ID" value={d.id} onChange={(id) => up({ id })} />
             <Text label="이름" value={d.name} onChange={(name) => up({ name })} />
             <Area label="설명 (GM용 — 어떤 장면인가, 언제 권하나)" value={d.description} onChange={(description) => up({ description })} rows={2} />
