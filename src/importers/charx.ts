@@ -48,7 +48,6 @@ export interface ParseResult {
   error?: string;
 }
 
-const MAX_BYTES = 30 * 1024 * 1024;
 const MAX_UNZIPPED = 60 * 1024 * 1024;
 const MAX_ENTRIES = 500;
 
@@ -174,7 +173,6 @@ const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg
 /** 파일(바이트)을 읽어 카드를 정규화한다 */
 export function parseCardFile(fileName: string, bytes: Uint8Array): ParseResult {
   try {
-    if (bytes.byteLength > MAX_BYTES) return { card: null, error: '파일이 너무 큽니다 (최대 30MB).' };
     // PNG 카드: ccv3(우선) 또는 chara 텍스트 청크 (base64 JSON)
     if (bytes[0] === 0x89 && bytes[1] === 0x50) {
       const text = readPngText(bytes);

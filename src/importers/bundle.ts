@@ -51,7 +51,6 @@ export async function readCharxBundle(file: Blob, fileName = 'card.charx', onPro
   const zip = await BlobZip.open(file);
   if (!zip) {
     // zip이 아니면 PNG·JSON 카드 (작은 파일)
-    if (file.size > 50 * 1024 * 1024) throw new Error('CHARX(zip)가 아닌 50MB 이상 파일은 읽지 않습니다.');
     const all = new Uint8Array(await file.arrayBuffer());
     const r = parseCardFile(fileName, all);
     if (!r.card) throw new Error(r.error ?? '카드를 읽을 수 없습니다.');

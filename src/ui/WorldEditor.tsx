@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { SKILL_IDS } from '../engine/character/rules';
 import { SceneForms } from './SceneForms';
+import { storeAssets } from '../storage/assets';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
@@ -254,16 +255,25 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       {tab === 'characters' && packUi === 'character' && <PackExport w={w} kind="character" onClose={() => setPackUi(null)} />}
       {tab === 'items' && packUi === 'rules' && <PackExport w={w} kind="rules" onClose={() => setPackUi(null)} />}
       {tab === 'characters' && importing && (
-        <CardImportDialog world={w} settings={settings} initialFile={initialCard} onClose={() => setImporting(false)} onAdd={(r) => {
+        <CardImportDialog world={w} settings={settings} initialFile={initialCard} onClose={() => setImporting(false)} onAdd={async (r) => {
+          // 카드 이미지 (v0.52): 이 세계의 이미지로 저장한다
+          let stored = 0;
+          if (r.images?.length) {
+            setStatus(`이미지 저장 중… 0/${r.images.length}`);
+            const res = await storeAssets(w.manifest.id, r.images, (d, t) => setStatus(`이미지 저장 중… ${d}/${t}`));
+            stored = res.stored;
+          }
+          const newAssets = (r.assets ?? []).filter((a) => !(w.assets ?? []).some((x) => x.id === a.id));
           // 카드로 새로 만드는 세계라면 이름도 카드에서 가져온다
           const named = initialCard && w.manifest.name === '새 세계' && r.cardName ? { ...w.manifest, name: r.cardName } : w.manifest;
           // 다른 사람의 카드로 만든 인물이 들어간 세계는 개인용이 된다 (내보내기 불가)
           const manifest = { ...named, private: named.private ?? { source: r.cardName ?? '캐릭터 카드', note: PRIVATE_NOTE } };
-          set({ manifest, characters: [...w.characters, ...r.characters], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs] });
+          set({ manifest, characters: [...w.characters, ...r.characters], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs], ...(newAssets.length ? { assets: [...(w.assets ?? []), ...newAssets] } : {}) });
           setImporting(false);
+          const imgNote = stored ? ` · 이미지 ${stored.toLocaleString()}장 (인물에 붙은 것 ${newAssets.filter((a) => a.characterId).length}장)` : '';
           setStatus(r.characters.length === 1
-            ? `${josa(r.characters[0]!.name, '을/를')} 추가했습니다 — 지식 ${r.claims.length}개. 인물 목록 맨 아래에서 확인하세요.`
-            : `인물 ${r.characters.length}명과 지식 ${r.claims.length}개를 추가했습니다. 인물 목록 맨 아래에서 확인하세요.`);
+            ? `${josa(r.characters[0]!.name, '을/를')} 추가했습니다 — 지식 ${r.claims.length}개${imgNote}. 인물 목록 맨 아래에서 확인하세요. 저장을 눌러야 반영됩니다.`
+            : `인물 ${r.characters.length}명과 지식 ${r.claims.length}개를 추가했습니다${imgNote}. 인물 목록 맨 아래에서 확인하세요. 저장을 눌러야 반영됩니다.`);
         }} />
       )}
       {tab === 'characters' && (
