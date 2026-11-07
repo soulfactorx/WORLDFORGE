@@ -343,7 +343,16 @@ img.zoomable { cursor: zoom-in; }
 .lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; cursor: zoom-out; touch-action: pinch-zoom; }
 .lightbox img { max-width: 100%; max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); object-fit: contain; border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
 .lightbox-caption { margin: 0; color: #eee; font-size: .9rem; text-align: center; }
-.lightbox-close { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,.5); color: #fff; border-color: rgba(255,255,255,.4); font-size: 1.1rem; }
+.lightbox-tools { position: absolute; top: 10px; right: 10px; left: 10px; display: flex; gap: 8px; align-items: center; justify-content: flex-end; z-index: 2; }
+.lightbox-tools button, .lightbox-tools a { background: rgba(0,0,0,.55); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 6px; padding: 5px 10px; font-size: .9rem; text-decoration: none; }
+.lightbox-dim { color: #ddd; font-size: .8rem; background: rgba(0,0,0,.45); padding: 3px 8px; border-radius: 6px; }
+.lightbox-close { font-size: 1.1rem; }
+.lightbox-stage { display: flex; align-items: center; justify-content: center; width: 100%; flex: 1 1 auto; min-height: 0; max-height: calc(100dvh - 90px); }
+.lightbox:not(.actual) .lightbox-stage img.vector { height: calc(100dvh - 140px); width: auto; max-width: 92vw; }
+.lightbox img { cursor: zoom-in; }
+.lightbox.actual { justify-content: flex-start; align-items: stretch; padding-top: 56px; }
+.lightbox.actual .lightbox-stage { flex: 1; overflow: auto; display: block; max-height: none; cursor: default; touch-action: auto; }
+.lightbox.actual .lightbox-stage img { max-width: none; max-height: none; width: auto; height: auto; cursor: zoom-out; display: block; margin: 0 auto; border-radius: 0; }
 
 /* 보상 연출 · 세션 훅 (v0.39) */
 .reward-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; margin: 4px 0; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); animation: reward-in .35s ease-out; }
@@ -678,3 +687,18 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .universe.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .lib-group { min-width: 56px; }
 .lib-icon { font-size: 1.1rem; display: flex; align-items: center; gap: 4px; }
+/* 만계서고 자세히 보기 (v0.66) */
+.lib-cell-wrap { position: relative; min-width: 0; display: flex; }
+.lib-cell-wrap > .lib-cell { flex: 1; }
+.lib-info { position: absolute; top: 4px; right: 4px; z-index: 1; padding: 0 6px; font-size: .8rem; line-height: 1.5; border-radius: 10px; background: color-mix(in srgb, var(--surface) 85%, transparent); }
+.lib-detail-back { position: fixed; inset: 0; z-index: 120; background: rgb(0 0 0 / .45); display: flex; align-items: center; justify-content: center; padding: 12px; }
+.lib-detail { width: min(760px, 100%); max-height: 92dvh; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.lib-field b { font-size: .85rem; }
+.lib-field p { margin: 2px 0 6px; white-space: pre-wrap; font-size: .88rem; line-height: 1.55; }
+.lib-char-head { align-items: flex-start; gap: 12px; }
+.lib-portrait { width: 120px; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); cursor: zoom-in; }
+.lib-image-view img { max-width: 100%; max-height: 55vh; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); display: block; cursor: zoom-in; }
+.lib-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-top: 4px; }
+.lib-gallery figure { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.lib-gallery img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: zoom-in; }
+.lib-gallery figcaption { font-size: .66rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

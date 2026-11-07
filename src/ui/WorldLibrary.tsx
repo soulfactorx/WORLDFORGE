@@ -11,6 +11,9 @@ import { assetBlob, storeAssets } from '../storage/assets';
 import { listPackages, packageKey } from '../storage/packages';
 import { AssetImage } from './AssetImage';
 import { confirmAdult } from './adult';
+import { JsonTree } from './DebugPanel';
+import { zoomImage } from './Lightbox';
+import { assetUrl } from '../storage/assets';
 
 type Src = { key: string; world: WorldPackage; builtin: boolean };
 /** 존재·사물 / 서사·법칙 */
@@ -35,6 +38,8 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
   const [basket, setBasket] = useState<Map<string, { src: string; kind: BorrowKind; id: string; name: string }>>(new Map());
   const [opts, setOpts] = useState({ withKnowledge: true, withImages: true, withFaction: true, link: true });
   const [busy, setBusy] = useState('');
+  /** 자세히 보기 (v0.66) */
+  const [detail, setDetail] = useState<{ src: Src; e: CatalogEntry } | null>(null);
   const [error, setError] = useState('');
   const doing = useRef(false);
 
@@ -141,18 +146,23 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
         {shown.map(({ src, e }) => {
           const on = basket.has(bkey(src.key, e.kind, e.id));
           return (
-            <button key={`${src.key}|${e.id}`} type="button" className={`lib-cell${on ? ' on' : ''}`} onClick={() => toggle(src, e)} title={`${e.name}\n${e.sub}\n${src.world.manifest.name} · ${e.id}`}>
+            <div key={`${src.key}|${e.id}`} className="lib-cell-wrap">
+            <button type="button" className="lib-info" title="자세히 보기" aria-label={`${e.name} 자세히 보기`} onClick={() => setDetail({ src, e })}>ⓘ</button>
+            <button type="button" className={`lib-cell${on ? ' on' : ''}`} onClick={() => toggle(src, e)} onDoubleClick={() => setDetail({ src, e })} title={`${e.name}\n${e.sub}\n${src.world.manifest.name} · ${e.id}\n(누르면 담기 · 두 번 누르거나 ⓘ로 자세히)`}>
               {e.portrait ? <img src={e.portrait} alt="" /> : e.thumb ? <AssetImage pkg={src.world.manifest.id} id={e.thumb} alt="" /> : <span className="lib-icon" aria-hidden>{ICON[e.kind]} <span className="small muted">{BORROW_LABEL[e.kind]}</span></span>}
               <span className="lib-name">{on ? '✓ ' : ''}{e.name}</span>
               <span className="lib-sub">{e.sub}</span>
               <span className="lib-from">{src.world.manifest.name}{src.world.manifest.private ? ' 🔒' : ''}{src.world.manifest.contentRating === 'mature' ? ' 🔞' : ''}</span>
             </button>
+            </div>
           );
         })}
       </div>
       {rows.length > limit && <button type="button" className="small" onClick={() => setLimit((n) => n + PAGE)}>더 보기 ({rows.length - limit}개 남음)</button>}
       {rows.length === 0 && <p className="small muted">찾는 것이 없습니다.</p>}
 
+      {detail && <LibraryDetail src={detail.src} e={detail.e} inBasket={basket.has(bkey(detail.src.key, detail.e.kind, detail.e.id))}
+        onToggle={() => toggle(detail.src, detail.e)} onClose={() => setDetail(null)} onOpen={(e) => setDetail({ src: detail.src, e })} />}
       <div className="library-foot">
         {basket.size > 0 && (
           <details className="small">
@@ -176,6 +186,140 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
           <span className="spacer" />
           <button type="button" className="primary" disabled={!basket.size || !!busy} onClick={apply}>{busy ? '불러오는 중…' : `🌌 담은 것 ${basket.size}개 불러오기`}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- 자세히 보기 (v0.66)
+
+const RAW_LIST: Partial<Record<BorrowKind, string>> = { character: 'characters', location: 'locations', item: 'items', monster: 'monsters', scene: 'scenes', faction: 'factions', class: 'classes', image: 'assets',
+  quest: 'quests', arc: 'arcs', choice: 'choices', clock: 'clocks', event: 'events', ending: 'endings', flag: 'flags', var: 'vars', encounter: 'encounters' };
+function rawOf(w: WorldPackage, kind: BorrowKind, id: string): Record<string, unknown> | undefined {
+  if (kind === 'knowledge') return (w.claims.find((c) => c.id === id) ?? w.facts.find((f) => f.id === id)) as unknown as Record<string, unknown> | undefined;
+  const list = (w as unknown as Record<string, { id: string }[] | undefined>)[RAW_LIST[kind]!] ?? [];
+  return list.find((x) => x.id === id) as unknown as Record<string, unknown> | undefined;
+}
+
+/** 원본 크기로 크게 보기 (저장소 이미지는 파일 그대로) */
+async function openOriginal(pkg: string, id: string, caption: string) {
+  const url = await assetUrl(pkg, id);
+  if (url) zoomImage(url, caption);
+}
+
+function Field({ label, text }: { label: string; text?: string | undefined }) {
+  if (!text) return null;
+  return <div className="lib-field"><b>{label}</b><p>{text}</p></div>;
+}
+
+function LibraryDetail({ src, e, inBasket, onToggle, onClose, onOpen }: { src: Src; e: CatalogEntry; inBasket: boolean; onToggle: () => void; onClose: () => void; onOpen: (e: CatalogEntry) => void }) {
+  const w = src.world;
+  const pkg = w.manifest.id;
+  const raw = rawOf(w, e.kind, e.id);
+  const name = (id?: string) => (id ? w.characters.find((c) => c.id === id)?.name ?? w.locations.find((l) => l.id === id)?.name ?? w.factions?.find((f) => f.id === id)?.name ?? id : '');
+  const deps = useMemo(() => {
+    const d = dependencies(w, [{ kind: e.kind, id: e.id }]);
+    const by: Partial<Record<BorrowKind, number>> = {};
+    for (const x of d) by[x.kind] = (by[x.kind] ?? 0) + 1;
+    return Object.entries(by).map(([k, n]) => `${BORROW_LABEL[k as BorrowKind]} ${n}`).join(' · ');
+  }, [w, e]);
+  const imgs = e.kind === 'character' ? (w.assets ?? []).filter((a) => a.characterId === e.id) : e.kind === 'location' ? (w.assets ?? []).filter((a) => a.locationId === e.id) : [];
+  const thumbEntry = (id: string) => catalogOf(w).find((x) => x.kind === 'image' && x.id === id);
+  const c = e.kind === 'character' ? w.characters.find((x) => x.id === e.id) : undefined;
+  const l = e.kind === 'location' ? w.locations.find((x) => x.id === e.id) : undefined;
+  const a = e.kind === 'image' ? (w.assets ?? []).find((x) => x.id === e.id) : undefined;
+  const q = e.kind === 'quest' ? w.quests?.find((x) => x.id === e.id) : undefined;
+  const arc = e.kind === 'arc' ? w.arcs?.find((x) => x.id === e.id) : undefined;
+  return (
+    <div className="lib-detail-back" role="dialog" aria-label={`${e.name} 자세히`} onClick={onClose}>
+      <div className="lib-detail" onClick={(ev) => ev.stopPropagation()}>
+        <div className="row">
+          <b>{BORROW_LABEL[e.kind]}: {e.name}</b>
+          <span className="small muted">{w.manifest.name} · <code>{e.id}</code></span>
+          <span className="spacer" />
+          <button type="button" className={inBasket ? '' : 'primary'} onClick={onToggle}>{inBasket ? '✓ 담음 — 빼기' : '＋ 담기'}</button>
+          <button type="button" onClick={onClose}>닫기</button>
+        </div>
+        {deps && <p className="small">🔗 담으면 함께 올 것: {deps}</p>}
+
+        {a && (
+          <div className="lib-image-view">
+            <AssetImage pkg={pkg} id={a.id} alt={a.name} zoom />
+            <div className="row">
+              <button type="button" onClick={() => void openOriginal(pkg, a.id, a.name)}>⤢ 원본 크기로 보기</button>
+              <span className="small muted">{a.mime} · {(a.size / 1024).toFixed(0)}KB · 종류 {a.kind}{a.characterId ? ` · 인물 ${name(a.characterId)}` : ''}{a.locationId ? ` · 장소 ${name(a.locationId)}` : ''}</span>
+            </div>
+            {a.tags.length > 0 && <p className="small">태그: {a.tags.map((t) => <code key={t}>{t}</code>)}</p>}
+          </div>
+        )}
+
+        {c && (
+          <div className="lib-char">
+            <div className="row lib-char-head">
+              {c.portrait ? <img className="lib-portrait zoomable" src={c.portrait} alt={c.name} onClick={() => zoomImage(c.portrait!, c.name)} /> : e.thumb ? <AssetImage pkg={pkg} id={e.thumb} alt={c.name} className="lib-portrait" zoom /> : null}
+              <div className="small">
+                {c.gender && <div>성별: {c.gender === 'F' ? '여성' : '남성'}</div>}
+                <div>있는 곳: {name(c.locationId)}</div>
+                {c.faction && <div>세력: {name(c.faction)}</div>}
+                {c.companion && <div>동료로 영입 가능</div>}
+                {c.romanceable && <div>연인이 될 수 있음</div>}
+              </div>
+            </div>
+            <Field label="외형" text={c.appearance} />
+            <Field label="성격" text={c.personality} />
+            <Field label="말투" text={c.speech} />
+            <Field label="배경" text={c.background} />
+            <Field label="첫 만남의 말" text={c.greeting} />
+            {(() => { const known = w.beliefs.filter((b) => b.holder === c.id).map((b) => w.claims.find((x) => x.id === b.claim)?.statement).filter(Boolean); return known.length ? <div className="lib-field"><b>아는 것 {known.length}</b><ul className="small">{known.slice(0, 12).map((t, i) => <li key={i}>{t}</li>)}{known.length > 12 && <li className="muted">… {known.length - 12}개 더</li>}</ul></div> : null; })()}
+          </div>
+        )}
+
+        {l && (
+          <>
+            <Field label="묘사" text={l.description} />
+            {l.connections.length > 0 && <p className="small">이어진 곳: {l.connections.map(name).join(' · ')}</p>}
+            {l.shop && <p className="small">상점: {l.shop.name} (물건 {l.shop.items.length}개)</p>}
+            {w.characters.some((x) => x.locationId === l.id) && <p className="small">있는 인물: {w.characters.filter((x) => x.locationId === l.id).map((x) => x.name).join(' · ')}</p>}
+          </>
+        )}
+
+        {q && (
+          <>
+            <p className="small">{q.kind === 'main' ? '메인' : '사이드'} 임무{q.giver ? ` · 의뢰인 ${name(q.giver)}` : ''}{q.rewards?.xp ? ` · 경험치 ${q.rewards.xp}` : ''}{q.rewards?.money ? ` · 돈 ${q.rewards.money}` : ''}</p>
+            <Field label="동기" text={q.motive} />
+            <ol className="small">{q.stages.map((st, i) => <li key={i}><b>{st.objective}</b>{st.hint ? <span className="muted"> — {st.hint}</span> : null}</li>)}</ol>
+          </>
+        )}
+
+        {arc && (
+          <ol className="small">{arc.chapters.map((ch, i) => <li key={i}><b>{ch.name}</b>{ch.summary ? ` — ${ch.summary}` : ''}{ch.goal ? <div className="muted">GM 목표: {ch.goal}</div> : null}</li>)}</ol>
+        )}
+
+        {e.kind === 'knowledge' && raw && <Field label={'truth' in raw ? `주장·소문 (${raw.truth === 'true' ? '참' : raw.truth === 'false' ? '거짓' : '반쯤 참'})` : '사실'} text={String(raw.statement ?? '')} />}
+        {['item', 'faction', 'scene', 'choice', 'ending', 'event', 'flag', 'class', 'monster', 'clock', 'var', 'encounter'].includes(e.kind) && raw && (
+          <>
+            <Field label="설명" text={String(raw.description ?? raw.prompt ?? raw.epilogue ?? raw.when ?? raw.blurb ?? raw.trigger ?? raw.announce ?? '') || undefined} />
+            {'image' in raw && typeof raw.image === 'string' && <div className="lib-image-view"><AssetImage pkg={pkg} id={raw.image} alt={e.name} zoom /></div>}
+          </>
+        )}
+
+        {imgs.length > 0 && (
+          <div className="lib-field">
+            <b>이미지 {imgs.length}장</b> <span className="small muted">— 누르면 크게, ⓘ로 이 이미지 자세히</span>
+            <div className="lib-gallery">
+              {imgs.slice(0, 60).map((im) => (
+                <figure key={im.id}>
+                  <AssetImage pkg={pkg} id={im.id} alt={im.name} zoom />
+                  <figcaption title={im.name}>{im.tags.join('·') || im.name}</figcaption>
+                  <button type="button" className="link small" onClick={() => { const te = thumbEntry(im.id); if (te) onOpen(te); }}>ⓘ</button>
+                </figure>
+              ))}
+            </div>
+            {imgs.length > 60 && <p className="small muted">… {imgs.length - 60}장 더 (이미지 종류에서 찾아보기)</p>}
+          </div>
+        )}
+
+        {raw && <details className="small"><summary>데이터 전체 보기</summary><JsonTree value={raw} open /></details>}
       </div>
     </div>
   );
