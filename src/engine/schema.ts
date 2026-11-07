@@ -820,6 +820,8 @@ export interface WorldPackage {
   /** 서술 문체 지침 (v0.13). 서술 AI에게 참고로 준다 */
   style?: string;
   /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경·분위기·규칙. 모든 AI가 참고하고 수첩 "세계 소개"에 보인다 */
+  /** 시간 흐름 규칙 (v0.58) — 비우면 AI가 행동마다 걸린 시간을 고른다 */
+  time?: TimeRules;
   /** 이 세계의 직업 목록 (v0.56) — 비우면 장르 기본 프리셋. 규칙은 base(엔진 직업)를 따르고 이름·설명·기술만 바꾼다 */
   classes?: WorldClass[];
   overview?: string;
@@ -843,4 +845,18 @@ export interface WorldClass {
   skills?: string[];
   /** 고를 수 있는 기술 후보 (비우면 base 직업의 후보) */
   skillOptions?: string[];
+}
+
+/** 시간 흐름 (v0.58): 한 턴에 게임 속 시간이 얼마나 흐르는가. 휴식(1시간·8시간)은 따로 */
+export interface TimeRules {
+  /** ai = GM 판단 AI가 행동의 길이(잠깐·짧게·오래·몇 시간)를 고른다 (기본), fixed = 턴마다 같은 시간 */
+  mode?: 'ai' | 'fixed';
+  /** fixed: 턴마다 흐르는 분 (기본 10) */
+  perTurn?: number;
+  /** 장소 이동에 더해지는 분 (기본 10) */
+  move?: number;
+  /** ai: 단계별 분 (기본 잠깐 2 · 짧게 15 · 오래 60 · 몇 시간 180) */
+  steps?: { moment?: number; short?: number; long?: number; hours?: number };
+  /** 한 턴에 흐를 수 있는 최대 분, 휴식 제외 (기본 240) */
+  maxPerTurn?: number;
 }

@@ -370,6 +370,23 @@ export function validateWorld(input: unknown): Issue[] {
     if (typeof v !== 'string') err(k, '글이어야 합니다.');
     else if (v.length > 2500) warn(k, `${v.length}자 — 2500자까지만 AI에게 전달됩니다.`);
   }
+  // ---- 시간 흐름 (v0.58)
+  {
+    const t = (input as Record<string, unknown>).time as Record<string, unknown> | undefined;
+    if (t !== undefined) {
+      if (!t || typeof t !== 'object') err('time', '객체여야 합니다.');
+      else {
+        if (t.mode !== undefined && t.mode !== 'ai' && t.mode !== 'fixed') err('time.mode', 'ai 또는 fixed입니다.');
+        for (const k of ['perTurn', 'move', 'maxPerTurn'] as const) if (t[k] !== undefined && !(typeof t[k] === 'number' && (t[k] as number) >= 0)) err(`time.${k}`, '0 이상 숫자(분)입니다.');
+        const st = t.steps as Record<string, unknown> | undefined;
+        if (st !== undefined) for (const [k, v] of Object.entries(st ?? {})) {
+          if (!['moment', 'short', 'long', 'hours'].includes(k)) err(`time.steps.${k}`, 'moment·short·long·hours 중 하나입니다.');
+          else if (!(typeof v === 'number' && v >= 0)) err(`time.steps.${k}`, '0 이상 숫자(분)입니다.');
+        }
+        if (typeof t.maxPerTurn === 'number' && t.maxPerTurn > 1440) warn('time.maxPerTurn', '한 턴에 하루 넘게 흐르면 일정·시계가 한꺼번에 지나갈 수 있습니다.');
+      }
+    }
+  }
   // ---- 직업 (v0.56)
   const classIds = new Set<string>();
   arr<NonNullable<WorldPackage['classes']>[number]>('classes', false).forEach((c, i) => {

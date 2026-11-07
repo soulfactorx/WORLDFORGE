@@ -114,7 +114,7 @@ export type GameEvent =
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number }
   /** GM 안내 (v0.14): 이번 턴 상황 요약 + 진행 제안 + 선택지 */
-  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[]; images?: { id: string; caption: string }[]; choiceSkills?: string[] };
+  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[]; images?: { id: string; caption: string }[]; choiceSkills?: string[]; /** 선택지 성격 (v0.58): advance·bond·bold·wild */ choiceKinds?: string[] };
 
 export interface StoredEvent {
   saveId: string;

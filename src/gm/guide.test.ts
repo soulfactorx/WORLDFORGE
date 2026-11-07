@@ -13,8 +13,9 @@ describe('GM 안내', () => {
     const s = state();
     const g = s.log.at(-1)!;
     expect(g.kind).toBe('guide');
-    expect(g.choices!.length).toBeGreaterThanOrEqual(2);
-    expect(g.choices![0]).toBe('주변을 자세히 살펴본다');
+    expect(g.choices!.length).toBe(4);
+    expect(g.choiceKinds).toEqual(['advance', 'bond', 'bold', 'wild']);
+    expect(g.choices).not.toContain('주변을 자세히 살펴본다');
   });
   it('AI 안내: 플레이어가 아는 것만 보내고, 형식이 잘못되면 기본 안내', async () => {
     const s = state();
@@ -24,5 +25,21 @@ describe('GM 안내', () => {
     expect(g).toEqual({ type: 'gm_guide', summary: '요약', suggestion: '제안', choices: ['a', 'b', 'c', 'd'] });
     for (const f of sampleWorld.facts) expect(sent).not.toContain(f.statement);
     expect(await gmGuide(llm({ facts: [] }), sampleWorld, s, '서술')).toEqual(basicGuide(sampleWorld, s));
+  });
+  it('AI 안내 (v0.58): 선택지 성격·세계 문체·이야기 정체·지난 선택지를 보낸다', async () => {
+    const s0 = state();
+    // 같은 장소에서 4턴 동안 별일이 없었다
+    const s = { ...s0, turn: s0.turn + 4 };
+    let sys = '', user = '';
+    const llm: LlmClient = { stream: async () => '', json: async <T,>(r: { system: string; user: string }) => { sys = r.system; user = r.user; return { summary: '안개 속에서 누군가 당신을 지켜본다.', suggestion: '저 시선의 주인이 궁금하지 않은가?', choices: [
+      { text: '마을로 향한다', skill: '', kind: 'advance' }, { text: '장로를 떠본다', skill: 'insight', kind: 'bond' },
+      { text: '제단을 부순다', skill: 'athletics', kind: 'bold' }, { text: '제단에 피 한 방울을 떨어뜨린다', skill: '', kind: 'wild' }] } as T; } };
+    const g = await gmGuide(llm, { ...sampleWorld, style: '건조하고 음산한 문체' }, s, '서술');
+    expect(g.type === 'gm_guide' && g.choiceKinds).toEqual(['advance', 'bond', 'bold', 'wild']);
+    expect(sys).toContain('wild');
+    expect(sys).toContain('건조하고 음산한 문체');
+    expect(user).toContain('이야기가 정체되어 있다');
+    expect(user).toContain('## 지난 선택지');
+    expect(user).toContain(s0.log.at(-1)!.choices![0]!);
   });
 });

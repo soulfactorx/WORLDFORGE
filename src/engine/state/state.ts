@@ -19,6 +19,8 @@ export interface LogEntry {
   choices?: string[];
   /** 선택지별 기술 ID ('' = 판정 없음) (v0.16) */
   choiceSkills?: string[];
+  /** 선택지 성격 (v0.58) */
+  choiceKinds?: string[];
 }
 
 export interface SceneRun { sceneId: EntityId; gauges: Record<string, number>; states: string[]; phase?: string; round: number; used: string[]; log: string[]; /** 지금 보이는 장면 그림 (v0.50) */ image?: string }
@@ -444,7 +446,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'time_advanced':
       return { ...s, worldMinutes: s.worldMinutes + e.minutes };
     case 'gm_guide':
-      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices, ...(e.images?.length ? { images: e.images } : {}), ...(e.choiceSkills ? { choiceSkills: e.choiceSkills } : {}) }] };
+      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices, ...(e.images?.length ? { images: e.images } : {}), ...(e.choiceSkills ? { choiceSkills: e.choiceSkills } : {}), ...(e.choiceKinds ? { choiceKinds: e.choiceKinds } : {}) }] };
   }
 }
 

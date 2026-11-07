@@ -602,3 +602,11 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .dbg-imgtable td { vertical-align: top; }
 .dbg-thumb { width: 72px; }
 .dbg-thumb img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; display: block; }
+
+/* 선택지 성격 (v0.58) */
+.choices .choice-kind { display: inline-block; font-size: .72rem; padding: 1px 6px; margin-right: 6px; border-radius: 10px; border: 1px solid var(--border); color: var(--muted); vertical-align: 1px; }
+.choices .choice-bold .choice-kind { color: #b0541e; border-color: #b0541e; }
+.choices .choice-wild .choice-kind { color: #8a3ab0; border-color: #8a3ab0; }
+.choices .choice-bond .choice-kind { color: var(--dialogue); border-color: var(--dialogue); }
+.choices .choice-advance .choice-kind { color: var(--check); border-color: var(--check); }
+@media (prefers-color-scheme: dark) { .choices .choice-wild .choice-kind { color: #d39af0; border-color: #d39af0; } .choices .choice-bold .choice-kind { color: #f0a070; border-color: #f0a070; } }

@@ -27,7 +27,7 @@ import { AssetImage } from './AssetImage';
 import { RichText } from './RichText';
 import { ReskinContext } from './reskin';
 import { reskinner } from '../engine/genre';
-import { basicGuide } from '../gm/guide';
+import { basicGuide, CHOICE_KINDS, type ChoiceKind } from '../gm/guide';
 import { calendarDate } from '../engine/calendar';
 import { ABILITIES, ABILITY_NAMES, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { checkModifier } from '../engine/character/sheet';
@@ -406,9 +406,10 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                   <div className="choices">
                     {e.choices.map((c, k) => {
                       const sk = e.choiceSkills?.[k];
+                      const kind = CHOICE_KINDS[e.choiceKinds?.[k] as ChoiceKind];
                       return (
-                        <button key={k} type="button" onClick={() => submit(c, sk ? `skill:${sk}` : undefined)}>
-                          {k + 1}. {c}{sk && sk in SKILLS && <span className="skill-badge">🎲 {SKILLS[sk as SkillId].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
+                        <button key={k} type="button" className={kind ? `choice-${e.choiceKinds![k]}` : undefined} onClick={() => submit(c, sk ? `skill:${sk}` : undefined)} title={kind ? `${kind.label}: ${kind.desc}` : undefined}>
+                          {kind ? <span className="choice-kind">{kind.icon} {kind.label}</span> : `${k + 1}. `}{c}{sk && sk in SKILLS && <span className="skill-badge">🎲 {SKILLS[sk as SkillId].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
                         </button>
                       );
                     })}

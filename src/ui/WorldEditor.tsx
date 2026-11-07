@@ -12,6 +12,7 @@ import { ArcForms, BoardForms, ChoiceForms, ClockForms, EventForms, ItemForms, M
 import { DIFFICULTY_LABEL, encounterDifficulty, monsterTable, monstersOfWorld } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { ClassEditor } from './ClassEditor';
+import { TimeFieldset } from './TimeFieldset';
 import { classesFor } from '../engine/classes';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import { type Belief, type Character, type Claim, type Fact, type Faction, type Location, type NpcRelationKind, QUEST_TYPES, type WorldPackage } from '../engine/schema';
@@ -52,6 +53,7 @@ function tabForPath(path: string): Tab {
   // 세부 경로가 먼저 (장소·인물 안의 상점·의뢰판·건넬 것)
   if (/^locations\[\d+\]\.(shop|pickups)/.test(path) || /^characters\[\d+\]\.gives/.test(path) || path.startsWith('start.items')) return 'items';
   if (/^locations\[\d+\]\.board/.test(path)) return 'quests';
+  if (path.startsWith('time')) return 'basic';
   if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style') || path.startsWith('overview') || path.startsWith('gmNotes')) return 'basic';
   if (path.startsWith('classes')) return 'classes';
   if (path.startsWith('assets')) return 'images';
@@ -230,6 +232,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
                 onChange={(contentRating) => { if (contentRating !== 'mature' || (confirmAdult() && confirm('성인 등급은 한 번 정하면 다시 바꿀 수 없습니다. 이 세계를 성인 등급으로 정할까요?'))) set({ manifest: { ...w.manifest, contentRating } }); }} />}
           <Select label="시작 장소" value={w.start.locationId} options={locOptions} onChange={(locationId) => set({ start: { ...w.start, locationId } })} />
           <Area label="첫 장면 (플레이어가 깨어났을 때)" value={w.start.openingScene} onChange={(openingScene) => set({ start: { ...w.start, openingScene } })} />
+          <TimeFieldset w={w} set={set} />
           <fieldset><legend>달력 (선택) — 게임 속 날짜와 카운트다운</legend>
             <div className="row">
               <Text label="연호" value={w.calendar?.era} placeholder="제국력" onChange={(era) => set({ calendar: { year: 1, month: 1, day: 1, ...w.calendar, era } })} />
