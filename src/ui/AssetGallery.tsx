@@ -65,7 +65,13 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
   }
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(0);
-  const list = useMemo(() => assets.filter((a) => filter === 'all' || a.kind === filter || a.characterId === filter || a.locationId === filter), [assets, filter]);
+  const [q, setQ] = useState('');
+  const list = useMemo(() => {
+    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const cn = new Map(world.characters.map((c) => [c.id, c.name])), ln = new Map(world.locations.map((l) => [l.id, l.name]));
+    return assets.filter((a) => (filter === 'all' || a.kind === filter || a.characterId === filter || a.locationId === filter)
+      && (!words.length || ((h) => words.every((t) => h.includes(t)))([a.name, a.id, a.kind, ({ character: '인물', scene: '장소 배경', map: '지도', cover: '표지', other: '기타' } as Record<string, string>)[a.kind] ?? '', ((g) => (g === 'F' ? '여성 여자' : g === 'M' ? '남성 남자' : ''))(a.gender ?? world.characters.find((c) => c.id === a.characterId)?.gender), ...a.tags, a.characterId ? cn.get(a.characterId) ?? '' : '', a.locationId ? ln.get(a.locationId) ?? '' : ''].join(' ').toLowerCase())));
+  }, [assets, filter, q, world.characters, world.locations]);
   const shown = list.slice(page * PAGE, (page + 1) * PAGE);
   const up = (id: string, patch: Partial<AssetMeta>) => onChange(assets.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
@@ -142,6 +148,8 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
             {world.locations.map((l) => <option key={l.id} value={l.id}>장소: {l.name} ({assets.filter((a) => a.locationId === l.id).length})</option>)}
           </select>
         </label>
+        <input type="search" className="gallery-search" placeholder="🔍 이름·태그·인물·장소로 찾기" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
+        <span className="small muted">{list.length}장</span>
         <button disabled={page === 0} onClick={() => setPage(page - 1)}>◀</button>
         <span className="small">{page + 1} / {pages}</span>
         <button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>▶</button>

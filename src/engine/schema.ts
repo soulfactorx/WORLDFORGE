@@ -115,7 +115,7 @@ export interface Character {
   /** 이 인물의 목표 (설계 v4 E7) */
   goals?: NpcGoal[];
   /** 외부에서 가져온 인물의 출처 (v0.12) */
-  source?: { format: 'charx' | 'ccv3' | 'ccv2' | 'ccv1'; name: string; creator?: string; version?: string; importedAt: string };
+  source?: { format: 'charx' | 'ccv3' | 'ccv2' | 'ccv1' | 'risum'; name: string; creator?: string; version?: string; importedAt: string };
 }
 
 /** 관계 6축 (설계 v3 4.2): 호감·신뢰·존경·두려움 + 친밀·원한 */

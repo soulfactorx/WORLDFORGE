@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AssetMeta, WorldPackage } from '../engine/schema';
 import { readCharxBundle, type CharxBundle } from '../importers/bundle';
 import { buildEntities, type Candidate, inferCandidates, type Inference, matchCardImages, SOURCE_LABEL } from '../importers/inferCharacters';
@@ -28,7 +28,9 @@ interface Row { key: string; name: string; pick: boolean; gender?: 'M' | 'F'; so
  * 카드의 이미지를 전부 불러와 인물에 붙인다 (이름 규칙 + 손으로 고치기).
  */
 export function CardImportDialog({ world, onAdd, onClose, initialFile }: {
-  world: WorldPackage; settings?: LlmSettings | null; onAdd: (e: ImportedEntities) => void; onClose: () => void;
+  world: WorldPackage; settings?: LlmSettings | null;
+  /** 추가 (v0.61): 이미지 저장까지 끝나면 돌아온다. progress로 진행률을 이 창에 보여 준다 */
+  onAdd: (e: ImportedEntities, progress: (msg: string) => void) => void | Promise<void>; onClose: () => void;
   /** 홈 화면에서 넘겨받은 카드 파일 (바로 연다) */
   initialFile?: File;
 }) {
@@ -44,6 +46,10 @@ export function CardImportDialog({ world, onAdd, onClose, initialFile }: {
   const [thumbs, setThumbs] = useState<Record<number, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  /** 추가 진행 (버튼 바로 위에 보인다) */
+  const [adding, setAdding] = useState('');
+  const addingRef = useRef(false);
+  const [added, setAdded] = useState(false);
 
   useEffect(() => { if (initialFile) void load(initialFile); }, [initialFile]);
 
@@ -93,8 +99,11 @@ export function CardImportDialog({ world, onAdd, onClose, initialFile }: {
   const counts = useMemo(() => { const c: Record<string, number> = {}; assets.forEach((_, i) => { const o = owner(i); if (o) c[o] = (c[o] ?? 0) + 1; }); return c; }, [auto, overrides, assets.length]);
 
   async function add() {
-    if (!bundle || !inf) return;
-    setBusy('인물 만드는 중…');
+    // 한 번만: 처리 중이거나 이미 추가했으면 다시 누르지 않는다 (v0.61)
+    if (!bundle || !inf || addingRef.current || added) return;
+    addingRef.current = true;
+    setAdding('인물 만드는 중…');
+    let ok = false;
     try {
       const ents = buildEntities(world, bundle, { inference: inf, picked: picked.map((r) => ({ key: r.key, name: r.name.trim() || r.key, ...(r.gender ? { gender: r.gender } : {}) })), loreAsKnowledge, locationId, mature: world.manifest.contentRating === 'mature' });
       // 이미지: 인물 key → 실제 ID, 손으로 고친 연결 반영, 세계 에셋 ID로
@@ -115,18 +124,23 @@ export function CardImportDialog({ world, onAdd, onClose, initialFile }: {
         images.push({ id: meta.id, read: () => a.read() });
       });
       // 초상화: 인물마다 기본 이미지 하나를 작게
-      setBusy('초상화 만드는 중…');
+      let n = 0;
       for (const c of ents.characters) {
+        setAdding(`초상화 만드는 중… ${++n}/${ents.characters.length}`);
         const m = metas.find((x) => x.characterId === c.id && x.tags.includes('default')) ?? metas.find((x) => x.characterId === c.id);
         if (!m) continue;
         try { const blob = await images[metas.indexOf(m)]!.read(); const url = await portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type || m.mime); if (url) c.portrait = url; } catch { /* 없이 */ }
       }
-      onAdd({ characters: ents.characters, facts: ents.facts, claims: ents.claims, beliefs: ents.beliefs, cardName: bundle.card.name, assets: metas, images,
-        source: { hash: bundle.fingerprint, name: bundle.card.name, ...(bundle.card.creator ? { creator: bundle.card.creator } : {}), fileName: bundle.fileName, format: bundle.card.format } });
+      setAdding('세계에 넣는 중…');
+      await onAdd({ characters: ents.characters, facts: ents.facts, claims: ents.claims, beliefs: ents.beliefs, cardName: bundle.card.name, assets: metas, images,
+        source: { hash: bundle.fingerprint, name: bundle.card.name, ...(bundle.card.creator ? { creator: bundle.card.creator } : {}), fileName: bundle.fileName, format: bundle.card.format } }, setAdding);
+      ok = true;
+      setAdded(true);
     } catch (e) {
       setError((e as Error).message);
-    } finally { setBusy(''); }
+    } finally { setAdding(''); if (!ok) addingRef.current = false; }
   }
+  const pct = (() => { const m = adding.match(/(\d[\d,]*)\/(\d[\d,]*)/); if (!m) return undefined; const d = Number(m[1]!.replace(/,/g, '')), t = Number(m[2]!.replace(/,/g, '')); return t ? Math.round((d / t) * 100) : undefined; })();
 
   const upRow = (k: string, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === k ? { ...r, ...p } : r)));
   const nKnow = inf && loreAsKnowledge ? inf.analyzed.filter((a) => a.kind === 'world' && inf.card.lore[a.index]!.enabled && !picked.some((p) => inf.candidates.find((c) => c.key === p.key)?.entry === a.index)).length : 0;
@@ -136,7 +150,7 @@ export function CardImportDialog({ world, onAdd, onClose, initialFile }: {
     <div className="dialog card-import">
       <div className="row">
         <b>캐릭터 카드 가져오기</b>
-        <span className="muted small">RisuAI CHARX · Character Card V3/V2/V1 (.charx · .png · .json) · 용량 제한 없음</span>
+        <span className="muted small">RisuAI CHARX·모듈 · Character Card V3/V2/V1 (.charx · .risum · .png · .json) · 용량 제한 없음</span>
         <span className="spacer" />
         <button type="button" onClick={onClose}>닫기</button>
       </div>
@@ -145,7 +159,7 @@ export function CardImportDialog({ world, onAdd, onClose, initialFile }: {
         스크립트는 실행하지 않고, 시스템 프롬프트류는 쓰지 않습니다. 원작자의 권리와 배포 조건을 확인해 주세요.
       </p>
       <label className="file">카드 파일 선택
-        <input type="file" accept=".charx,.png,.json,application/json,image/png,application/zip" disabled={!!busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) load(f); e.target.value = ''; }} />
+        <input type="file" accept=".charx,.risum,.png,.json,application/json,image/png,application/zip" disabled={!!busy || !!adding} onChange={(e) => { const f = e.target.files?.[0]; if (f) load(f); e.target.value = ''; }} />
       </label>
       {busy && <p className="status"><span className="spinner" /> {busy}</p>}
       {error && <p className="status">❌ {error}</p>}
@@ -212,11 +226,20 @@ export function CardImportDialog({ world, onAdd, onClose, initialFile }: {
             </fieldset>
           )}
 
-          <div className="row">
-            <span className="spacer" />
-            <button type="button" className="primary" disabled={!!busy || (!picked.length && !nKnow)} onClick={add}>
-              {busy || `인물 ${picked.length}명 · 지식 ${nKnow}항목 · 이미지 ${nImg.toLocaleString()}장 추가`}
-            </button>
+          <div className="card-import-foot">
+            {adding && (
+              <div className="add-progress" role="status" aria-live="polite">
+                <span className="small"><span className="spinner" /> {adding}</span>
+                {pct !== undefined && <progress max={100} value={pct} />}
+              </div>
+            )}
+            <div className="row">
+              {added && !adding && <span className="small">✓ 추가했습니다. 닫는 중…</span>}
+              <span className="spacer" />
+              <button type="button" className="primary" disabled={!!busy || !!adding || added || (!picked.length && !nKnow)} onClick={add} aria-busy={!!adding}>
+                {adding ? '추가하는 중…' : added ? '추가함' : `인물 ${picked.length}명 · 지식 ${nKnow}항목 · 이미지 ${nImg.toLocaleString()}장 추가`}
+              </button>
+            </div>
           </div>
         </>
       )}

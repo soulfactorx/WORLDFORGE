@@ -37,3 +37,26 @@ describe('BlobZip', () => {
     expect(await BlobZip.open(new Blob([strToU8('hello world, this is not a zip file at all')]))).toBeNull();
   });
 });
+
+describe('.risum 단독 파일 (v0.61)', () => {
+  it('모듈 이름·로어북·이미지 에셋을 카드 묶음처럼 읽는다 (이미지가 아닌 에셋은 뺀다)', async () => {
+    const { readCharxBundle } = await import('./bundle');
+    const { inferCandidates } = await import('./inferCharacters');
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    const module = { name: '왕궁 모듈', description: '왕궁 설정', lorebook: [{ comment: '세라', key: '세라', content: '이름: 세라\n나이: 19\n외모: 은발\n성격: 다정함\n말투: 존댓말' }, { comment: '폴더', mode: 'folder', content: 'x' }],
+      assets: [['sera_smile', '', 'png'], ['bgm', '', 'mp3'], ['sera_angry', '', 'png']] };
+    const file = new File([new Uint8Array(makeRisum(module, [png, new Uint8Array([7]), png]))], 'palace.risum');
+    const b = await readCharxBundle(file, file.name);
+    expect(b.card.format).toBe('risum');
+    expect(b.card.name).toBe('왕궁 모듈');
+    expect(b.card.lore.map((e) => e.name)).toEqual(['세라']);
+    expect(b.assets.map((a) => a.name)).toEqual(['sera_smile', 'sera_angry']);
+    expect((await b.assets[0]!.read()).type).toBe('image/png');
+    expect(b.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(b.warnings[0]).toContain('이미지 2장');
+    // 이름 없는 확장자라도 매직 번호로 알아본다
+    const b2 = await readCharxBundle(new File([new Uint8Array(makeRisum(module, [png]))], 'module.bin'), 'module.bin');
+    expect(b2.card.format).toBe('risum');
+    expect(inferCandidates(b).candidates.some((c) => c.name === '세라')).toBe(true);
+  });
+});

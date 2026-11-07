@@ -35,7 +35,7 @@ export function MoveOutButton({ world, onMessage }: { world: WorldPackage; onMes
   if (needsCard) {
     return (
       <label className="file small" title="이 세계는 카드 지문이 저장되기 전에 만들어서, 원본 카드 파일을 한 번 골라야 합니다">📱 다른 기기로 (원본 카드 고르기)
-        <input type="file" accept=".charx,.png,.json,application/zip,image/png,application/json" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) run(f); e.target.value = ''; }} />
+        <input type="file" accept=".charx,.risum,.png,.json,application/zip,image/png,application/json" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) run(f); e.target.value = ''; }} />
       </label>
     );
   }
@@ -110,7 +110,7 @@ export function MoveInPanel({ onDone, onClose }: { onDone: (world: WorldPackage)
             </ul>
           ) : <p className="small">필요한 카드: <b>{info.cardName}</b></p>}
           <label className="file">② 원본 카드 파일{info.cards && info.cards.length > 1 ? ' (여러 장 한꺼번에 골라도 된다)' : ''}
-            <input type="file" multiple accept=".charx,.png,.json,application/zip,image/png,application/json" disabled={busy} onChange={(e) => { const fs = [...(e.target.files ?? [])]; if (fs.length) void addCards(fs); e.target.value = ''; }} />
+            <input type="file" multiple accept=".charx,.risum,.png,.json,application/zip,image/png,application/json" disabled={busy} onChange={(e) => { const fs = [...(e.target.files ?? [])]; if (fs.length) void addCards(fs); e.target.value = ''; }} />
           </label>
           {info.cards?.length ? (
             <div className="row">

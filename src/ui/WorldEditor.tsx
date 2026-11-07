@@ -294,12 +294,12 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       {tab === 'characters' && packUi === 'character' && <PackExport w={w} kind="character" onClose={() => setPackUi(null)} />}
       {tab === 'items' && packUi === 'rules' && <PackExport w={w} kind="rules" onClose={() => setPackUi(null)} />}
       {tab === 'characters' && importing && (
-        <CardImportDialog world={w} settings={settings} initialFile={initialCard} onClose={() => setImporting(false)} onAdd={async (r) => {
-          // 카드 이미지 (v0.52): 이 세계의 이미지로 저장한다
+        <CardImportDialog world={w} settings={settings} initialFile={initialCard} onClose={() => setImporting(false)} onAdd={async (r, progress) => {
+          // 카드 이미지 (v0.52): 이 세계의 이미지로 저장한다 — 진행률은 가져오기 창의 추가 버튼 위에 (v0.61)
           let stored = 0;
           if (r.images?.length) {
-            setStatus(`이미지 저장 중… 0/${r.images.length}`);
-            const res = await storeAssets(w.manifest.id, r.images, (d, t) => setStatus(`이미지 저장 중… ${d}/${t}`));
+            progress(`이미지 저장 중… 0/${r.images.length.toLocaleString()}`);
+            const res = await storeAssets(w.manifest.id, r.images, (d, t) => progress(`이미지 저장 중… ${d.toLocaleString()}/${t.toLocaleString()}`));
             stored = res.stored;
           }
           const newAssets = (r.assets ?? []).filter((a) => !(w.assets ?? []).some((x) => x.id === a.id));

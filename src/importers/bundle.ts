@@ -48,6 +48,11 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 
 export async function readCharxBundle(file: Blob, fileName = 'card.charx', onProgress?: (msg: string) => void): Promise<CharxBundle> {
   const warnings: string[] = [];
+  // RisuAI 모듈(.risum): 로어북 + 이미지 에셋 (v0.61)
+  if (/\.risum$/i.test(fileName) || (await file.slice(0, 1).arrayBuffer().then((b) => new Uint8Array(b)[0])) === 111) {
+    const risum = await readRisumBundle(file, fileName, onProgress).catch((e: Error) => { if (/\.risum$/i.test(fileName)) throw e; return null; });
+    if (risum) return risum;
+  }
   const zip = await BlobZip.open(file);
   if (!zip) {
     // zip이 아니면 PNG·JSON 카드 (작은 파일)
@@ -140,4 +145,33 @@ export function parseToggles(text: string): { key: string; label: string; kind: 
     out.push({ key: key!, label: label ?? key!, kind: kind ?? '', options: (opts ?? '').split(',').map((s) => s.trim()).filter(Boolean) });
   }
   return out;
+}
+
+/** RisuAI 모듈(.risum) 하나를 카드 묶음처럼 읽는다: 모듈 이름·설명 → 카드, 로어북 → 로어, 에셋 → 이미지 (v0.61) */
+async function readRisumBundle(file: Blob, fileName: string, onProgress?: (msg: string) => void): Promise<CharxBundle> {
+  onProgress?.('RisuAI 모듈 해독 중…');
+  const r = await parseRisum(file);
+  const m = r.module;
+  // 지문: 모듈 본문(로어북·에셋 목록)이 있는 앞부분 — 큰 파일도 통째로 읽지 않는다
+  const fingerprint = await sha256Hex(new Uint8Array(await file.slice(0, Math.min(file.size, 8 * 1024 * 1024)).arrayBuffer()));
+  const lore: LoreEntry[] = (m.lorebook ?? [])
+    .filter((e) => e.content && e.mode !== 'folder')
+    .map((e) => ({ name: e.comment ?? '', keys: (e.key ?? '').split(',').map((k) => k.trim()).filter(Boolean), content: e.content!.trim(), enabled: true, ...(e.alwaysActive ? { constant: true } : {}) }));
+  const name = (m.name ?? '').trim() || fileName.replace(/\.risum$/i, '');
+  const card: NormalizedCard = {
+    format: 'risum', name, nickname: '', description: (m.description ?? '').trim(), personality: '', scenario: '', firstMes: '', mesExample: '',
+    creator: '', version: '', tags: [], lore, ignoredPrompts: [], unsupported: [], images: [],
+  };
+  const codes = (m.trigger ?? []).flatMap((t) => (t.effect ?? []).map((e) => e.code ?? '')).filter(Boolean);
+  const code = codes.join('\n\n');
+  const assets: BundleAsset[] = r.assets.filter((a) => isImage(a.ext)).map((a) => {
+    const ext = a.ext.toLowerCase();
+    return { name: a.name, ext, mime: MIME[ext]!, size: a.size, source: 'module' as const, read: async () => new Blob([new Uint8Array(await a.read())], { type: MIME[ext] }) };
+  });
+  const skipped = r.assets.length - assets.length;
+  return {
+    fingerprint, fileName, fileSize: file.size, card, rawCard: {}, module: m, extraLore: [], lua: { code, data: code ? extractLuaData(code) : {} },
+    regexComments: (m.regex ?? []).map((x) => x.comment ?? '').filter(Boolean), toggles: typeof m.customModuleToggle === 'string' ? m.customModuleToggle : '',
+    assets, warnings: [`RisuAI 모듈 파일입니다 — 인물 카드 본문 없이 로어북 ${lore.length}개와 이미지 ${assets.length}장을 가져옵니다.${skipped ? ` (이미지가 아닌 에셋 ${skipped}개는 뺐습니다)` : ''}`],
+  };
 }

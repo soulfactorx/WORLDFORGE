@@ -86,6 +86,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
 
   async function importPackage(file: File) {
     // 큰 파일·CHARX는 통째로 읽지 않고 카드인지 먼저 본다
+    if (/\.risum$/i.test(file.name)) { onCard(file); return; }
     if (/\.charx$/i.test(file.name) || file.size > MAX_FILE_BYTES) {
       const zip = await BlobZip.open(file).catch(() => null);
       if (zip?.get('card.json')) { onCard(file); return; }
@@ -245,13 +246,13 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
             <Menu label="＋ 만들기 ▾" className="primary-menu">
               <button onClick={() => onEdit(null)}>＋ 빈 세계관에서 직접 만들기</button>
               <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
-              <label className="file">✦ 캐릭터 카드로 만들기 (.charx · .png · .json)
-                <input type="file" accept=".charx,.png,.json,application/json,image/png,application/zip" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCard(f); e.target.value = ''; }} />
+              <label className="file">✦ 캐릭터 카드로 만들기 (.charx · .risum · .png · .json)
+                <input type="file" accept=".charx,.risum,.png,.json,application/json,image/png,application/zip" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCard(f); e.target.value = ''; }} />
               </label>
             </Menu>
             <Menu label="⤒ 가져오기 ▾">
               <label className="file">패키지 파일 (.wpk · .json)
-                <input type="file" accept=".wpk,.zip,.json,.charx,.png,application/zip,application/json" onChange={(e) => { const f = e.target.files?.[0]; if (f) importPackage(f); e.target.value = ''; }} />
+                <input type="file" accept=".wpk,.zip,.json,.charx,.risum,.png,application/zip,application/json" onChange={(e) => { const f = e.target.files?.[0]; if (f) importPackage(f); e.target.value = ''; }} />
               </label>
               <button onClick={() => setReceiving(true)} title="다른 기기에서 만든 개인용 세계를 AI 없이 이어받기">📲 옮겨 온 세계 받기 (.wfmove)</button>
             </Menu>

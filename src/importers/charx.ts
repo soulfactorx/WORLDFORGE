@@ -10,7 +10,7 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { josa } from '../engine/text/josa';
 
-export type CardFormat = 'charx' | 'ccv3' | 'ccv2' | 'ccv1';
+export type CardFormat = 'charx' | 'ccv3' | 'ccv2' | 'ccv1' | 'risum';
 
 export interface LoreEntry {
   name: string;

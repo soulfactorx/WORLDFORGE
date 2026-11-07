@@ -648,3 +648,10 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .img-pick-cell img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; display: block; background: color-mix(in srgb, var(--text) 6%, transparent); }
 .img-pick-cap { font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .img-pick-sub { font-size: .65rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 카드 가져오기: 추가 진행률은 버튼 바로 위, 아래에 붙어 있게 (v0.61) */
+.card-import .card-import-foot { position: sticky; bottom: 0; z-index: 2; background: var(--bg); border-top: 1px solid var(--border); padding: 8px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+.card-import .add-progress { display: flex; flex-direction: column; gap: 4px; }
+.card-import .add-progress progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.img-pick-cell.mine { border-color: var(--check); }
+.gallery-search { flex: 1 1 180px; min-width: 140px; }
