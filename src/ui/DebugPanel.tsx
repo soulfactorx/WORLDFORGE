@@ -7,7 +7,7 @@ import { clearDebug, currentEntry, type DebugCall, type DebugEntry, debugOn, loa
 import type { WorldPackage } from '../engine/schema';
 import { replay, type GameState } from '../engine/state/state';
 import { ROLE_LABEL, type Role } from '../llm/metrics';
-import { loadEvents } from '../storage/db';
+import { db, loadEvents } from '../storage/db';
 import type { StoredEvent } from '../engine/state/events';
 
 export function useDebugOn(): boolean { return useSyncExternalStore(subscribeDebug, debugOn); }
@@ -113,7 +113,7 @@ function EntryView({ e, saveId }: { e: DebugEntry; saveId?: string }) {
   const t = (id: typeof tab, label: string) => <button key={id} className={tab === id ? 'on' : ''} onClick={() => { setTab(id); if (id === 'state' && snap === null) void loadSnap(); }}>{label}</button>;
   return (
     <div className="dbg-entry">
-      <div className="row"><b>{KIND_ICON[e.kind]} {e.title}</b><span className="spacer" /><span className="muted small">{fmtTime(e.at)}{e.ms !== undefined ? ` · ${(e.ms / 1000).toFixed(1)}초` : ' · 진행 중…'}</span></div>
+      <div className="row"><b>{KIND_ICON[e.kind]} {e.title}</b>{e.saveId && <span className="muted small">세이브 {e.saveId.slice(0, 8)}</span>}<span className="spacer" /><span className="muted small">{fmtTime(e.at)}{e.ms !== undefined ? ` · ${(e.ms / 1000).toFixed(1)}초` : ' · 진행 중…'}</span></div>
       <div className="tabs dbg-tabs">
         {t('sum', '요약')}
         {t('calls', `AI 호출 ${e.calls.length}`)}
@@ -172,13 +172,19 @@ export function DebugPanel({ saveId, world, state, onClose }: { saveId?: string;
   const [tick, setTick] = useState(0);
   const [log, setLog] = useState<StoredEvent[] | null>(null);
   const [filter, setFilter] = useState('');
+  const [saveNames, setSaveNames] = useState<Map<string, string>>(new Map());
+  const [saveFilter, setSaveFilter] = useState('');
   const on = useDebugOn();
+  useEffect(() => { void db.saves.toArray().then((ss) => setSaveNames(new Map(ss.map((x) => [x.id, x.name])))); }, [tick]);
   useEffect(() => subscribeDebug(() => setTick((n) => n + 1)), []);
   useEffect(() => { void loadDebug(saveId).then(setEntries); }, [saveId, tick]);
   useEffect(() => { if (tab === 'events' && saveId) void loadEvents(saveId).then(setLog); }, [tab, saveId, tick]);
   const live = currentEntry();
   const list = useMemo(() => (live && !entries.some((e) => e.id === live.id) && (!saveId || live.saveId === saveId) ? [live, ...entries] : entries), [entries, live, tick]);
-  const shown = list.filter((e) => !filter || `${e.title} ${e.input ?? ''}`.toLowerCase().includes(filter.toLowerCase()));
+  const shown = list.filter((e) => (!filter || `${e.title} ${e.input ?? ''}`.toLowerCase().includes(filter.toLowerCase()))
+    && (!saveFilter || (saveFilter === '-' ? !e.saveId : e.saveId === saveFilter)));
+  const savesInList = [...new Set(list.map((e) => e.saveId).filter((x): x is string => !!x))];
+  const saveLabel = (e: DebugEntry) => (e.saveId ? saveNames.get(e.saveId) ?? '(지운 세이브)' : '세이브 밖 (세계 만들기 등)');
   const selected = list.find((e) => e.id === sel) ?? list[0];
   const types = log ? [...new Set(log.map((x) => x.event.type))].sort() : [];
   const [evType, setEvType] = useState('');
@@ -204,6 +210,13 @@ export function DebugPanel({ saveId, world, state, onClose }: { saveId?: string;
               <div className="row">
                 <input type="search" placeholder="찾기" value={filter} onChange={(e) => setFilter(e.target.value)} />
               </div>
+              {!saveId && (
+                <select value={saveFilter} onChange={(e) => setSaveFilter(e.target.value)}>
+                  <option value="">모든 세이브</option>
+                  {savesInList.map((id) => <option key={id} value={id}>{saveNames.get(id) ?? '(지운 세이브)'}</option>)}
+                  <option value="-">세이브 밖 (세계 만들기 등)</option>
+                </select>
+              )}
               <div className="row small">
                 <button className="small" onClick={() => download(`worldforge-debug-${Date.now()}.json`, list)}>⤓ JSON 내보내기</button>
                 <button className="small" onClick={() => confirm('디버그 기록을 지울까요?') && void clearDebug(saveId)}>지우기</button>
@@ -214,6 +227,7 @@ export function DebugPanel({ saveId, world, state, onClose }: { saveId?: string;
                   <li key={e.id}>
                     <button className={selected?.id === e.id ? 'on' : ''} onClick={() => setSel(e.id)}>
                       <span>{KIND_ICON[e.kind]} {e.title}</span>
+                      {!saveId && <span className="small dbg-save">{saveLabel(e)}</span>}
                       <span className="muted small">{fmtTime(e.at)} · AI {e.calls.length}{e.rejected?.length ? ` · 거부 ${e.rejected.length}` : ''}{e.error ? ' · ❌' : ''}{!e.done ? ' · 진행 중' : ''}</span>
                     </button>
                   </li>

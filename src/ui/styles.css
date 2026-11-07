@@ -597,3 +597,4 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .dbg-ev { display: flex; gap: 8px; align-items: baseline; }
 .dbg-ev > details, .dbg-ev > .dbg-leaf { flex: 1; min-width: 0; }
 .dbg-call-body .dbg-block > p.small.muted { margin: 4px 0 0; }
+.dbg-save { color: var(--check); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

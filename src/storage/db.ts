@@ -122,9 +122,11 @@ export async function undoLastTurn(saveId: string): Promise<void> {
 }
 
 export async function deleteSave(saveId: string): Promise<void> {
-  await db.transaction('rw', db.events, db.saves, async () => {
+  await db.transaction('rw', db.events, db.saves, db.debug, async () => {
     await db.events.where('saveId').equals(saveId).delete();
     await db.saves.delete(saveId);
+    // 디버그 기록도 함께 지운다 (v0.57.2) — 남아 있으면 새 게임 기록과 섞여 보인다
+    await db.debug.where('saveId').equals(saveId).delete();
   });
 }
 

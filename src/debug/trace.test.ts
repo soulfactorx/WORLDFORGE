@@ -26,6 +26,8 @@ describe('디버그 기록 (v0.57)', () => {
     setDebugOn(true);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'r1', model: 'mock', choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 3 } }), { status: 200 })));
     const llm = createLlmClient({ provider: 'openai-compatible', apiKey: 'sk-SECRET-KEY', model: 'mock', baseUrl: 'http://mock.local/v1' }, { sink: () => {} });
+    const { db } = await import('../storage/db');
+    await db.saves.put({ id: 's', name: '테스트', packageId: 'p', packageVersion: '1', createdAt: 1, updatedAt: 1 });
     const e = beginDebug('turn', '턴 1: 둘러본다', { saveId: 's', input: '둘러본다' });
     debugStage('GM이 행동을 판단하는 중');
     const out = await llm.json<{ ok: boolean }>({ system: '너는 판단 모듈이다', user: '## 컨텍스트\n플레이어 입력', maxTokens: 500 }, { type: 'object' });
@@ -69,5 +71,19 @@ describe('디버그 기록 (v0.57)', () => {
     const b = { ...a, player: { ...a.player, sheet: { ...a.player.sheet, hp: a.player.sheet.hp - 3 } }, log: [...a.log, { kind: 'narration', text: 'x' } as never] };
     const d = diffState(a, b);
     expect(d).toEqual([{ path: 'player.sheet.hp', before: a.player.sheet.hp, after: a.player.sheet.hp - 3 }]);
+  });
+});
+
+describe('세이브를 지우면 디버그 기록도 지운다 (v0.57.2)', () => {
+  it('deleteSave와 고아 기록 정리', async () => {
+    setDebugOn(true);
+    const { db, deleteSave } = await import('../storage/db');
+    await db.debug.clear();
+    await db.saves.bulkPut([{ id: 'old', name: '옛 세이브', packageId: 'p', packageVersion: '1', createdAt: 1, updatedAt: 1 }, { id: 'new', name: '새 세이브', packageId: 'p', packageVersion: '1', createdAt: 2, updatedAt: 2 }]);
+    const s0 = state0();
+    for (const id of ['old', 'new', 'ghost']) await endDebug(beginDebug('turn', `턴 1 (${id})`, { saveId: id }), { before: s0, after: s0 });
+    await deleteSave('old');
+    const left = await loadDebug();
+    expect(left.map((e) => e.saveId)).toEqual(['new']); // old는 지우면서, ghost(세이브 없음)는 불러올 때 정리
   });
 });

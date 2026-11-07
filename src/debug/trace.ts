@@ -196,6 +196,10 @@ export function diffState(a: GameState, b: GameState, limit = 400): DebugDiff[] 
 
 export async function loadDebug(saveId?: string): Promise<DebugEntry[]> {
   const { db } = await import('../storage/db');
+  // 지운 세이브의 기록은 정리한다 (v0.57.2 이전에 지운 세이브 포함)
+  const live = new Set(await db.saves.toCollection().primaryKeys());
+  const orphan = (await db.debug.toArray()).filter((e) => e.saveId && !live.has(e.saveId)).map((e) => e.id);
+  if (orphan.length) await db.debug.bulkDelete(orphan);
   const all = await db.debug.orderBy('at').reverse().toArray();
   return saveId ? all.filter((e) => e.saveId === saveId || (!e.saveId && e.kind === 'other')) : all;
 }
