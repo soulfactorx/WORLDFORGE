@@ -15,7 +15,7 @@ import { UserArtManager } from './UserArtManager';
 import type { WorldPackage } from '../engine/schema';
 import { blankWorld } from '../storage/packages';
 
-type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean } | { name: 'worldgen' } | { name: 'cardworld'; file: File } | { name: 'userart' };
+type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean } | { name: 'worldgen' } | { name: 'cardworld'; file: File; extras?: File[] } | { name: 'userart' };
 
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
@@ -45,9 +45,9 @@ export function App() {
           </>
         )}
         {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world) => setView({ name: 'editor', world })} onGenerate={() => setView({ name: 'worldgen' })} onUserArt={() => setView({ name: 'userart' })}
-          onCard={(file) => setView({ name: 'cardworld', file })} />}
+          onCard={(file, extras) => setView({ name: 'cardworld', file, ...(extras?.length ? { extras } : {}) })} />}
         {view.name === 'userart' && <UserArtManager onClose={() => setView({ name: 'saves' })} />}
-        {view.name === 'cardworld' && <CardWorldPanel file={view.file} settings={settings} onCancel={() => setView({ name: 'saves' })}
+        {view.name === 'cardworld' && <CardWorldPanel file={view.file} {...(view.extras ? { extraFiles: view.extras } : {})} settings={settings} onCancel={() => setView({ name: 'saves' })}
           onDone={(world, notes) => setView({ name: 'editor', world, notes, saved: true })}
           onCharactersOnly={(card) => setView({ name: 'editor', world: { ...blankWorld(), manifest: { ...blankWorld().manifest, id: `card.${Date.now().toString(36)}` } }, card })} />}
         {view.name === 'editor' && <WorldEditor key={view.world?.manifest.id ?? 'new'} initial={view.world} draftNotes={view.notes} alreadySaved={view.saved} initialCard={view.card} settings={settings} onDone={() => setView({ name: 'saves' })} />}

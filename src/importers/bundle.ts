@@ -34,6 +34,8 @@ export interface CharxBundle {
   warnings: string[];
   /** 카드 지문 (card.json 또는 카드 파일의 SHA-256) — 같은 카드인지 확인하고, 기기 간 이동 파일의 열쇠로 쓴다 */
   fingerprint: string;
+  /** 여러 파일을 합친 묶음이면 파일마다 (v0.62): 출처 카드 기록·기기 이동에 모두 쓴다 */
+  parts?: { fileName: string; fingerprint: string; name: string; format: string; creator?: string; lore: number; images: number }[];
 }
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -173,5 +175,40 @@ async function readRisumBundle(file: Blob, fileName: string, onProgress?: (msg: 
     fingerprint, fileName, fileSize: file.size, card, rawCard: {}, module: m, extraLore: [], lua: { code, data: code ? extractLuaData(code) : {} },
     regexComments: (m.regex ?? []).map((x) => x.comment ?? '').filter(Boolean), toggles: typeof m.customModuleToggle === 'string' ? m.customModuleToggle : '',
     assets, warnings: [`RisuAI 모듈 파일입니다 — 인물 카드 본문 없이 로어북 ${lore.length}개와 이미지 ${assets.length}장을 가져옵니다.${skipped ? ` (이미지가 아닌 에셋 ${skipped}개는 뺐습니다)` : ''}`],
+  };
+}
+
+/**
+ * 본 카드 + 추가 파일(모듈 .risum, 다른 캐릭터 카드, 로어북)을 하나의 묶음으로 합친다 (v0.62).
+ * - 로어북: 모든 파일의 로어북 (같은 글은 한 번만). 추가 파일이 인물 카드면 카드 본문(설명·성격·상황)도 그 인물의 항목으로
+ * - 이미지·스크립트 데이터 표·선택 설정·경고: 모두 모은다
+ * - 지문: 모든 파일 지문으로 새로 만든다 (AI 결과 저장소가 섞이지 않게). 파일별 지문은 parts에
+ */
+export async function mergeBundles(main: CharxBundle, extras: CharxBundle[]): Promise<CharxBundle> {
+  if (!extras.length) return main;
+  const all = [main, ...extras];
+  const seen = new Set([...main.card.lore, ...main.extraLore].map((e) => e.content.slice(0, 200)));
+  const extraLore: LoreEntry[] = [...main.extraLore];
+  const add = (e: LoreEntry) => { const k = e.content.slice(0, 200); if (!e.content.trim() || seen.has(k)) return; seen.add(k); extraLore.push(e); };
+  const parts: NonNullable<CharxBundle['parts']> = [];
+  const part = (b: CharxBundle) => ({ fileName: b.fileName, fingerprint: b.fingerprint, name: b.card.name, format: b.card.format, ...(b.card.creator ? { creator: b.card.creator } : {}), lore: b.card.lore.length + b.extraLore.length, images: b.assets.length });
+  parts.push(part(main));
+  for (const x of extras) {
+    parts.push(part(x));
+    // 인물 카드 본문 → 그 인물의 로어북 항목 (모듈에는 본문이 없다)
+    const body = [x.card.description, x.card.personality && `성격: ${x.card.personality}`, x.card.scenario && `상황: ${x.card.scenario}`].filter(Boolean).join('\n\n').trim();
+    if (x.card.format !== 'risum' && body) add({ name: x.card.nickname || x.card.name, keys: [x.card.name, x.card.nickname].filter(Boolean), content: body, enabled: true });
+    for (const e of [...x.card.lore, ...x.extraLore]) add(e);
+  }
+  const lua: CharxBundle['lua'] = { code: all.map((b) => b.lua.code).filter(Boolean).join('\n\n'), data: { ...main.lua.data } };
+  for (const x of extras) for (const [k, v] of Object.entries(x.lua.data)) lua.data[k in lua.data ? `${k}@${x.fileName}` : k] = v;
+  const fingerprint = await sha256Hex(new TextEncoder().encode(all.map((b) => b.fingerprint).join('+')));
+  return {
+    ...main, fingerprint, parts, extraLore, lua,
+    fileSize: all.reduce((s, b) => s + b.fileSize, 0),
+    assets: all.flatMap((b) => b.assets),
+    regexComments: all.flatMap((b) => b.regexComments),
+    toggles: all.map((b) => b.toggles).filter(Boolean).join('\n'),
+    warnings: [...main.warnings, ...extras.flatMap((x) => x.warnings.map((w) => `${x.fileName}: ${w}`))],
   };
 }

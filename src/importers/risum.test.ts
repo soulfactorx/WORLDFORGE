@@ -60,3 +60,22 @@ describe('.risum 단독 파일 (v0.61)', () => {
     expect(inferCandidates(b).candidates.some((c) => c.name === '세라')).toBe(true);
   });
 });
+
+describe('여러 파일 합치기 (v0.62)', () => {
+  it('본 카드 + 모듈 + 다른 인물 카드: 로어북·이미지·데이터를 모으고 파일별 지문을 남긴다', async () => {
+    const { readCharxBundle, mergeBundles } = await import('./bundle');
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1]);
+    const mainCard = { spec: 'chara_card_v3', data: { name: '왕궁', description: '왕궁 이야기', character_book: { entries: [{ comment: '왕궁', keys: ['왕궁'], content: '왕궁은 북쪽에 있다.' }] } } };
+    const main = await readCharxBundle(new File([strToU8(JSON.stringify(mainCard))], 'main.json'), 'main.json');
+    const mod = await readCharxBundle(new File([new Uint8Array(makeRisum({ name: '확장 모듈', lorebook: [{ comment: '기사단', content: '기사단은 왕을 지킨다.' }, { comment: '중복', content: '왕궁은 북쪽에 있다.' }], assets: [['sera_smile', '', 'png']] }, [png]))], 'ext.risum'), 'ext.risum');
+    const other = await readCharxBundle(new File([strToU8(JSON.stringify({ spec: 'chara_card_v2', data: { name: '레온', description: '나이: 24\n외모: 흑발', personality: '과묵함' } }))], 'leon.json'), 'leon.json');
+    const m = await mergeBundles(main, [mod, other]);
+    expect(m.parts!.map((p) => p.fileName)).toEqual(['main.json', 'ext.risum', 'leon.json']);
+    expect(m.parts!.map((p) => p.fingerprint)).toEqual([main.fingerprint, mod.fingerprint, other.fingerprint]);
+    expect(m.fingerprint).not.toBe(main.fingerprint);
+    expect([...m.card.lore, ...m.extraLore].map((e) => e.name)).toEqual(['왕궁', '기사단', '레온']); // 같은 글은 한 번만
+    expect(m.extraLore.find((e) => e.name === '레온')!.content).toContain('성격: 과묵함');
+    expect(m.assets.map((a) => a.name)).toEqual(['sera_smile']);
+    expect(await mergeBundles(main, [])).toBe(main);
+  });
+});

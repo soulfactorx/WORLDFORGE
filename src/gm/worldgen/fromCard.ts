@@ -334,8 +334,10 @@ export async function cardToWorld(
     ...(relations.length ? { relations } : {}),
     manifest: {
       ...world.manifest, name: d.name || card.name, license: '원작자 소유 — 개인 플레이 전용', aiAssisted: true,
-      private: { source: `${card.name}${card.creator ? ` / ${card.creator}` : ''} (${b.fileName})`, note: PRIVATE_NOTE, cardHash: b.fingerprint },
-      sources: [{ hash: b.fingerprint, name: card.name, ...(card.creator ? { creator: card.creator } : {}), fileName: b.fileName, format: card.format, importedAt: new Date().toISOString(), via: 'world' }],
+      private: { source: `${card.name}${card.creator ? ` / ${card.creator}` : ''} (${b.parts ? b.parts.map((p) => p.fileName).join(' + ') : b.fileName})`, note: PRIVATE_NOTE, cardHash: b.parts?.[0]?.fingerprint ?? b.fingerprint },
+      // 여러 파일을 합쳤으면 파일마다 출처로 남긴다 — 기기 간 이동 때 모든 원본 파일이 필요하다 (v0.62)
+      sources: (b.parts ?? [{ fingerprint: b.fingerprint, name: card.name, ...(card.creator ? { creator: card.creator } : {}), fileName: b.fileName, format: card.format }])
+        .map((p) => ({ hash: p.fingerprint, name: p.name, ...(p.creator ? { creator: p.creator } : {}), fileName: p.fileName, format: p.format, importedAt: new Date().toISOString(), via: 'world' as const })),
     },
     characters: ents.characters,
     claims: [...world.claims, ...ents.claims],

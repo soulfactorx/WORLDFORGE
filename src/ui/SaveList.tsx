@@ -54,7 +54,7 @@ export function Menu({ label, title, children, className }: { label: ReactNode; 
 }
 
 export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
-  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void; onGenerate: () => void; onCard: (file: File) => void; onUserArt: () => void;
+  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void; onGenerate: () => void; onCard: (file: File, extras?: File[]) => void; onUserArt: () => void;
 }) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
   const packages = useLiveQuery(() => listPackages(), []);
@@ -246,8 +246,14 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
             <Menu label="＋ 만들기 ▾" className="primary-menu">
               <button onClick={() => onEdit(null)}>＋ 빈 세계관에서 직접 만들기</button>
               <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
-              <label className="file">✦ 캐릭터 카드로 만들기 (.charx · .risum · .png · .json)
-                <input type="file" accept=".charx,.risum,.png,.json,application/json,image/png,application/zip" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCard(f); e.target.value = ''; }} />
+              <label className="file">✦ 캐릭터 카드로 만들기 (.charx · .risum · .png · .json — 모듈 등 여러 파일을 함께 골라도 된다)
+                <input type="file" multiple accept=".charx,.risum,.png,.json,application/json,image/png,application/zip" onChange={(e) => {
+                  const fs = [...(e.target.files ?? [])];
+                  // 본 카드: 모듈(.risum)이 아닌 첫 파일 — 나머지는 함께 분석할 추가 파일
+                  const main = fs.find((f) => !/\.risum$/i.test(f.name)) ?? fs[0];
+                  if (main) onCard(main, fs.filter((f) => f !== main));
+                  e.target.value = '';
+                }} />
               </label>
             </Menu>
             <Menu label="⤒ 가져오기 ▾">

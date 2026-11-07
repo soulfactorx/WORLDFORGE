@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
 import { analyzeBundle, cardToWorld } from '../gm/worldgen/fromCard';
-import { type CharxBundle, parseToggles, readCharxBundle } from '../importers/bundle';
+import { type CharxBundle, mergeBundles, parseToggles, readCharxBundle } from '../importers/bundle';
 import { portraitDataUrl } from '../importers/portrait';
 import type { EntryChoice } from '../importers/worldcard';
 import { createLlmClient } from '../llm';
@@ -21,13 +21,19 @@ const mb = (n: number) => `${(n / 1048576).toFixed(1)}MB`;
  * 카드·모듈(risum)·Lua 데이터·모든 이미지를 읽고 → AI가 세계 구조를 만들고 → 이미지를 저장한다.
  * 결과는 개인용 세계(내보내기·공유 불가).
  */
-export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersOnly }: {
+export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, onCharactersOnly }: {
   file: File; settings: LlmSettings | null;
+  /** 홈에서 함께 고른 추가 파일 (v0.62) */
+  extraFiles?: File[];
   onDone: (world: WorldPackage, notes: string[]) => void; onCancel: () => void;
   /** 기존 방식: 빈 세계에 인물로만 가져오기 */
   onCharactersOnly: (file: File) => void;
 }) {
   const [bundle, setBundle] = useState<CharxBundle | null>(null);
+  /** 본 카드 + 추가 파일 (v0.62): 모듈(.risum)·다른 카드·로어북을 함께 분석한다 */
+  const [main, setMain] = useState<CharxBundle | null>(null);
+  const [extras, setExtras] = useState<CharxBundle[]>([]);
+  const [extraMsg, setExtraMsg] = useState('');
   const [loading, setLoading] = useState('파일 읽는 중…');
   const [error, setError] = useState('');
   const [choices, setChoices] = useState<EntryChoice[]>([]);
@@ -60,9 +66,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
       try {
         const b = await readCharxBundle(file, file.name, (m) => live && setLoading(m));
         if (!live) return;
-        setBundle(b);
-        setStored(await genCacheCount(b.fingerprint));
-        setChoices(analyzeBundle(b).analyzed.map((a) => a.choice));
+        setMain(b);
         if (/nsfw|성인|19금|adult/i.test(b.card.tags.join(' ')) && isAdultConfirmed()) setRating('mature');
         const t: { name: string; url: string }[] = [];
         for (const a of b.assets.slice(0, 12)) { const u = URL.createObjectURL(await a.read()); urls.push(u); t.push({ name: a.name, url: u }); }
@@ -75,6 +79,43 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
     })();
     return () => { live = false; urls.forEach((u) => URL.revokeObjectURL(u)); abort.current?.abort(); };
   }, [file]);
+
+  // 본 카드·추가 파일이 바뀌면 다시 합치고 다시 분석한다
+  useEffect(() => {
+    if (!main) return;
+    let live = true;
+    (async () => {
+      const b = await mergeBundles(main, extras);
+      if (!live) return;
+      setBundle(b);
+      // 추가한 인물 카드의 본문 항목은 처음부터 인물로 (v0.62)
+      const cardNames = new Set(extras.filter((x) => x.card.format !== 'risum').map((x) => x.card.nickname || x.card.name));
+      const an = analyzeBundle(b);
+      const mainCount = b.card.lore.length + main.extraLore.length;
+      setChoices(an.analyzed.map((x) => (x.index >= mainCount && cardNames.has(an.card.lore[x.index]!.name) ? 'character' : x.choice)));
+      setStored(await genCacheCount(b.fingerprint));
+    })();
+    return () => { live = false; };
+  }, [main, extras]);
+
+  // 홈에서 함께 고른 파일은 본 카드를 읽은 뒤 한 번만 넣는다
+  const extrasDone = useRef(false);
+  useEffect(() => { if (main && extraFiles?.length && !extrasDone.current) { extrasDone.current = true; void addExtras(extraFiles); } }, [main]);
+
+  async function addExtras(files: File[]) {
+    const got: CharxBundle[] = [];
+    const errs: string[] = [];
+    for (const [i, f] of files.entries()) {
+      setExtraMsg(`추가 파일 읽는 중… (${i + 1}/${files.length}) ${f.name}`);
+      try {
+        const x = await readCharxBundle(f, f.name, (m) => setExtraMsg(`${f.name}: ${m}`));
+        if (x.fingerprint === main?.fingerprint || [...extras, ...got].some((e) => e.fingerprint === x.fingerprint)) { errs.push(`${f.name}: 이미 넣은 파일`); continue; }
+        got.push(x);
+      } catch (e) { errs.push(`${f.name}: ${(e as Error).message}`); }
+    }
+    setExtras((xs) => [...xs, ...got]);
+    setExtraMsg(errs.length ? `❌ ${errs.join(' · ')}` : '');
+  }
 
   const analysis = useMemo(() => (bundle ? analyzeBundle(bundle) : null), [bundle]);
 
@@ -144,6 +185,22 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
           <div className="row">
             {thumbs.map((t) => <img key={t.url} className="portrait small-portrait" src={t.url} alt={t.name} title={t.name} />)}
           </div>
+          <fieldset className="extra-files">
+            <legend>함께 분석할 파일 {b.parts ? `${b.parts.length}개` : '1개'}</legend>
+            <ul className="small">
+              {(b.parts ?? [{ fileName: b.fileName, name: b.card.name, format: b.card.format, lore: analysis.card.lore.length, images: b.assets.length, fingerprint: b.fingerprint }]).map((p, i) => (
+                <li key={p.fingerprint}>
+                  {i === 0 ? '📇 본 카드' : p.format === 'risum' ? '🧩 모듈' : '📇 추가 카드'}: <b>{p.name}</b> <span className="muted">({p.fileName} · {p.format.toUpperCase()} · 로어북 {p.lore} · 이미지 {p.images.toLocaleString()})</span>
+                  {i > 0 && !busy && <button type="button" className="small link" onClick={() => setExtras((xs) => xs.filter((x) => x.fingerprint !== p.fingerprint))}>빼기</button>}
+                </li>
+              ))}
+            </ul>
+            <label className="file small">＋ 모듈·다른 카드 추가 (.risum · .charx · .png · .json, 여러 개 가능)
+              <input type="file" multiple accept=".risum,.charx,.png,.json,application/zip,image/png,application/json" disabled={busy || !!extraMsg && !extraMsg.startsWith('❌')} onChange={(e) => { const fs = [...(e.target.files ?? [])]; if (fs.length) void addExtras(fs); e.target.value = ''; }} />
+            </label>
+            {extraMsg && <p className="small status">{extraMsg}</p>}
+            <p className="small muted">카드에 쓰이는 모듈이나 함께 쓰는 인물 카드가 따로 있으면 넣으세요. 모든 파일의 로어북·이미지·스크립트 데이터 표를 합쳐 분석하고, 추가 인물 카드의 본문은 그 인물의 항목이 됩니다. 기기 간 이동 때는 넣은 파일이 모두 필요합니다.</p>
+          </fieldset>
           <ul className="small">
             <li><b>{b.card.name}</b>{b.card.creator && ` · 제작 ${b.card.creator}`}</li>
             <li>로어북 {analysis.card.lore.length}항목 (모듈에만 있는 항목 {b.extraLore.length}) → 규칙으로 찾은 인물 {nChar} · 세계 설정 {nWorld} · 제외 {choices.length - nChar - nWorld}
