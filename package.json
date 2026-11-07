@@ -1,7 +1,7 @@
 {
   "name": "worldforge",
   "private": true,
-  "version": "0.74.0",
+  "version": "0.75.0",
   "license": "GPL-3.0-or-later",
   "repository": "https://github.com/soulfactorx/WORLDFORGE",
   "type": "module",
@@ -11,7 +11,8 @@
     "build:single": "tsc -b && vite build --mode single",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ui:audit": "node scripts/ui-audit.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",

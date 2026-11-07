@@ -756,3 +756,22 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .img-pick-preview-info .row { flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .gallery.stock figure { position: relative; }
 .fig-peek { position: absolute; top: 4px; right: 4px; z-index: 2; padding: 2px 6px; font-size: .8rem; line-height: 1.2; background: rgba(0,0,0,.55); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 6px; }
+
+/* ───────── UI 점검 (v0.75): PC·모바일 공통 기준 ─────────
+ * 모바일(≤600px): 입력칸 글자 16px(iOS 확대 방지) · 누르는 것 최소 36px · 체크박스 20px · 접기 제목 넉넉히
+ * PC(≥1100px): 세계관 편집기는 넓게
+ * 새 화면은 scripts/ui-audit.cjs로 점검한다 (CLAUDE.md 참고)
+ */
+@media (max-width: 600px) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea { font-size: 16px !important; }
+  button, select, [role=button] { min-height: 36px; }
+  button.small { padding: 6px 10px; }
+  input[type=checkbox], input[type=radio] { width: 20px; height: 20px; flex: none; }
+  summary { padding: 8px 0; min-height: 36px; box-sizing: border-box; }
+  .topbar .brand { min-height: 36px; }
+  .topbar a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 6px; }
+  .universe-whole { min-height: 36px; }
+}
+@media (min-width: 1100px) {
+  .app:has(.editor) { max-width: 1080px; }
+}

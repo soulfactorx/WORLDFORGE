@@ -18,6 +18,15 @@ async function home(page) {
   await page.evaluate(() => { localStorage.clear(); localStorage.setItem('worldforge.llm', JSON.stringify({ provider: 'openai-compatible', baseUrl: 'http://x', model: 'm', apiKey: 'k' })); localStorage.setItem('worldforge.home.tab', 'play'); });
   await page.reload(); await page.waitForTimeout(400);
 }
+async function play(page) {
+  await home(page);
+  const sel = page.locator('label:has-text("세계관") select');
+  await sel.selectOption(await sel.locator('option', { hasText: '장미 정원' }).getAttribute('value'));
+  await page.click('button:has-text("주인공 만들고 시작")');
+  await page.click('.gender-pick button >> nth=0');
+  await page.click('button:has-text("이 캐릭터로 시작")');
+  await page.waitForSelector('.entry.narration');
+}
 async function editor(page) {
   await home(page);
   await page.click('.home-tabs button:has-text("세계관")');
@@ -32,8 +41,9 @@ const SCREENS = [
   ['홈: 세계관', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세계관")'); }],
   ['홈: 세이브', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세이브")'); }],
   ['주인공 만들기', async (p) => { await home(p); await p.click('button:has-text("주인공 만들고 시작")'); }],
-  ['플레이 화면', async (p) => { await home(p); await p.click('button:has-text("주인공 만들고 시작")'); await p.click('.gender-pick button >> nth=0'); await p.click('button:has-text("이 캐릭터로 시작")'); await p.waitForSelector('.entry.narration'); }],
-  ['플레이: 캐릭터', async (p) => { await home(p); await p.click('button:has-text("주인공 만들고 시작")'); await p.click('.gender-pick button >> nth=0'); await p.click('button:has-text("이 캐릭터로 시작")'); await p.waitForSelector('.entry.narration'); await p.click('button:has-text("캐릭터")'); }],
+  ['플레이 화면', play],
+  ['플레이: 캐릭터', async (p) => { await play(p); await p.click('button:has-text("캐릭터")'); }],
+  ['플레이: 수첩', async (p) => { await play(p); await p.click('button:has-text("수첩")'); }],
   ...EDITOR_TABS.map((t) => [`편집: ${t}`, (p) => editorTab(p, t)]),
   ['편집: 장면 (펼침)', async (p) => {
     await editorTab(p, '장면');
