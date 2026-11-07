@@ -79,3 +79,23 @@ describe('직업 검증', () => {
     for (const p of CLASS_PRESETS) expect(validateWorld({ ...sampleWorld, classes: p.classes }).filter((i) => i.path.startsWith('classes')), p.id).toEqual([]);
   });
 });
+
+describe('동료 직업 (v0.57.1)', () => {
+  const custom = { ...sampleWorld, classes: [{ id: 'knight', name: '기사', base: 'fighter' }, { id: 'chef', name: '전투 요리사', base: 'ranger' }] };
+  it('세계 직업(role)이 있으면 그 규칙 직업과 이름으로 동료 시트를 만든다', async () => {
+    const { companionClass } = await import('./classes');
+    const { companionSheet } = await import('./character/sheet');
+    const cc = companionClass(custom, { classId: 'fighter', role: 'chef' });
+    expect(cc).toEqual({ classId: 'ranger', role: { id: 'chef', name: '전투 요리사' } });
+    const sh = companionSheet('브란', cc.classId, { str: 14, dex: 12, con: 13, int: 10, wis: 11, cha: 10 }, cc.role);
+    expect(sh.classId).toBe('ranger');
+    expect(classLabel(custom, sh)).toBe('전투 요리사');
+    expect(companionClass(custom, { classId: 'wizard' })).toEqual({ classId: 'wizard' });
+  });
+  it('검증: 없는 세계 직업·규칙 직업 불일치는 경고', () => {
+    const w = { ...custom, characters: custom.characters.map((c, i) => (i === 0 ? { ...c, companion: { classId: 'fighter', role: 'chef', abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, joinCondition: '함께 간다' } } : i === 1 ? { ...c, companion: { classId: 'fighter', role: 'nope', abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, joinCondition: '함께 간다' } } : c)) };
+    const issues = validateWorld(w).filter((i) => i.path.includes('companion'));
+    expect(issues.map((i) => i.level)).toEqual(['warning', 'warning']);
+    expect(issues.map((i) => i.path)).toEqual(['characters[0].companion.classId', 'characters[1].companion.role']);
+  });
+});

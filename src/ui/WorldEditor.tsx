@@ -354,7 +354,24 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               })} /> 동료로 영입 가능</label>
               {c.companion && (
                 <>
-                  <Select label="직업" value={c.companion.classId} options={Object.values(CLASSES).map((x) => { const wc = classesFor(w).find((k) => k.base === x.id); return [x.id, wc && wc.name !== x.name ? `${wc.name} (규칙: ${x.name})` : x.name] as const; })} onChange={(classId) => up({ companion: { ...c.companion!, classId } })} />
+                  {(() => {
+                    // 이 세계의 직업 목록 (직업 탭에서 추가한 것 포함) + 목록에 없는 규칙 직업 (v0.57.1)
+                    const wcs = classesFor(w);
+                    const byRole = c.companion.role ? wcs.find((k) => k.id === c.companion!.role) : undefined;
+                    // 직업을 정하지 않은 동료는 같은 규칙 직업의 첫 세계 직업으로 보인다 (플레이 화면과 같게)
+                    const shownAs = byRole ?? wcs.find((k) => k.base === c.companion!.classId);
+                    const cur = shownAs ? `role:${shownAs.id}` : `base:${c.companion.classId}`;
+                    const opts = [
+                      ...wcs.map((k) => [`role:${k.id}`, k.name === CLASSES[k.base]?.name ? k.name : `${k.name} (규칙: ${CLASSES[k.base]?.name ?? k.base})`] as const),
+                      ...Object.values(CLASSES).filter((x) => cur === `base:${x.id}` || !wcs.some((k) => k.base === x.id)).map((x) => [`base:${x.id}`, `${x.name} (규칙 직업 그대로)`] as const),
+                    ];
+                    return <Select label="직업 (직업 탭의 목록)" value={cur} options={opts} onChange={(v) => {
+                      const [kind, id] = v.split(':') as ['role' | 'base', string];
+                      const wc = kind === 'role' ? wcs.find((k) => k.id === id) : undefined;
+                      const { role: _drop, ...rest } = c.companion!;
+                      up({ companion: wc ? { ...rest, classId: wc.base, role: wc.id } : { ...rest, classId: id } });
+                    }} />;
+                  })()}
                   <Area label="동행 조건 (이 NPC가 스스로 판단하는 기준)" value={c.companion.joinCondition} onChange={(joinCondition) => up({ companion: { ...c.companion!, joinCondition } })} />
                   <div className="ability-grid">
                     {(['str', 'dex', 'con', 'int', 'wis', 'cha'] as const).map((k) => (

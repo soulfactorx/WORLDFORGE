@@ -1,6 +1,7 @@
 import { genreGuide } from '../../engine/genre';
 import { genreOf } from '../../data/genres';
 import { CLASSES } from '../../engine/character/rules';
+import { companionClass } from '../../engine/classes';
 import { monsterTable, monstersOfWorld } from '../../engine/combat/monsters';
 import { validateWorld, type Issue } from '../../engine/package/validate';
 import type { WorldPackage } from '../../engine/schema';
@@ -84,7 +85,7 @@ export function worldSummary(w: WorldPackage): string {
   return [
     `# ${w.manifest.name}`,
     '## 장소', ...w.locations.map((l) => `- ${short(l.id)}: ${l.name} — ${l.description.slice(0, 80)} (연결: ${l.connections.map(short).join(', ')})${l.discoveries?.length ? ` [발견 가능: ${l.discoveries.map((d) => short(d.claim)).join(', ')}]` : ''}`),
-    '## 인물', ...w.characters.map((c) => `- ${short(c.id)}: ${c.name} @${short(c.locationId)} — ${c.personality.slice(0, 60)}${c.companion ? ` [동료 후보: ${CLASSES[c.companion.classId]?.name}]` : ''}${c.romanceable ? ' [연인 가능]' : ''}${c.faction ? ` [소속: ${short(c.faction)}]` : ''}`),
+    '## 인물', ...w.characters.map((c) => `- ${short(c.id)}: ${c.name} @${short(c.locationId)} — ${c.personality.slice(0, 60)}${c.companion ? ` [동료 후보: ${companionClass(w, c.companion).role?.name ?? CLASSES[c.companion.classId]?.name}]` : ''}${c.romanceable ? ' [연인 가능]' : ''}${c.faction ? ` [소속: ${short(c.faction)}]` : ''}`),
     ...(w.factions?.length ? ['## 세력', ...w.factions.map((f) => `- ${short(f.id)}: ${f.name} — ${f.description.slice(0, 60)}`)] : []),
     ...(w.relations?.length ? ['## 인물 사이 관계', ...w.relations.map((r) => `- ${short(r.a)} ↔ ${short(r.b)}: ${r.kind}${r.note ? ` (${r.note})` : ''}`)] : []),
     '## 진실', ...w.facts.map((f) => `- ${short(f.id)} (비밀 ${f.secrecy}): ${f.statement}`),

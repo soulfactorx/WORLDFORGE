@@ -419,6 +419,8 @@ export interface Shop {
 
 export interface CompanionSpec {
   classId: string;
+  /** 세계 직업 ID (v0.57.1) — 있으면 이 직업의 이름으로 보이고, 규칙은 그 직업의 base를 따른다 */
+  role?: string;
   abilities: { str: number; dex: number; con: number; int: number; wis: number; cha: number };
   /** Actor(해당 NPC)에게만 주는 동행 조건. NPC가 대화 중 스스로 판단한다. */
   joinCondition: string;

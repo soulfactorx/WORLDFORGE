@@ -27,6 +27,12 @@ export function recommendedSkills(wc: WorldClass): SkillId[] {
   return [...new Set((wc.skills ?? []).filter((s): s is SkillId => opts.includes(s as SkillId)))].slice(0, CLASSES[wc.base]!.skillChoices);
 }
 
+/** 동료의 직업: 세계 직업(role)이 있으면 그 규칙 직업과 이름, 없으면 classId (v0.57.1) */
+export function companionClass(world: Pick<WorldPackage, 'classes' | 'genre'>, spec: { classId: string; role?: string }): { classId: string; role?: { id: string; name: string } } {
+  const wc = spec.role ? classesFor(world).find((c) => c.id === spec.role) : undefined;
+  return wc ? { classId: wc.base, role: { id: wc.id, name: wc.name } } : { classId: spec.classId };
+}
+
 /** 화면에 보일 직업 이름: 시트에 저장된 역할 → 세계 직업 중 같은 base → 엔진 이름(장르 용어 바꾸기) */
 export function classLabel(world: Pick<WorldPackage, 'classes' | 'genre'> | undefined, sheet: Pick<CharacterSheet, 'classId' | 'roleName'>, rs: (s: string) => string = (s) => s): string {
   if (sheet.roleName) return sheet.roleName;

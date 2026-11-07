@@ -12,6 +12,7 @@ import type { Condition, WorldPackage } from '../schema';
 import { GENRES } from '../../data/genres';
 import { stockDataUrl } from '../../data/stockart';
 import { MAX_LEVEL } from '../character/progression';
+import { classesFor } from '../classes';
 
 export interface Issue {
   level: 'error' | 'warning';
@@ -163,6 +164,11 @@ export function validateWorld(input: unknown): Issue[] {
     if (!IMPROV.includes(c.improvisation)) err(`${p}.improvisation`, 'none / minor / free 중 하나입니다.');
     if (c.companion) {
       if (!CLASSES[c.companion.classId]) err(`${p}.companion.classId`, `알 수 없는 직업 "${c.companion.classId}" (${Object.keys(CLASSES).join(', ')})`);
+      if (c.companion.role !== undefined) {
+        const wc = classesFor(input as unknown as WorldPackage).find((k) => k.id === c.companion!.role);
+        if (!wc) warn(`${p}.companion.role`, `이 세계의 직업 목록에 없는 직업 "${c.companion.role}" — 규칙 직업(${c.companion.classId})의 이름으로 보입니다.`);
+        else if (wc.base !== c.companion.classId) warn(`${p}.companion.classId`, `직업 "${wc.name}"의 규칙 직업은 ${wc.base}입니다 — 영입하면 ${wc.base} 규칙을 따릅니다.`);
+      }
       const ab = c.companion.abilities as unknown;
       if (!isObj(ab) || ['str', 'dex', 'con', 'int', 'wis', 'cha'].some((k) => typeof ab[k] !== 'number' || (ab[k] as number) < 1 || (ab[k] as number) > 20)) {
         err(`${p}.companion.abilities`, '능력치 6개(str dex con int wis cha)가 1~20 숫자여야 합니다.');

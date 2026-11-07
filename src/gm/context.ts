@@ -36,7 +36,7 @@ function partyLines(world: WorldPackage, state: GameState): string[] {
   if (!ids.length) return ['(없음 — 혼자다)'];
   return ids.map((id) => {
     const sh = state.party[id]!;
-    return `- ${sh.name} [${id}] HP ${sh.hp}/${sh.maxHp}`;
+    return `- ${sh.name} [${id}] ${classLabel(world, sh, reskinner(world))} ${sh.level}레벨 · HP ${sh.hp}/${sh.maxHp}`;
   });
 }
 

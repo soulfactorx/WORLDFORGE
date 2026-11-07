@@ -8,6 +8,7 @@ import type { GameEvent } from '../engine/state/events';
 import { RATING_GUIDE } from '../engine/rating';
 import { applyEvent, type GameState, initialState, MAX_PARTY } from '../engine/state/state';
 import { companionSheet } from '../engine/character/sheet';
+import { companionClass } from '../engine/classes';
 import { josa } from '../engine/text/josa';
 import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
@@ -333,7 +334,8 @@ export async function runTurn(
     if (out.party_decision === 'join' && npc.companion && !s.party[npc.id] && blocker) {
       outcomes.push(`${josa(npc.name, '은/는')} 아직 함께 갈 마음이 서지 않았다 (${blocker}) — 동행은 성사되지 않음`);
     } else if (out.party_decision === 'join' && npc.companion && !s.party[npc.id] && Object.keys(s.party).length < MAX_PARTY) {
-      push({ type: 'companion_joined', npcId: npc.id, sheet: companionSheet(npc.name, npc.companion.classId, npc.companion.abilities) });
+      const cc = companionClass(world, npc.companion);
+      push({ type: 'companion_joined', npcId: npc.id, sheet: companionSheet(npc.name, cc.classId, npc.companion.abilities, cc.role) });
       outcomes.push(`${josa(npc.name, '이/가')} 동료가 되어 함께 다닌다`);
     } else if (out.party_decision === 'leave' && s.party[npc.id]) {
       push({ type: 'companion_left', npcId: npc.id, locationId: s.player.locationId });
