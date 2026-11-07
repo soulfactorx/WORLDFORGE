@@ -1,4 +1,5 @@
 import type { AssetMeta, Condition, SceneAction, SceneDef, SceneEnd, SceneReaction, WorldPackage } from '../engine/schema';
+import { autoSceneArt } from './sceneArt';
 
 /**
  * 격투 샘플 세계: 파이널 벨 — 항구 도시 무진의 지하 서킷에서 세계 대회 결승까지.
@@ -634,3 +635,6 @@ export const fightingSample: WorldPackage = {
     art('study', 17, { locationId: 'loc/tower' }, '대표실'), art('palace-hall', 18, { locationId: 'loc/arena' }, '대회장'),
   ],
 };
+
+// 장면 그림 (v0.50): 시작·단계·행동·결과·반작용·끝의 빈 자리에 내장 장면 그림(stock.fx-…)을 채운다
+fightingSample.scenes = fightingSample.scenes?.map(autoSceneArt);

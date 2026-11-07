@@ -10,6 +10,7 @@ import { STAGES } from '../relationship';
 import { encounterDifficulty, MONSTERS, monsterTable } from '../combat/monsters';
 import type { Condition, WorldPackage } from '../schema';
 import { GENRES } from '../../data/genres';
+import { stockDataUrl } from '../../data/stockart';
 import { MAX_LEVEL } from '../character/progression';
 
 export interface Issue {
@@ -416,6 +417,20 @@ export function validateWorld(input: unknown): Issue[] {
       if (re?.chance !== undefined && (typeof re.chance !== 'number' || re.chance <= 0 || re.chance > 1)) err(`${p}.reactions[${j}].chance`, '확률은 0보다 크고 1 이하입니다.');
       sDelta(re?.delta, `${p}.reactions[${j}].delta`);
     });
+    // 그림 참조 (v0.50): 내장 그림은 있어야 하고, 세계 이미지는 등록돼 있어야 한다 (내 기본 이미지 user.…는 기기마다 달라 확인하지 않음)
+    const assetIds = new Set(((input as unknown as WorldPackage).assets ?? []).map((a) => a?.id));
+    const img = (id: unknown, path: string) => {
+      if (id === undefined) return;
+      if (typeof id !== 'string' || !id) { err(path, '그림은 에셋 ID 글자입니다.'); return; }
+      if (id.startsWith('stock.')) { if (!stockDataUrl(id)) err(path, `없는 내장 그림 "${id}"`); return; }
+      if (!id.startsWith('user.') && !assetIds.has(id)) warn(path, `세계 이미지에 없는 그림 "${id}" — 이미지 탭에서 올리거나 내장 장면 그림(stock.fx-…)을 고르세요.`);
+    };
+    img(sc.image, `${p}.image`);
+    (sc.phases ?? []).forEach((ph, j) => img(ph?.image, `${p}.phases[${j}].image`));
+    (Array.isArray(sc.actions) ? sc.actions : []).forEach((a, j) => { img(a?.image, `${p}.actions[${j}].image`); img(a?.success?.image, `${p}.actions[${j}].success.image`); img(a?.great?.image, `${p}.actions[${j}].great.image`); img(a?.failure?.image, `${p}.actions[${j}].failure.image`); });
+    (sc.reactions ?? []).forEach((re, j) => img(re?.delta?.image, `${p}.reactions[${j}].delta.image`));
+    (Array.isArray(sc.ends) ? sc.ends : []).forEach((e, j) => img(e?.image, `${p}.ends[${j}].image`));
+    if (sc.narration !== undefined && !['fixed', 'end', 'ai'].includes(sc.narration)) err(`${p}.narration`, 'narration은 fixed·end·ai 중 하나입니다.');
     if (sc.timeoutEnd && !endIds.has(sc.timeoutEnd)) err(`${p}.timeoutEnd`, `없는 끝 "${sc.timeoutEnd}"`);
     if (!sc.maxRounds && !(sc.ends ?? []).some((e) => e?.outcome === 'failure')) warn(`${p}`, '실패로 끝나는 길도, 차례 한도(maxRounds)도 없습니다 — 장면이 끝나지 않을 수 있습니다.');
   });

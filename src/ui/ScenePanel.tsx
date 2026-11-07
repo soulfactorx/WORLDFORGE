@@ -4,12 +4,13 @@ import { sceneActions } from '../engine/scene';
 import type { SceneDef } from '../engine/schema';
 import type { GameState, SceneRun } from '../engine/state/state';
 import { useRs } from './reskin';
+import { AssetImage } from './AssetImage';
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
 /** 장면 패널 (v0.47): 수치 막대 · 상태 · 단계 · 행동 카드 · 기록 */
-export function ScenePanel({ def, run, sheet, busy, npcName, onAct, onQuit }: {
-  def: SceneDef; run: SceneRun; sheet: GameState['player']['sheet']; busy: boolean; npcName?: string;
+export function ScenePanel({ def, run, sheet, busy, npcName, pkg, onAct, onQuit }: {
+  def: SceneDef; run: SceneRun; sheet: GameState['player']['sheet']; busy: boolean; npcName?: string; pkg: string;
   onAct: (actionId: string) => void; onQuit: () => void;
 }) {
   const rs = useRs();
@@ -23,6 +24,7 @@ export function ScenePanel({ def, run, sheet, busy, npcName, onAct, onQuit }: {
     <section className="scene-panel" aria-label={`장면: ${def.name}`}>
       <div className="row"><b>🎭 {rs(def.name)}</b>{npcName && <span className="small muted">— {rs(npcName)}</span>}<span className="spacer" />
         <span className="small muted">{phase ? `${rs(phase.name)} · ` : ''}{run.round}차례{def.maxRounds ? ` / ${def.maxRounds}` : ''}</span></div>
+      {run.image && <AssetImage pkg={pkg} id={run.image} alt={def.name} className="scene-art" zoom />}
       {phase?.text && <p className="small muted">{rs(phase.text)}</p>}
       <div className="scene-gauges">
         {def.gauges.filter((g) => g.visible !== false).map((g) => {
@@ -40,7 +42,8 @@ export function ScenePanel({ def, run, sheet, busy, npcName, onAct, onQuit }: {
       )}
       <div className="scene-actions">
         {acts.map(({ action: a, ok, why, mode, mod, gaugeMod }) => (
-          <button key={a.id} type="button" disabled={busy || !ok} onClick={() => onAct(a.id)} title={why || rs(a.text ?? '')}>
+          <button key={a.id} type="button" disabled={busy || !ok} onClick={() => onAct(a.id)} title={why || rs(a.text ?? '')} className={a.image ? 'has-art' : undefined}>
+            {a.image && <AssetImage pkg={pkg} id={a.image} alt="" className="act-art" />}
             <b>{rs(a.name)}</b>
             <span className="small muted">
               {a.check ? `${checkName(a.check)} ${mod !== undefined ? fmt(mod) : ''}${gaugeMod ? ` (수치 ${fmt(gaugeMod)})` : ''} vs ${a.dc ?? 12}` : '판정 없음'}

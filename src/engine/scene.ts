@@ -31,7 +31,8 @@ export function sceneCond(c: SceneCond | undefined, run: SceneRun): boolean {
 
 export function newRun(def: SceneDef): SceneRun {
   const gauges = Object.fromEntries(def.gauges.map((g) => { const [lo, hi] = gaugeRange(def, g.id); return [g.id, Math.max(lo, Math.min(hi, g.start))]; }));
-  return { sceneId: def.id, gauges, states: [], ...(def.phases?.[0] ? { phase: def.phases[0].id } : {}), round: 0, used: [], log: [] };
+  const image = def.image ?? def.phases?.[0]?.image;
+  return { sceneId: def.id, gauges, states: [], ...(def.phases?.[0] ? { phase: def.phases[0].id } : {}), round: 0, used: [], log: [], ...(image ? { image } : {}) };
 }
 
 /** 지금 시작할 수 있는 장면 (진행 중인 장면·전투가 없을 때) */
@@ -68,17 +69,21 @@ export function gaugeMods(def: SceneDef, run: SceneRun, action: SceneAction): { 
 }
 
 /** 반작용: 조건이 맞는 것 모두, 확률은 rng로 (rng가 없으면 확률 1인 것만) */
-export function applyReactions(def: SceneDef, run: SceneRun, roll?: () => number): { run: SceneRun; texts: string[] } {
+export function applyReactions(def: SceneDef, run: SceneRun, roll?: () => number): { run: SceneRun; texts: string[]; images: string[] } {
   let r = run;
   const texts: string[] = [];
+  const images: string[] = [];
   for (const re of def.reactions ?? []) {
     if (re.when && !sceneCond(re.when, r)) continue;
     const p = re.chance ?? 1;
     if (p < 1 && (!roll || roll() >= p)) continue;
-    r = applyDelta(def, r, re.delta);
+    // 패널의 그림은 행동 결과를 유지한다 (반작용 그림은 기록에만)
+    const { image: _img, ...noImg } = re.delta;
+    r = applyDelta(def, r, noImg);
     if (re.delta.text) texts.push(re.delta.text);
+    if (re.delta.image) images.push(re.delta.image);
   }
-  return { run: r, texts };
+  return { run: r, texts, images };
 }
 
 /** 행동마다 쓸 수 있는가와 판정 이점 */
@@ -111,7 +116,10 @@ export function applyDelta(def: SceneDef, run: SceneRun, d: SceneDelta | undefin
   }
   const states = [...run.states.filter((s) => !(d.removeStates ?? []).includes(s)), ...(d.addStates ?? []).filter((s) => !run.states.includes(s))];
   const phase = d.phase && def.phases?.some((p) => p.id === d.phase) ? d.phase : run.phase;
-  return { ...run, gauges, states, ...(phase ? { phase } : {}) };
+  // 그림: 결과의 그림 > 새 단계의 그림 > 그대로 (v0.50)
+  const phaseImg = phase !== run.phase ? def.phases?.find((p) => p.id === phase)?.image : undefined;
+  const image = d.image ?? phaseImg ?? run.image;
+  return { ...run, gauges, states, ...(phase ? { phase } : {}), ...(image ? { image } : {}) };
 }
 
 /** 끝났는가: 위에서부터 처음 맞는 끝, 아니면 차례 한도 */

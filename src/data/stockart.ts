@@ -1,3 +1,4 @@
+import { fxSvg } from './sceneArt';
 /**
  * 기본 이미지 에셋 (v0.16) — 앱에 내장된 절차적 SVG 그림.
  * 카드에 이미지가 없거나 부족할 때, AI가 고르거나 제작자가 직접 인물·장소에 붙인다.
@@ -300,6 +301,7 @@ export function stockSvg(artId: string): string | undefined {
   const m = /^(.+)-(m|f)$/.exec(artId);
   const arch = m && ARCHETYPES.find((a) => a.id === m[1]);
   if (arch) svg = characterSvg(m![2] === 'm' ? arch.m : arch.f, m![2] === 'm' ? 'M' : 'F', arch.id.length);
+  else if (artId.startsWith('fx-')) svg = fxSvg(artId); // 장면 그림 (v0.50)
   else { const sc = SCENES.find((s) => s.id === artId); if (sc) svg = sceneSvg(sc); }
   if (svg) svgCache.set(artId, svg);
   return svg;

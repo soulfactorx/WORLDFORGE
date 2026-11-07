@@ -1,4 +1,5 @@
 import type { AssetMeta, WorldPackage } from '../../engine/schema';
+import { autoSceneArt } from '../sceneArt';
 
 /**
  * 공식 세계: 에테리아 — 봉인이 깨어나는 대륙 (하이 판타지, 1판).
@@ -1206,3 +1207,6 @@ export const aetheriaWorld: WorldPackage = {
     maxRounds: 9, timeoutEnd: 'stalemate',
   }],
 };
+
+// 장면 그림 (v0.50): 시작·단계·행동·결과·반작용·끝의 빈 자리에 내장 장면 그림(stock.fx-…)을 채운다
+aetheriaWorld.scenes = aetheriaWorld.scenes?.map(autoSceneArt);

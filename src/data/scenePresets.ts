@@ -6,8 +6,9 @@ import type { SceneDef } from '../engine/schema';
  * 효과(effects)는 세계마다 다르므로 비워 둔다 — 끝에 플래그·관계·세계 수치 효과를 붙여 쓴다.
  */
 export interface ScenePreset { key: string; label: string; desc: string; make: () => SceneDef }
+import { autoSceneArt } from './sceneArt';
 
-export const SCENE_PRESETS: ScenePreset[] = [
+const PRESETS: ScenePreset[] = [
   {
     key: 'negotiation', label: '협상', desc: '인내심을 지키며 합의를 끌어올린다. 상대의 경계가 높을수록 설득이 어렵다.',
     make: (): SceneDef => ({
@@ -256,3 +257,6 @@ export const SCENE_PRESETS: ScenePreset[] = [
     }),
   },
 ];
+
+/** 프리셋마다 장면 그림을 채워 내보낸다 (v0.50) */
+export const SCENE_PRESETS: ScenePreset[] = PRESETS.map((p) => ({ ...p, make: () => autoSceneArt(p.make()) }));

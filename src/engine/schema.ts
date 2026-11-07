@@ -176,6 +176,8 @@ export interface SceneDelta {
   phase?: string;
   /** 기록에 남는 한 줄 */
   text?: string;
+  /** 이 결과의 그림 (에셋 ID — 세계의 이미지 또는 stock.fx-…) (v0.50) */
+  image?: string;
 }
 export interface SceneAction {
   id: string;
@@ -190,6 +192,8 @@ export interface SceneAction {
   requires?: SceneCond;
   /** 상대의 성향과 맞춰 보는 꼬리표 (예: 칭찬, 위협) */
   tags?: string[];
+  /** 행동 카드 그림 (v0.50) */
+  image?: string;
   /** 장면에서 한 번만 */
   once?: boolean;
   /** 지금 수치가 굴림에 더해진다 (v0.48): 값 × per (반올림), ±max로 제한. 예: 상대의 경계 1당 −1 → { gauge: "guard", per: -1 } */
@@ -208,6 +212,8 @@ export interface SceneEnd {
   when: SceneCond;
   outcome: 'success' | 'failure' | 'neutral';
   text?: string;
+  /** 끝 그림 (v0.50) */
+  image?: string;
   effects?: StoryEffect[];
   rewards?: Rewards;
 }
@@ -228,8 +234,13 @@ export interface SceneDef {
   repeatable?: boolean;
   gauges: SceneGauge[];
   states?: SceneStateDef[];
+  /** 시작 그림 · 시작할 때 기록에 남는 글 (v0.50) */
+  image?: string;
+  intro?: string;
+  /** 장면 서술 (v0.50): fixed = 정해진 글만 (AI 없음) · end = 끝날 때만 AI가 서술 (기본) · ai = 매 차례 AI가 장면을 서술. 플레이 설정이 우선한다 */
+  narration?: 'fixed' | 'end' | 'ai';
   /** 단계 이름 (처음 것이 시작 단계) */
-  phases?: { id: string; name: string; text?: string }[];
+  phases?: { id: string; name: string; text?: string; image?: string }[];
   actions: SceneAction[];
   /** 행동마다 일어나는 반작용 (위에서부터 모두) */
   reactions?: SceneReaction[];

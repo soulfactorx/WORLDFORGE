@@ -5,8 +5,11 @@ export type DisplayLevel = 'immersive' | 'standard' | 'game';
 /** 대화 속 이미지 크기 (v0.46.1): 숨김 · 접기(눌러서 펼침) · 작게 · 보통 · 크게 · 화면 폭 */
 export type ImageSize = 'hidden' | 'collapsed' | 'small' | 'medium' | 'large' | 'full';
 export const IMAGE_SIZES: [ImageSize, string][] = [['full', '화면 폭에 맞게'], ['large', '크게'], ['medium', '보통'], ['small', '작게'], ['collapsed', '접기 (눌러서 펼침)'], ['hidden', '숨기기 (글만)']];
-export interface PlayPrefs { adaptive: boolean; display: DisplayLevel; images: ImageSize }
-const DEFAULTS: PlayPrefs = { adaptive: true, display: 'standard', images: 'large' };
+/** 장면 서술 (v0.50): scene = 장면 설정을 따름 · fixed = 정해진 글만 · end = 끝날 때만 AI · ai = 매 차례 AI */
+export type SceneNarration = 'scene' | 'fixed' | 'end' | 'ai';
+export const SCENE_NARRATIONS: [SceneNarration, string][] = [['scene', '장면 설정을 따름'], ['fixed', '정해진 글만 (AI 없이 빠르게)'], ['end', '끝날 때만 AI 서술'], ['ai', '매 차례 AI가 장면 서술']];
+export interface PlayPrefs { adaptive: boolean; display: DisplayLevel; images: ImageSize; sceneNarration: SceneNarration }
+const DEFAULTS: PlayPrefs = { adaptive: true, display: 'standard', images: 'large', sceneNarration: 'scene' };
 export function loadPlayPrefs(): PlayPrefs {
   try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<PlayPrefs>) }; } catch { return { ...DEFAULTS }; }
 }

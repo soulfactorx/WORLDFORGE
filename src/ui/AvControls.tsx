@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { type DisplayLevel, IMAGE_SIZES, type ImageSize, loadPlayPrefs, savePlayPrefs } from './playPrefs';
+import { type DisplayLevel, IMAGE_SIZES, type ImageSize, loadPlayPrefs, savePlayPrefs, SCENE_NARRATIONS, type SceneNarration } from './playPrefs';
 import { isStandalone, loadOrientation, type OrientationPref, saveOrientation } from './orientation';
 import { type AvSettings, loadAv, playSfx, saveAv, stopSpeaking } from './audio';
 
@@ -54,6 +54,11 @@ export function AvControls({ onChange }: { onChange: () => void }) {
           <label className="small av-vol">이미지 크기
             <select value={play.images} onChange={(e) => { const p = { ...play, images: e.target.value as ImageSize }; setPlay(p); savePlayPrefs(p); onChange(); }}>
               {IMAGE_SIZES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <label className="small av-vol">장면 서술
+            <select value={play.sceneNarration} onChange={(e) => { const p = { ...play, sceneNarration: e.target.value as SceneNarration }; setPlay(p); savePlayPrefs(p); onChange(); }}>
+              {SCENE_NARRATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </label>
           <label className="small av-vol">표시 수준

@@ -160,3 +160,34 @@ describe('장면 2.0 (v0.48): 수치 판정·반작용·대성공·프리셋', (
     }
   });
 });
+
+describe('장면 그림 (v0.50)', () => {
+  it('샘플·공식·프리셋 장면은 시작·행동·결과·반작용·끝마다 그림이 있고, 모두 그려진다', async () => {
+    const { stockDataUrl } = await import('../data/stockart');
+    const { SCENE_PRESETS } = await import('../data/scenePresets');
+    const worlds = [(await import('../data/official/aetheria')).aetheriaWorld, (await import('../data/official/cheonha')).cheonhaWorld, (await import('../data/official/everheart')).everheartWorld, (await import('../data/sample-fighting')).fightingSample];
+    const all = [...worlds.flatMap((w) => w.scenes ?? []), ...SCENE_PRESETS.map((p) => p.make())];
+    expect(all.length).toBeGreaterThan(30);
+    for (const d of all) {
+      const imgs = [d.image, ...(d.phases ?? []).map((p) => p.image), ...d.actions.flatMap((a) => [a.image, ...[a.success, a.great, a.failure].filter((x) => !!x).map((x) => x!.image)]),
+        ...(d.reactions ?? []).filter((r) => r.delta.text).map((r) => r.delta.image), ...d.ends.map((e) => e.image)];
+      for (const id of imgs) { expect(id, d.name).toBeTruthy(); expect(stockDataUrl(id!), id).toBeTruthy(); }
+    }
+  });
+  it('행동의 그림은 기록과 패널의 현재 그림으로 간다', () => {
+    const w = world();
+    w.scenes![0]!.image = 'stock.fx-talk';
+    w.scenes![0]!.actions[0]!.success!.image = 'stock.fx-heart';
+    w.scenes![0]!.reactions = [{ delta: { text: '한숨', image: 'stock.fx-awkward' } }];
+    let s = apply(start(w), [{ type: 'moved', to: 'loc/village-gate' }, { type: 'moved', to: 'loc/inn' }]);
+    s = apply(s, startSceneEvents(w, s, 'scene/haggle'));
+    expect(s.scene!.image).toBe('stock.fx-talk');
+    expect(s.log.at(-1)!.images?.[0]?.id).toBe('stock.fx-talk');
+    s = apply(s, sceneActionEvents(w, s, 'praise'));
+    expect(s.scene!.image).toBe('stock.fx-heart');
+    expect(s.log.at(-1)!.images!.map((i) => i.id)).toEqual(['stock.fx-heart', 'stock.fx-awkward']);
+    expect(validateWorld(w).filter((i) => i.path.startsWith('scenes'))).toEqual([]);
+    w.scenes![0]!.image = 'stock.fx-nope';
+    expect(validateWorld(w).some((i) => i.level === 'error' && i.path === 'scenes[0].image')).toBe(true);
+  });
+});

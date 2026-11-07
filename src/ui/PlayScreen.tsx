@@ -36,7 +36,7 @@ import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/diges
 import { loadPlayPrefs } from './playPrefs';
 import { ScenePanel } from './ScenePanel';
 import { availableScenes, sceneDef } from '../engine/scene';
-import { abandonSceneEvents, narrateScene, sceneActionEvents, startSceneEvents } from '../gm/scene';
+import { abandonSceneEvents, narrateScene, narrateSceneTurn, narrationMode, sceneActionEvents, startSceneEvents } from '../gm/scene';
 import { CodexPanel } from './CodexPanel';
 import { recordEnding } from './collection';
 import { XpBar } from './Rewards';
@@ -219,22 +219,28 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     const all = await loadEvents(saveId);
     const after = replay(all);
     const def = sceneId ? sceneDef(world, sceneId) : undefined;
-    if (sceneId && !after.scene && def && settings) {
-      let seq = (all.at(-1)?.seq ?? -1) + 1;
-      const lastLog = [...log, ...events.flatMap((e) => (e.type === 'scene_action' ? [e.line] : []))];
-      setStreaming(''); setStage('장면을 서술하는 중'); setStartedAt(Date.now());
+    // 장면 서술 (v0.50): 정해진 글만 / 끝날 때만 AI / 매 차례 AI — 플레이 설정이 장면 설정보다 우선
+    const mode = def ? narrationMode(def, loadPlayPrefs().sceneNarration) : 'fixed';
+    const lines = events.flatMap((e) => (e.type === 'scene_action' ? [e.line] : []));
+    let seq = (all.at(-1)?.seq ?? -1) + 1;
+    const narrate = async (label: string, run: (onText: (d: string) => void, signal: AbortSignal) => Promise<string>, fallback: string) => {
+      setStreaming(''); setStage(label); setStartedAt(Date.now());
       abort.current = new AbortController();
-      let text: string;
-      try {
-        text = await narrateScene(createLlmClient(settings), world, after, def, lastLog, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
-      } catch (e) {
-        setError(`장면 서술 실패: ${(e as Error).message}`);
-        text = '장면이 끝났다.';
+      try { return await run((d) => setStreaming((p) => (p ?? '') + d), abort.current.signal); }
+      catch (e) { setError(`${label} 실패: ${(e as Error).message}`); return fallback; }
+    };
+    if (sceneId && !after.scene && def) {
+      const extra: GameEvent[] = [];
+      if (mode !== 'fixed' && settings) {
+        const text = await narrate('장면을 서술하는 중', (on, sig) => narrateScene(createLlmClient(settings), world, after, def, [...log, ...lines], on, sig), '장면이 끝났다.');
+        extra.push({ type: 'narration', text });
       }
-      await appendEvents(saveId, [
-        { saveId, seq: seq++, turn: after.turn, event: { type: 'narration', text } },
-        { saveId, seq: seq++, turn: after.turn, event: basicGuide(world, after) },
-      ]);
+      extra.push(basicGuide(world, after));
+      await appendEvents(saveId, extra.map((event) => ({ saveId, seq: seq++, turn: after.turn, event })));
+      setStreaming(null);
+    } else if (after.scene && def && mode === 'ai' && settings && lines.length) {
+      const text = await narrate('차례를 서술하는 중', (on, sig) => narrateSceneTurn(createLlmClient(settings), world, after, def, lines.at(-1)!, on, sig), '');
+      if (text.trim()) await appendEvents(saveId, [{ saveId, seq: seq++, turn: after.turn, event: { type: 'narration', text } }]);
       setStreaming(null);
     }
     await reload();
@@ -386,7 +392,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}
           onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
       ) : state.scene && sceneNow ? (
-        <ScenePanel def={sceneNow} run={state.scene} sheet={state.player.sheet} busy={streaming !== null}
+        <ScenePanel def={sceneNow} run={state.scene} sheet={state.player.sheet} busy={streaming !== null} pkg={world.manifest.id}
           npcName={sceneNow.npcId ? world.characters.find((c) => c.id === sceneNow.npcId)?.name : undefined}
           onAct={(id) => commitScene((s) => sceneActionEvents(world, s, id))}
           onQuit={() => commitScene((s) => abandonSceneEvents(world, s))} />

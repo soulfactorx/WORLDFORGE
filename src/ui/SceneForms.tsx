@@ -8,12 +8,32 @@ import { SCENE_PRESETS } from '../data/scenePresets';
 import { ConditionField } from './ConditionEditor';
 import { EffectsEditor } from './WorldForms';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { AssetImage } from './AssetImage';
+import { autoSceneArt, SCENE_FX } from '../data/sceneArt';
 
 type Set = (patch: Partial<WorldPackage>) => void;
 
 const CHECKS: [string, string][] = [['', '판정 없음 (항상 성공)'], ...SKILL_IDS.map((k) => [`skill:${k}`, `기술: ${SKILLS[k].name}`] as [string, string]), ...ABILITIES.map((a) => [`ability:${a}`, `능력치: ${ABILITY_NAMES[a]}`] as [string, string])];
 const csv = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
 const uniq = (base: string, taken: string[]) => { let id = base; for (let n = 2; taken.includes(id); n++) id = `${base}-${n}`; return id; };
+
+/** 그림 고르기 (v0.50): 내장 장면 그림 + 이 세계의 이미지 */
+function ImagePick({ label, value, w, onChange }: { label: string; value: string | undefined; w: WorldPackage; onChange: (v: string | undefined) => void }) {
+  const known = !value || SCENE_FX.some((f) => `stock.${f.id}` === value) || (w.assets ?? []).some((a) => a.id === value);
+  return (
+    <label className="img-pick">{label}
+      <span className="row">
+        <select value={value ?? ''} onChange={(e) => onChange(e.target.value || undefined)}>
+          <option value="">(그림 없음)</option>
+          {!known && <option value={value}>{value}</option>}
+          <optgroup label="장면 그림 (내장)">{SCENE_FX.map((f) => <option key={f.id} value={`stock.${f.id}`}>{f.label}</option>)}</optgroup>
+          {(w.assets ?? []).length > 0 && <optgroup label="이 세계의 이미지">{(w.assets ?? []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>}
+        </select>
+        {value && <AssetImage pkg={w.manifest.id} id={value} alt={label} className="img-pick-thumb" zoom />}
+      </span>
+    </label>
+  );
+}
 
 /** 작은 행 목록 (수치·상태·단계·보정) */
 function Rows<T>({ title, items, make, onChange, render }: { title: string; items: T[]; make: () => T; onChange: (v: T[]) => void; render: (it: T, up: (p: Partial<T>) => void) => React.ReactNode }) {
@@ -63,7 +83,7 @@ function SceneCondField({ label, value, def, onChange, optional }: { label: stri
 }
 
 /** 결과(수치 변화·상태·단계·한 줄) */
-function DeltaEditor({ label, value, def, onChange }: { label: string; value: SceneDelta | undefined; def: SceneDef; onChange: (d: SceneDelta | undefined) => void }) {
+function DeltaEditor({ label, value, def, w, onChange }: { label: string; value: SceneDelta | undefined; def: SceneDef; w: WorldPackage; onChange: (d: SceneDelta | undefined) => void }) {
   const d = value ?? {};
   const set = (p: Partial<SceneDelta>) => { const n = { ...d, ...p }; onChange(Object.values(n).some((v) => v !== undefined && !(Array.isArray(v) && !v.length) && !(typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)) ? n : undefined); };
   const stateMode = (id: string) => (d.addStates?.includes(id) ? 'add' : d.removeStates?.includes(id) ? 'remove' : '');
@@ -99,11 +119,12 @@ function DeltaEditor({ label, value, def, onChange }: { label: string; value: Sc
         )}
         <input placeholder="기록에 남는 한 줄 (선택)" value={d.text ?? ''} onChange={(e) => set({ text: e.target.value || undefined })} />
       </div>
+      <ImagePick label="그림" value={d.image} w={w} onChange={(image) => set({ image })} />
     </fieldset>
   );
 }
 
-function ActionForm({ a, def, up }: { a: SceneAction; def: SceneDef; up: (p: Partial<SceneAction>) => void }) {
+function ActionForm({ a, def, w, up }: { a: SceneAction; def: SceneDef; w: WorldPackage; up: (p: Partial<SceneAction>) => void }) {
   return (
     <div className="form-grid">
       <Text label="ID" value={a.id} onChange={(id) => up({ id })} />
@@ -111,6 +132,7 @@ function ActionForm({ a, def, up }: { a: SceneAction; def: SceneDef; up: (p: Par
       <Text label="설명 (버튼 아래 · 서술 재료)" value={a.text} onChange={(text) => up({ text: text || undefined })} />
       <Select label="판정" value={a.check ?? ''} options={CHECKS} onChange={(check) => up({ check: check || undefined })} />
       {a.check && <Num label="난이도 DC (기본 12)" value={a.dc} onChange={(dc) => up({ dc })} />}
+      <ImagePick label="카드 그림" value={a.image} w={w} onChange={(image) => up({ image })} />
       <Text label="꼬리표 (쉼표로 — 상대의 좋아함·싫어함과 맞춘다)" value={(a.tags ?? []).join(', ')} onChange={(v) => up({ tags: csv(v).length ? csv(v) : undefined })} />
       {(def.phases?.length ?? 0) > 0 && (
         <fieldset className="cond-field"><legend>쓸 수 있는 단계 (비우면 언제나)</legend>
@@ -131,9 +153,9 @@ function ActionForm({ a, def, up }: { a: SceneAction; def: SceneDef; up: (p: Par
             <label className="small delta-num">최대 ±<input type="number" className="num" value={m.max ?? ''} placeholder="없음" onChange={(e) => upM({ max: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
           </>} />
       )}
-      <DeltaEditor label={a.check ? '성공하면' : '하면'} value={a.success} def={def} onChange={(success) => up({ success })} />
-      {a.check && <DeltaEditor label="대성공하면 (DC를 5 이상 넘김 · 비우면 성공과 같음)" value={a.great} def={def} onChange={(great) => up({ great })} />}
-      {a.check && <DeltaEditor label="실패하면" value={a.failure} def={def} onChange={(failure) => up({ failure })} />}
+      <DeltaEditor label={a.check ? '성공하면' : '하면'} value={a.success} def={def} w={w} onChange={(success) => up({ success })} />
+      {a.check && <DeltaEditor label="대성공하면 (DC를 5 이상 넘김 · 비우면 성공과 같음)" value={a.great} def={def} w={w} onChange={(great) => up({ great })} />}
+      {a.check && <DeltaEditor label="실패하면" value={a.failure} def={def} w={w} onChange={(failure) => up({ failure })} />}
     </div>
   );
 }
@@ -145,6 +167,7 @@ function EndForm({ e, def, w, up }: { e: SceneEnd; def: SceneDef; w: WorldPackag
       <Text label="이름" value={e.name} onChange={(name) => up({ name })} />
       <Select label="결과" value={e.outcome} options={[['success', '성공'], ['failure', '실패'], ['neutral', '중립']] as const} onChange={(outcome) => up({ outcome })} />
       <Text label="플레이어에게 보이는 한 줄" value={e.text} onChange={(text) => up({ text: text || undefined })} />
+      <ImagePick label="끝 그림" value={e.image} w={w} onChange={(image) => up({ image })} />
       <SceneCondField label="이렇게 되면 끝" value={e.when} def={def} onChange={(when) => up({ when: when ?? { round: 99 } })} />
       <EffectsEditor label="끝나면 일어나는 일" value={e.effects} w={w} onChange={(effects) => up({ effects: effects.length ? effects : undefined })} />
       <JsonField label="보상 (선택)" value={e.rewards ?? {}} rows={2} onChange={(r) => up({ rewards: r && typeof r === 'object' && Object.keys(r).length ? r : undefined })}
@@ -181,6 +204,10 @@ export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
             <Select label="상대 인물 (그 인물이 있어야 열림)" value={d.npcId ?? ''} options={chars} onChange={(npcId) => up({ npcId: npcId || undefined })} />
             <Select label="장소" value={d.locationId ?? ''} options={locs} onChange={(locationId) => up({ locationId: locationId || undefined })} />
             <ConditionField label="열리는 조건" value={d.start} world={w} optional onChange={(start) => up({ start })} />
+            <ImagePick label="시작 그림" value={d.image} w={w} onChange={(image) => up({ image })} />
+            <Area label="시작할 때 기록에 남는 글 (선택)" value={d.intro} onChange={(intro) => up({ intro: intro || undefined })} rows={2} />
+            <Select label="장면 서술 (플레이 설정이 우선)" value={d.narration ?? 'end'} options={[['fixed', '정해진 글만 (AI 없음)'], ['end', '끝날 때만 AI 서술 (기본)'], ['ai', '매 차례 AI가 장면 서술']] as const} onChange={(narration) => up({ narration: narration === 'end' ? undefined : narration })} />
+            <div className="row"><button type="button" className="small" onClick={() => up(autoSceneArt(d))}>🖼 빈 그림 자리 자동 채우기</button><span className="small muted">이름·설명·꼬리표의 낱말로 내장 장면 그림을 고른다 (이미 고른 것은 그대로)</span></div>
             <label className="check"><input type="checkbox" checked={!!d.auto} onChange={(e) => up({ auto: e.target.checked || undefined })} /> 조건이 맞으면 저절로 시작</label>
             <label className="check"><input type="checkbox" checked={!!d.repeatable} onChange={(e) => up({ repeatable: e.target.checked || undefined })} /> 끝난 뒤 다시 할 수 있음</label>
             <Text label="상대가 좋아하는 꼬리표 (쉼표 — 판정 이점)" value={(d.likes ?? []).join(', ')} onChange={(v) => up({ likes: csv(v).length ? csv(v) : undefined })} />
@@ -207,12 +234,13 @@ export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
                 <input className="id-in" value={p.id} title="ID" onChange={(e) => upP({ id: e.target.value })} />
                 <input value={p.name} title="이름" onChange={(e) => upP({ name: e.target.value })} />
                 <input value={p.text ?? ''} placeholder="장면 패널에 보이는 한 줄 (선택)" onChange={(e) => upP({ text: e.target.value || undefined })} />
+                <ImagePick label="그림" value={p.image} w={w} onChange={(image) => upP({ image })} />
               </>} />
             <fieldset><legend>행동 카드</legend>
               {d.actions.map((a, i) => (
                 <details key={i} className="scene-item">
                   <summary><b>{a.name || '(이름 없음)'}</b> <span className="small muted">{a.check ? CHECKS.find(([k]) => k === a.check)?.[1] : '판정 없음'}{a.dc ? ` · DC ${a.dc}` : ''}</span></summary>
-                  <ActionForm a={a} def={d} up={(p) => up({ actions: d.actions.map((x, j) => (j === i ? { ...x, ...p } : x)) })} />
+                  <ActionForm a={a} def={d} w={w} up={(p) => up({ actions: d.actions.map((x, j) => (j === i ? { ...x, ...p } : x)) })} />
                   <button type="button" className="small" onClick={() => up({ actions: d.actions.filter((_, j) => j !== i) })}>행동 삭제</button>
                 </details>
               ))}
@@ -226,7 +254,7 @@ export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
                     <summary><b>반작용 {i + 1}</b> <span className="small muted">{r.delta.text ?? ''}{r.chance !== undefined ? ` · 확률 ${Math.round(r.chance * 100)}%` : ''}</span></summary>
                     <SceneCondField label="조건 (없으면 매번)" value={r.when} def={d} optional onChange={(when) => upR({ when })} />
                     <Num label="확률 (0~1, 비우면 항상)" value={r.chance} onChange={(chance) => upR({ chance })} />
-                    <DeltaEditor label="일어나는 일" value={r.delta} def={d} onChange={(delta) => upR({ delta: delta ?? {} })} />
+                    <DeltaEditor label="일어나는 일" value={r.delta} def={d} w={w} onChange={(delta) => upR({ delta: delta ?? {} })} />
                     <button type="button" className="small" onClick={() => up({ reactions: (d.reactions ?? []).filter((_, j) => j !== i) })}>반작용 삭제</button>
                   </details>
                 );

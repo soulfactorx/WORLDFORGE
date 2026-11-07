@@ -21,7 +21,7 @@ export interface LogEntry {
   choiceSkills?: string[];
 }
 
-export interface SceneRun { sceneId: EntityId; gauges: Record<string, number>; states: string[]; phase?: string; round: number; used: string[]; log: string[] }
+export interface SceneRun { sceneId: EntityId; gauges: Record<string, number>; states: string[]; phase?: string; round: number; used: string[]; log: string[]; /** 지금 보이는 장면 그림 (v0.50) */ image?: string }
 
 export interface GameState {
   packageId: string;
@@ -247,14 +247,14 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         log: [...s.log, { turn, kind: 'relation', text: e.text }] };
     }
     case 'scene_started':
-      return { ...s, scene: e.run, log: [...s.log, { turn, kind: 'combat', text: `🎭 장면 시작 — ${e.name}` }] };
+      return { ...s, scene: e.run, log: [...s.log, { turn, kind: 'combat', text: `🎭 장면 시작 — ${e.name}${e.intro ? `\n${e.intro}` : ''}`, ...(e.run.image ? { images: [{ id: e.run.image, caption: e.name }] } : {}) }] };
     case 'scene_action':
-      return { ...s, scene: e.run, rngState: e.rngState, log: [...s.log, { turn, kind: 'check', text: e.line }] };
+      return { ...s, scene: e.run, rngState: e.rngState, log: [...s.log, { turn, kind: 'check', text: e.line, ...(e.images?.length ? { images: e.images.map((id) => ({ id, caption: '' })) } : {}) }] };
     case 'scene_ended': {
       const prev = s.sceneResults?.[e.sceneId];
       const { scene: _s, ...rest } = s;
       return { ...rest, sceneResults: { ...(s.sceneResults ?? {}), [e.sceneId]: { endId: e.endId, outcome: e.outcome, turn, times: (prev?.times ?? 0) + 1 } },
-        log: [...s.log, { turn, kind: 'quest', text: `🎭 장면 끝 — ${e.name}${e.text ? `: ${e.text}` : ''}` }] };
+        log: [...s.log, { turn, kind: 'quest', text: `🎭 장면 끝 — ${e.name}${e.text ? `: ${e.text}` : ''}`, ...(e.image ? { images: [{ id: e.image, caption: e.text ?? e.name }] } : {}) }] };
     }
     case 'goal_started':
       return { ...s, npcGoals: { ...(s.npcGoals ?? {}), [e.goalId]: { startedAt: s.worldMinutes } } };

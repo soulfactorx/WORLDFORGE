@@ -1,4 +1,5 @@
 import type { AssetMeta, WorldPackage } from '../../engine/schema';
+import { autoSceneArt } from '../sceneArt';
 
 /**
  * 공식 세계: 에버하트 — 장미와 왕관의 도시 (로맨스).
@@ -1116,3 +1117,6 @@ export const everheartWorld: WorldPackage = {
     maxRounds: 9, timeoutEnd: 'stalled',
   }],
 };
+
+// 장면 그림 (v0.50): 시작·단계·행동·결과·반작용·끝의 빈 자리에 내장 장면 그림(stock.fx-…)을 채운다
+everheartWorld.scenes = everheartWorld.scenes?.map(autoSceneArt);
