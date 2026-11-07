@@ -54,7 +54,7 @@ export function Menu({ label, title, children, className }: { label: ReactNode; 
 }
 
 export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
-  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null) => void; onGenerate: () => void; onCard: (file: File, extras?: File[]) => void; onUserArt: () => void;
+  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null, library?: boolean) => void; onGenerate: () => void; onCard: (file: File, extras?: File[]) => void; onUserArt: () => void;
 }) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
   const packages = useLiveQuery(() => listPackages(), []);
@@ -246,6 +246,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
             <Menu label="＋ 만들기 ▾" className="primary-menu">
               <button onClick={() => onEdit(null)}>＋ 빈 세계관에서 직접 만들기</button>
               <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
+              <button onClick={() => onEdit(null, true)}>📚 만들어 둔 세계에서 골라 만들기 (AI 없이)</button>
               <label className="file">✦ 캐릭터 카드로 만들기 (.charx · .risum · .png · .json — 모듈 등 여러 파일을 함께 골라도 된다)
                 <input type="file" multiple accept=".charx,.risum,.png,.json,application/json,image/png,application/zip" onChange={(e) => {
                   const fs = [...(e.target.files ?? [])];
@@ -262,6 +263,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
               </label>
               <button onClick={() => setReceiving(true)} title="다른 기기에서 만든 개인용 세계를 AI 없이 이어받기">📲 옮겨 온 세계 받기 (.wfmove)</button>
             </Menu>
+            <button onClick={() => onEdit(null, true)} title="모든 세계의 인물·장소·장면·이미지를 한곳에서 찾아 골라 새 세계를 만든다">📚 자료실</button>
             <button onClick={onUserArt}>🖼 내 기본 이미지</button>
             {(packages?.length ?? 0) > 6 && <input className="grow filter" type="search" placeholder="세계관 찾기" value={filter} onChange={(e) => setFilter(e.target.value)} />}
           </div>

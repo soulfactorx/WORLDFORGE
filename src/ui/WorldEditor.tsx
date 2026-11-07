@@ -12,6 +12,7 @@ import { ArcForms, BoardForms, ChoiceForms, ClockForms, EventForms, ItemForms, M
 import { DIFFICULTY_LABEL, encounterDifficulty, monsterTable, monstersOfWorld } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { ClassEditor } from './ClassEditor';
+import { WorldLibrary } from './WorldLibrary';
 import { TimeFieldset } from './TimeFieldset';
 import { classesFor } from '../engine/classes';
 import { hasErrors, validateWorld } from '../engine/package/validate';
@@ -71,12 +72,14 @@ function tabForPath(path: string): Tab {
 
 // ---------------------------------------------------------------- 편집기
 
-export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard, alreadySaved }: {
+export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard, alreadySaved, openLibrary }: {
   initial: WorldPackage | null; onDone: () => void; settings?: LlmSettings | null; draftNotes?: string[];
   /** 이미 라이브러리에 저장된 AI 결과 (카드로 만든 세계) */
   alreadySaved?: boolean;
   /** 이 카드 파일로 새 세계를 만든다 (인물 탭에서 가져오기 창을 바로 연다) */
   initialCard?: File;
+  /** 자료실을 바로 연다 (v0.63: 여러 세계에서 골라 새 세계 만들기) */
+  openLibrary?: boolean;
 }) {
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
   const [questView, setQuestView] = useState<'form' | 'json'>('form');
@@ -101,6 +104,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [genStage, setGenStage] = useState('');
   const [genRequest, setGenRequest] = useState('');
   const [importing, setImporting] = useState(!!initialCard);
+  const [library, setLibrary] = useState(!!openLibrary);
   const [packUi, setPackUi] = useState<null | 'import' | 'character' | 'rules'>(null);
 
   async function aiScenario() {
@@ -145,11 +149,19 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       <div className="row">
         <h2>세계관 제작 — {w.manifest.name}</h2>
         <span className="spacer" />
+        <button onClick={() => setLibrary((v) => !v)} title="만들어 둔 다른 세계의 인물·장소·장면·이미지 등을 AI 없이 가져온다">📚 자료실에서 가져오기</button>
         <button onClick={onDone}>닫기</button>
         {w.manifest.private ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용 (내보내기 불가)</span>
           : shareBlocked(w) ? <span className="small muted" title={MATURE_NOTE}>🔞 성인 등급 (내보내기 불가)</span> : <button onClick={exportFile}>.wpk 내보내기</button>}
         <button className="primary" onClick={save}>저장</button>
       </div>
+      {library && (
+        <WorldLibrary target={w} onClose={() => setLibrary(false)} onApply={(nw, notes) => {
+          setW(nw);
+          setLibrary(false);
+          setStatus(`자료실에서 가져왔습니다 — ${notes.join(' / ')} · 저장을 눌러야 반영됩니다.`);
+        }} />
+      )}
       {status && <p className="status small">{status}</p>}
       {!approved && (
         <div className="ai-draft small">

@@ -655,3 +655,17 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .card-import .add-progress progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .img-pick-cell.mine { border-color: var(--check); }
 .gallery-search { flex: 1 1 180px; min-width: 140px; }
+
+/* 자료실 (v0.63) */
+.library .grow { flex: 1 1 180px; min-width: 0; }
+.lib-kinds { gap: 4px; }
+.lib-kinds button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; max-height: 50vh; overflow: auto; }
+.lib-cell { display: flex; flex-direction: column; gap: 2px; padding: 5px; text-align: left; min-width: 0; }
+.lib-cell.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.lib-cell img, .lib-cell .lib-ph { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--text) 6%, transparent); font-size: 1.6rem; color: var(--muted); }
+.lib-name { font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-sub, .lib-from { font-size: .66rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-from { color: var(--check); }
+.library .library-foot { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.lib-basket { margin: 4px 0; padding-left: 18px; max-height: 120px; overflow: auto; }
