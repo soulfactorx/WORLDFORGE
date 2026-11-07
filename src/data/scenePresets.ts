@@ -39,7 +39,7 @@ const PRESETS: ScenePreset[] = [
     key: 'chase', label: '추격', desc: '거리를 좁히며 상대를 쫓는다. 매 차례 상대가 달아나고, 내 숨이 찬다.',
     make: (): SceneDef => ({
       id: 'scene/chase', name: '추격', description: '도망치는 상대를 골목·지붕·시장통을 지나 쫓는다.',
-      gauges: [{ id: 'distance', name: '거리', start: 6, min: 0, max: 10 }, { id: 'stamina', name: '숨', start: 6, min: 0, max: 6 }],
+      gauges: [{ id: 'distance', name: '거리', start: 5, min: 0, max: 10 }, { id: 'stamina', name: '숨', start: 6, min: 0, max: 6 }],
       states: [{ id: 'shortcut', name: '지름길을 앎', edge: 1 }, { id: 'lost', name: '놓침', edge: -1 }],
       actions: [
         { id: 'sprint', name: '전력 질주', check: 'skill:athletics', dc: 12, mods: [{ gauge: 'stamina', per: 0.5, max: 3 }],
@@ -53,7 +53,7 @@ const PRESETS: ScenePreset[] = [
         { id: 'breathe', name: '숨 고르기', success: { gauges: { stamina: 2, distance: 1 } } },
       ],
       reactions: [
-        { delta: { gauges: { distance: 1 }, text: '상대가 모퉁이를 돈다' } },
+        { chance: 0.6, delta: { gauges: { distance: 1 }, text: '상대가 모퉁이를 돈다' } },
         { when: { gauge: 'distance', gte: 8 }, chance: 0.5, delta: { addStates: ['lost'], text: '인파 속에 등이 사라진다' } },
       ],
       ends: [
@@ -115,24 +115,24 @@ const PRESETS: ScenePreset[] = [
     key: 'interrogation', label: '심문', desc: '저항을 무너뜨려 자백을 받는다. 겁을 너무 주면 입을 닫는다.',
     make: (): SceneDef => ({
       id: 'scene/interrogation', name: '심문', description: '붙잡힌 자에게서 진실을 캐낸다. 상대는 자존심이 세고 협박에 굳는다.',
-      gauges: [{ id: 'resolve', name: '저항', start: 8, min: 0, max: 10 }, { id: 'fear', name: '두려움', start: 2, min: 0, max: 10 }, { id: 'truth', name: '털어놓은 것', start: 0, min: 0, max: 6 }],
+      gauges: [{ id: 'resolve', name: '저항', start: 8, min: 0, max: 10 }, { id: 'fear', name: '두려움', start: 2, min: 0, max: 10 }, { id: 'truth', name: '털어놓은 것', start: 0, min: 0, max: 5 }],
       states: [{ id: 'caught_lie', name: '거짓말 들킴', edge: 1 }, { id: 'clammed', name: '입을 닫음', edge: -1 }],
       likes: ['공감'], dislikes: ['협박'],
       actions: [
         { id: 'empathy', name: '사정 들어 주기', check: 'skill:persuasion', dc: 13, tags: ['공감'], mods: [{ gauge: 'resolve', per: -0.5, max: 4 }],
           success: { gauges: { resolve: -2, truth: 1 } }, great: { gauges: { resolve: -3, truth: 2 } }, failure: { gauges: { resolve: 1 } } },
         { id: 'threat', name: '협박', check: 'skill:intimidation', dc: 12, tags: ['협박'],
-          success: { gauges: { fear: 3, resolve: -1 } }, failure: { gauges: { resolve: 1 }, addStates: ['clammed'] } },
+          success: { gauges: { fear: 3, resolve: -1 } }, failure: { gauges: { fear: 1, resolve: 1 }, addStates: ['clammed'] } },
         { id: 'catch', name: '모순 짚기', check: 'skill:insight', dc: 14,
           success: { addStates: ['caught_lie'], removeStates: ['clammed'], gauges: { resolve: -2 } }, failure: { gauges: { resolve: 1 } } },
         { id: 'evidence', name: '증거 내밀기', check: 'skill:investigation', dc: 12, once: true, success: { gauges: { resolve: -3, truth: 1 } }, failure: {} },
-        { id: 'ask', name: '핵심을 묻다', check: 'skill:intimidation', dc: 15, mods: [{ gauge: 'fear', per: 1, max: 5 }, { gauge: 'resolve', per: -1, max: 5 }],
+        { id: 'ask', name: '핵심을 묻다', check: 'skill:intimidation', dc: 14, mods: [{ gauge: 'fear', per: 1, max: 5 }, { gauge: 'resolve', per: -1, max: 5 }],
           success: { gauges: { truth: 2 } }, great: { gauges: { truth: 3 } }, failure: { gauges: { resolve: 1 } } },
       ],
-      reactions: [{ when: { gauge: 'fear', gte: 8 }, delta: { addStates: ['clammed'], text: '겁에 질린 상대가 이를 악문다' } }],
+      reactions: [{ when: { gauge: 'fear', gte: 7 }, delta: { addStates: ['clammed'], text: '겁에 질린 상대가 이를 악문다' } }],
       ends: [
-        { id: 'confess', name: '자백', when: { gauge: 'truth', gte: 6 }, outcome: 'success', rewards: { xp: 'minor' } },
-        { id: 'broken', name: '정신을 놓다', when: { gauge: 'fear', gte: 10 }, outcome: 'failure' },
+        { id: 'confess', name: '자백', when: { gauge: 'truth', gte: 5 }, outcome: 'success', rewards: { xp: 'minor' } },
+        { id: 'broken', name: '정신을 놓다', when: { gauge: 'fear', gte: 9 }, outcome: 'failure' },
         { id: 'silent', name: '끝까지 버팀', when: { round: 99 }, outcome: 'neutral' },
       ],
       maxRounds: 9, timeoutEnd: 'silent',
@@ -204,7 +204,7 @@ const PRESETS: ScenePreset[] = [
     key: 'auction', label: '경매', desc: '경쟁자의 의지를 꺾으며 자금을 아낀다. 값이 오를수록 버티기 어렵다.',
     make: (): SceneDef => ({
       id: 'scene/auction', name: '경매', description: '탐나는 물건을 두고 경쟁자와 값을 다툰다.',
-      gauges: [{ id: 'price', name: '호가', start: 2, min: 0, max: 10 }, { id: 'purse', name: '남은 자금', start: 8, min: 0, max: 8 }, { id: 'rival', name: '경쟁자의 의지', start: 6, min: 0, max: 8 }],
+      gauges: [{ id: 'price', name: '호가', start: 2, min: 0, max: 10 }, { id: 'purse', name: '남은 자금', start: 7, min: 0, max: 8 }, { id: 'rival', name: '경쟁자의 의지', start: 6, min: 0, max: 8 }],
       states: [{ id: 'read_rival', name: '경쟁자 한도 파악', edge: 1 }, { id: 'flustered', name: '흥분', edge: -1 }],
       actions: [
         { id: 'raise', name: '값 올리기', success: { gauges: { price: 1, purse: -1, rival: -1 } } },

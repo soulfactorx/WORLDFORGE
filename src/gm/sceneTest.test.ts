@@ -36,4 +36,9 @@ describe('장면 시험 플레이 (v0.71)', () => {
       expect(simulateScene(w, d.id, testSheet(w, 0, 3), 40)).toEqual(r);
     }
   });
+
+  it('모든 프리셋의 모든 끝은 무작위 플레이로도 나올 수 있다 (v0.72 수치 조정)', () => {
+    const w = withScenes();
+    for (const d of w.scenes!) expect([d.id, simulateScene(w, d.id, testSheet(w, 0, 3), 400).unreached]).toEqual([d.id, []]);
+  });
 });
