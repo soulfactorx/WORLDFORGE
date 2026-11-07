@@ -2,10 +2,12 @@
  * 그림 고르기 (v0.60): 이미지가 많아도 찾기 쉽게 — 검색(이름·태그·인물·장소·ID), 종류별 거르기, 썸네일 격자.
  * 장면 편집기의 모든 그림 칸(시작·단계·행동·반작용·끝)에서 쓴다.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SCENE_FX } from '../data/sceneArt';
 import type { WorldPackage } from '../engine/schema';
+import { assetUrl } from '../storage/assets';
 import { AssetImage } from './AssetImage';
+import { zoomImage } from './Lightbox';
 
 type Kind = 'all' | 'fx' | 'scene' | 'character' | 'other';
 interface Item { id: string; name: string; kind: Exclude<Kind, 'all'>; hay: string; sub: string }
@@ -27,6 +29,37 @@ function itemsOf(w: WorldPackage): Item[] {
   return [...own, ...fx];
 }
 
+/** 적용 전 미리보기 (v0.74): 큰 그림 · 원본 해상도 · 원본 크기로 보기 · 적용 */
+function PickPreview({ w, item, current, onApply, onCancel }: { w: WorldPackage; item: Item; current: boolean; onApply: () => void; onCancel: () => void }) {
+  const [url, setUrl] = useState<string>();
+  const [dim, setDim] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    let live = true;
+    setUrl(undefined); setDim(null);
+    assetUrl(w.manifest.id, item.id).then((u) => { if (live) setUrl(u); }).catch(() => {});
+    return () => { live = false; };
+  }, [w.manifest.id, item.id]);
+  return (
+    <div className="img-pick-preview" aria-label={`미리보기: ${item.name}`}>
+      <div className="img-pick-preview-stage">
+        {url ? <img src={url} alt={item.name} title="눌러서 원본 크기로 보기" onClick={() => zoomImage(url, item.name)}
+          onLoad={(e) => setDim({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} /> : <span className="asset-ph" />}
+      </div>
+      <div className="img-pick-preview-info">
+        <b>{item.name}</b>
+        <span className="small muted">{item.id}</span>
+        {item.sub && <span className="small">{item.sub}</span>}
+        <span className="small muted">{dim ? `원본 ${dim.w} × ${dim.h}px` : '불러오는 중…'}{current ? ' · 지금 쓰는 그림' : ''}</span>
+        <div className="row">
+          <button type="button" className="primary" onClick={onApply}>✔ 이 그림 적용</button>
+          <button type="button" className="small" disabled={!url} onClick={() => url && zoomImage(url, item.name)}>⛶ 원본 크기로 보기</button>
+          <button type="button" className="small" onClick={onCancel}>다른 그림 고르기</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** 검색·종류별 거르기·썸네일 격자 (그림 고르기·초상화 고르기가 함께 쓴다, v0.61) */
 export function ImageSearchGrid({ w, value, onPick, fx = true, prefer, autoFocus = true }: {
   w: WorldPackage; value?: string | undefined; onPick: (id: string) => void;
@@ -37,6 +70,8 @@ export function ImageSearchGrid({ w, value, onPick, fx = true, prefer, autoFocus
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<Kind>('all');
   const [limit, setLimit] = useState(PAGE);
+  /** 누르면 먼저 미리보기, 적용은 따로 (두 번 누르면 바로 적용) */
+  const [sel, setSel] = useState<string | null>(null);
   const all = useMemo(() => {
     const items = itemsOf(w).filter((x) => fx || x.kind !== 'fx');
     if (!prefer) return items;
@@ -55,16 +90,21 @@ export function ImageSearchGrid({ w, value, onPick, fx = true, prefer, autoFocus
           <button key={k} type="button" className={`small${kind === k ? ' on' : ''}`} onClick={() => { setKind(k); setLimit(PAGE); }}>{KIND_LABEL[k]} {counts(k)}</button>
         ))}
       </div>
-      <p className="small muted">{hits.length}개{hits.length > limit ? ` 중 ${limit}개 표시` : ''}{mineIds.size ? ` · ★ = 이 인물의 이미지 ${mineIds.size}장 (먼저 보임)` : ''}</p>
+      <p className="small muted">{hits.length}개{hits.length > limit ? ` 중 ${limit}개 표시` : ''} · 누르면 미리보기, 두 번 누르면 바로 적용{mineIds.size ? ` · ★ = 이 인물의 이미지 ${mineIds.size}장 (먼저 보임)` : ''}</p>
       <div className="img-pick-grid">
         {hits.slice(0, limit).map((x) => (
-          <button key={x.id} type="button" className={`img-pick-cell${x.id === value ? ' on' : ''}${mineIds.has(x.id) ? ' mine' : ''}`} onClick={() => onPick(x.id)} title={`${x.name}\n${x.id}${x.sub ? `\n${x.sub}` : ''}`}>
+          <button key={x.id} type="button" className={`img-pick-cell${x.id === value ? ' on' : ''}${x.id === sel ? ' sel' : ''}${mineIds.has(x.id) ? ' mine' : ''}`}
+            onClick={() => setSel(x.id)} onDoubleClick={() => { onPick(x.id); setSel(null); }} aria-pressed={x.id === sel}
+            title={`${x.name}\n${x.id}${x.sub ? `\n${x.sub}` : ''}\n누르면 미리보기 · 두 번 누르면 바로 적용`}>
             <AssetImage pkg={w.manifest.id} id={x.id} alt={x.name} />
             <span className="img-pick-cap">{mineIds.has(x.id) ? '★ ' : ''}{x.name}</span>
             {x.sub && <span className="img-pick-sub">{x.sub}</span>}
           </button>
         ))}
       </div>
+      {sel && all.find((x) => x.id === sel) && (
+        <PickPreview w={w} item={all.find((x) => x.id === sel)!} current={sel === value} onApply={() => { onPick(sel); setSel(null); }} onCancel={() => setSel(null)} />
+      )}
       {hits.length > limit && <button type="button" className="small" onClick={() => setLimit((n) => n + PAGE)}>더 보기 ({hits.length - limit}개 남음)</button>}
       {hits.length === 0 && <p className="small muted">찾는 그림이 없습니다. 이미지 탭에서 올리거나 이름·태그를 바꿔 보세요.</p>}
     </div>

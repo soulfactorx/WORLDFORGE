@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { AssetMeta, WorldPackage } from '../engine/schema';
 import { AssetImage } from './AssetImage';
+import { zoomImage } from './Lightbox';
+import { assetUrl } from '../storage/assets';
 import { STOCK_ART, stockDataUrl } from '../data/stockart';
 import { assignStockImages, missingImages, nextStockIndex, stockAsset } from '../gm/worldgen/stock';
 import { createLlmClient } from '../llm';
@@ -124,6 +126,8 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
         <div className="gallery stock">
           {mine.filter((a) => a.kind === targetKind && (!targetChar?.gender || !a.gender || a.gender === targetChar.gender)).map((a) => (
             <figure key={a.id} onClick={() => addStock(`u:${a.id}`)} title="눌러서 붙이기">
+              <button type="button" className="fig-peek" title="붙이기 전에 원본 보기" aria-label={`${a.label} 원본 보기`}
+                onClick={(e) => { e.stopPropagation(); void assetUrl(world.manifest.id, `user.${a.id}`).then((u) => u && zoomImage(u, a.label)); }}>🔍</button>
               <AssetImage pkg={world.manifest.id} id={`user.${a.id}`} alt={a.label} />
               <figcaption>{a.label}</figcaption>
             </figure>
@@ -133,6 +137,8 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
         <div className="gallery stock">
           {STOCK_ART.filter((a) => a.kind === targetKind && (!targetChar?.gender || !a.gender || a.gender === targetChar.gender)).map((a) => (
             <figure key={a.id} onClick={() => addStock(a.id)} title="눌러서 붙이기">
+              <button type="button" className="fig-peek" title="붙이기 전에 원본 보기" aria-label={`${a.label} 원본 보기`}
+                onClick={(e) => { e.stopPropagation(); const u = stockDataUrl(`stock.${a.id}`); if (u) zoomImage(u, a.label); }}>🔍</button>
               <img src={stockDataUrl(`stock.${a.id}`)} alt={a.label} />
               <figcaption>{a.label}</figcaption>
             </figure>
