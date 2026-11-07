@@ -824,6 +824,8 @@ export interface WorldPackage {
   /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경·분위기·규칙. 모든 AI가 참고하고 수첩 "세계 소개"에 보인다 */
   /** 시간 흐름 규칙 (v0.58) — 비우면 AI가 행동마다 걸린 시간을 고른다 */
   time?: TimeRules;
+  /** 주인공 정보 양식 (v0.68): 시작할 때 고르거나 적는 성별·나이·외모 등 — 비우면 장르 기본 */
+  playerProfile?: PlayerProfile;
   /** 이 세계의 직업 목록 (v0.56) — 비우면 장르 기본 프리셋. 규칙은 base(엔진 직업)를 따르고 이름·설명·기술만 바꾼다 */
   classes?: WorldClass[];
   overview?: string;
@@ -869,4 +871,25 @@ export interface TimeRules {
   steps?: { moment?: number; short?: number; long?: number; hours?: number };
   /** 한 턴에 흐를 수 있는 최대 분, 휴식 제외 (기본 240) */
   maxPerTurn?: number;
+}
+
+/** 주인공 정보 양식 (v0.68) */
+export interface PlayerProfile {
+  /** 성별 선택지 (비우면 남성·여성·밝히지 않음) */
+  genders?: string[];
+  /** 성별을 묻지 않는다 */
+  noGender?: boolean;
+  fields?: ProfileField[];
+}
+export interface ProfileField {
+  id: string;
+  label: string;
+  /** text = 한 줄, long = 여러 줄, select = 고르기 */
+  kind: 'text' | 'long' | 'select';
+  options?: string[];
+  placeholder?: string;
+  help?: string;
+  required?: boolean;
+  /** NPC가 겉으로 보고 알 수 있는 것 (외모·옷차림·종족 등) — NPC 연기 AI에게도 알린다 */
+  visible?: boolean;
 }

@@ -1,7 +1,8 @@
 import { useRs } from './reskin';
 import { useMemo, useState } from 'react';
 import { recommendedSkills, skillOptionsOf } from '../engine/classes';
-import type { WorldClass } from '../engine/schema';
+import type { PlayerProfile, WorldClass } from '../engine/schema';
+import { gendersOf, profileErrors } from '../engine/profile';
 import { abilityModifier } from '../engine/dice/dice';
 import { ABILITIES, ABILITY_NAMES, CLASSES, POINT_BUY_BUDGET, POINT_BUY_COST, SKILLS, STANDARD_ARRAY, type SkillId } from '../engine/character/rules';
 import {
@@ -13,9 +14,12 @@ const POINT_VALUES = Object.keys(POINT_BUY_COST).map(Number);
 
 const DEFAULT_CLASSES: WorldClass[] = Object.values(CLASSES).map((c) => ({ id: c.id, name: c.name, base: c.id, blurb: c.blurb }));
 
-export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES }: { onCreate: (c: CharacterSheet) => void; onCancel: () => void; classes?: WorldClass[] }) {
+export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES, profile: form = { fields: [] } }: { onCreate: (c: CharacterSheet) => void; onCancel: () => void; classes?: WorldClass[]; /** 주인공 정보 양식 (v0.68) */ profile?: PlayerProfile }) {
   const list = classes.filter((c) => CLASSES[c.base]);
   const [name, setName] = useState('');
+  const genders = gendersOf(form);
+  const [gender, setGender] = useState('');
+  const [info, setInfo] = useState<Record<string, string>>(() => Object.fromEntries((form.fields ?? []).filter((f) => f.kind === 'select' && f.required && f.options?.length).map((f) => [f.id, f.options![0]!])));
   const rs = useRs();
   const [roleId, setRoleId] = useState(list[0]?.id ?? 'fighter');
   const role = list.find((c) => c.id === roleId) ?? list[0] ?? DEFAULT_CLASSES[0]!;
@@ -28,8 +32,8 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
   // 기본 8직업이 아니면 시트에 역할 이름을 남긴다
   const custom = !(role.id === role.base && role.name === cls.name);
 
-  const input = { name: name.trim() || '이방인', classId, method, abilities, skills, ...(custom ? { role: { id: role.id, name: role.name, skillOptions: options } } : {}) };
-  const errors = useMemo(() => validateCreation(input), [name, roleId, method, abilities, skills]);
+  const input = { name: name.trim() || '이방인', classId, method, abilities, skills, ...(custom ? { role: { id: role.id, name: role.name, skillOptions: options } } : {}), ...(gender ? { gender } : {}), profile: info };
+  const errors = useMemo(() => [...profileErrors(form, gender, info), ...validateCreation(input)], [name, roleId, method, abilities, skills, gender, info]);
 
   function changeClass(id: string) {
     const next = list.find((c) => c.id === id) ?? role;
@@ -57,6 +61,27 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
       <h2>주인공 만들기</h2>
       <p className="muted small">당신은 이 세계에 소환된 이방인입니다. 몸과 기술은 기억하지만, 이 세계에 대해서는 아무것도 모릅니다.</p>
       <label>이름<input value={name} placeholder="이방인" onChange={(e) => setName(e.target.value)} /></label>
+      {(genders.length > 0 || (form.fields ?? []).length > 0) && (
+        <fieldset className="profile-form">
+          <legend>주인공 정보</legend>
+          {genders.length > 0 && (
+            <div className="row gender-pick" role="radiogroup" aria-label="성별">
+              <span className="small">성별</span>
+              {genders.map((g) => <button key={g} type="button" role="radio" aria-checked={gender === g} className={gender === g ? 'primary' : ''} onClick={() => setGender(g)}>{g}</button>)}
+            </div>
+          )}
+          {(form.fields ?? []).map((f) => (
+            <label key={f.id}>{f.label}{f.required ? ' *' : ''}{f.visible ? <span className="small muted"> · 사람들이 보고 아는 것</span> : null}
+              {f.kind === 'select'
+                ? <select value={info[f.id] ?? ''} onChange={(e) => setInfo((p) => ({ ...p, [f.id]: e.target.value }))}>{!f.required && <option value="">(정하지 않음)</option>}{(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}</select>
+                : f.kind === 'long'
+                  ? <textarea rows={2} value={info[f.id] ?? ''} placeholder={f.placeholder} onChange={(e) => setInfo((p) => ({ ...p, [f.id]: e.target.value }))} />
+                  : <input value={info[f.id] ?? ''} placeholder={f.placeholder} onChange={(e) => setInfo((p) => ({ ...p, [f.id]: e.target.value }))} />}
+              {f.help && <span className="small muted">{f.help}</span>}
+            </label>
+          ))}
+        </fieldset>
+      )}
 
       <fieldset>
         <legend>직업</legend>

@@ -388,6 +388,28 @@ export function validateWorld(input: unknown): Issue[] {
       }
     }
   }
+  // ---- 주인공 정보 양식 (v0.68)
+  {
+    const pp = (input as Record<string, unknown>).playerProfile as Record<string, unknown> | undefined;
+    if (pp !== undefined) {
+      if (!pp || typeof pp !== 'object') err('playerProfile', '객체여야 합니다.');
+      else {
+        if (pp.genders !== undefined && !(Array.isArray(pp.genders) && pp.genders.every((g) => typeof g === 'string'))) err('playerProfile.genders', '글 목록이어야 합니다.');
+        const ids = new Set<string>();
+        ((pp.fields as unknown[] | undefined) ?? []).forEach((f0, i) => {
+          const f = f0 as Record<string, unknown>;
+          const p = `playerProfile.fields[${i}]`;
+          if (!f || typeof f !== 'object') { err(p, '객체여야 합니다.'); return; }
+          if (typeof f.id !== 'string' || !/^[a-z0-9_]+$/.test(f.id)) err(`${p}.id`, 'ID는 영문 소문자·숫자·_ 입니다.');
+          else if (ids.has(f.id)) err(`${p}.id`, `ID "${f.id}"가 겹칩니다.`);
+          else ids.add(f.id);
+          if (typeof f.label !== 'string' || !f.label.trim()) err(`${p}.label`, '항목 이름이 필요합니다.');
+          if (!['text', 'long', 'select'].includes(f.kind as string)) err(`${p}.kind`, 'text·long·select 중 하나입니다.');
+          if (f.kind === 'select' && !(Array.isArray(f.options) && f.options.length)) err(`${p}.options`, '고르기 항목에는 선택지가 필요합니다.');
+        });
+      }
+    }
+  }
   // ---- 직업 (v0.56)
   const classIds = new Set<string>();
   arr<NonNullable<WorldPackage['classes']>[number]>('classes', false).forEach((c, i) => {

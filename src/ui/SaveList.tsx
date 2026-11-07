@@ -4,6 +4,7 @@ import { endingsSeen } from './collection';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { genreOf } from '../data/genres';
 import { classesFor } from '../engine/classes';
+import { profileFor } from '../engine/profile';
 import type { CharacterSheet } from '../engine/character/sheet';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { WorldPackage } from '../engine/schema';
@@ -109,7 +110,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
     try { await importSave(await file.text()); setMessage({ text: '세이브를 가져왔습니다.' }); } catch (e) { setMessage({ text: (e as Error).message }); }
   }
 
-  if (creating && world) return <ReskinContext.Provider value={reskinner(world)}><CharacterCreator classes={classesFor(world)} onCreate={newGame} onCancel={() => setCreating(false)} /></ReskinContext.Provider>;
+  if (creating && world) return <ReskinContext.Provider value={reskinner(world)}><CharacterCreator classes={classesFor(world)} profile={profileFor(world)} onCreate={newGame} onCancel={() => setCreating(false)} /></ReskinContext.Provider>;
 
   const nameOf = new Map((packages ?? []).map((p) => [p.world.manifest.id, p.world.manifest.name]));
   const endingsLabel = (w: WorldPackage) => (w.endings?.length ? `결말 ${w.endings.filter((e) => endingsSeen(w.manifest.id).includes(e.id)).length}/${w.endings.length}` : '');

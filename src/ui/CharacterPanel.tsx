@@ -1,4 +1,5 @@
 import { classLabel, subclassLabel, subclassOptions } from '../engine/classes';
+import { profileLine } from '../engine/profile';
 import { useRs } from './reskin';
 import type { WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
@@ -95,6 +96,7 @@ export function CharacterPanel({ sheet, party = {}, onChoose, disabled, world, s
         <span className="spacer" />
         <span>HP {sheet.hp}/{sheet.maxHp}</span>
       </div>
+      {(sheet.gender || sheet.profile) && world && <p className="small muted profile-line">{profileLine(world, sheet)}</p>}
       <div className="row small">
         <XpBar sheet={sheet} />
         <span className="spacer" />

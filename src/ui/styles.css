@@ -709,3 +709,9 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .universe-wrap .universe { flex: 1; }
 .universe-whole { font-size: .72rem; padding: 2px 6px; }
 .universe-whole.on, .universe-wrap.whole .universe { border-color: var(--accent); color: var(--accent); }
+/* 주인공 정보 (v0.68) */
+.profile-form { display: flex; flex-direction: column; gap: 8px; }
+.gender-pick { gap: 6px; align-items: center; }
+.profile-line { margin: 2px 0 6px; }
+.profile-editor { display: flex; flex-direction: column; gap: 10px; }
+.profile-editor .profile-field { border-radius: 8px; }

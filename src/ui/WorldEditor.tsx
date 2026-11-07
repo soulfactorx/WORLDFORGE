@@ -12,6 +12,7 @@ import { ArcForms, BoardForms, ChoiceForms, ClockForms, EventForms, ItemForms, M
 import { DIFFICULTY_LABEL, encounterDifficulty, monsterTable, monstersOfWorld } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
 import { ClassEditor } from './ClassEditor';
+import { ProfileEditor } from './ProfileEditor';
 import { WorldLibrary } from './WorldLibrary';
 import { TimeFieldset } from './TimeFieldset';
 import { classesFor } from '../engine/classes';
@@ -42,9 +43,9 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
+type Tab = 'basic' | 'player' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
-  ['basic', '기본'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
+  ['basic', '기본'], ['player', '주인공'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
   ['encounters', '조우'], ['scenes', '장면'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
@@ -57,6 +58,7 @@ function tabForPath(path: string): Tab {
   if (path.startsWith('time')) return 'basic';
   if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style') || path.startsWith('overview') || path.startsWith('gmNotes')) return 'basic';
   if (path.startsWith('classes')) return 'classes';
+  if (path.startsWith('playerProfile')) return 'player';
   if (path.startsWith('assets')) return 'images';
   if (path.startsWith('locations')) return 'locations';
   if (path.startsWith('characters')) return 'characters';
@@ -498,6 +500,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
 
       {tab === 'classes' && <ClassEditor world={w} onChange={(classes) => set({ classes })} />}
+      {tab === 'player' && <ProfileEditor world={w} onChange={(playerProfile) => set({ playerProfile })} />}
       {tab === 'scenes' && (
         <>
           <p className="muted small">
