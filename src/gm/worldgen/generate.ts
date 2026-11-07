@@ -7,6 +7,7 @@ import type { WorldPackage } from '../../engine/schema';
 import type { LlmClient } from '../../llm/types';
 import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
+import { generateScenes } from './scenes';
 import { addScenario, scenarioDraftSchema, type ScenarioDraft, WORLD_DRAFT_SCHEMA, type WorldDraft, worldFromDraft } from './draft';
 
 /**
@@ -64,6 +65,8 @@ export interface GenerateOptions {
   size: Size;
   contentRating: WorldPackage['manifest']['contentRating'];
   withScenario: boolean;
+  /** 장면(협상·추격·대결…)까지 만들기 (v0.51, 기본 예) */
+  withScenes?: boolean;
   author?: string;
   /** 장르 프로필 ID (설계 v3 2장) */
   genre?: string;
@@ -96,7 +99,9 @@ export async function generateWorld(
   llm: LlmClient, opts: GenerateOptions, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal,
 ): Promise<GenerateResult> {
   // 진행률 (v0.46.3): 단계가 시작할 때 [지금 %, 이 단계가 끝날 때 %]
-  const [worldEnd, scenEnd] = opts.withScenario ? [55, 88] : [85, 85];
+  const scenes = opts.withScenes !== false;
+  const [worldEnd, scenEnd] = opts.withScenario ? (scenes ? [50, 74] : [55, 88]) : (scenes ? [70, 70] : [85, 85]);
+  const scenesEnd = scenes ? 88 : scenEnd;
   onStage('세계 만드는 중 (장소·인물·비밀)…', 2, worldEnd);
   const draft = await llm.json<WorldDraft>({
     system: `${WORLD_SYSTEM}\n- ${genreGuide({ genre: { id: opts.genre ?? 'high_fantasy' } })}${genreOf(opts.genre).combat === 'rare' ? '\n- 이 장르는 전투보다 관계·사교가 중심이다. 동료 후보보다 관계가 깊어질 수 있는 인물을 늘린다.' : ''}`,
@@ -111,7 +116,18 @@ export async function generateWorld(
     world = r.world;
     notes = [...notes, ...r.notes];
   }
-  onStage('인물·장소에 기본 이미지 고르는 중…', scenEnd, 97);
+  // 장면 (v0.51): 실패해도 세계는 살린다
+  if (scenes) {
+    try {
+      const r = await generateScenes(llm, world, (st) => onStage(st, scenEnd, scenesEnd), signal, opts.prompt.slice(0, 1500));
+      world = r.world;
+      notes = [...notes, ...r.notes];
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      notes = [...notes, `장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`];
+    }
+  }
+  onStage('인물·장소에 기본 이미지 고르는 중…', scenesEnd, 97);
   const st = await assignStockImages(world, llm, signal);
   world = { ...world, assets: st.assets };
   if (st.added) notes = [...notes, `인물·장소 ${st.added}곳에 앱 내장 기본 이미지를 붙였습니다. 편집기 이미지 탭에서 바꿀 수 있습니다.`];

@@ -26,6 +26,7 @@ import { PRIVATE_NOTE } from '../../storage/packages';
 import { RATING_GUIDE } from '../../engine/rating';
 import { worldFromDraft, type WorldDraft } from './draft';
 import { generateScenario } from './generate';
+import { generateScenes } from './scenes';
 import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
 import { translateToKorean } from './translate';
@@ -118,6 +119,8 @@ export interface CardWorldOptions {
   /** 남은 이미지를 AI로 분류 (파일 이름만 보낸다) */
   classifyImages: boolean;
   withScenario: boolean;
+  /** 장면까지 만들기 (v0.51, 기본 예) */
+  withScenes?: boolean;
   /** 인물 대표 이미지 → 작은 초상화 data URL (브라우저에서만) */
   makePortrait?: (blob: Blob) => Promise<string | undefined>;
   /** 규칙이 놓친 인물을 AI가 로어북에서 찾기 (기본 켬) */
@@ -418,12 +421,23 @@ export async function cardToWorld(
   if (opts.withScenario) {
     try {
       const request = `원작 카드를 바탕으로 한 세계다. 원작의 줄거리와 연표를 따라가는 메인 임무와 결말을 만든다.\n${cut(d.plot_request ?? '', 3000)}\n\n## 연표\n${timeline.slice(0, 40).map((t) => `- [${t.when}] ${t.title} (${claimByKey(t.key)?.replace(/^claim\//, '') ?? ''})`).join('\n')}`;
-      const r = await generateScenario(llm, world, (st) => onStage(st, 78, 90), signal, request);
+      const r = await generateScenario(llm, world, (st) => onStage(st, 78, opts.withScenes !== false ? 85 : 90), signal, request);
       world = r.world;
       notes.push(...r.notes);
     } catch (e) {
       if (signal?.aborted) throw e;
       notes.push(`임무·결말 생성에 실패했습니다 (편집기에서 다시 만들 수 있습니다): ${(e as Error).message}`);
+    }
+  }
+  // 5) 장면 (v0.51): 원작의 인물·관계로 협상·대결·데이트 같은 장면
+  if (opts.withScenes !== false) {
+    try {
+      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`);
+      world = r.world;
+      notes.push(...r.notes);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      notes.push(`장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`);
     }
   }
   onStage('검사 중…', 90, 91);

@@ -34,6 +34,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
   const [rating, setRating] = useState<WorldPackage['manifest']['contentRating']>('teen');
   const [classify, setClassify] = useState(true);
   const [withScenario, setWithScenario] = useState(true);
+  const [withScenes, setWithScenes] = useState(true);
 
   const [agree, setAgree] = useState(false);
   const [stage, setStage] = useState('');
@@ -90,7 +91,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
       // 재시도·잘린 응답 처리 + 단계별 결과 저장(같은 카드로 다시 하면 끝난 단계는 건너뜀)
       const llm = cached(createLlmClient(settings, { onRetry: (n, why, label) => setStage(`${label ? `${label}: ` : ''}AI 응답 문제로 다시 시도하는 중 (${n}번째)… ${why.includes('길이 제한') ? '응답이 길어 잘림 — 한도를 늘려 다시 요청' : why.slice(0, 60)}`) }), genCache(bundle.fingerprint), () => { hits++; setStage(`저장된 결과를 다시 쓰는 중… (${hits}개)`); });
       const r = await cardToWorld(llm, bundle, {
-        contentRating: rating, classifyImages: classify, withScenario, choices, translate, aiFindCharacters: findChars,
+        contentRating: rating, classifyImages: classify, withScenario, withScenes, choices, translate, aiFindCharacters: findChars,
         makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),
       }, onStage, signal);
       onStage('이미지 저장 중…', 91, 91);
@@ -173,6 +174,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
             </label>
             <label className="check"><input type="checkbox" checked={classify} disabled={busy} onChange={(e) => setClassify(e.target.checked)} /> 이름 규칙으로 못 찾은 이미지를 AI로 분류 (파일 이름만 보냄)</label>
             <label className="check"><input type="checkbox" checked={withScenario} disabled={busy} onChange={(e) => setWithScenario(e.target.checked)} /> 임무·결말까지 만들기</label>
+            <label className="check"><input type="checkbox" checked={withScenes} disabled={busy} onChange={(e) => setWithScenes(e.target.checked)} /> 장면(협상·대결·데이트…)까지 만들기</label>
             {stored > 0 && <label className="check"><input type="checkbox" checked={reuse} disabled={busy} onChange={(e) => setReuse(e.target.checked)} /> 이전에 진행한 AI 결과 {stored}개 다시 쓰기 (끄면 처음부터 새로 만듦)</label>}
             <label className="check"><input type="checkbox" checked={findChars} disabled={busy} onChange={(e) => setFindChars(e.target.checked)} /> 규칙으로 못 찾은 인물을 AI가 로어북에서 더 찾기</label>
             <label className="check"><input type="checkbox" checked={translate} disabled={busy} onChange={(e) => setTranslate(e.target.checked)} /> 외국어(영어 등) 인물·설정 글을 한국어로 번역</label>
@@ -182,7 +184,7 @@ export function CardWorldPanel({ file, settings, onDone, onCancel, onCharactersO
             <label className="check"><input type="checkbox" checked={agree} disabled={busy} onChange={(e) => setAgree(e.target.checked)} /> 이해했습니다. 개인적으로만 사용합니다.</label>
           </div>
           {!settings && <p className="status">❌ 먼저 AI 설정을 해 주세요.</p>}
-          <p className="muted small">AI 호출: {findChars ? `인물 찾기 ${Math.max(1, Math.ceil(nWorld / 20))}회 안팎 + ` : ''}세계 구조 1회{translate ? ' + 번역(필요할 때, 동시에)' : ''} + 기본 이미지 고르기 1회{withScenario ? ' + 임무 1회' : ''}{classify ? ' + 이미지 분류(필요할 때만)' : ''}. 카드 글이 길면 시간이 걸립니다.</p>
+          <p className="muted small">AI 호출: {findChars ? `인물 찾기 ${Math.max(1, Math.ceil(nWorld / 20))}회 안팎 + ` : ''}세계 구조 1회{translate ? ' + 번역(필요할 때, 동시에)' : ''} + 기본 이미지 고르기 1회{withScenario ? ' + 임무 1회' : ''}{withScenes ? ' + 장면 1회' : ''}{classify ? ' + 이미지 분류(필요할 때만)' : ''}. 카드 글이 길면 시간이 걸립니다.</p>
           {busy && (() => {
             // 긴 AI 호출 중에는 다음 단계 쪽으로 천천히 차오르게 한다 (실제 진행률은 단계가 끝날 때 맞춘다)
             const creep = pct.at + (pct.next - pct.at) * (1 - Math.exp(-(Date.now() - pct.since) / 45000)) * 0.9;

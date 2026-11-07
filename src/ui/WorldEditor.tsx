@@ -26,6 +26,7 @@ import { IssueList } from './IssueList';
 import { CardImportDialog } from './CardImportDialog';
 import { josa } from '../engine/text/josa';
 import { generateScenario } from '../gm/worldgen/generate';
+import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 
@@ -72,6 +73,18 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
   const [questView, setQuestView] = useState<'form' | 'json'>('form');
   const [sceneView, setSceneView] = useState<'form' | 'json'>('form');
+  const [sceneStage, setSceneStage] = useState('');
+  const [sceneRequest, setSceneRequest] = useState('');
+  async function genScenes() {
+    if (!settings) return;
+    setSceneStage('장면 만드는 중…');
+    try {
+      const r = await generateScenes(createLlmClient(settings), w, setSceneStage, undefined, sceneRequest);
+      setW(r.world);
+      setStatus(r.notes.join(' '));
+    } catch (e) { setStatus(`장면 생성 실패: ${(e as Error).message}`); }
+    finally { setSceneStage(''); }
+  }
   const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
@@ -411,6 +424,10 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <div className="row"><b>보기:</b>
             <button type="button" className={sceneView === 'form' ? 'primary' : ''} onClick={() => setSceneView('form')}>폼</button>
             <button type="button" className={sceneView === 'json' ? 'primary' : ''} onClick={() => setSceneView('json')}>JSON</button>
+          </div>
+          <div className="row">
+            <input value={sceneRequest} placeholder="(선택) 원하는 장면 — 예: 라이벌과의 비무, 상인과의 흥정" disabled={!!sceneStage} onChange={(e) => setSceneRequest(e.target.value)} />
+            <button type="button" disabled={!settings || !!sceneStage} onClick={genScenes}>{sceneStage || '✦ AI로 장면 추가'}</button>
           </div>
           {sceneView === 'form' ? <SceneForms w={w} set={set} /> : <JsonField label="장면" value={w.scenes ?? []} onChange={(scenes) => set({ scenes: Array.isArray(scenes) && scenes.length ? scenes : undefined })} rows={20}
             help={`예: { "id": "scene/haggle", "name": "값 흥정", "description": "상인과 값을 두고 흥정한다 (GM용)", "npcId": "npc/…", "start": { "all": [] }, "gauges": [{ "id": "patience", "name": "인내심", "start": 5, "min": 0, "max": 5 }, { "id": "deal", "name": "합의", "start": 0, "max": 10 }], "states": [{ "id": "warm", "name": "호의", "edge": 1 }], "phases": [{ "id": "talk", "name": "탐색" }, { "id": "close", "name": "담판" }], "likes": ["칭찬"], "dislikes": ["위협"], "actions": [{ "id": "praise", "name": "물건 칭찬", "check": "skill:persuasion", "dc": 12, "tags": ["칭찬"], "success": { "gauges": { "deal": 3 }, "addStates": ["warm"] }, "failure": { "gauges": { "patience": -1 } } }, { "id": "final", "name": "마지막 제안", "phases": ["close"], "check": "skill:insight", "dc": 14, "success": { "gauges": { "deal": 5 } }, "failure": { "gauges": { "patience": -2 } } }], "ends": [{ "id": "deal", "name": "거래 성사", "when": { "gauge": "deal", "gte": 10 }, "outcome": "success", "effects": [{ "setFlag": "…" }], "rewards": { "money": 20 } }, { "id": "walk", "name": "결렬", "when": { "gauge": "patience", "lte": 0 }, "outcome": "failure" }], "maxRounds": 8, "timeoutEnd": "walk" } · 판정: skill:${SKILL_IDS.join('/')} 또는 ability:str/dex/con/int/wis/cha · 장면 조건: gauge(gte·lte)·state·phase·round·all·any · 수치 기본 범위 0~100`} />}
