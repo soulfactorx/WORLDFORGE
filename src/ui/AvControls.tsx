@@ -1,3 +1,4 @@
+import { DebugToggle } from './DebugPanel';
 import { useEffect, useRef, useState } from 'react';
 import { type DisplayLevel, IMAGE_SIZES, type ImageSize, loadPlayPrefs, savePlayPrefs, SCENE_NARRATIONS, type SceneNarration } from './playPrefs';
 import { isStandalone, loadOrientation, type OrientationPref, saveOrientation } from './orientation';
@@ -69,6 +70,7 @@ export function AvControls({ onChange }: { onChange: () => void }) {
             </select>
           </label>
           <label className="check small"><input type="checkbox" checked={play.adaptive} onChange={(e) => { const p = { ...play, adaptive: e.target.checked }; setPlay(p); savePlayPrefs(p); }} /> 적응 난이도 (연달아 지면 조금 쉽게, 연달아 압승하면 정예)</label>
+          <DebugToggle />
           <p className="small muted">소리는 이 기기에서 바로 만들어 냅니다 (파일·인터넷 필요 없음). 음성은 브라우저에 설치된 한국어 목소리를 씁니다.</p>
         </div>
       )}

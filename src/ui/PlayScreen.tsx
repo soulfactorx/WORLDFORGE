@@ -5,6 +5,8 @@ import { findWorld } from '../storage/packages';
 import { replay, type GameState } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
 import { metrics } from '../llm/metrics';
+import { beginDebug, debugStage, endDebug } from '../debug/trace';
+import { DebugPanel, useDebugOn } from './DebugPanel';
 import { pendingChoice } from '../engine/story';
 import { equipItem, shopHere } from '../gm/economy';
 import { BoardPanel, InventoryPanel, ShopPanel } from './InventoryPanel';
@@ -100,6 +102,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const [, tick] = useState(0);
   useEffect(() => { if (streaming === null) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [streaming !== null]);
   const [panel, setPanel] = useState<'none' | 'sheet' | 'journal' | 'codex' | 'items' | 'shop' | 'board'>('none');
+  const debug = useDebugOn();
+  const [showDebug, setShowDebug] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -198,15 +202,18 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     setRewards([]); setShowRecap(false); followNow();
     if (choice === undefined) setInput(''); setError(''); setStreaming(''); setStage('AI에게 보내는 중'); setStartedAt(Date.now());
     abort.current = new AbortController();
+    const dbg = beginDebug('turn', `턴 ${state.turn + 1}: ${text.slice(0, 60)}`, { saveId, turn: state.turn + 1, input: text, ...(turnUse ? { use: turnUse } : {}), ...(decision ? { decision } : {}) });
     try {
       const t0 = performance.now();
-      const { events, rejected } = await runTurn(createLlmClient(settings), world, state, text,
-        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, setStage, turnUse, decision, { adaptive: loadPlayPrefs().adaptive });
+      const { events, rejected, state: after } = await runTurn(createLlmClient(settings), world, state, text,
+        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision, { adaptive: loadPlayPrefs().adaptive });
       metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected });
+      await endDebug(dbg, { events, before: state, after, rejected });
       const turn = state.turn + 1;
       await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));
       await reload();
     } catch (e) {
+      await endDebug(dbg, { error: abort.current?.signal.aborted ? '중단 (저장 안 됨)' : String((e as Error).message) });
       setError(abort.current?.signal.aborted ? '중단했습니다. 이 턴은 저장되지 않았습니다.' : (e as Error).message);
       if (choice === undefined) setInput(text); // 실패한 턴은 저장하지 않는다
     } finally {
@@ -220,10 +227,12 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     setError('');
     const before = state.combat;
     let events: GameEvent[];
-    try { events = make(state); } catch (e) { setError((e as Error).message); return; }
+    const dbg = beginDebug('combat', `전투 행동 (턴 ${state.turn}, 라운드 ${state.combat.round ?? '?'})`, { saveId, turn: state.turn });
+    try { events = make(state); } catch (e) { setError((e as Error).message); await endDebug(dbg, { error: (e as Error).message }); return; }
     await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn: state.turn, event })));
     const all = await loadEvents(saveId);
     let after = replay(all);
+    const stateBefore = state;
     let seq = (all.at(-1)?.seq ?? -1) + 1;
     if (!after.combat) {
       const startIdx = after.log.findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 시작'));
@@ -243,6 +252,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       ]);
       setStreaming(null);
     }
+    if (dbg) { const fin = await loadEvents(saveId); await endDebug(dbg, { events: fin.slice(all.length - events.length).map((x) => x.event), before: stateBefore, after: replay(fin) }); }
     await reload();
   }
 
@@ -253,7 +263,10 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     const sceneId = state.scene?.sceneId;
     const log = state.scene?.log ?? [];
     let events: GameEvent[];
-    try { events = make(state); } catch (e) { setError((e as Error).message); return; }
+    const dbg = beginDebug('scene', `장면 행동${sceneId ? ` (${sceneId})` : ''} — 턴 ${state.turn}`, { saveId, turn: state.turn });
+    try { events = make(state); } catch (e) { setError((e as Error).message); await endDebug(dbg, { error: (e as Error).message }); return; }
+    const stateBefore = state;
+    const firstSeq = nextSeq;
     await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn: state.turn, event })));
     const all = await loadEvents(saveId);
     const after = replay(all);
@@ -282,6 +295,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       if (text.trim()) await appendEvents(saveId, [{ saveId, seq: seq++, turn: after.turn, event: { type: 'narration', text } }]);
       setStreaming(null);
     }
+    if (dbg) { const fin = await loadEvents(saveId); await endDebug(dbg, { events: fin.filter((x) => x.seq >= firstSeq).map((x) => x.event), before: stateBefore, after: replay(fin) }); }
     await reload();
   }
 
@@ -292,6 +306,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     let events: GameEvent[];
     try { events = make(state); } catch (e) { setError((e as Error).message); return; }
     await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn: state.turn, event })));
+    const dbg = beginDebug('items', `소지품·상점 (턴 ${state.turn})`, { saveId, turn: state.turn });
+    if (dbg) await endDebug(dbg, { events, before: state, after: replay(await loadEvents(saveId)) });
     await reload();
   }
 
@@ -344,6 +360,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           ];
         })()}
         <AvControls onChange={() => setAvTick((n) => n + 1)} />
+        {debug && <button onClick={() => setShowDebug(true)} title="디버그: 턴마다 AI 요청·응답과 엔진 처리">🐞 디버그</button>}
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null} title="턴 되돌리기">↶ 되돌리기</button>
         <button onClick={onExit}>나가기</button>
       </div>
@@ -472,6 +489,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         const canEquip = ['weapon', 'armor', 'shield', 'trinket'].includes(item.kind) && !state.combat && !Object.values(state.equipped ?? {}).includes(loot);
         return <LootDialog item={item} rs={rs} canEquip={canEquip} onClose={() => setLoot(null)} onEquip={() => { setLoot(null); commitEvents((s) => equipItem(world, s, loot)); }} />;
       })()}
+      {showDebug && <DebugPanel saveId={saveId} world={world} state={state} onClose={() => setShowDebug(false)} />}
       {levelInfo && <LevelUpDialog info={levelInfo} sheet={state.player.sheet} rs={rs} onClose={() => setLevelInfo(null)} onSheet={() => { setLevelInfo(null); setPanel('sheet'); }} />}
     </section>
     </ReskinContext.Provider>

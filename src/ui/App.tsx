@@ -1,4 +1,5 @@
 import { Lightbox } from './Lightbox';
+import { DebugPanel, DebugToggle, useDebugOn } from './DebugPanel';
 import { useState } from 'react';
 import type { LlmSettings } from '../llm/types';
 import { loadSettings } from '../storage/settings';
@@ -19,6 +20,8 @@ type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: s
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
   const [view, setView] = useState<View>(settings ? { name: 'saves' } : { name: 'settings' });
+  const debug = useDebugOn();
+  const [showDebug, setShowDebug] = useState(false);
 
   return (
     <div className="app">
@@ -30,6 +33,7 @@ export function App() {
           <InstallButton />
           <a className="small nowrap" href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">소스<span className="wide-only"> (GPL)</span></a>
         </span>
+        {debug && view.name !== 'play' && <button className="small" onClick={() => setShowDebug(true)} title="디버그 기록: 세계 만들기 등 모든 AI 호출">🐞</button>}
         <button className="topbar-settings" onClick={() => setView({ name: 'settings' })}>AI 설정</button>
       </header>
       <main>
@@ -37,6 +41,7 @@ export function App() {
           <>
             <SettingsPanel initial={settings} onSaved={(s) => { setSettings(s); setView({ name: 'saves' }); }} />
             <QualityPanel settings={settings} />
+            <section className="panel"><h2>디버그</h2><DebugToggle /><p className="small muted">켜면 플레이 화면의 <b>🐞 디버그</b>에서 턴마다 AI에게 보낸 프롬프트·파라미터·실제 요청 본문·응답 원문, 엔진이 만든 이벤트·거부한 제안·상태 변화, 현재 상태·세계 데이터·이벤트 로그 전체를 볼 수 있습니다. 세계 만들기 같은 플레이 밖 AI 호출은 위쪽 🐞 버튼에서 봅니다.</p></section>
           </>
         )}
         {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world) => setView({ name: 'editor', world })} onGenerate={() => setView({ name: 'worldgen' })} onUserArt={() => setView({ name: 'userart' })}
@@ -53,6 +58,7 @@ export function App() {
             : <p>먼저 AI 설정을 해 주세요.</p>
         )}
       </main>
+      {showDebug && <DebugPanel onClose={() => setShowDebug(false)} />}
       <Lightbox />
     </div>
   );

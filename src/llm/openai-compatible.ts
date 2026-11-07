@@ -1,3 +1,4 @@
+import { finishAttempt, traceAttempt } from '../debug/trace';
 import { addUsage, type LlmClient, LlmHttpError, LlmJsonError, type LlmRequest, type LlmSettings, LlmTruncatedError } from './types';
 
 /**
@@ -15,11 +16,12 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
 
   return {
     async stream(req, onText, signal) {
-      const res = await fetch(url, {
-        method: 'POST', headers, signal,
-        body: JSON.stringify({ model: s.model, max_tokens: req.maxTokens, stream: true, messages: messages(req) }),
-      });
-      if (!res.ok || !res.body) throw new LlmHttpError(res.status, `LLM 요청 실패 (${res.status}): ${(await res.text()).slice(0, 500)}`);
+      const body = { model: s.model, max_tokens: req.maxTokens, stream: true, messages: messages(req) };
+      const at = traceAttempt(req.trace, `POST ${url}`, body);
+      let res: Response;
+      try { res = await fetch(url, { method: 'POST', headers, signal, body: JSON.stringify(body) }); } catch (e) { finishAttempt(at, { error: String((e as Error)?.message ?? e) }); throw e; }
+      if (!res.ok || !res.body) { const t = (await res.text()).slice(0, 2000); finishAttempt(at, { status: res.status, raw: t, error: `HTTP ${res.status}` }); throw new LlmHttpError(res.status, `LLM 요청 실패 (${res.status}): ${t.slice(0, 500)}`); }
+      let finish: unknown;
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
       let buf = '', full = '';
       let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
@@ -34,28 +36,31 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
           if (!data || data === '[DONE]' || !line.startsWith('data:')) continue;
           const chunk = JSON.parse(data);
           if (chunk.usage) usage = chunk.usage;
+          if (chunk.choices?.[0]?.finish_reason) finish = chunk.choices[0].finish_reason;
           const delta = chunk.choices?.[0]?.delta?.content as string | undefined;
           if (delta) { full += delta; onText(delta); }
         }
       }
       addUsage(req.meter, usage?.prompt_tokens, usage?.completion_tokens, { inChars: req.system.length + req.user.length, outChars: full.length });
+      finishAttempt(at, { status: res.status, meta: { finish_reason: finish, usage }, raw: full });
       return full;
     },
     async json<T>(req: LlmRequest, schema: Record<string, unknown>, signal?: AbortSignal) {
       // 모든 호환 서버가 json_schema를 지원하지는 않으므로 프롬프트로 스키마를 알리고 json_object 모드를 요청한다.
-      const res = await fetch(url, {
-        method: 'POST', headers, signal,
-        body: JSON.stringify({
-          model: s.model, max_tokens: req.maxTokens, response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: `${req.system}\n\n반드시 다음 JSON 스키마에 맞는 JSON 객체 하나만 출력한다:\n${JSON.stringify(schema)}` },
-            { role: 'user', content: req.user },
-          ],
-        }),
-      });
-      if (!res.ok) throw new LlmHttpError(res.status, `LLM 요청 실패 (${res.status}): ${(await res.text()).slice(0, 500)}`);
+      const reqBody = {
+        model: s.model, max_tokens: req.maxTokens, response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: `${req.system}\n\n반드시 다음 JSON 스키마에 맞는 JSON 객체 하나만 출력한다:\n${JSON.stringify(schema)}` },
+          { role: 'user', content: req.user },
+        ],
+      };
+      const at = traceAttempt(req.trace, `POST ${url}`, reqBody);
+      let res: Response;
+      try { res = await fetch(url, { method: 'POST', headers, signal, body: JSON.stringify(reqBody) }); } catch (e) { finishAttempt(at, { error: String((e as Error)?.message ?? e) }); throw e; }
+      if (!res.ok) { const t = (await res.text()).slice(0, 2000); finishAttempt(at, { status: res.status, raw: t, error: `HTTP ${res.status}` }); throw new LlmHttpError(res.status, `LLM 요청 실패 (${res.status}): ${t.slice(0, 500)}`); }
       const body = await res.json();
       const text: string = body.choices?.[0]?.message?.content ?? '';
+      finishAttempt(at, { status: res.status, meta: { id: body.id, model: body.model, finish_reason: body.choices?.[0]?.finish_reason, usage: body.usage }, raw: text });
       addUsage(req.meter, body.usage?.prompt_tokens, body.usage?.completion_tokens, { inChars: req.system.length + req.user.length + JSON.stringify(schema).length, outChars: text.length });
       const start = text.indexOf('{');
       if (body.choices?.[0]?.finish_reason === 'length') throw new LlmTruncatedError(start >= 0 ? text.slice(start) : text);

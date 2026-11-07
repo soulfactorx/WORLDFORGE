@@ -1,3 +1,4 @@
+import type { DebugCall } from '../debug/trace';
 /**
  * 제공자 독립 LLM 인터페이스. 게임 엔진은 이 인터페이스만 알고, 특정 업체를 모른다.
  */
@@ -32,6 +33,8 @@ export interface LlmRequest {
   label?: string;
   /** 사용량 기록 (계측 래퍼가 넣고, 어댑터가 채운다. 재시도한 호출도 모두 더한다) */
   meter?: Meter;
+  /** 디버그 기록 (v0.57): 어댑터가 실제 요청·응답을 붙인다 */
+  trace?: DebugCall;
 }
 
 export interface Meter {

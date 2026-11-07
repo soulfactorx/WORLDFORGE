@@ -1,6 +1,7 @@
 import { createAnthropicClient } from './anthropic';
 import { createOpenAiCompatibleClient } from './openai-compatible';
-import type { LlmClient, LlmSettings, RoleGroup } from './types';
+import type { LlmClient, LlmRequest, LlmSettings, Meter, RoleGroup } from './types';
+import { finishCall, traceCall } from '../debug/trace';
 import { robust, type RobustOptions } from './robust';
 import { type CallRecord, metered, type Role, roleOf } from './metrics';
 
@@ -25,7 +26,7 @@ export function createLlmClient(s: LlmSettings, opts?: RobustOptions & { sink?: 
     let c = cache.get(model);
     if (!c) {
       const ms = { ...s, model };
-      c = metered(robust(s.provider === 'anthropic' ? createAnthropicClient(ms) : createOpenAiCompatibleClient(ms), opts), model, opts?.sink);
+      c = traced(metered(robust(s.provider === 'anthropic' ? createAnthropicClient(ms) : createOpenAiCompatibleClient(ms), opts), model, opts?.sink), s, model);
       cache.set(model, c);
     }
     return c;
@@ -37,3 +38,30 @@ export function createLlmClient(s: LlmSettings, opts?: RobustOptions & { sink?: 
 }
 
 export const ANTHROPIC_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'] as const;
+
+/** 디버그 기록 래퍼 (v0.57): 디버그 모드일 때만 요청·응답 전체를 남긴다 */
+function traced(llm: LlmClient, s: LlmSettings, model: string): LlmClient {
+  const wrap = async <T>(kind: 'stream' | 'json', req: LlmRequest, schema: Record<string, unknown> | undefined, run: (r: LlmRequest) => Promise<T>): Promise<T> => {
+    const call = traceCall({
+      role: roleOf(req.system), model, provider: s.provider === 'anthropic' ? 'anthropic' : `openai-compatible (${s.baseUrl ?? 'https://api.openai.com/v1'})`, kind,
+      ...(req.label ? { label: req.label } : {}),
+      params: { maxTokens: req.maxTokens, ...(kind === 'json' ? { effort: req.effort ?? 'low (기본)' } : req.effort ? { effort: req.effort } : {}) },
+      system: req.system, user: req.user, ...(schema ? { schema } : {}),
+    });
+    if (!call) return run(req);
+    const meter: Meter = req.meter ?? { input: 0, output: 0, calls: 0 };
+    const t0 = performance.now();
+    try {
+      const out = await run({ ...req, meter, trace: call });
+      finishCall(call, { ...(kind === 'stream' ? { output: out as string } : { parsed: out }), ms: Math.round(performance.now() - t0), usage: meter });
+      return out;
+    } catch (e) {
+      finishCall(call, { error: String((e as Error)?.message ?? e), ms: Math.round(performance.now() - t0), usage: meter });
+      throw e;
+    }
+  };
+  return {
+    stream: (req, onText, signal) => wrap('stream', req, undefined, (r) => llm.stream(r, onText, signal)),
+    json: <T,>(req: LlmRequest, schema: Record<string, unknown>, signal?: AbortSignal) => wrap<T>('json', req, schema, (r) => llm.json<T>(r, schema, signal)),
+  };
+}
