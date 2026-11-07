@@ -816,9 +816,27 @@ export interface WorldPackage {
   /** 서술 문체 지침 (v0.13). 서술 AI에게 참고로 준다 */
   style?: string;
   /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경·분위기·규칙. 모든 AI가 참고하고 수첩 "세계 소개"에 보인다 */
+  /** 이 세계의 직업 목록 (v0.56) — 비우면 장르 기본 프리셋. 규칙은 base(엔진 직업)를 따르고 이름·설명·기술만 바꾼다 */
+  classes?: WorldClass[];
   overview?: string;
   /** GM 메모 (v0.54): 연출 지침·숨은 설정. Director만 참고하고 플레이어에게 직접 말하지 않는다 */
   gmNotes?: string;
   /** 이미지 에셋 목록 (v0.13) */
   assets?: AssetMeta[];
+}
+
+/** 세계의 직업 (v0.56): 엔진 직업(base) 하나를 이 세계에 맞는 이름·설명·기술로 보여 준다 */
+export interface WorldClass {
+  id: string;
+  name: string;
+  /** 규칙상 직업: fighter·rogue·cleric·wizard·bard·ranger·paladin·warlock */
+  base: string;
+  /** 플레이어에게 보이는 소개 */
+  blurb?: string;
+  /** 잘하는 것 (예: 사교 · 화술 · 정보) */
+  strengths?: string;
+  /** 처음에 골라 둘 추천 기술 */
+  skills?: string[];
+  /** 고를 수 있는 기술 후보 (비우면 base 직업의 후보) */
+  skillOptions?: string[];
 }

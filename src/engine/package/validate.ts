@@ -359,6 +359,28 @@ export function validateWorld(input: unknown): Issue[] {
     if (typeof v !== 'string') err(k, '글이어야 합니다.');
     else if (v.length > 2500) warn(k, `${v.length}자 — 2500자까지만 AI에게 전달됩니다.`);
   }
+  // ---- 직업 (v0.56)
+  const classIds = new Set<string>();
+  arr<NonNullable<WorldPackage['classes']>[number]>('classes', false).forEach((c, i) => {
+    const p = `classes[${i}]`;
+    if (!c || typeof c !== 'object') { err(p, '직업은 객체여야 합니다.'); return; }
+    if (!c.id || typeof c.id !== 'string') err(`${p}.id`, 'ID가 필요합니다.');
+    else if (classIds.has(c.id)) err(`${p}.id`, `직업 ID "${c.id}"가 겹칩니다.`);
+    else classIds.add(c.id);
+    if (!c.name || typeof c.name !== 'string' || !c.name.trim()) err(`${p}.name`, '이름이 필요합니다.');
+    const base = CLASSES[c.base];
+    if (!base) { err(`${p}.base`, `알 수 없는 규칙 직업 "${c.base}" (${Object.keys(CLASSES).join(', ')})`); return; }
+    for (const k of ['skills', 'skillOptions'] as const) {
+      const v = c[k];
+      if (v === undefined) continue;
+      if (!Array.isArray(v)) { err(`${p}.${k}`, '기술 ID 목록이어야 합니다.'); continue; }
+      v.forEach((sk, j) => { if (!SKILL_IDS.includes(sk as never)) err(`${p}.${k}[${j}]`, `알 수 없는 기술 "${sk}"`); });
+    }
+    if (c.skillOptions?.length && c.skillOptions.length < base.skillChoices) warn(`${p}.skillOptions`, `기술 후보가 ${base.skillChoices}개보다 적어 규칙 직업의 기본 후보를 씁니다.`);
+    const opts = c.skillOptions?.length && c.skillOptions.length >= base.skillChoices ? c.skillOptions : base.skillOptions;
+    if (c.skills?.some((sk) => !opts.includes(sk as never))) warn(`${p}.skills`, '추천 기술 중 후보에 없는 것은 무시됩니다.');
+    if ((c.skills?.length ?? 0) > base.skillChoices) warn(`${p}.skills`, `추천 기술은 ${base.skillChoices}개까지만 미리 골라집니다.`);
+  });
   // ---- 장면 (v0.47)
   const sceneIds = new Set<string>();
   arr<NonNullable<WorldPackage['scenes']>[number]>('scenes', false).forEach((sc, i) => {

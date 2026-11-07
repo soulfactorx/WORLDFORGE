@@ -539,3 +539,13 @@ img.zoomable { cursor: zoom-in; }
 .menu-pop label.file input[type='file'] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 label.file-btn { position: relative; display: inline-flex; flex-direction: row; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 1rem; }
 label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+/* 직업 편집 (v0.56) */
+.class-editor { display: flex; flex-direction: column; gap: 10px; }
+.class-editor .class-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--surface); }
+.class-editor .class-card > summary { cursor: pointer; padding: 2px 0; }
+.class-editor .class-card[open] > summary { margin-bottom: 8px; }
+.class-editor .class-card .skill-grid select { width: auto; padding: 2px 4px; }
+.class-editor .grow { flex: 1; min-width: 0; }
+.class-editor .row > label { flex: 1 1 200px; }
+.class-editor .skill-grid label { flex-direction: row; align-items: center; gap: 6px; }

@@ -1,3 +1,4 @@
+import { classLabel } from '../engine/classes';
 import { useEffect } from 'react';
 import type { CharacterSheet } from '../engine/character/sheet';
 import { XP_FOR_LEVEL } from '../engine/character/progression';
@@ -31,7 +32,7 @@ export function LevelUpDialog({ info, sheet, rs, onClose, onSheet }: { info: Ret
     <div className="modal-back" onClick={onClose}>
       <div className="levelup" role="dialog" aria-modal="true" aria-label="레벨업" onClick={(e) => e.stopPropagation()}>
         <p className="levelup-title">★ {sheet.level}레벨</p>
-        <p className="small muted">{rs(CLASSES[sheet.classId]?.name ?? '')} · 최대 HP {sheet.maxHp} (+{info.hpGain})</p>
+        <p className="small muted">{classLabel(undefined, sheet, rs)} · 최대 HP {sheet.maxHp} (+{info.hpGain})</p>
         {info.features.length > 0 && (
           <ul className="levelup-features">{info.features.map((f, i) => <li key={i}>{rs(f)}</li>)}</ul>
         )}

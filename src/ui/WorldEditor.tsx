@@ -11,6 +11,8 @@ import { PackExport, PackImport } from './PackDialog';
 import { ArcForms, BoardForms, ChoiceForms, ClockForms, EventForms, ItemForms, MonsterForms } from './WorldForms';
 import { DIFFICULTY_LABEL, encounterDifficulty, monsterTable, monstersOfWorld } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
+import { ClassEditor } from './ClassEditor';
+import { classesFor } from '../engine/classes';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import { type Belief, type Character, type Claim, type Fact, type Faction, type Location, type NpcRelationKind, QUEST_TYPES, type WorldPackage } from '../engine/schema';
 import { QUEST_TYPE_LABEL } from '../engine/scenario';
@@ -38,9 +40,9 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
+type Tab = 'basic' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
-  ['basic', '기본'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
+  ['basic', '기본'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
   ['encounters', '조우'], ['scenes', '장면'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
@@ -51,6 +53,7 @@ function tabForPath(path: string): Tab {
   if (/^locations\[\d+\]\.(shop|pickups)/.test(path) || /^characters\[\d+\]\.gives/.test(path) || path.startsWith('start.items')) return 'items';
   if (/^locations\[\d+\]\.board/.test(path)) return 'quests';
   if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style') || path.startsWith('overview') || path.startsWith('gmNotes')) return 'basic';
+  if (path.startsWith('classes')) return 'classes';
   if (path.startsWith('assets')) return 'images';
   if (path.startsWith('locations')) return 'locations';
   if (path.startsWith('characters')) return 'characters';
@@ -351,7 +354,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               })} /> 동료로 영입 가능</label>
               {c.companion && (
                 <>
-                  <Select label="직업" value={c.companion.classId} options={Object.values(CLASSES).map((x) => [x.id, x.name] as const)} onChange={(classId) => up({ companion: { ...c.companion!, classId } })} />
+                  <Select label="직업" value={c.companion.classId} options={Object.values(CLASSES).map((x) => { const wc = classesFor(w).find((k) => k.base === x.id); return [x.id, wc && wc.name !== x.name ? `${wc.name} (규칙: ${x.name})` : x.name] as const; })} onChange={(classId) => up({ companion: { ...c.companion!, classId } })} />
                   <Area label="동행 조건 (이 NPC가 스스로 판단하는 기준)" value={c.companion.joinCondition} onChange={(joinCondition) => up({ companion: { ...c.companion!, joinCondition } })} />
                   <div className="ability-grid">
                     {(['str', 'dex', 'con', 'int', 'wis', 'cha'] as const).map((k) => (
@@ -461,6 +464,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         </>
       )}
 
+      {tab === 'classes' && <ClassEditor world={w} onChange={(classes) => set({ classes })} />}
       {tab === 'scenes' && (
         <>
           <p className="muted small">

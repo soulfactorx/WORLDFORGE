@@ -25,6 +25,9 @@ export interface CharacterSheet {
   feats?: string[];
   /** 아직 고르지 않은 능력치 향상·특성 선택 (레벨 목록, 플레이어만) */
   pending?: number[];
+  /** 세계 직업 (v0.56): 보이는 이름. 규칙은 classId를 따른다 */
+  role?: string;
+  roleName?: string;
 }
 
 export type CheckSpec =
@@ -64,6 +67,8 @@ export interface CreationInput {
   method: AbilityMethod;
   abilities: Abilities;
   skills: SkillId[];
+  /** 세계 직업 (v0.56) */
+  role?: { id: string; name: string; skillOptions?: SkillId[] };
 }
 
 /** 캐릭터 생성 규칙 검증. 오류 메시지 목록을 반환한다 (빈 배열 = 유효). */
@@ -84,8 +89,9 @@ export function validateCreation(input: CreationInput): string[] {
   }
   const uniq = new Set(input.skills);
   if (uniq.size !== input.skills.length) errors.push('같은 기술을 중복 선택했습니다.');
-  if (input.skills.length !== cls.skillChoices) errors.push(`${cls.name}는 기술을 ${cls.skillChoices}개 선택해야 합니다.`);
-  if (input.skills.some((s) => !cls.skillOptions.includes(s))) errors.push(`${cls.name}가 선택할 수 없는 기술이 포함되어 있습니다.`);
+  if (input.skills.length !== cls.skillChoices) errors.push(`${input.role?.name ?? cls.name}: 기술을 ${cls.skillChoices}개 선택해야 합니다.`);
+  const opts = input.role?.skillOptions?.length ? input.role.skillOptions : cls.skillOptions;
+  if (input.skills.some((s) => !opts.includes(s))) errors.push(`${input.role ? `${input.role.name}:` : `${cls.name}가`} 선택할 수 없는 기술이 포함되어 있습니다.`);
   return errors;
 }
 
@@ -101,6 +107,7 @@ export function createCharacter(input: CreationInput): CharacterSheet {
     name: input.name, classId: cls.id, level: 1, abilities: { ...input.abilities },
     skillProficiencies: [...input.skills], saveProficiencies: [...cls.saves], maxHp, hp: maxHp,
     resources: classResources(cls.id, 1),
+    ...(input.role ? { role: input.role.id, roleName: input.role.name } : {}),
   };
 }
 

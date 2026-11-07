@@ -1,3 +1,4 @@
+import { classLabel } from '../engine/classes';
 import { useRs } from './reskin';
 import type { WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
@@ -90,7 +91,7 @@ export function CharacterPanel({ sheet, party = {}, onChoose, disabled, world, s
     <aside className="sheet">
       <div className="row">
         <b>{sheet.name}</b>
-        <span className="muted small">{rs(CLASSES[sheet.classId]?.name ?? '직업 없음')}{sheet.subclass && SUBCLASSES[sheet.subclass] ? ` (${rs(SUBCLASSES[sheet.subclass]!.name)})` : ''} {sheet.level}레벨 · 숙련 보너스 {sign(proficiencyBonus(sheet.level))}</span>
+        <span className="muted small">{classLabel(world, sheet, rs)}{sheet.subclass && SUBCLASSES[sheet.subclass] ? ` (${rs(SUBCLASSES[sheet.subclass]!.name)})` : ''} {sheet.level}레벨 · 숙련 보너스 {sign(proficiencyBonus(sheet.level))}</span>
         <span className="spacer" />
         <span>HP {sheet.hp}/{sheet.maxHp}</span>
       </div>
@@ -129,7 +130,7 @@ export function CharacterPanel({ sheet, party = {}, onChoose, disabled, world, s
           {Object.entries(party).map(([id, c]) => (
             <div key={id} className="row small">
               <b>{c.name}</b>
-              <span className="muted">{rs(CLASSES[c.classId]?.name ?? '')}{c.subclass && SUBCLASSES[c.subclass] ? ` (${rs(SUBCLASSES[c.subclass]!.name)})` : ''} {c.level}레벨</span>
+              <span className="muted">{classLabel(world, c, rs)}{c.subclass && SUBCLASSES[c.subclass] ? ` (${rs(SUBCLASSES[c.subclass]!.name)})` : ''} {c.level}레벨</span>
               <span className="spacer" />
               {Object.entries(c.resources ?? {}).map(([k, r]) => <span key={k} className="muted">{rs(RESOURCE_LABEL[k] ?? k)} {r.cur}/{r.max}</span>)}
               <span>HP {c.hp}/{c.maxHp}</span>

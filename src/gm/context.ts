@@ -8,6 +8,8 @@ import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
 import { epithetOf, knowsName } from '../engine/names';
 import { allTitles, rankOf, renownOf, renownTier } from '../engine/renown';
+import { classesFor, classLabel } from '../engine/classes';
+import { reskinner } from '../engine/genre';
 
 const dateLabel = (world: WorldPackage, minutes: number) => { const d = calendarDate(world, minutes); return d ? `${d.label}${d.countdown ? ` (${d.countdown})` : ''} ` : ''; };
 
@@ -101,12 +103,21 @@ function stayLines(state: GameState): string[] {
   return ['## 이 장소에 머문 시간 (엔진 확정)', n === 1 ? '이번이 이 장소에서의 첫 턴이다 (방금 도착했다).' : `이 장소에서 ${n}번째 턴이다.`, ''];
 }
 
+/** 주인공의 직업 (v0.56) — 장르에 맞는 역할로 이야기를 고른다. 규칙상 직업은 말하지 않는다 */
+export function playerLines(world: WorldPackage, state: GameState): string[] {
+  const sh = state.player.sheet;
+  const wc = classesFor(world).find((c) => (sh.role ? c.id === sh.role : c.base === sh.classId));
+  const desc = wc ? [wc.strengths && `잘하는 것: ${wc.strengths}`, wc.blurb].filter(Boolean).join(' — ') : '';
+  return ['## 주인공', `${sh.name} — ${classLabel(world, sh, reskinner(world))} ${sh.level}레벨${desc ? ` (${desc})` : ''}`, ''];
+}
+
 export function buildDirectorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => `- ${c.id}: ${c.appearance}`);
   return [
     ...worldBrief(world, true),
     ...sceneHeader(world, state), '',
     ...stayLines(state),
+    ...playerLines(world, state),
     '## 이동 가능한 곳', ...exits(world, state), '',
     '## 이 장소에 있는 인물', ...(npcs.length ? npcs : ['(없음)']), '',
     '## 플레이어와 동행 중인 동료', ...partyLines(world, state), '',
@@ -230,6 +241,7 @@ export function buildNarratorContext(world: WorldPackage, state: GameState): str
     '## 이동 가능한 곳', ...exits(world, state), '',
     '## 이 장소에 있는 인물', ...(npcs.length ? npcs : ['(없음)']), '',
     '## 동행 중인 동료', ...partyLines(world, state), '',
+    ...playerLines(world, state),
     '## 플레이어의 몸 상태', `HP ${state.player.sheet.hp}/${state.player.sheet.maxHp}${state.player.sheet.hp <= state.player.sheet.maxHp / 3 ? ' (심하게 다침)' : ''}`, '',
     ...worldMood(world, state),
     '## 플레이어가 알고 있는 것', ...playerKnowledge(world, state), '',
