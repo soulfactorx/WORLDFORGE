@@ -486,3 +486,10 @@ img.zoomable { cursor: zoom-in; }
 .card-gallery img, .card-gallery .asset-ph { width: 100%; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
 .card-gallery figcaption { font-size: .7rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-gallery select { width: 100%; font-size: .75rem; padding: 2px; }
+
+/* 출처 카드 (v0.53) */
+.sources-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sources-list li { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; border-bottom: 1px dashed var(--border); padding-bottom: 6px; overflow-wrap: anywhere; }
+.sources-list li > button { flex: none; }
+.move-cards { list-style: none; padding: 0; margin: 4px 0; }
+.move-cards li.ok { color: var(--accent); }

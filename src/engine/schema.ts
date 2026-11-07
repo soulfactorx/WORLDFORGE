@@ -23,8 +23,25 @@ export interface PackageManifest {
    * 이 브라우저에서 혼자 플레이할 수만 있고 패키지·세이브 내보내기가 막힌다.
    */
   private?: { source: string; note: string; /** 원본 카드 지문 (기기 간 이동용, v0.19) */ cardHash?: string };
+  /** 이 세계에 쓴 다른 사람의 카드 파일 (v0.53): 출처 관리·제거·기기 이동 확인 */
+  sources?: SourceCard[];
   /** 이 세계에 넣은 콘텐츠 패키지 (설계 v3 10장 · R7) */
   includes?: { id: string; version: string; type: 'character' | 'rules'; name: string }[];
+}
+
+/** 출처 카드 (v0.53): 세계에 들어간 카드 파일 하나와, 그 카드에서 온 것들 */
+export interface SourceCard {
+  /** 카드 지문 (SHA-256) — 기기 간 이동 때 같은 파일인지 확인한다 */
+  hash: string;
+  name: string;
+  creator?: string;
+  fileName?: string;
+  format?: string;
+  importedAt: string;
+  /** world = 이 카드로 세계 전체를 만듦 (뺄 수 없다) · import = 인물 탭에서 가져옴 */
+  via: 'world' | 'import';
+  /** 이 카드에서 온 것 (제거용) */
+  ids?: { characters: string[]; facts: string[]; claims: string[]; assets: string[] };
 }
 
 export interface Location {

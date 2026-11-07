@@ -31,6 +31,11 @@ export async function assetBlob(pkg: string, id: string): Promise<Blob | undefin
   return (await db.assets.get(assetKey(pkg, id)))?.blob;
 }
 
+/** 세계 이미지 지우기 (v0.53: 출처 카드를 뺀 뒤 저장할 때) */
+export async function deleteAssets(pkg: string, ids: string[]): Promise<void> {
+  if (ids.length) await db.assets.bulkDelete(ids.map((id) => assetKey(pkg, id)));
+}
+
 export async function assetCount(pkg: string): Promise<number> {
   return db.assets.where('pkg').equals(pkg).count();
 }

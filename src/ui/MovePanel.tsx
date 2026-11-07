@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
-import { readCharxBundle } from '../importers/bundle';
-import { exportMove, importMove, readMoveHeader } from '../storage/move';
+import { sourcesOf } from '../engine/sources';
+import { type CharxBundle, readCharxBundle } from '../importers/bundle';
+import { exportMove, importMove, missingCards, type MoveHeader, readMoveHeader } from '../storage/move';
 
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -28,7 +29,7 @@ export function MoveOutButton({ world, onMessage }: { world: WorldPackage; onMes
       const card = cardFile ? await readCharxBundle(cardFile, cardFile.name) : undefined;
       const blob = await exportMove(world, card, pass);
       download(blob, `worldforge-${world.manifest.id.replace(/[^\w.-]+/g, "_")}.wfmove`);
-      onMessage(`"${world.manifest.name}" 옮기기 파일을 만들었습니다 (${(blob.size / 1048576).toFixed(1)}MB). 다른 기기의 WORLDFORGE에서 "옮겨 온 세계 받기"로 이 파일과 ${byPass ? '정한 암호' : '원본 카드 파일'}를 함께 쓰세요.`);
+      onMessage(`"${world.manifest.name}" 옮기기 파일을 만들었습니다 (${(blob.size / 1048576).toFixed(1)}MB). 다른 기기의 WORLDFORGE에서 "옮겨 온 세계 받기"로 이 파일과 ${byPass ? '정한 암호' : `원본 카드 파일 ${sourcesOf(world).length || 1}장`}을 함께 쓰세요.`);
     } catch (e) { onMessage(`❌ ${(e as Error).message}`); } finally { setBusy(false); }
   }
   if (needsCard) {
@@ -44,21 +45,41 @@ export function MoveOutButton({ world, onMessage }: { world: WorldPackage; onMes
 /** 받기: 옮기기 파일 + 원본 카드 */
 export function MoveInPanel({ onDone, onClose }: { onDone: (world: WorldPackage) => void; onClose: () => void }) {
   const [move, setMove] = useState<File | null>(null);
-  const [info, setInfo] = useState<{ worldName: string; cardName: string; lock?: 'card' | 'pass' } | null>(null);
+  const [info, setInfo] = useState<{ worldName: string; cardName: string; lock?: 'card' | 'pass'; cards?: MoveHeader['cards'] } | null>(null);
+  const [cards, setCards] = useState<{ blob: File; name: string; bundle: CharxBundle }[]>([]);
   const [pass, setPass] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function pickMove(f: File) {
     setStatus('');
-    try { const h = await readMoveHeader(f); setMove(f); setInfo({ worldName: h.worldName, cardName: h.cardName, lock: h.lock }); }
+    try { const h = await readMoveHeader(f); setMove(f); setCards([]); setInfo({ worldName: h.worldName, cardName: h.cardName, lock: h.lock, ...(h.cards ? { cards: h.cards } : {}) }); }
     catch (e) { setStatus(`❌ ${(e as Error).message}`); }
   }
-  async function pickCard(card: File | null) {
+  /** 카드 파일 고르기 (여러 장): 지문을 읽어 필요한 카드인지 표시한다 (v0.53) */
+  async function addCards(files: File[]) {
+    setBusy(true);
+    try {
+      const got = [...cards];
+      for (const [i, f] of files.entries()) {
+        setStatus(`카드 읽는 중… (${i + 1}/${files.length}) ${f.name}`);
+        const bundle = await readCharxBundle(f, f.name);
+        if (!got.some((g) => g.bundle.fingerprint === bundle.fingerprint)) got.push({ blob: f, name: f.name, bundle });
+      }
+      setCards(got);
+      setStatus('');
+      // 예전 파일(카드 한 장, 목록 없음)은 고르자마자 받는다
+      if (!info?.cards?.length && got.length) await receive(got);
+    } catch (e) { setStatus(`❌ ${(e as Error).message}`); } finally { setBusy(false); }
+  }
+  const have = cards.map((c) => c.bundle.fingerprint);
+  const missing = info?.cards ? missingCards({ cards: info.cards } as MoveHeader, have) : [];
+  async function pickCard(card: File | null) { await receive(card ? [{ blob: card, name: card.name, bundle: await readCharxBundle(card, card.name) }] : null); }
+  async function receive(list: { blob: File; name: string; bundle: CharxBundle }[] | null) {
     if (!move) return;
     setBusy(true);
     try {
-      const r = await importMove(move, card, card?.name ?? '', (m, d, t) => setStatus(`${m}${d !== undefined ? ` ${d}/${t}` : ''}`), pass || undefined);
+      const r = await importMove(move, list, '', (m, d, t) => setStatus(`${m}${d !== undefined ? ` ${d}/${t}` : ''}`), pass || undefined);
       setStatus(`✓ "${r.world.manifest.name}"을(를) 받았습니다 — 이미지 ${r.images}장, 세이브 ${r.saves}개. 세이브 목록에서 이어하기를 누르세요.`);
       onDone(r.world);
     } catch (e) { setStatus(`❌ ${(e as Error).message}`); } finally { setBusy(false); }
@@ -82,10 +103,22 @@ export function MoveInPanel({ onDone, onClose }: { onDone: (world: WorldPackage)
       )}
       {info && info.lock !== 'pass' && (
         <>
-          <p className="small">세계: <b>{info.worldName}</b> · 필요한 카드: <b>{info.cardName}</b></p>
-          <label className="file">② 원본 카드 파일
-            <input type="file" accept=".charx,.png,.json,application/zip,image/png,application/json" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) pickCard(f); e.target.value = ''; }} />
+          <p className="small">세계: <b>{info.worldName}</b> · 필요한 카드 {info.cards?.length ?? 1}장</p>
+          {info.cards?.length ? (
+            <ul className="small move-cards">
+              {info.cards.map((c) => <li key={c.hash} className={have.includes(c.hash) ? 'ok' : ''}>{have.includes(c.hash) ? '✓' : '○'} <b>{c.name}</b>{c.fileName && <span className="muted"> ({c.fileName})</span>}</li>)}
+            </ul>
+          ) : <p className="small">필요한 카드: <b>{info.cardName}</b></p>}
+          <label className="file">② 원본 카드 파일{info.cards && info.cards.length > 1 ? ' (여러 장 한꺼번에 골라도 된다)' : ''}
+            <input type="file" multiple accept=".charx,.png,.json,application/zip,image/png,application/json" disabled={busy} onChange={(e) => { const fs = [...(e.target.files ?? [])]; if (fs.length) void addCards(fs); e.target.value = ''; }} />
           </label>
+          {info.cards?.length ? (
+            <div className="row">
+              {missing.length > 0 && <span className="small warn-text">빠진 카드 {missing.length}장 — 모든 원본 파일이 있어야 열린다</span>}
+              <span className="spacer" />
+              <button className="primary" disabled={busy || missing.length > 0} onClick={() => receive(cards)}>받기</button>
+            </div>
+          ) : null}
         </>
       )}
       {status && <p className="status small">{status}</p>}

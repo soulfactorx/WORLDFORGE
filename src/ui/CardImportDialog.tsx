@@ -16,6 +16,8 @@ export interface ImportedEntities {
   /** 카드의 이미지 (v0.52): 세계 이미지로 저장할 것 */
   assets?: AssetMeta[];
   images?: { id: string; read: () => Promise<Blob> }[];
+  /** 출처 카드 (v0.53) */
+  source?: { hash: string; name: string; creator?: string; fileName?: string; format?: string };
 }
 
 const PAGE = 40;
@@ -119,7 +121,8 @@ export function CardImportDialog({ world, onAdd, onClose, initialFile }: {
         if (!m) continue;
         try { const blob = await images[metas.indexOf(m)]!.read(); const url = await portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type || m.mime); if (url) c.portrait = url; } catch { /* 없이 */ }
       }
-      onAdd({ characters: ents.characters, facts: ents.facts, claims: ents.claims, beliefs: ents.beliefs, cardName: bundle.card.name, assets: metas, images });
+      onAdd({ characters: ents.characters, facts: ents.facts, claims: ents.claims, beliefs: ents.beliefs, cardName: bundle.card.name, assets: metas, images,
+        source: { hash: bundle.fingerprint, name: bundle.card.name, ...(bundle.card.creator ? { creator: bundle.card.creator } : {}), fileName: bundle.fileName, format: bundle.card.format } });
     } catch (e) {
       setError((e as Error).message);
     } finally { setBusy(''); }

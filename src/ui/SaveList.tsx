@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { sourcesOf } from '../engine/sources';
 import { endingsSeen } from './collection';
 import { useState } from 'react';
 import type { CharacterSheet } from '../engine/character/sheet';
@@ -136,6 +137,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
         {packages?.map((p) => (
           <li key={packageKey(p.world)}>
             <span>{p.world.manifest.name} <span className="muted small">v{p.world.manifest.version} · {p.world.manifest.id}{p.builtin ? ' · 내장' : ''}</span>
+              {sourcesOf(p.world).length > 0 && <span className="need-badge" title={sourcesOf(p.world).map((x) => x.name).join(' · ')}>🔒 출처 카드 {sourcesOf(p.world).length}장</span>}
               {!p.builtin && (() => { const n = imageNeeds(p.world).length; return n > 0 && <span className="need-badge" title="진짜 이미지가 없는 인물·장소 — 편집 → 이미지 탭, 또는 내 기본 이미지에 추천 파일 이름으로 올리면 자동으로 붙습니다">🖼 이미지 부족 {n}</span>; })()}</span>
             <span className="row">
               {p.world.manifest.private

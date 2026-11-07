@@ -63,3 +63,35 @@ describe('직접 만든 성인 등급 세계 (암호로 옮기기)', () => {
     expect((await assetBlob('me.adult', 'img1'))!.size).toBe(3);
   });
 });
+
+describe('여러 카드로 만든 세계 옮기기 (v0.53)', () => {
+  it('기록된 모든 카드 파일이 있어야 열리고, 이미지는 각 카드에서 다시 읽는다', async () => {
+    const c1 = makeCharx(200, 3);
+    const c2 = makeCharx(400, 3, { lore: [{ comment: '둘째', content: '두 번째 카드' }] });
+    const b1 = await readCharxBundle(c1, 'one.charx');
+    const b2 = await readCharxBundle(c2, 'two.charx');
+    expect(b1.fingerprint).not.toBe(b2.fingerprint);
+    const world: WorldPackage = {
+      ...blankWorld(),
+      manifest: { ...blankWorld().manifest, id: 'multi.move', private: { source: '하나 · 둘', note: 'x', cardHash: b1.fingerprint },
+        sources: [
+          { hash: b1.fingerprint, name: '하나', fileName: 'one.charx', importedAt: '2026-01-01', via: 'import', ids: { characters: [], facts: [], claims: [], assets: ['x1'] } },
+          { hash: b2.fingerprint, name: '둘', fileName: 'two.charx', importedAt: '2026-01-02', via: 'import', ids: { characters: [], facts: [], claims: [], assets: ['x2'] } },
+        ] },
+      assets: [
+        { id: 'x1', name: b1.assets[1]!.name, kind: 'other', tags: [], mime: b1.assets[1]!.mime, size: b1.assets[1]!.size },
+        { id: 'x2', name: b2.assets[1]!.name, kind: 'other', tags: [], mime: b2.assets[1]!.mime, size: b2.assets[1]!.size },
+      ],
+    };
+    const file = await exportMove(world);
+    const h = await readMoveHeader(file);
+    expect(h.cards?.map((c) => c.name)).toEqual(['하나', '둘']);
+    await Promise.all([db.packages.clear(), db.assets.clear()]);
+    // 한 장만 있으면 빠진 카드를 알려 준다
+    await expect(importMove(file, [{ blob: c1, name: 'one.charx' }], '')).rejects.toThrow('"둘"');
+    const r = await importMove(file, [{ blob: c2, name: 'two.charx' }, { blob: c1, name: 'one.charx' }], '');
+    expect(r.images).toBe(2);
+    expect((await assetBlob('multi.move', 'x1'))!.size).toBe(b1.assets[1]!.size);
+    expect((await assetBlob('multi.move', 'x2'))!.size).toBe(b2.assets[1]!.size);
+  });
+});

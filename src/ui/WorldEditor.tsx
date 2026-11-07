@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { SKILL_IDS } from '../engine/character/rules';
 import { SceneForms } from './SceneForms';
-import { storeAssets } from '../storage/assets';
+import { deleteAssets, storeAssets } from '../storage/assets';
+import { addSource, removeSource, sourcesOf } from '../engine/sources';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
@@ -74,6 +75,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
   const [questView, setQuestView] = useState<'form' | 'json'>('form');
   const [sceneView, setSceneView] = useState<'form' | 'json'>('form');
+  const [pruneOnSave, setPruneOnSave] = useState<string[]>([]);
   const [sceneStage, setSceneStage] = useState('');
   const [sceneRequest, setSceneRequest] = useState('');
   async function genScenes() {
@@ -118,6 +120,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   async function save() {
     try {
       await savePackage(w, 'created');
+      // 뺀 출처 카드의 이미지 파일은 저장할 때 지운다 (저장하지 않고 닫으면 그대로)
+      if (pruneOnSave.length) { await deleteAssets(w.manifest.id, pruneOnSave.filter((id) => !(w.assets ?? []).some((a) => a.id === id))); setPruneOnSave([]); }
       setApproved(true);
       setStatus(`저장했습니다 (${w.manifest.id}@${w.manifest.version}).${hasErrors(issues) ? ' 오류를 고쳐야 플레이할 수 있습니다.' : ''}`);
     } catch (e) {
@@ -159,6 +163,32 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         </div>
       )}
       {w.manifest.private && <div className="private-banner">🔒 {w.manifest.private.note}<br /><span className="muted">원작: {w.manifest.private.source}</span></div>}
+      {tab === 'basic' && sourcesOf(w).length > 0 && (
+        <fieldset className="sources-box">
+          <legend>출처 카드 {sourcesOf(w).length}장 — 이 세계에 쓴 다른 사람의 카드 파일</legend>
+          <p className="small muted">다른 기기로 옮길 때 받는 기기에서 <b>이 카드 파일이 모두</b> 있어야 열립니다. 인물 탭에서 가져온 카드는 그 카드에서 온 인물·지식·이미지를 한꺼번에 뺄 수 있습니다.</p>
+          <ul className="sources-list">
+            {sourcesOf(w).map((s) => (
+              <li key={s.hash}>
+                <span><b>{s.name}</b>{s.creator && <span className="muted"> · 제작 {s.creator}</span>}
+                  <br /><span className="small muted">{s.fileName ?? '(파일 이름 기록 없음)'}{s.format ? ` · ${s.format.toUpperCase()}` : ''}{s.importedAt ? ` · ${new Date(s.importedAt).toLocaleDateString()}` : ''} · 지문 {s.hash.slice(0, 10)}…
+                  {' · '}{s.via === 'world' ? '이 카드로 세계 전체를 만듦' : `인물 ${s.ids?.characters.length ?? 0} · 지식 ${s.ids?.claims.length ?? 0} · 이미지 ${s.ids?.assets.length ?? 0}`}</span></span>
+                {s.via === 'import' && (
+                  <button type="button" className="small" onClick={() => {
+                    if (!confirm(`"${s.name}"에서 온 인물 ${s.ids?.characters.length ?? 0}명·지식 ${s.ids?.claims.length ?? 0}개·이미지 ${s.ids?.assets.length ?? 0}장을 이 세계에서 뺄까요? 이 인물을 쓰는 임무·장면 자리는 비워집니다. 저장해야 확정됩니다.`)) return;
+                    try {
+                      const r = removeSource(w, s.hash);
+                      setW(r.world);
+                      setPruneOnSave((p) => [...p, ...(s.ids?.assets ?? [])]);
+                      setStatus(`"${s.name}"을(를) 뺐습니다 — 인물 ${r.removed.characters} · 지식 ${r.removed.claims} · 믿음 ${r.removed.beliefs} · 이미지 ${r.removed.assets}.${r.unlocked ? ' 남은 출처 카드가 없어 개인용 잠금을 풀었습니다.' : ''} 저장해야 확정되고, 이미지 파일도 그때 지워집니다.`);
+                    } catch (e) { setStatus(`❌ ${(e as Error).message}`); }
+                  }}>이 카드 빼기</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </fieldset>
+      )}
       <IssueList issues={issues} onPick={(p) => setTab(tabForPath(p))} limit={8} />
       {(() => { const nd = imageNeeds(w); return nd.length > 0 && tab !== 'images' && (
         <p className="small">🖼 진짜 이미지가 없는 인물 {nd.filter((x) => x.kind === 'character').length}명 · 장소 {nd.filter((x) => x.kind === 'location').length}곳 (앱 내장 그림으로 대신하는 중)
@@ -267,7 +297,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           // 카드로 새로 만드는 세계라면 이름도 카드에서 가져온다
           const named = initialCard && w.manifest.name === '새 세계' && r.cardName ? { ...w.manifest, name: r.cardName } : w.manifest;
           // 다른 사람의 카드로 만든 인물이 들어간 세계는 개인용이 된다 (내보내기 불가)
-          const manifest = { ...named, private: named.private ?? { source: r.cardName ?? '캐릭터 카드', note: PRIVATE_NOTE } };
+          // 출처 카드 기록 (v0.53): 이 카드에서 온 인물·지식·이미지 — 나중에 이 카드만 뺄 수 있다
+          const recorded = r.source ? addSource({ ...w, manifest: named }, { ...r.source, importedAt: new Date().toISOString(), via: 'import',
+            ids: { characters: r.characters.map((c) => c.id), facts: r.facts.map((f) => f.id), claims: r.claims.map((c) => c.id), assets: newAssets.map((a) => a.id) } }).manifest : named;
+          const names = sourcesOf({ ...w, manifest: recorded }).map((s) => s.name);
+          const manifest = { ...recorded, private: { ...(named.private ?? { note: PRIVATE_NOTE }), source: names.join(' · ') || (r.cardName ?? '캐릭터 카드'), ...(named.private?.cardHash ? {} : r.source ? { cardHash: r.source.hash } : {}) } };
           set({ manifest, characters: [...w.characters, ...r.characters], facts: [...w.facts, ...r.facts], claims: [...w.claims, ...r.claims], beliefs: [...w.beliefs, ...r.beliefs], ...(newAssets.length ? { assets: [...(w.assets ?? []), ...newAssets] } : {}) });
           setImporting(false);
           const imgNote = stored ? ` · 이미지 ${stored.toLocaleString()}장 (인물에 붙은 것 ${newAssets.filter((a) => a.characterId).length}장)` : '';
