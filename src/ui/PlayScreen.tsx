@@ -109,7 +109,46 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     setNextSeq((events.at(-1)?.seq ?? -1) + 1);
   }
   useEffect(() => { reload(); return () => abort.current?.abort(); }, [saveId]);
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }); }, [state?.log.length, streaming]);
+  // 자동 스크롤 (v0.51.1): 맨 아래를 보고 있을 때만 따라간다. 위로 올리면 멈추고 "↓ 새 글" 버튼으로 돌아온다.
+  // 글이 길어질 때마다 끌어내리지 않으므로 AI가 쓰는 동안에도 마음대로 스크롤할 수 있다.
+  const logRef = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
+  const [behind, setBehind] = useState(false);
+  const scroller = (): HTMLElement => {
+    const el = logRef.current;
+    if (el && el.scrollHeight > el.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(el).overflowY)) return el;
+    return (document.scrollingElement ?? document.documentElement) as HTMLElement;
+  };
+  const toBottom = () => { const s = scroller(); s.scrollTop = s.scrollHeight; };
+  const followNow = () => { follow.current = true; setBehind(false); toBottom(); };
+  const touching = useRef(false);
+  useEffect(() => {
+    // 맨 아래에 닿으면 다시 따라가고, 충분히 위에 있으면 멈춘다 (그 사이는 그대로)
+    const onScroll = () => {
+      const s = scroller(); const d = s.scrollHeight - s.scrollTop - s.clientHeight;
+      if (d < 12) { follow.current = true; setBehind(false); } else if (d > 120) follow.current = false;
+    };
+    // 사용자의 손길을 먼저 본다: 새 글이 스크롤 이벤트보다 먼저 와도 끌어내리지 않게
+    const stop = () => { follow.current = false; };
+    const onWheel = (e: WheelEvent) => { if (e.deltaY < 0) stop(); };
+    const onKey = (e: KeyboardEvent) => { if (['PageUp', 'ArrowUp', 'Home'].includes(e.key) && !(e.target as HTMLElement)?.closest?.('textarea, input, select')) stop(); };
+    const onTouchStart = () => { touching.current = true; };
+    const onTouchEnd = () => { touching.current = false; onScroll(); };
+    const el = logRef.current;
+    el?.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      el?.removeEventListener('scroll', onScroll); window.removeEventListener('scroll', onScroll); window.removeEventListener('wheel', onWheel); window.removeEventListener('keydown', onKey);
+      window.removeEventListener('touchstart', onTouchStart); window.removeEventListener('touchend', onTouchEnd); window.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [!!state, !!logRef.current]);
+  // 손가락이 화면에 닿아 있는 동안은 절대 끌어내리지 않는다
+  useEffect(() => { if (follow.current && !touching.current) toBottom(); else if (!follow.current) setBehind(true); }, [state?.log.length, streaming]);
 
   // 연출 (설계 v3 R10): 새로 생긴 기록에 효과음·음성, 장면에 맞는 음악
   const seenLog = useRef<number | null>(null);
@@ -156,7 +195,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (!state || !text || streaming !== null) return;
     const turnUse = choice !== undefined ? choiceUse : use || undefined;
     if (choice === undefined) setUse('');
-    setRewards([]); setShowRecap(false);
+    setRewards([]); setShowRecap(false); followNow();
     if (choice === undefined) setInput(''); setError(''); setStreaming(''); setStage('AI에게 보내는 중'); setStartedAt(Date.now());
     abort.current = new AbortController();
     try {
@@ -329,7 +368,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         </div>
       )}
       </div>
-      <div className="log">
+      <div className="log" ref={logRef}>
         {showRecap && <RecapCard r={recap(world, state)} rs={rs} onClose={() => setShowRecap(false)} onSheet={() => { setShowRecap(false); setPanel('sheet'); }} />}
         {state.log.map((e, i) => (
           <div key={i} className={`entry-wrap k-${e.kind}`}>
@@ -377,6 +416,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         {streaming !== null && <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>}
         <div ref={bottom} />
       </div>
+      {behind && <button type="button" className="jump-new" onClick={followNow}>↓ 새 글{streaming !== null ? ' (쓰는 중)' : ''}</button>}
       {streaming !== null && (
         <div className="ai-status" role="status" aria-live="polite">
           <span className="spinner" /> <span>{stage || 'AI 처리 중'}… {Math.max(0, Math.floor((Date.now() - startedAt) / 1000))}초</span>
