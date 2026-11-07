@@ -15,7 +15,7 @@ const lore = [
   { comment: '세계관', keys: ['제국'], content: '## 제국\n발크제파스 제국은 대륙 서쪽에 있다.\n## 황궁\n황궁에는 장미 정원이 있다.' },
   { comment: '상태창 출력 규칙', keys: [], content: 'Absolute rule: end every response with a status window.' },
 ];
-const images = ['Hedwig(F)', 'Hedwig_smile', 'Karenya(F)', 'Karenya(M)', 'garden_rain', 'palace_map', '???'];
+const images = ['Hedwig(F)', 'Hedwig_smile', 'Karenya(F)', 'Karenya(M)', 'garden_rain', 'palace_map', 'mystery_lady'];
 
 const draft: CardWorldDraft = {
   name: '파멸 예정 황궁', premise: '요약', style: '건조하고 우아한 3인칭 궁정 문체.', start_location: 'bedchamber', opening_scene: '비단 이불 속에서 눈을 뜬다.',
@@ -124,7 +124,7 @@ describe('cardToWorld', () => {
     expect((ev[1] as { text: string }).text).toContain('정원을 쓸고');
     const ev2 = startEvents(w, legacyCharacter('나'), 1, 'start/karenya');
     expect(ev2.filter((e) => e.type === 'knowledge_revealed').length).toBe(2);
-    expect(w.assets!.find((a) => a.name === '???')).toMatchObject({ kind: 'character', characterId: 'npc/hedwig', tags: ['angry'] });
+    expect(w.assets!.find((a) => a.name === 'mystery_lady')).toMatchObject({ kind: 'character', characterId: 'npc/hedwig', tags: ['angry'] });
   });
 });
 
