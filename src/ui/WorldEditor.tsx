@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { SKILL_IDS } from '../engine/character/rules';
 import { SceneForms } from './SceneForms';
+import { PortraitPicker } from './PortraitPicker';
 import { deleteAssets, storeAssets } from '../storage/assets';
 import { addSource, removeSource, sourcesOf } from '../engine/sources';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
@@ -323,7 +324,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <Select label="성별 (이미지 고르기용)" value={c.gender ?? ''} options={[['', '정하지 않음'], ['F', '여성'], ['M', '남성']] as const} onChange={(g) => up({ gender: g || undefined })} />
               <Area label="배경 (이 인물만 아는 과거)" value={c.background} onChange={(background) => up({ background: background || undefined })} rows={3} />
               <Area label="첫 만남의 말 (참고)" value={c.greeting} onChange={(greeting) => up({ greeting: greeting || undefined })} rows={2} />
-              {c.portrait && <div className="row"><ZoomImg className="portrait" src={c.portrait} alt={c.name} /><button type="button" onClick={() => up({ portrait: undefined })}>초상화 지우기</button></div>}
+              <PortraitPicker c={c} w={w} onChange={(portrait) => up({ portrait })} />
               {c.source && <p className="muted small">출처: {c.source.format.toUpperCase()} "{c.source.name}"{c.source.creator && ` · 제작 ${c.source.creator}`} · 가져온 날 {c.source.importedAt.slice(0, 10)}</p>}
               <Select label="있는 곳" value={c.locationId} options={locOptions} onChange={(locationId) => up({ locationId })} />
               <JsonField label="목표 (이 인물이 스스로 이루려는 일 — 시작하면 날 수가 지나 이뤄지고, 막는 조건이면 꺾인다)" value={c.goals ?? []} onChange={(goals) => up({ goals: Array.isArray(goals) && goals.length ? goals : undefined })} rows={4}

@@ -493,3 +493,11 @@ img.zoomable { cursor: zoom-in; }
 .sources-list li > button { flex: none; }
 .move-cards { list-style: none; padding: 0; margin: 4px 0; }
 .move-cards li.ok { color: var(--accent); }
+
+/* 초상화 바꾸기 (v0.53.1) */
+.portrait-pick .row { align-items: center; }
+.portrait-pick .asset-ph.portrait { width: 72px; height: 72px; }
+.portrait-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; margin-top: 6px; }
+.portrait-grid button { padding: 0; border-radius: 6px; overflow: hidden; aspect-ratio: 1; }
+.portrait-grid button.mine { outline: 2px solid var(--accent); }
+.portrait-grid img, .portrait-grid .asset-ph { width: 100%; height: 100%; object-fit: cover; display: block; }
