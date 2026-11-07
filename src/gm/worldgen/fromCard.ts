@@ -387,7 +387,7 @@ export async function cardToWorld(
   if (opts.classifyImages && assets.some((a) => a.kind === 'other')) {
     try {
       assets = await classifyAssetsAI(llm, assets, ents.characters.map((c, i) => ({ id: c.id, name: c.name, aliases: targets[i]!.aliases })), world.locations.map((l) => ({ id: l.id, name: l.name })),
-        (done, total) => onStage(`AI가 이미지 이름 분류 중… ${done}/${total}`, 60 + Math.round((done / Math.max(1, total)) * 10), 70), signal);
+        (done, total, info) => onStage(`AI가 이미지 이름 분류 중… 이미지 ${done.toLocaleString()}/${total.toLocaleString()}${info ? ` · ${info}` : ''}`, 60 + Math.round((done / Math.max(1, total)) * 10), 70), signal);
     } catch (e) {
       if (signal?.aborted) throw e;
       notes.push(`이미지 AI 분류에 실패해 이름 규칙으로만 연결했습니다: ${(e as Error).message}`);
