@@ -50,7 +50,7 @@ function tabForPath(path: string): Tab {
   // 세부 경로가 먼저 (장소·인물 안의 상점·의뢰판·건넬 것)
   if (/^locations\[\d+\]\.(shop|pickups)/.test(path) || /^characters\[\d+\]\.gives/.test(path) || path.startsWith('start.items')) return 'items';
   if (/^locations\[\d+\]\.board/.test(path)) return 'quests';
-  if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style')) return 'basic';
+  if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style') || path.startsWith('overview') || path.startsWith('gmNotes')) return 'basic';
   if (path.startsWith('assets')) return 'images';
   if (path.startsWith('locations')) return 'locations';
   if (path.startsWith('characters')) return 'characters';
@@ -245,6 +245,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               </div>
             )}
           </fieldset>
+          <Area label="세계 개요 — 플레이어도 아는 배경·분위기·규칙 (모든 AI가 참고하고, 수첩 맨 위 '세계 소개'에 보인다 · 2500자까지)" value={w.overview} rows={6} onChange={(overview) => set({ overview: overview || undefined })} />
+          <Area label="GM 메모 — 숨은 설정·연출 지침 (Director만 참고하고 플레이어에게 직접 말하지 않는다 · 2500자까지)" value={w.gmNotes} rows={4} onChange={(gmNotes) => set({ gmNotes: gmNotes || undefined })} />
           <Area label="서술 문체 참고 (선택, 1500자까지)" value={w.style} rows={4} onChange={(style) => set({ style: style || undefined })} />
           <JsonField label="시작 방식 선택지 (선택: [{ id, name, description, locationId, openingScene, knows }])" value={w.starts ?? []} rows={8} onChange={(starts) => set({ starts: starts.length ? starts : undefined })} />
         </div>

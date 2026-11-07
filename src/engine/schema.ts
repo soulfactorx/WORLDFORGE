@@ -815,6 +815,10 @@ export interface WorldPackage {
   calendar?: Calendar;
   /** 서술 문체 지침 (v0.13). 서술 AI에게 참고로 준다 */
   style?: string;
+  /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경·분위기·규칙. 모든 AI가 참고하고 수첩 "세계 소개"에 보인다 */
+  overview?: string;
+  /** GM 메모 (v0.54): 연출 지침·숨은 설정. Director만 참고하고 플레이어에게 직접 말하지 않는다 */
+  gmNotes?: string;
   /** 이미지 에셋 목록 (v0.13) */
   assets?: AssetMeta[];
 }

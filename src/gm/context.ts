@@ -56,6 +56,17 @@ function canonBlock(world: WorldPackage, state: GameState, id: EntityId, indent 
   ];
 }
 
+/** 세계 개요 (v0.54) — 모든 AI가 참고. withNotes면 GM 메모(비공개)도 */
+export function worldBrief(world: WorldPackage, withNotes = false, limit = 2500): string[] {
+  const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+  const o = world.overview?.trim();
+  const g = withNotes ? world.gmNotes?.trim() : '';
+  return [
+    ...(o ? [`## 이 세계 (${world.manifest.name}) — 개요 (플레이어도 아는 배경)`, cut(o, limit), ''] : []),
+    ...(g ? ['## GM 메모 (플레이어는 모름 — 연출에 쓰되 직접 밝히지 않는다)', cut(g, limit), ''] : []),
+  ];
+}
+
 function sceneHeader(world: WorldPackage, state: GameState): string[] {
   const loc = world.locations.find((l) => l.id === state.player.locationId);
   if (!loc) throw new Error(`unknown location: ${state.player.locationId}`);
@@ -93,6 +104,7 @@ function stayLines(state: GameState): string[] {
 export function buildDirectorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => `- ${c.id}: ${c.appearance}`);
   return [
+    ...worldBrief(world, true),
     ...sceneHeader(world, state), '',
     ...stayLines(state),
     '## 이동 가능한 곳', ...exits(world, state), '',
@@ -138,6 +150,8 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
   }
   const loc = world.locations.find((l) => l.id === state.player.locationId);
   return [
+    // 세계의 공개 배경은 이 세계에 사는 인물이라면 안다 (v0.54)
+    ...worldBrief(world, false, 1200),
     `## 너는 ${npc.name} [${npc.id}]`,
     `외형: ${npc.appearance}`,
     `성격: ${npc.personality}`,
@@ -210,6 +224,7 @@ export function buildNarratorContext(world: WorldPackage, state: GameState): str
     ...canonBlock(world, state, c.id),
   ].join('\n'));
   return [
+    ...worldBrief(world),
     ...sceneHeader(world, state),
     ...canonBlock(world, state, state.player.locationId, ''), '',
     '## 이동 가능한 곳', ...exits(world, state), '',

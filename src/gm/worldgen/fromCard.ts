@@ -47,6 +47,8 @@ export interface CardWorldDraft {
   timeline: { key: string; when: string; title: string; statement: string; status: 'past' | 'ongoing' | 'future'; secrecy: number; protected_topic: string; known_by: string[]; rumor_by: string[] }[];
   starts: { key: string; name: string; description: string; location: string; opening_scene: string; knows: string[] }[];
   plot_request: string;
+  /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경 */
+  overview?: string;
   genre?: string;
   calendar: { era: string; start_year: number; start_month: number; start_day: number; countdown_label: string; countdown_year: number; countdown_month: number; countdown_day: number };
 }
@@ -88,6 +90,7 @@ export const CARD_WORLD_SCHEMA = obj({
     knows: { type: 'array', items: str, description: '이 방식으로 시작하면 플레이어가 처음부터 아는 timeline key (예: 원작을 읽은 빙의자라면 앞으로의 사건)' },
   })),
   plot_request: { type: 'string', description: '임무·결말 설계자에게 줄 원작 줄거리·갈등·결말 방향 요약 (10줄 이내)' },
+  overview: { type: 'string', description: '플레이어도 알아도 되는 세계 개요 3~6문장 (한국어): 시대·지역·분위기·사회의 큰 규칙. 원작의 비밀·반전은 쓰지 않는다' },
   genre: { type: 'string', enum: GENRES.map((g) => g.id), description: `원작에 가장 가까운 장르: ${GENRES.map((g) => `${g.id}=${g.label}(${g.description})`).join(', ')}` },
   calendar: obj({
     era: { type: 'string', description: '연호 (예: 제국력). 없으면 ""' },
@@ -337,6 +340,8 @@ export async function cardToWorld(
     characters: ents.characters,
     claims: [...world.claims, ...ents.claims],
     facts: [...world.facts, ...ents.facts],
+    ...(d.overview?.trim() ? { overview: cut(d.overview.trim(), 2500) } : {}),
+    ...(d.plot_request?.trim() ? { gmNotes: cut(d.plot_request.trim(), 2500) } : {}),
     beliefs,
     ...(starts.length ? { starts } : {}),
     ...(d.style?.trim() ? { style: cut(d.style.trim(), 1500) } : {}),

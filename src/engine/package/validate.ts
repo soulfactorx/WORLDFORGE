@@ -352,6 +352,13 @@ export function validateWorld(input: unknown): Issue[] {
     text(b.message, `${p}.message`, false);
     if (b.resolveFlag && !flagIds.has(b.resolveFlag)) err(`${p}.resolveFlag`, `선언되지 않은 플래그 "${b.resolveFlag}" — 플래그 목록에 추가하세요 (GM이 세울 수 있어야 사건이 닫힙니다).`);
   });
+  // ---- 세계 개요·GM 메모 (v0.54)
+  for (const k of ['overview', 'gmNotes'] as const) {
+    const v = (input as Record<string, unknown>)[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'string') err(k, '글이어야 합니다.');
+    else if (v.length > 2500) warn(k, `${v.length}자 — 2500자까지만 AI에게 전달됩니다.`);
+  }
   // ---- 장면 (v0.47)
   const sceneIds = new Set<string>();
   arr<NonNullable<WorldPackage['scenes']>[number]>('scenes', false).forEach((sc, i) => {

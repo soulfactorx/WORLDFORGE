@@ -1,4 +1,5 @@
 import { ZoomImg } from './Lightbox';
+import { RichText } from './RichText';
 import { openQuestions, todoThree } from '../engine/digest';
 import { knowledgeOf } from '../engine/knowledge/knowledge';
 import { AXES, AXIS_NAMES, HOSTILE_STAGES, loyaltyOf, OBEY_LOYALTY, relationshipOf, reputationLabel, reputationOf, stageFor } from '../engine/relationship';
@@ -36,6 +37,12 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
   const vars = (world.vars ?? []).filter((v) => v.visible);
   return (
     <aside className="sheet">
+      {world.overview?.trim() && (
+        <details className="world-intro">
+          <summary><b>🌍 세계 소개 — {world.manifest.name}</b></summary>
+          <RichText text={world.overview} />
+        </details>
+      )}
       {todoRows.length > 0 && (
         <>
           <b>지금 할 일</b>

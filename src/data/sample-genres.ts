@@ -149,3 +149,7 @@ export const romanceSample: WorldPackage = {
     art('ballroom', 3, { locationId: 'loc/ballroom' }, '연회장'), art('garden', 4, { locationId: 'loc/garden' }, '정원'), art('study', 5, { locationId: 'loc/library' }, '서재'),
   ],
 };
+
+// 세계 개요 (v0.54)
+wuxiaSample.overview = '강호의 작은 현성. 청운검문은 협의를 중시하는 정파지만, 요즘 장문인이 병으로 누웠다는 소문에 기세가 꺾였다. 죽림 산길은 흑풍채 산적들이 막고 통행세를 뜯는다. 플레이어는 현성 어귀의 청운객잔에서 깨어난 낯선 이다.';
+romanceSample.overview = '수도 공작저의 무도회. 젊은 공작 카시안은 몇 해 전 일방적으로 파혼한 냉혈한이라는 소문이 따라다니고, 사교계의 꽃 엘레노어는 그를 바라본다. 플레이어는 초대장을 손에 든 채 샹들리에 아래에서 눈을 뜬다.';

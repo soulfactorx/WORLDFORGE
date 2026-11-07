@@ -28,6 +28,8 @@ export interface DraftCond { op: 'all' | 'any'; items: DraftAtom[] }
 export interface WorldDraft {
   name: string;
   premise: string;
+  /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경 */
+  overview?: string;
   opening_scene: string;
   start_location: string;
   locations: { key: string; name: string; description: string; connections: string[]; improvisation: 'none' | 'minor' | 'free' }[];
@@ -91,7 +93,8 @@ const COND_SCHEMA = obj({
 });
 
 export const WORLD_DRAFT_SCHEMA = obj({
-  name: str, premise: { type: 'string', description: '제작자용 한 문단 요약' }, opening_scene: { type: 'string', description: '플레이어가 깨어나는 첫 장면 (2인칭, 세계 설명 금지)' },
+  name: str, premise: { type: 'string', description: '제작자용 한 문단 요약 (숨은 진실 포함 — GM 메모가 된다)' },
+  overview: { type: 'string', description: '플레이어도 알아도 되는 세계 개요 3~6문장: 시대·지역·분위기·사회의 큰 규칙·지금 벌어지는 일. 비밀·진실은 쓰지 않는다' }, opening_scene: { type: 'string', description: '플레이어가 깨어나는 첫 장면 (2인칭, 세계 설명 금지)' },
   start_location: str,
   locations: arr(obj({ key: { type: 'string', description: '영문 소문자 슬러그' }, name: str, description: { type: 'string', description: '감각으로 알 수 있는 것만' }, connections: arr(str), improvisation: IMPROV })),
   characters: arr(obj({
@@ -417,6 +420,8 @@ export function worldFromDraft(raw: WorldDraft, opts: { id: string; contentRatin
     locations, characters, facts, claims, beliefs, encounters: [], quests: [], flags: [], endings: [],
     ...(factions.length ? { factions } : {}), ...(relations.length ? { relations } : {}),
     start: { locationId: startId, openingScene: d.opening_scene || '낯선 곳에서 눈을 뜬다.' },
+    ...(d.overview?.trim() ? { overview: d.overview.trim().slice(0, 2500) } : {}),
+    ...(d.premise?.trim() ? { gmNotes: d.premise.trim().slice(0, 2500) } : {}),
   };
   return { world, notes };
 }
