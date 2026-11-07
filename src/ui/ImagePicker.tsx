@@ -122,7 +122,7 @@ export function ImagePicker({ label, value, w, onChange }: { label: string; valu
         {value && <AssetImage pkg={w.manifest.id} id={value} alt={label} className="img-pick-thumb" zoom />}
         <span className="img-pick-name">{value ? cur?.name ?? value : <span className="muted">(그림 없음)</span>}</span>
         <button type="button" className="small" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{open ? '닫기' : value ? '바꾸기' : '🔍 고르기'}</button>
-        {value && <button type="button" className="small" onClick={() => onChange(undefined)} title="그림 빼기">✕</button>}
+        {value && <button type="button" className="small" onClick={() => onChange(undefined)} title="그림 빼기">빼기</button>}
       </span>
       {open && <ImageSearchGrid w={w} value={value} onPick={(id) => { onChange(id); setOpen(false); }} />}
     </div>

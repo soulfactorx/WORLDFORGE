@@ -27,8 +27,8 @@ function Rows<T>({ title, items, make, onChange, render }: { title: string; item
     <fieldset className="scene-rows"><legend>{title}</legend>
       {items.map((it, i) => (
         <div key={i} className="scene-row">
-          {render(it, (p) => onChange(items.map((x, j) => (j === i ? { ...x, ...p } : x))))}
-          <button type="button" className="small" aria-label="삭제" onClick={() => onChange(items.filter((_, j) => j !== i))}>✕</button>
+          <div className="scene-row-body">{render(it, (p) => onChange(items.map((x, j) => (j === i ? { ...x, ...p } : x))))}</div>
+          <button type="button" className="row-del" aria-label={`${title} ${i + 1}번째 줄 삭제`} title="이 줄 삭제" onClick={() => onChange(items.filter((_, j) => j !== i))}>🗑</button>
         </div>
       ))}
       <button type="button" className="small" onClick={() => onChange([...items, make()])}>＋ 추가</button>
