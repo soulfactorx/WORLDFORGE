@@ -61,7 +61,7 @@ export interface DebugEntry {
   events?: GameEvent[];
   rejected?: string[];
   diff?: DebugDiff[];
-  newLog?: { kind: string; text: string; images?: { id: string; caption: string }[] }[];
+  newLog?: { kind: string; text: string; images?: { id: string; caption: string; para?: number; bg?: string }[] }[];
   ms?: number;
   error?: string;
   done?: boolean;

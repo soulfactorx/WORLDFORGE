@@ -17,7 +17,7 @@ export type GameEvent =
   /** breakdown은 v0.2부터 (수정치 구성: 능력치 + 숙련 등) */
   | { type: 'check_rolled'; skill: string; reason: string; result: D20Test; rngState: number; breakdown?: ModifierBreakdown; mode?: RollMode }
   /** images: 이 장면에 보여줄 이미지 (v0.13). 엔진이 고른 에셋 ID와 설명 */
-  | { type: 'narration'; text: string; images?: { id: string; caption: string }[] }
+  | { type: 'narration'; text: string; images?: NarrationImage[] }
   | { type: 'moved'; to: EntityId }
   /** statement는 화면 표시용 (v0.3부터) */
   | { type: 'knowledge_revealed'; belief: Belief; statement?: string }
@@ -122,3 +122,7 @@ export interface StoredEvent {
   turn: number;
   event: GameEvent;
 }
+
+/** 서술 이미지 (v0.59): para = 그 인물이 나온 문단 번호(빈 줄로 나눈 0부터), 없으면 서술 맨 앞.
+ * bg = 배경(장소) 이미지 — new: 장소가 바뀌었거나 장면이 바뀜, same: 같은 장소의 배경을 다시 보여 줌 */
+export interface NarrationImage { id: string; caption: string; para?: number; bg?: 'new' | 'same' }

@@ -42,7 +42,7 @@ describe('턴: 고른 기술 · 서술에 나온 인물 이미지', () => {
     w.assets = [{ id: 'stock.knight-m--0', name: 'k', kind: 'character', characterId: far.id, tags: ['default'], mime: 'image/svg+xml', size: 0 }];
     const r = await runTurn(mock(`멀리서 ${far.name}의 이야기가 들린다.`, 'none'), w, start(w), '귀를 기울인다', () => {});
     const n = r.events.find((e) => e.type === 'narration');
-    expect(n && n.type === 'narration' && n.images).toContainEqual({ id: 'stock.knight-m--0', caption: far.name });
+    expect(n && n.type === 'narration' && n.images).toContainEqual({ id: 'stock.knight-m--0', caption: far.name, para: 0 });
   });
 });
 
@@ -148,5 +148,25 @@ describe('조우 판단에 머문 시간 (실제 모델 평가 반영)', () => {
     expect(users[0]).toContain('이번이 이 장소에서의 첫 턴이다');
     await runTurn(llm, sampleWorld, r1.state, '계속 기다린다', () => {});
     expect(users[1]).toContain('이 장소에서 2번째 턴이다');
+  });
+});
+
+describe('서술 이미지 제자리 (v0.59)', () => {
+  it('배경은 bg로 매 턴, 인물은 처음 나온 문단 번호, 같은 장소면 직전 배경을 잇는다', async () => {
+    const w = structuredClone(sampleWorld);
+    const npc = w.characters.find((c) => c.locationId === w.start.locationId) ?? w.characters[0]!;
+    w.assets = [
+      { id: 'bg/a', name: 'a', kind: 'scene', locationId: w.start.locationId, tags: [], mime: 'image/svg+xml', size: 0 },
+      { id: 'bg/b', name: 'b', kind: 'scene', locationId: w.start.locationId, tags: [], mime: 'image/svg+xml', size: 0 },
+      { id: 'npc/img', name: 'n', kind: 'character', characterId: npc.id, tags: ['default'], mime: 'image/svg+xml', size: 0 },
+    ];
+    const s0 = start(w);
+    const startBg = s0.log.flatMap((l) => l.images ?? []).find((im) => im.bg);
+    expect(startBg?.bg).toBe('new');
+    const r = await runTurn(mock(`안개가 짙다.\n\n${npc.name}이(가) 고개를 든다.`, 'none'), w, s0, '기다린다', () => {});
+    const n = r.events.find((e) => e.type === 'narration');
+    const imgs = n && n.type === 'narration' ? n.images! : [];
+    expect(imgs[0]).toEqual({ id: startBg!.id, caption: expect.any(String), bg: 'same' });
+    expect(imgs.find((im) => im.id === 'npc/img')?.para).toBe(1);
   });
 });

@@ -167,7 +167,7 @@ const findName = (text: string, name: string): number => {
 };
 
 /** 직함 (배경 첫 줄 "직함: 시녀장 · …") — 다른 인물과 겹치지 않을 때만 이름처럼 쓴다 */
-function titleOf(c: Pick<Character, 'background'>): string {
+export function titleOf(c: Pick<Character, 'background'>): string {
   const m = /^직함:\s*([^\n·,]+)/.exec(c.background ?? '');
   const t = m?.[1]?.trim() ?? '';
   return t.length >= 2 && t.length <= 14 ? t : '';
@@ -203,4 +203,17 @@ export function mentionedImages(world: WorldPackage, text: string, salt: string,
 /** 인물의 대표 이미지 (목록·편집기용) */
 export function portraitAsset(world: WorldPackage, npcId: EntityId): AssetMeta | undefined {
   return pickCharacterImage(world, npcId, 'default', 'portrait');
+}
+
+// ---------------------------------------------------------------- 문단 위치 (v0.59)
+
+/** 서술을 문단으로 나눈다 (화면도 같은 규칙으로 나눈다) */
+export const paragraphsOf = (text: string): string[] => text.split(/\n\s*\n/);
+
+/** 이 말들 중 하나가 처음 나오는 문단 번호 (없으면 undefined) */
+export function paragraphOf(text: string, needles: string[]): number | undefined {
+  const ns = needles.map((n) => n.trim()).filter((n) => n.length >= 2);
+  if (!ns.length || !text) return undefined;
+  const i = paragraphsOf(text).findIndex((p) => ns.some((n) => p.includes(n)));
+  return i >= 0 ? i : undefined;
 }

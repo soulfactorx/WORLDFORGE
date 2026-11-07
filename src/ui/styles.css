@@ -610,3 +610,27 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .choices .choice-bond .choice-kind { color: var(--dialogue); border-color: var(--dialogue); }
 .choices .choice-advance .choice-kind { color: var(--check); border-color: var(--check); }
 @media (prefers-color-scheme: dark) { .choices .choice-wild .choice-kind { color: #d39af0; border-color: #d39af0; } .choices .choice-bold .choice-kind { color: #f0a070; border-color: #f0a070; } }
+
+/* 서술 이미지 제자리 (v0.59): 배경은 서술 맨 앞 띠, 인물은 그 문단 앞 */
+.placed-narration .scene-images.bg { margin-bottom: 10px; }
+.play .placed-narration .scene-images.bg figure { width: 100%; max-width: 100%; }
+.play .placed-narration .scene-images.bg img { width: 100%; height: 240px; max-height: none; object-fit: cover; }
+.play.img-small .placed-narration .scene-images.bg img { height: 120px; }
+.play.img-medium .placed-narration .scene-images.bg img { height: 180px; }
+.play.img-large .placed-narration .scene-images.bg img { height: 320px; }
+.play.img-full .placed-narration .scene-images.bg img { height: auto; max-height: 85vh; object-fit: contain; }
+.placed-narration .scene-images.bg figcaption { text-align: left; }
+.placed-narration .scene-images.inline { margin: 2px 0 6px; }
+@media (max-width: 600px) { .play .placed-narration .scene-images.bg img { height: 160px; } .play.img-large .placed-narration .scene-images.bg img { height: 220px; } }
+/* 문단 사이 인물 이미지는 한 단계 작게 (글 흐름을 끊지 않게) */
+.play .placed-narration .scene-images.inline figure { width: 200px; }
+.play.img-small .placed-narration .scene-images.inline figure { width: 110px; }
+.play.img-large .placed-narration .scene-images.inline figure { width: 300px; }
+.play.img-full .placed-narration .scene-images.inline figure { width: 420px; max-width: 100%; }
+.play .placed-narration .scene-images.inline img { max-height: 46vh; }
+@media (max-width: 600px) {
+  .play .placed-narration .scene-images.inline figure { width: 40%; max-width: 40%; }
+  .play.img-small .placed-narration .scene-images.inline figure { width: 28%; max-width: 28%; }
+  .play.img-large .placed-narration .scene-images.inline figure { width: 56%; max-width: 56%; }
+  .play.img-full .placed-narration .scene-images.inline figure { width: 80%; max-width: 80%; }
+}

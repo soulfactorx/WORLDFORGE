@@ -8,8 +8,10 @@ export const IMAGE_SIZES: [ImageSize, string][] = [['full', '화면 폭에 맞�
 /** 장면 서술 (v0.50): scene = 장면 설정을 따름 · fixed = 정해진 글만 · end = 끝날 때만 AI · ai = 매 차례 AI */
 export type SceneNarration = 'scene' | 'fixed' | 'end' | 'ai';
 export const SCENE_NARRATIONS: [SceneNarration, string][] = [['scene', '장면 설정을 따름'], ['fixed', '정해진 글만 (AI 없이 빠르게)'], ['end', '끝날 때만 AI 서술'], ['ai', '매 차례 AI가 장면 서술']];
-export interface PlayPrefs { adaptive: boolean; display: DisplayLevel; images: ImageSize; sceneNarration: SceneNarration }
-const DEFAULTS: PlayPrefs = { adaptive: true, display: 'standard', images: 'large', sceneNarration: 'scene' };
+/** 배경 이미지 (v0.59): every = 매 턴 서술 맨 앞, change = 장소·장면이 바뀔 때만 */
+export type BackgroundMode = 'every' | 'change';
+export interface PlayPrefs { adaptive: boolean; display: DisplayLevel; images: ImageSize; sceneNarration: SceneNarration; background: BackgroundMode }
+const DEFAULTS: PlayPrefs = { adaptive: true, display: 'standard', images: 'large', sceneNarration: 'scene', background: 'every' };
 export function loadPlayPrefs(): PlayPrefs {
   try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<PlayPrefs>) }; } catch { return { ...DEFAULTS }; }
 }

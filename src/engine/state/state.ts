@@ -13,7 +13,7 @@ export interface LogEntry {
   turn: number;
   kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide' | 'omen';
   text: string;
-  images?: { id: string; caption: string }[];
+  images?: import('./events').NarrationImage[];
   /** guide: 진행 제안과 선택지 */
   suggestion?: string;
   choices?: string[];

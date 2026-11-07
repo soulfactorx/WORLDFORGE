@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
 import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
-import { replay, type GameState } from '../engine/state/state';
+import { replay, type GameState, type LogEntry } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
 import { metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
@@ -33,9 +33,10 @@ import { ABILITIES, ABILITY_NAMES, SKILL_IDS, SKILLS, type SkillId } from '../en
 import { checkModifier } from '../engine/character/sheet';
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
-import { pickCharacterImage, pickSceneImage } from '../engine/assets';
+import { paragraphsOf, pickCharacterImage, pickSceneImage } from '../engine/assets';
+import type { NarrationImage } from '../engine/state/events';
 import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/digest';
-import { loadPlayPrefs } from './playPrefs';
+import { type BackgroundMode, type ImageSize, loadPlayPrefs } from './playPrefs';
 import { ScenePanel } from './ScenePanel';
 import { availableScenes, sceneDef } from '../engine/scene';
 import { abandonSceneEvents, narrateScene, narrateSceneTurn, narrationMode, sceneActionEvents, startSceneEvents } from '../gm/scene';
@@ -389,7 +390,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         {showRecap && <RecapCard r={recap(world, state)} rs={rs} onClose={() => setShowRecap(false)} onSheet={() => { setShowRecap(false); setPanel('sheet'); }} />}
         {state.log.map((e, i) => (
           <div key={i} className={`entry-wrap k-${e.kind}`}>
-            {e.kind !== 'guide' && e.images && e.images.length > 0 && imgSize !== 'hidden' && (() => {
+            {e.kind !== 'guide' && !placed(e) && e.images && e.images.length > 0 && imgSize !== 'hidden' && (() => {
               const figs = <div className="scene-images">{e.images.map((im) => <figure key={im.id}><AssetImage pkg={world.manifest.id} id={im.id} alt={im.caption} zoom /><figcaption>{im.caption}</figcaption></figure>)}</div>;
               return imgSize === 'collapsed'
                 ? <details className="scene-images-fold"><summary className="small muted">🖼 {e.images.map((im) => im.caption).join(' · ')}</summary>{figs}</details>
@@ -416,7 +417,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                   </div>
                 )}
               </div>
-            ) : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : rs(e.text)}</p>}
+            ) : placed(e) ? <PlacedNarration text={e.text} images={e.images!} pkg={world.manifest.id} size={imgSize} bgMode={loadPlayPrefs().background} />
+              : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : rs(e.text)}</p>}
           </div>
         ))}
         {decisive && streaming === null && (
@@ -494,5 +496,41 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       {levelInfo && <LevelUpDialog info={levelInfo} sheet={state.player.sheet} rs={rs} onClose={() => setLevelInfo(null)} onSheet={() => { setLevelInfo(null); setPanel('sheet'); }} />}
     </section>
     </ReskinContext.Provider>
+  );
+}
+
+/** 자리 정보가 있는 서술 이미지인가 (v0.59) */
+const placed = (e: LogEntry) => e.kind === 'narration' && !!e.images?.some((im) => im.bg || im.para !== undefined);
+
+/** 서술 + 이미지 제자리 (v0.59): 배경은 서술 맨 앞, 인물은 그 인물이 처음 나온 문단 앞 */
+function PlacedNarration({ text, images, pkg, size, bgMode }: { text: string; images: NarrationImage[]; pkg: string; size: ImageSize; bgMode: BackgroundMode }) {
+  const paras = paragraphsOf(text);
+  const visible = images.filter((im) => !im.bg || bgMode === 'every' || im.bg === 'new');
+  const fig = (im: NarrationImage) => <figure key={im.id}><AssetImage pkg={pkg} id={im.id} alt={im.caption} zoom /><figcaption>{im.caption}</figcaption></figure>;
+  if (size === 'hidden') return <div className="entry narration"><RichText text={text} /></div>;
+  if (size === 'collapsed') {
+    return (
+      <>
+        {visible.length > 0 && <details className="scene-images-fold"><summary className="small muted">🖼 {visible.map((im) => im.caption).join(' · ')}</summary><div className="scene-images">{visible.map(fig)}</div></details>}
+        <div className="entry narration"><RichText text={text} /></div>
+      </>
+    );
+  }
+  const bg = visible.filter((im) => im.bg);
+  const top = visible.filter((im) => !im.bg && (im.para === undefined || im.para >= paras.length));
+  return (
+    <div className="placed-narration">
+      {bg.length > 0 && <div className="scene-images bg">{bg.map(fig)}</div>}
+      {top.length > 0 && <div className="scene-images inline">{top.map(fig)}</div>}
+      {paras.map((p, i) => {
+        const here = visible.filter((im) => !im.bg && im.para === i);
+        return (
+          <Fragment key={i}>
+            {here.length > 0 && <div className="scene-images inline">{here.map(fig)}</div>}
+            <p className="entry narration"><RichText text={p} /></p>
+          </Fragment>
+        );
+      })}
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { DebugToggle } from './DebugPanel';
 import { useEffect, useRef, useState } from 'react';
-import { type DisplayLevel, IMAGE_SIZES, type ImageSize, loadPlayPrefs, savePlayPrefs, SCENE_NARRATIONS, type SceneNarration } from './playPrefs';
+import { type BackgroundMode, type DisplayLevel, IMAGE_SIZES, type ImageSize, loadPlayPrefs, savePlayPrefs, SCENE_NARRATIONS, type SceneNarration } from './playPrefs';
 import { isStandalone, loadOrientation, type OrientationPref, saveOrientation } from './orientation';
 import { type AvSettings, loadAv, playSfx, saveAv, stopSpeaking } from './audio';
 
@@ -55,6 +55,12 @@ export function AvControls({ onChange }: { onChange: () => void }) {
           <label className="small av-vol">이미지 크기
             <select value={play.images} onChange={(e) => { const p = { ...play, images: e.target.value as ImageSize }; setPlay(p); savePlayPrefs(p); onChange(); }}>
               {IMAGE_SIZES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <label className="small av-vol">배경 이미지
+            <select value={play.background} onChange={(e) => { const p = { ...play, background: e.target.value as BackgroundMode }; setPlay(p); savePlayPrefs(p); onChange(); }}>
+              <option value="every">매 턴 서술 맨 앞에</option>
+              <option value="change">장소·장면이 바뀔 때만</option>
             </select>
           </label>
           <label className="small av-vol">장면 서술
