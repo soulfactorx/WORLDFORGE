@@ -13,7 +13,7 @@ const PRESETS: ScenePreset[] = [
     key: 'negotiation', label: '협상', desc: '인내심을 지키며 합의를 끌어올린다. 상대의 경계가 높을수록 설득이 어렵다.',
     make: (): SceneDef => ({
       id: 'scene/negotiation', name: '협상', description: '상대와 조건을 두고 협상한다. 상대는 정중함을 좋아하고 위협을 싫어한다.',
-      gauges: [{ id: 'patience', name: '인내심', start: 5, min: 0, max: 6 }, { id: 'deal', name: '합의', start: 0, min: 0, max: 10 }, { id: 'guard', name: '경계', start: 3, min: 0, max: 6 }],
+      gauges: [{ id: 'patience', name: '인내심', start: 6, min: 0, max: 7 }, { id: 'deal', name: '합의', start: 0, min: 0, max: 10 }, { id: 'guard', name: '경계', start: 3, min: 0, max: 6 }],
       states: [{ id: 'leverage', name: '약점을 쥠', edge: 1 }, { id: 'offended', name: '불쾌함', edge: -1 }],
       phases: [{ id: 'probe', name: '탐색' }, { id: 'bargain', name: '담판' }],
       likes: ['정중'], dislikes: ['위협'],
@@ -39,7 +39,7 @@ const PRESETS: ScenePreset[] = [
     key: 'chase', label: '추격', desc: '거리를 좁히며 상대를 쫓는다. 매 차례 상대가 달아나고, 내 숨이 찬다.',
     make: (): SceneDef => ({
       id: 'scene/chase', name: '추격', description: '도망치는 상대를 골목·지붕·시장통을 지나 쫓는다.',
-      gauges: [{ id: 'distance', name: '거리', start: 5, min: 0, max: 10 }, { id: 'stamina', name: '숨', start: 6, min: 0, max: 6 }],
+      gauges: [{ id: 'distance', name: '거리', start: 5, min: 0, max: 10 }, { id: 'stamina', name: '숨', start: 5, min: 0, max: 6 }],
       states: [{ id: 'shortcut', name: '지름길을 앎', edge: 1 }, { id: 'lost', name: '놓침', edge: -1 }],
       actions: [
         { id: 'sprint', name: '전력 질주', check: 'skill:athletics', dc: 12, mods: [{ gauge: 'stamina', per: 0.5, max: 3 }],
@@ -53,7 +53,7 @@ const PRESETS: ScenePreset[] = [
         { id: 'breathe', name: '숨 고르기', success: { gauges: { stamina: 2, distance: 1 } } },
       ],
       reactions: [
-        { chance: 0.6, delta: { gauges: { distance: 1 }, text: '상대가 모퉁이를 돈다' } },
+        { chance: 0.5, delta: { gauges: { distance: 1 }, text: '상대가 모퉁이를 돈다' } },
         { when: { gauge: 'distance', gte: 8 }, chance: 0.5, delta: { addStates: ['lost'], text: '인파 속에 등이 사라진다' } },
       ],
       ends: [
@@ -68,24 +68,24 @@ const PRESETS: ScenePreset[] = [
     key: 'ritual', label: '의식', desc: '결속을 쌓되 역류를 넘기지 않는다. 역류가 쌓일수록 집중이 흐트러진다.',
     make: (): SceneDef => ({
       id: 'scene/ritual', name: '의식', description: '문양과 주문으로 힘을 엮는 의식. 서두르면 힘이 역류한다.',
-      gauges: [{ id: 'bind', name: '결속', start: 0, min: 0, max: 10 }, { id: 'backlash', name: '역류', start: 0, min: 0, max: 6 }],
+      gauges: [{ id: 'bind', name: '결속', start: 0, min: 0, max: 10 }, { id: 'backlash', name: '역류', start: 0, min: 0, max: 7 }],
       states: [{ id: 'focused', name: '몰입', edge: 1 }, { id: 'shaken', name: '동요', edge: -1 }],
       phases: [{ id: 'prepare', name: '준비' }, { id: 'channel', name: '엮기' }],
       actions: [
         { id: 'prepare', name: '문양 그리기', check: 'skill:arcana', dc: 12, phases: ['prepare'],
-          success: { gauges: { bind: 2 }, phase: 'channel' }, great: { gauges: { bind: 2 }, addStates: ['focused'], phase: 'channel' }, failure: { gauges: { backlash: 1 } } },
-        { id: 'channel', name: '힘 흘려보내기', check: 'ability:con', dc: 12, phases: ['channel'], mods: [{ gauge: 'backlash', per: -1, max: 4 }],
-          success: { gauges: { bind: 3, backlash: 1 } }, great: { gauges: { bind: 4 } }, failure: { gauges: { backlash: 2 }, addStates: ['shaken'] } },
+          success: { gauges: { bind: 3 }, phase: 'channel' }, great: { gauges: { bind: 3 }, addStates: ['focused'], phase: 'channel' }, failure: { gauges: { backlash: 1 } } },
+        { id: 'channel', name: '힘 흘려보내기', check: 'ability:con', dc: 11, phases: ['channel'], mods: [{ gauge: 'backlash', per: -1, max: 4 }],
+          success: { gauges: { bind: 3 } }, great: { gauges: { bind: 4, backlash: -1 } }, failure: { gauges: { backlash: 2 }, addStates: ['shaken'] } },
         { id: 'pray', name: '기도', check: 'skill:religion', dc: 13, once: true, success: { gauges: { bind: 2 }, removeStates: ['shaken'] }, failure: { gauges: { backlash: 1 } } },
         { id: 'steady', name: '마음 다잡기', check: 'ability:wis', dc: 11, success: { gauges: { backlash: -2 }, removeStates: ['shaken'] }, failure: { gauges: { backlash: 1 } } },
       ],
       reactions: [{ when: { gauge: 'bind', gte: 6 }, chance: 0.4, delta: { gauges: { backlash: 1 }, text: '모인 힘이 출렁인다' } }],
       ends: [
         { id: 'complete', name: '의식 완성', when: { gauge: 'bind', gte: 10 }, outcome: 'success', rewards: { xp: 'minor' } },
-        { id: 'backfire', name: '역류 폭주', when: { gauge: 'backlash', gte: 6 }, outcome: 'failure' },
+        { id: 'backfire', name: '역류 폭주', when: { gauge: 'backlash', gte: 7 }, outcome: 'failure' },
         { id: 'partial', name: '반쯤 된 의식', when: { round: 99 }, outcome: 'neutral' },
       ],
-      maxRounds: 9, timeoutEnd: 'partial',
+      maxRounds: 10, timeoutEnd: 'partial',
     }),
   },
   {
@@ -97,10 +97,10 @@ const PRESETS: ScenePreset[] = [
       actions: [
         { id: 'shape', name: '형태 잡기', check: 'ability:str', dc: 11, phases: ['shape'],
           success: { gauges: { quality: 3, material: -1 }, phase: 'refine' }, great: { gauges: { quality: 4, material: -1 }, phase: 'refine' }, failure: { gauges: { material: -2, flaw: 1 } } },
-        { id: 'refine', name: '세밀하게 다듬기', check: 'skill:sleight_of_hand', dc: 13, phases: ['refine'], mods: [{ gauge: 'flaw', per: -1 }],
+        { id: 'refine', name: '세밀하게 다듬기', check: 'skill:sleight_of_hand', dc: 12, phases: ['refine'], mods: [{ gauge: 'flaw', per: -1 }],
           success: { gauges: { quality: 3 } }, great: { gauges: { quality: 4, flaw: -1 } }, failure: { gauges: { flaw: 1, material: -1 } } },
         { id: 'study', name: '설계 다시 보기', check: 'skill:investigation', dc: 12, success: { gauges: { flaw: -2 } }, failure: {} },
-        { id: 'finish', name: '마무리', check: 'skill:arcana', dc: 13, phases: ['refine', 'finish'], requires: { gauge: 'quality', gte: 6 },
+        { id: 'finish', name: '마무리', check: 'skill:arcana', dc: 12, phases: ['refine', 'finish'], requires: { gauge: 'quality', gte: 6 },
           success: { gauges: { quality: 4 }, phase: 'finish' }, great: { gauges: { quality: 6 }, phase: 'finish' }, failure: { gauges: { flaw: 2 } } },
       ],
       ends: [
@@ -119,7 +119,7 @@ const PRESETS: ScenePreset[] = [
       states: [{ id: 'caught_lie', name: '거짓말 들킴', edge: 1 }, { id: 'clammed', name: '입을 닫음', edge: -1 }],
       likes: ['공감'], dislikes: ['협박'],
       actions: [
-        { id: 'empathy', name: '사정 들어 주기', check: 'skill:persuasion', dc: 13, tags: ['공감'], mods: [{ gauge: 'resolve', per: -0.5, max: 4 }],
+        { id: 'empathy', name: '사정 들어 주기', check: 'skill:persuasion', dc: 12, tags: ['공감'], mods: [{ gauge: 'resolve', per: -0.5, max: 4 }],
           success: { gauges: { resolve: -2, truth: 1 } }, great: { gauges: { resolve: -3, truth: 2 } }, failure: { gauges: { resolve: 1 } } },
         { id: 'threat', name: '협박', check: 'skill:intimidation', dc: 12, tags: ['협박'],
           success: { gauges: { fear: 3, resolve: -1 } }, failure: { gauges: { fear: 1, resolve: 1 }, addStates: ['clammed'] } },
@@ -163,7 +163,7 @@ const PRESETS: ScenePreset[] = [
       reactions: [
         { when: { gauge: 'foe_momentum', gte: 5 }, delta: { gauges: { my_momentum: -1 }, text: '상대의 검이 매섭게 몰아친다' } },
         { when: { gauge: 'foe_momentum', gte: 8 }, chance: 0.5, delta: { addStates: ['staggered'], text: '받아 낸 일격에 중심이 흔들린다' } },
-        { chance: 0.5, delta: { gauges: { foe_momentum: 1 } } },
+        { chance: 0.35, delta: { gauges: { foe_momentum: 1 } } },
       ],
       ends: [
         { id: 'win', name: '한 수 위', when: { gauge: 'foe_balance', lte: 0 }, outcome: 'success', rewards: { xp: 'minor' } },
@@ -177,27 +177,27 @@ const PRESETS: ScenePreset[] = [
     key: 'date', label: '데이트', desc: '분위기를 끌어올리고 어색함을 관리한다. 상대의 취향이 판정을 바꾼다.',
     make: (): SceneDef => ({
       id: 'scene/date', name: '데이트', description: '함께 시간을 보내며 서로를 알아 간다. 상대는 진솔한 이야기를 좋아하고 허세를 싫어한다.',
-      gauges: [{ id: 'mood', name: '분위기', start: 2, min: 0, max: 10 }, { id: 'awkward', name: '어색함', start: 1, min: 0, max: 5 }, { id: 'known', name: '알게 된 것', start: 0, min: 0, max: 4 }],
+      gauges: [{ id: 'mood', name: '분위기', start: 3, min: 0, max: 10 }, { id: 'awkward', name: '어색함', start: 0, min: 0, max: 6 }, { id: 'known', name: '알게 된 것', start: 0, min: 0, max: 4 }],
       states: [{ id: 'laughing', name: '웃음이 터짐', edge: 1 }, { id: 'silence', name: '침묵', edge: -1 }],
       phases: [{ id: 'meet', name: '만남' }, { id: 'walk', name: '산책' }, { id: 'farewell', name: '헤어질 무렵' }],
       likes: ['진솔'], dislikes: ['허세'],
       actions: [
         { id: 'ask', name: '취향 묻기', check: 'skill:insight', dc: 11, tags: ['진솔'], success: { gauges: { known: 1, mood: 1 } }, great: { gauges: { known: 2, mood: 1 } }, failure: { gauges: { awkward: 1 } } },
         { id: 'joke', name: '농담', check: 'skill:performance', dc: 12, mods: [{ gauge: 'awkward', per: -1, max: 3 }],
-          success: { gauges: { mood: 2, awkward: -1 }, addStates: ['laughing'], removeStates: ['silence'] }, failure: { gauges: { awkward: 2 }, addStates: ['silence'] } },
+          success: { gauges: { mood: 2, awkward: -1 }, addStates: ['laughing'], removeStates: ['silence'] }, failure: { gauges: { awkward: 1 }, addStates: ['silence'] } },
         { id: 'brag', name: '자랑', check: 'skill:persuasion', dc: 12, tags: ['허세'], success: { gauges: { mood: 1 } }, failure: { gauges: { awkward: 2 } } },
         { id: 'walk', name: '걷자고 하기', phases: ['meet'], requires: { gauge: 'mood', gte: 4 }, success: { phase: 'walk' } },
         { id: 'story', name: '내 이야기 털어놓기', check: 'skill:persuasion', dc: 13, tags: ['진솔'], phases: ['walk', 'farewell'], mods: [{ gauge: 'known', per: 1, max: 3 }],
           success: { gauges: { mood: 3 } }, great: { gauges: { mood: 4, awkward: -1 } }, failure: { gauges: { awkward: 1 } } },
         { id: 'promise', name: '다음 약속', phases: ['walk'], requires: { gauge: 'mood', gte: 7 }, success: { phase: 'farewell', gauges: { mood: 1 } } },
       ],
-      reactions: [{ when: { state: 'silence' }, delta: { gauges: { awkward: 1 }, text: '말이 끊긴 채 발소리만 들린다' } }],
+      reactions: [{ when: { state: 'silence' }, chance: 0.5, delta: { gauges: { awkward: 1 }, text: '말이 끊긴 채 발소리만 들린다' } }],
       ends: [
         { id: 'sweet', name: '설레는 하루', when: { gauge: 'mood', gte: 10 }, outcome: 'success' },
-        { id: 'flop', name: '어색한 하루', when: { gauge: 'awkward', gte: 5 }, outcome: 'failure' },
+        { id: 'flop', name: '어색한 하루', when: { gauge: 'awkward', gte: 6 }, outcome: 'failure' },
         { id: 'fine', name: '무난한 하루', when: { round: 99 }, outcome: 'neutral' },
       ],
-      maxRounds: 9, timeoutEnd: 'fine',
+      maxRounds: 8, timeoutEnd: 'fine',
     }),
   },
   {
@@ -216,7 +216,7 @@ const PRESETS: ScenePreset[] = [
         { id: 'calm', name: '침착하기', check: 'ability:wis', dc: 11, success: { removeStates: ['flustered'] }, failure: {} },
       ],
       reactions: [
-        { when: { gauge: 'rival', gte: 3 }, delta: { gauges: { price: 1 }, text: '경쟁자가 패를 든다' } },
+        { when: { gauge: 'rival', gte: 3 }, chance: 0.7, delta: { gauges: { price: 1 }, text: '경쟁자가 패를 든다' } },
         { when: { state: 'flustered' }, chance: 0.5, delta: { gauges: { purse: -1 }, text: '흥분해서 손이 먼저 올라간다' } },
       ],
       ends: [
@@ -231,25 +231,25 @@ const PRESETS: ScenePreset[] = [
     key: 'infiltration', label: '잠입 경보', desc: '들키지 않고 목표에 닿는다. 매 차례 경보가 오르고, 경보가 높을수록 숨기 어렵다.',
     make: (): SceneDef => ({
       id: 'scene/infiltration', name: '잠입', description: '경비가 도는 곳에 몰래 들어가 목표에 닿는다.',
-      gauges: [{ id: 'progress', name: '진척', start: 0, min: 0, max: 8 }, { id: 'alert', name: '경보', start: 1, min: 0, max: 10 }],
+      gauges: [{ id: 'progress', name: '진척', start: 0, min: 0, max: 7 }, { id: 'alert', name: '경보', start: 0, min: 0, max: 10 }],
       states: [{ id: 'disguised', name: '변장', edge: 1 }, { id: 'spotted', name: '수상한 눈길', edge: -1 }],
       phases: [{ id: 'outer', name: '외곽' }, { id: 'inner', name: '내부' }],
       actions: [
-        { id: 'sneak', name: '그림자 따라 움직이기', check: 'skill:stealth', dc: 12, mods: [{ gauge: 'alert', per: -0.5, max: 4 }],
+        { id: 'sneak', name: '그림자 따라 움직이기', check: 'skill:stealth', dc: 11, mods: [{ gauge: 'alert', per: -0.5, max: 4 }],
           success: { gauges: { progress: 2 } }, great: { gauges: { progress: 3, alert: -1 } }, failure: { gauges: { alert: 2 }, addStates: ['spotted'] } },
         { id: 'lock', name: '자물쇠 따기', check: 'skill:sleight_of_hand', dc: 13, phases: ['outer'], once: true,
-          success: { gauges: { progress: 2 }, phase: 'inner' }, failure: { gauges: { alert: 1 } } },
+          success: { gauges: { progress: 3 }, phase: 'inner' }, failure: { gauges: { alert: 1 } } },
         { id: 'disguise', name: '변장하기', check: 'skill:deception', dc: 13, once: true, success: { addStates: ['disguised'] }, failure: { gauges: { alert: 1 } } },
         { id: 'distract', name: '소리로 따돌리기', check: 'skill:sleight_of_hand', dc: 12, success: { gauges: { alert: -2 }, removeStates: ['spotted'] }, failure: { gauges: { alert: 1 } } },
         { id: 'wait', name: '숨죽여 기다리기', success: { gauges: { alert: -1 } } },
       ],
       reactions: [
-        { delta: { gauges: { alert: 1 } } },
+        { chance: 0.7, delta: { gauges: { alert: 1 } } },
         { when: { state: 'spotted' }, delta: { gauges: { alert: 1 }, text: '경비가 이쪽으로 고개를 돌린다' } },
         { when: { gauge: 'alert', gte: 7 }, chance: 0.5, delta: { addStates: ['spotted'], text: '횃불이 늘어난다' } },
       ],
       ends: [
-        { id: 'reached', name: '목표 도달', when: { gauge: 'progress', gte: 8 }, outcome: 'success', rewards: { xp: 'minor' } },
+        { id: 'reached', name: '목표 도달', when: { gauge: 'progress', gte: 7 }, outcome: 'success', rewards: { xp: 'minor' } },
         { id: 'caught', name: '발각', when: { gauge: 'alert', gte: 10 }, outcome: 'failure' },
         { id: 'retreat', name: '물러남', when: { round: 99 }, outcome: 'neutral' },
       ],

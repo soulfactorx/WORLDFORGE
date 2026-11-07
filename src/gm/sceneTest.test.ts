@@ -41,4 +41,15 @@ describe('장면 시험 플레이 (v0.71)', () => {
     const w = withScenes();
     for (const d of w.scenes!) expect([d.id, simulateScene(w, d.id, testSheet(w, 0, 3), 400).unreached]).toEqual([d.id, []]);
   });
+
+  it('프리셋 균형 (v0.73): 무작위 플레이로 성공 15~50%, 모든 끝 3% 이상', () => {
+    const w = withScenes();
+    for (const d of w.scenes!) {
+      const r = simulateScene(w, d.id, testSheet(w, 0, 3), 600);
+      const pct = (id: string) => Math.round(((r.ends[id] ?? 0) / r.runs) * 100);
+      const win = d.ends.filter((e) => e.outcome === 'success').reduce((a, e) => a + pct(e.id), 0);
+      expect([d.id, win >= 15 && win <= 50]).toEqual([d.id, true]);
+      for (const e of d.ends) expect([d.id, e.id, pct(e.id) >= 3]).toEqual([d.id, e.id, true]);
+    }
+  });
 });
