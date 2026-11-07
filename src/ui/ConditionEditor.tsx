@@ -1,3 +1,4 @@
+import { isAlwaysTrue, isUnset } from '../engine/scenario';
 /**
  * 조건 빌더 (설계 v3 11장 · R8): 조건식(Condition)을 폼으로 만든다. 참조는 목록에서 고른다.
  * 모든 조건 종류를 지원하고, 언제든 JSON으로 볼 수 있다.
@@ -72,7 +73,7 @@ export function describeCondition(c: Condition, w: WorldPackage): string {
   const x = c as Record<string, unknown>;
   switch (k) {
     case 'all': return (x.all as Condition[]).length ? (x.all as Condition[]).map((y) => describeCondition(y, w)).join(' 그리고 ') : '항상';
-    case 'any': return `(${(x.any as Condition[]).map((y) => describeCondition(y, w)).join(' 또는 ')})`;
+    case 'any': return (x.any as Condition[]).length ? `(${(x.any as Condition[]).map((y) => describeCondition(y, w)).join(' 또는 ')})` : '정하지 않음 (성립하지 않음)';
     case 'not': return `아님: ${describeCondition(x.not as Condition, w)}`;
     case 'knows': return `안다: ${name(w.claims, x.knows as string)}`;
     case 'at': return `${name(w.locations, x.at as string)}에 있다`;
@@ -190,7 +191,7 @@ export function ConditionEditor({ value, world: w, onChange, depth = 0 }: { valu
 }
 
 /** 조건 필드 하나: 폼 + 한 줄 요약 + JSON 보기 */
-export function ConditionField({ label, value, world, onChange, optional }: { label: string; value: Condition | undefined; world: WorldPackage; onChange: (c: Condition | undefined) => void; optional?: boolean }) {
+export function ConditionField({ label, value, world, onChange, optional, completion }: { label: string; value: Condition | undefined; world: WorldPackage; onChange: (c: Condition | undefined) => void; optional?: boolean; /** 완료 조건: 비면 바로 끝난다고 경고 (v0.57.3) */ completion?: boolean }) {
   const [json, setJson] = useState(false);
   const [text, setText] = useState('');
   const [bad, setBad] = useState('');
@@ -202,6 +203,8 @@ export function ConditionField({ label, value, world, onChange, optional }: { la
       ) : (
         <>
           <p className="small muted cond-summary">{describeCondition(value, world)}</p>
+          {completion && isAlwaysTrue(value) && <p className="small warn-text">⚠ 조건이 비어 있어 <b>시작하자마자 끝납니다</b> (보상도 바로 받음). 아래에서 조건을 추가하세요.</p>}
+          {completion && isUnset(value) && <p className="small muted">아직 조건을 정하지 않아 끝나지 않습니다. 아래에서 조건을 추가하세요.</p>}
           {json ? (
             <>
               <textarea rows={4} value={text} onChange={(e) => { setText(e.target.value); try { onChange(JSON.parse(e.target.value)); setBad(''); } catch { setBad('JSON 형식 오류'); } }} />

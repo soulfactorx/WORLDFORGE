@@ -1,3 +1,4 @@
+import { UNSET_CONDITION } from '../engine/scenario';
 /**
  * 임무·플래그·결말 폼 (R8 제작 도구 2.0). 조건은 조건 빌더로, 고급 항목은 JSON으로.
  */
@@ -14,7 +15,7 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
   const claims = [['', '(없음)'], ...w.claims.map((c) => [c.id, c.statement.slice(0, 40)] as const)] as const;
   return (
     <ItemList<Quest> title="임무" items={w.quests ?? []} onChange={(quests) => set({ quests })}
-      make={(n) => ({ id: `quest/new-${n}`, name: '새 임무', kind: 'side', start: { all: [] }, stages: [{ objective: '목표', hint: '', complete: { all: [] } }] })}
+      make={(n) => ({ id: `quest/new-${n}`, name: '새 임무', kind: 'side', start: { all: [] }, stages: [{ objective: '목표', hint: '', complete: UNSET_CONDITION }] })}
       render={(q, up) => (
         <div className="form-grid">
           <Text label="ID" value={q.id} onChange={(id) => up({ id })} />
@@ -42,7 +43,7 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
                 <legend>{i + 1}단계</legend>
                 <Text label="목표 (수첩에 보임)" value={st.objective} onChange={(objective) => upSt({ objective })} />
                 <Area label="GM 힌트" value={st.hint} onChange={(hint) => upSt({ hint })} rows={2} />
-                <ConditionField label="완료 조건" value={st.complete} world={w} onChange={(complete) => upSt({ complete: complete ?? { all: [] } })} />
+                <ConditionField label="완료 조건" value={st.complete} world={w} completion onChange={(complete) => upSt({ complete: complete ?? UNSET_CONDITION })} />
                 <ConditionField label="실패 조건 (이 단계에서만)" value={st.fail} world={w} optional onChange={(fail) => upSt({ fail })} />
                 <div className="row">
                   {i > 0 && <button type="button" className="small" onClick={() => { const s2 = [...q.stages]; [s2[i - 1], s2[i]] = [s2[i]!, s2[i - 1]!]; up({ stages: s2 }); }}>▲ 위로</button>}
@@ -51,7 +52,7 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
               </fieldset>
             );
           })}
-          <button type="button" className="small" onClick={() => up({ stages: [...q.stages, { objective: '다음 목표', hint: '', complete: { all: [] } }] })}>＋ 단계 추가</button>
+          <button type="button" className="small" onClick={() => up({ stages: [...q.stages, { objective: '다음 목표', hint: '', complete: UNSET_CONDITION }] })}>＋ 단계 추가</button>
           <fieldset><legend>보상</legend>
             <div className="ability-grid">
               <Select label="경험치 (레벨에 맞춰 계산)" value={typeof q.rewards?.xp === 'number' ? 'num' : q.rewards?.xp ?? 'none'}

@@ -171,3 +171,16 @@ export function varLabel(def: NonNullable<WorldPackage['vars']>[number], value: 
   const l = [...(def.labels ?? [])].sort((a, b) => a[0] - b[0]).filter(([n]) => value >= n).at(-1);
   return l ? l[1] : String(value);
 }
+
+/** 조건이 비어 항상 참인가 ({ all: [] } — 시작하자마자 성립) (v0.57.3) */
+export function isAlwaysTrue(c: Condition | undefined): boolean {
+  if (!c || typeof c !== 'object') return false;
+  if ('all' in c && Array.isArray(c.all)) return c.all.every((x) => isAlwaysTrue(x));
+  return false;
+}
+/** 조건을 아직 정하지 않았는가 ({ any: [] } — 절대 성립하지 않음) */
+export function isUnset(c: Condition | undefined): boolean {
+  return !!c && typeof c === 'object' && 'any' in c && Array.isArray(c.any) && c.any.length === 0;
+}
+/** 새 장·단계의 완료 조건 기본값: 정하기 전에는 끝나지 않는다 */
+export const UNSET_CONDITION: Condition = { any: [] };

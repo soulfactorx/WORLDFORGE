@@ -1,3 +1,4 @@
+import { UNSET_CONDITION } from '../engine/scenario';
 /**
  * 나머지 편집 폼 (R8 마무리): 줄기·결정적 선택·진행 시계·연표 사건·아이템·세계만의 적·의뢰판.
  * 조건은 조건 빌더, 효과는 효과 편집기로. 고급 항목은 각 탭의 JSON 보기로.
@@ -7,7 +8,7 @@ import { allItems } from '../engine/items';
 import { AXES, AXIS_NAMES, RELATION_KIND_LABEL } from '../engine/relationship';
 import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import {
-  type Arc, type Clock, type CustomMonster, type DecisiveChoice, type ItemDef, type Job, type MonsterAttack, type MonsterSpecial, QUEST_TYPES, type StoryEffect, type WorldEvent, type WorldPackage,
+  type Arc, type Chapter, type Clock, type CustomMonster, type DecisiveChoice, type ItemDef, type Job, type MonsterAttack, type MonsterSpecial, QUEST_TYPES, type StoryEffect, type WorldEvent, type WorldPackage,
 } from '../engine/schema';
 import { ConditionField } from './ConditionEditor';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
@@ -94,7 +95,7 @@ export function EffectsEditor({ label, value, w, onChange }: { label: string; va
 export function ArcForms({ w, set }: { w: WorldPackage; set: Set }) {
   return (
     <ItemList<Arc> title="줄기" items={w.arcs ?? []} onChange={(arcs) => set({ arcs })}
-      make={(n) => ({ id: `arc/new-${n}`, name: '새 이야기', kind: 'main', start: (w.arcs ?? []).length ? { arcDone: w.arcs!.at(-1)!.id } : { all: [] }, chapters: [{ name: '1장', goal: '', complete: { all: [] } }] })}
+      make={(n) => ({ id: `arc/new-${n}`, name: '새 이야기', kind: 'main', start: (w.arcs ?? []).length ? { arcDone: w.arcs!.at(-1)!.id } : { all: [] }, chapters: [{ name: '1장', goal: '', complete: UNSET_CONDITION }] })}
       render={(a, up) => (
         <div className="form-grid">
           <Text label="ID" value={a.id} onChange={(id) => up({ id })} />
@@ -108,16 +109,36 @@ export function ArcForms({ w, set }: { w: WorldPackage; set: Set }) {
                 <Text label="장 이름" value={ch.name} onChange={(name) => upCh({ name })} />
                 <Area label="GM 목표 (이 장에서 일어나야 할 일)" value={ch.goal} onChange={(goal) => upCh({ goal })} rows={2} />
                 <Text label="수첩에 보이는 한 줄 (비밀 누설 금지)" value={ch.summary} onChange={(summary) => upCh({ summary: summary || undefined })} />
-                <ConditionField label="끝나는 조건" value={ch.complete} world={w} onChange={(complete) => upCh({ complete: complete ?? { all: [] } })} />
+                <ConditionField label="끝나는 조건" value={ch.complete} world={w} completion onChange={(complete) => upCh({ complete: complete ?? UNSET_CONDITION })} />
                 <ConditionField label="실패 조건 (줄기가 실패로 끝남)" value={ch.fail} world={w} optional onChange={(fail) => upCh({ fail })} />
+                <ChapterXp value={ch.xp} onChange={(xp) => upCh({ xp })} />
                 <EffectsEditor label="장을 끝냈을 때" value={ch.effects} w={w} onChange={(effects) => upCh({ effects: effects.length ? effects : undefined })} />
                 {a.chapters.length > 1 && <button type="button" className="small" onClick={() => up({ chapters: a.chapters.filter((_, j) => j !== i) })}>장 삭제</button>}
               </fieldset>
             );
           })}
-          <button type="button" className="small" onClick={() => up({ chapters: [...a.chapters, { name: `${a.chapters.length + 1}장`, goal: '', complete: { all: [] } }] })}>＋ 장 추가</button>
+          <button type="button" className="small" onClick={() => up({ chapters: [...a.chapters, { name: `${a.chapters.length + 1}장`, goal: '', complete: UNSET_CONDITION }] })}>＋ 장 추가</button>
         </div>
       )} />
+  );
+}
+
+/** 장 보상 경험치 (v0.57.3) */
+function ChapterXp({ value, onChange }: { value: Chapter['xp']; onChange: (v: Chapter['xp']) => void }) {
+  const mode = value === undefined || value === 'chapter' ? 'chapter' : value === 'major' || value === 'minor' ? value : value === 0 ? 'none' : 'num';
+  return (
+    <div className="row">
+      <label>장을 끝냈을 때 경험치
+        <select value={mode} onChange={(e) => { const m = e.target.value; onChange(m === 'chapter' ? undefined : m === 'none' ? 0 : m === 'num' ? 100 : (m as 'major' | 'minor')); }}>
+          <option value="chapter">다음 레벨까지 필요한 만큼 (기본 — 장마다 1레벨)</option>
+          <option value="major">큰 보상 (다음 레벨까지의 약 25%)</option>
+          <option value="minor">작은 보상 (약 10%)</option>
+          <option value="num">직접 숫자</option>
+          <option value="none">없음</option>
+        </select>
+      </label>
+      {mode === 'num' && <label>경험치<input type="number" min={1} value={typeof value === 'number' ? value : 100} onChange={(e) => onChange(Math.max(1, Number(e.target.value) || 1))} /></label>}
+    </div>
   );
 }
 

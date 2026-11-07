@@ -13,6 +13,7 @@ import { GENRES } from '../../data/genres';
 import { stockDataUrl } from '../../data/stockart';
 import { MAX_LEVEL } from '../character/progression';
 import { classesFor } from '../classes';
+import { isAlwaysTrue, isUnset } from '../scenario';
 
 export interface Issue {
   level: 'error' | 'warning';
@@ -316,7 +317,11 @@ export function validateWorld(input: unknown): Issue[] {
       checkRewards(o.rewards, `${op}.rewards`);
     });
     if (!Array.isArray(q.stages) || !q.stages.length) err(`${p}.stages`, '단계가 하나 이상 필요합니다.');
-    else q.stages.forEach((st, j) => { text(st.objective, `${p}.stages[${j}].objective`); text(st.hint, `${p}.stages[${j}].hint`, false); checkCond(st.complete, `${p}.stages[${j}].complete`); if (st.fail) checkCond(st.fail, `${p}.stages[${j}].fail`); });
+    else q.stages.forEach((st, j) => {
+      text(st.objective, `${p}.stages[${j}].objective`); text(st.hint, `${p}.stages[${j}].hint`, false); checkCond(st.complete, `${p}.stages[${j}].complete`); if (st.fail) checkCond(st.fail, `${p}.stages[${j}].fail`);
+      if (isAlwaysTrue(st.complete)) warn(`${p}.stages[${j}].complete`, `완료 조건이 비어 있어 이 단계가 ${j === 0 ? '임무를 받자마자' : '앞 단계 직후'} 끝납니다. 조건을 정하세요.`);
+      if (isUnset(st.complete)) warn(`${p}.stages[${j}].complete`, '완료 조건을 아직 정하지 않아 이 단계는 끝나지 않습니다.');
+    });
     if (q.type && !(QUEST_TYPES as readonly string[]).includes(q.type)) err(`${p}.type`, `유형은 ${QUEST_TYPES.join('/')} 중 하나입니다.`);
     if (q.giver && !charIds.has(q.giver)) err(`${p}.giver`, `없는 인물 "${q.giver}"`);
     if (q.target && !charIds.has(q.target)) err(`${p}.target`, `없는 인물 "${q.target}"`);
@@ -650,7 +655,9 @@ export function validateWorld(input: unknown): Issue[] {
       const q = `${p}.chapters[${j}]`;
       text(ch.name, `${q}.name`); text(ch.goal, `${q}.goal`, false);
       checkCond(ch.complete, `${q}.complete`);
-      if (isObj(ch.complete) && 'all' in ch.complete && Array.isArray(ch.complete.all) && !ch.complete.all.length) warn(`${q}.complete`, '완료 조건이 비어 바로 끝납니다.');
+      if (isAlwaysTrue(ch.complete)) warn(`${q}.complete`, `끝나는 조건이 비어 있어 ${j === 0 ? '줄기가 시작되자마자' : '앞 장이 끝나자마자'} 이 장이 끝납니다 (장 보상 경험치도 바로 받음). 조건을 정하세요.`);
+      if (isUnset(ch.complete)) warn(`${q}.complete`, '끝나는 조건을 아직 정하지 않아 이 장은 끝나지 않습니다.');
+      if (ch.xp !== undefined && !(typeof ch.xp === 'number' ? ch.xp >= 0 : ['minor', 'major', 'chapter'].includes(ch.xp))) err(`${q}.xp`, '경험치는 0 이상 숫자 또는 minor·major·chapter입니다.');
       if (ch.fail) checkCond(ch.fail, `${q}.fail`);
       checkEffects(ch.effects, `${q}.effects`);
     });

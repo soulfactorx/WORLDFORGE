@@ -672,6 +672,8 @@ export interface Chapter {
   fail?: Condition;
   /** 장을 끝냈을 때 */
   effects?: StoryEffect[];
+  /** 장을 끝냈을 때 경험치 (v0.57.3): 비우면 'chapter' = 다음 레벨까지 필요한 만큼. 0이면 없음 */
+  xp?: number | 'minor' | 'major' | 'chapter';
 }
 
 /** 줄기 (설계 v3 5.1·15.3): 한 세계에 여러 개. 시작 조건으로 열리고, 플래그로 서로 이어진다 */

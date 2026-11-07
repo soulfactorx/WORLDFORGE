@@ -3,7 +3,7 @@ import { sampleWorld } from '../data/sample-world';
 import { legacyCharacter } from '../engine/character/sheet';
 import { validateWorld } from '../engine/package/validate';
 import { evalCondition } from '../engine/scenario';
-import type { WorldPackage } from '../engine/schema';
+import type { Condition, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState, replay } from '../engine/state/state';
 import { pendingChoice } from '../engine/story';
@@ -134,5 +134,40 @@ describe('성장 곡선 (설계 v4 E1): 장 완료 이정표', () => {
     // 같은 열쇠로는 다시 주지 않는다
     const again = run(w, s);
     expect(again.player.sheet.xp).toBe(s.player.sheet.xp);
+  });
+});
+
+describe('장 완료 조건·보상 (v0.57.3)', () => {
+  const one = (complete: Condition, xp?: number | 'minor' | 'major' | 'chapter'): WorldPackage => ({
+    ...structuredClone(sampleWorld),
+    arcs: [{ id: 'arc/t', name: '시험', kind: 'main', start: { all: [] }, chapters: [{ name: '1장', goal: '', complete, ...(xp !== undefined ? { xp } : {}) }, { name: '2장', goal: '', complete: { any: [] } }] }],
+  });
+  it('정하지 않은 조건({ any: [] })은 끝나지 않는다 — 새 장의 기본값', async () => {
+    const { UNSET_CONDITION, isUnset, isAlwaysTrue } = await import('../engine/scenario');
+    expect(isUnset(UNSET_CONDITION)).toBe(true);
+    expect(isAlwaysTrue({ all: [] })).toBe(true);
+    expect(isAlwaysTrue({ all: [{ all: [] }] })).toBe(true);
+    expect(isAlwaysTrue({ at: 'loc/x' })).toBe(false);
+    const w = one(UNSET_CONDITION);
+    const s = run(w, start(w));
+    expect(s.log.some((l) => l.text.includes('장 완료'))).toBe(false);
+    expect(s.player.sheet.level).toBe(1);
+  });
+  it('비어 있는 조건({ all: [] })은 바로 끝나고 검사기가 경고한다', () => {
+    const w = one({ all: [] });
+    const s = run(w, start(w));
+    expect(s.player.sheet.level).toBe(2); // 기본 보상: 다음 레벨까지
+    expect(validateWorld(w).some((i) => i.path === 'arcs[0].chapters[0].complete' && i.level === 'warning' && i.message.includes('시작되자마자'))).toBe(true);
+    expect(validateWorld(w).some((i) => i.path === 'arcs[0].chapters[1].complete' && i.message.includes('정하지 않아'))).toBe(true);
+  });
+  it('장 보상 경험치를 정할 수 있다 (없음·숫자)', () => {
+    const none = run(one({ all: [] }, 0), start(one({ all: [] }, 0)));
+    expect(none.player.sheet.xp ?? 0).toBe(0);
+    expect(none.player.sheet.level).toBe(1);
+    const w = one({ all: [] }, 120);
+    const s = run(w, start(w));
+    expect(s.player.sheet.xp).toBe(120);
+    expect(s.player.sheet.level).toBe(1);
+    expect(validateWorld(one({ all: [] }, -5)).some((i) => i.path === 'arcs[0].chapters[0].xp' && i.level === 'error')).toBe(true);
   });
 });
