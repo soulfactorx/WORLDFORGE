@@ -4,7 +4,7 @@
  * 새 크로스오버 세계를 만들거나 기존 세계로 불러온다. AI를 다시 쓰지 않는다.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BORROW_LABEL, type BorrowKind, type BorrowPick, borrow, type CatalogEntry, catalogOf, dependencies } from '../engine/borrow';
+import { BORROW_LABEL, type BorrowKind, type BorrowPick, borrow, type CatalogEntry, catalogOf, dependencies, isBlankWorld, wholePicks } from '../engine/borrow';
 import { genreOf } from '../data/genres';
 import type { WorldPackage } from '../engine/schema';
 import { assetBlob, storeAssets } from '../storage/assets';
@@ -35,7 +35,9 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
   const [kind, setKind] = useState<BorrowKind>('character');
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(PAGE);
-  const [basket, setBasket] = useState<Map<string, { src: string; kind: BorrowKind; id: string; name: string }>>(new Map());
+  const [basket, setBasket] = useState<Map<string, { src: string; kind: BorrowKind | 'whole'; id: string; name: string }>>(new Map());
+  const wholeKey = (src: string) => `${src}|whole`;
+  const toggleWhole = (s: Src) => setBasket((b) => { const n = new Map(b); const k = wholeKey(s.key); if (n.has(k)) n.delete(k); else { for (const key of [...n.keys()]) if (key.startsWith(`${s.key}|`)) n.delete(key); n.set(k, { src: s.key, kind: 'whole', id: '*', name: `세계 통째로 — ${s.world.manifest.name}` }); } return n; });
   const [opts, setOpts] = useState({ withKnowledge: true, withImages: true, withFaction: true, link: true });
   const [busy, setBusy] = useState('');
   /** 자세히 보기 (v0.66) */
@@ -59,12 +61,12 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
   // 서사를 담으면 그것이 가리키는 것도 함께 온다 — 미리 보여 준다
   const depPreview = useMemo(() => {
     const by = new Map<string, BorrowPick[]>();
-    for (const b of basket.values()) by.set(b.src, [...(by.get(b.src) ?? []), { kind: b.kind, id: b.id }]);
+    for (const b of basket.values()) if (b.kind !== 'whole') by.set(b.src, [...(by.get(b.src) ?? []), { kind: b.kind, id: b.id }]);
     const counts: Partial<Record<BorrowKind, number>> = {};
     for (const [k, picks] of by) { const s = srcs.find((x) => x.key === k); if (!s) continue; for (const d of dependencies(s.world, picks)) counts[d.kind] = (counts[d.kind] ?? 0) + 1; }
     return Object.entries(counts).map(([k, n]) => `${BORROW_LABEL[k as BorrowKind]} ${n}`).join(' · ');
   }, [basket, srcs]);
-  const toggle = (src: Src, e: CatalogEntry) => setBasket((b) => { const n = new Map(b); const k = bkey(src.key, e.kind, e.id); if (n.has(k)) n.delete(k); else n.set(k, { src: src.key, kind: e.kind, id: e.id, name: e.name }); return n; });
+  const toggle = (src: Src, e: CatalogEntry) => setBasket((b) => { const n = new Map(b); if (n.has(wholeKey(src.key))) return n; const k = bkey(src.key, e.kind, e.id); if (n.has(k)) n.delete(k); else n.set(k, { src: src.key, kind: e.kind, id: e.id, name: e.name }); return n; });
   const matureSrc = [...new Set([...basket.values()].map((b) => b.src))].map((k) => srcs.find((s) => s.key === k)!).filter((s) => s?.world.manifest.contentRating === 'mature');
   const privateSrc = [...new Set([...basket.values()].map((b) => b.src))].map((k) => srcs.find((s) => s.key === k)!).filter((s) => s?.world.manifest.private);
 
@@ -84,12 +86,16 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
       const notes: string[] = [];
       const copies: { fromPkg: string; fromId: string; toId: string }[] = [];
       const bySrc = new Map<string, BorrowPick[]>();
-      for (const b of basket.values()) bySrc.set(b.src, [...(bySrc.get(b.src) ?? []), { kind: b.kind, id: b.id }]);
+      const wholeSrc = new Set([...basket.values()].filter((b) => b.kind === 'whole').map((b) => b.src));
+      // 통째로 담은 세계를 먼저 (빈 새 세계면 그 세계의 설정·시작을 그대로 쓴다)
+      for (const k of wholeSrc) bySrc.set(k, wholePicks(srcs.find((s) => s.key === k)!.world));
+      for (const b of basket.values()) if (b.kind !== 'whole' && !wholeSrc.has(b.src)) bySrc.set(b.src, [...(bySrc.get(b.src) ?? []), { kind: b.kind, id: b.id }]);
       let i = 0;
       for (const [k, picks] of bySrc) {
         const src = srcs.find((s) => s.key === k)!;
         setBusy(`「${src.world.manifest.name}」에서 불러오는 중… (${++i}/${bySrc.size})`);
-        const r = borrow(w, src.world, picks, { withKnowledge: opts.withKnowledge, withImages: opts.withImages, withFaction: opts.withFaction, ...(opts.link ? { linkTo: w.start.locationId } : {}) });
+        const whole = wholeSrc.has(k);
+        const r = borrow(w, src.world, picks, { withKnowledge: opts.withKnowledge, withImages: opts.withImages, withFaction: opts.withFaction, ...(whole ? { whole: true } : {}), ...(opts.link && !(whole && isBlankWorld(w)) ? { linkTo: w.start.locationId } : {}) });
         w = r.world;
         copies.push(...r.copies);
         const got = Object.entries(r.added).map(([kk, n]) => `${BORROW_LABEL[kk as BorrowKind]} ${n}`).join(' · ');
@@ -119,13 +125,19 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
       <p className="small muted">만들어 둔 세계(우주)들의 <b>존재·사물</b>(인물·장소·아이템…)과 <b>서사·법칙</b>(이야기 줄기·임무·결말…)을 골라 담아 <b>{target.manifest.name}</b>(으)로 불러옵니다. AI를 다시 쓰지 않습니다. 겹치는 ID는 새로 붙이고, 딸린 것과 서사가 가리키는 것(인물·장소·플래그·조우…)도 함께 옮깁니다.</p>
       <div className="universes">
         <button type="button" className={`universe${from === 'all' ? ' on' : ''}`} onClick={() => { setFrom('all'); setLimit(PAGE); }}><b>✦ 모든 우주</b><span>{srcs.length}개 세계</span></button>
-        {srcs.map((s) => (
-          <button key={s.key} type="button" className={`universe${from === s.key ? ' on' : ''}`} onClick={() => { setFrom(s.key); setLimit(PAGE); }} title={s.world.overview ?? ''}>
-            <b>{s.world.manifest.name}</b>
-            <span>{genreOf(s.world.genre?.id).label}{s.builtin ? ' · 내장' : ''}{s.world.manifest.private ? ' · 🔒' : ''}{s.world.manifest.contentRating === 'mature' ? ' · 🔞' : ''}</span>
-            <span>인물 {s.world.characters.length} · 장소 {s.world.locations.length} · 임무 {s.world.quests?.length ?? 0}{s.world.manifest.crossover?.length ? ` · 🌌${s.world.manifest.crossover.length}` : ''}</span>
-          </button>
-        ))}
+        {srcs.map((s) => {
+          const whole = basket.has(wholeKey(s.key));
+          return (
+            <div key={s.key} className={`universe-wrap${whole ? ' whole' : ''}`}>
+              <button type="button" className={`universe${from === s.key ? ' on' : ''}`} onClick={() => { setFrom(s.key); setLimit(PAGE); }} title={s.world.overview ?? ''}>
+                <b>{s.world.manifest.name}</b>
+                <span>{genreOf(s.world.genre?.id).label}{s.builtin ? ' · 내장' : ''}{s.world.manifest.private ? ' · 🔒' : ''}{s.world.manifest.contentRating === 'mature' ? ' · 🔞' : ''}</span>
+                <span>인물 {s.world.characters.length} · 장소 {s.world.locations.length} · 임무 {s.world.quests?.length ?? 0}{s.world.manifest.crossover?.length ? ` · 🌌${s.world.manifest.crossover.length}` : ''}</span>
+              </button>
+              <button type="button" className={`small universe-whole${whole ? ' on' : ''}`} onClick={() => toggleWhole(s)} title="이 세계의 모든 것(인물·장소·임무·이야기 흐름·이미지…)과 세계 설정(장르·개요·문체·시작·달력·시간)을 통째로 담는다">{whole ? '✓ 통째로 담음' : '⬇ 통째로 담기'}</button>
+            </div>
+          );
+        })}
       </div>
       <div className="row">
         <label>세계
@@ -144,7 +156,7 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
       </div>
       <div className="lib-grid">
         {shown.map(({ src, e }) => {
-          const on = basket.has(bkey(src.key, e.kind, e.id));
+          const on = basket.has(bkey(src.key, e.kind, e.id)) || basket.has(wholeKey(src.key));
           return (
             <div key={`${src.key}|${e.id}`} className="lib-cell-wrap">
             <button type="button" className="lib-info" title="자세히 보기" aria-label={`${e.name} 자세히 보기`} onClick={() => setDetail({ src, e })}>ⓘ</button>
@@ -167,7 +179,7 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
         {basket.size > 0 && (
           <details className="small">
             <summary>담은 것 {basket.size}개 — {[...new Set([...basket.values()].map((b) => b.src))].length}개 세계에서</summary>
-            <ul className="lib-basket">{[...basket.entries()].map(([k, b]) => <li key={k}>{BORROW_LABEL[b.kind]}: {b.name} <span className="muted">({srcs.find((s) => s.key === b.src)?.world.manifest.name})</span> <button type="button" className="link small" onClick={() => setBasket((m) => { const n = new Map(m); n.delete(k); return n; })}>빼기</button></li>)}</ul>
+            <ul className="lib-basket">{[...basket.entries()].map(([k, b]) => <li key={k}>{b.kind === 'whole' ? '🌌' : `${BORROW_LABEL[b.kind]}:`} {b.name} <span className="muted">({srcs.find((s) => s.key === b.src)?.world.manifest.name})</span> <button type="button" className="link small" onClick={() => setBasket((m) => { const n = new Map(m); n.delete(k); return n; })}>빼기</button></li>)}</ul>
           </details>
         )}
         <div className="row small">

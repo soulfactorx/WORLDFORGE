@@ -13,6 +13,7 @@ import { GENRES } from '../../data/genres';
 import { stockDataUrl } from '../../data/stockart';
 import { MAX_LEVEL } from '../character/progression';
 import { classesFor } from '../classes';
+import { subclassesOf } from '../character/build';
 import { isAlwaysTrue, isUnset } from '../scenario';
 
 export interface Issue {
@@ -408,6 +409,17 @@ export function validateWorld(input: unknown): Issue[] {
     const opts = c.skillOptions?.length && c.skillOptions.length >= base.skillChoices ? c.skillOptions : base.skillOptions;
     if (c.skills?.some((sk) => !opts.includes(sk as never))) warn(`${p}.skills`, '추천 기술 중 후보에 없는 것은 무시됩니다.');
     if ((c.skills?.length ?? 0) > base.skillChoices) warn(`${p}.skills`, `추천 기술은 ${base.skillChoices}개까지만 미리 골라집니다.`);
+    if (c.subclasses !== undefined) {
+      if (!Array.isArray(c.subclasses)) err(`${p}.subclasses`, '하위 직업 목록이어야 합니다.');
+      else {
+        const allowed = subclassesOf(c.base).map((x) => x.id);
+        c.subclasses.forEach((sc, j) => {
+          if (!allowed.includes(sc?.base)) err(`${p}.subclasses[${j}].base`, `규칙 직업 ${c.base}의 하위 직업이 아닙니다 (${allowed.join(', ')})`);
+          if (typeof sc?.name !== 'string') err(`${p}.subclasses[${j}].name`, '이름이 필요합니다.');
+        });
+        if (allowed.length && allowed.every((id) => c.subclasses!.some((sc) => sc.base === id && sc.hidden))) warn(`${p}.subclasses`, '하위 직업을 모두 숨기면 기본 목록을 보여 줍니다.');
+      }
+    }
   });
   // ---- 장면 (v0.47)
   const sceneIds = new Set<string>();

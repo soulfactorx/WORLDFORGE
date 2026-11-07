@@ -108,3 +108,54 @@ describe('임무·이야기 흐름 (v0.64)', () => {
     expect(errors(r.world)).toEqual([]);
   });
 });
+
+describe('세계 통째로 (v0.67)', () => {
+  it('빈 새 세계에 내장 세계를 통째로: 모든 것과 설정이 그대로, 자리 장소는 사라지고 검사기 오류가 없다', async () => {
+    const { BUILTIN, blankWorld } = await import('../storage/packages');
+    const { wholePicks } = await import('./borrow');
+    for (const src of BUILTIN) {
+      const blank = blankWorld();
+      if (src.manifest.contentRating === 'mature') blank.manifest.contentRating = 'mature';
+      const r = borrow(blank, src, wholePicks(src), { whole: true });
+      const w = r.world;
+      expect(errors(w).slice(0, 3), src.manifest.name).toEqual([]);
+      expect(w.characters.length).toBe(src.characters.length);
+      expect(w.locations.length).toBe(src.locations.length);
+      expect(w.quests?.length ?? 0).toBe(src.quests?.length ?? 0);
+      expect(w.arcs?.length ?? 0).toBe(src.arcs?.length ?? 0);
+      expect(w.locations.some((l) => l.id === 'loc/start' && l.name === '시작 장소')).toBe(false);
+      expect(w.locations.find((l) => l.id === w.start.locationId)!.name).toBe(src.locations.find((l) => l.id === src.start.locationId)!.name);
+      expect(w.start.openingScene).toBe(src.start.openingScene);
+      expect(w.genre?.id).toBe(src.genre?.id);
+      expect(w.overview).toBe(src.overview);
+      expect(w.starts?.length ?? 0).toBe(src.starts?.length ?? 0);
+      const n = (ws: WorldPackage) => [(ws.factions ?? []).reduce((k, f) => k + (f.actions?.length ?? 0), 0), ws.characters.reduce((k, c) => k + (c.goals?.length ?? 0), 0), (ws.scenes ?? []).filter((x) => x.start).length];
+      expect(n(w), `${src.manifest.name}: 세력 행동·인물 목표·장면 조건`).toEqual(n(src));
+    }
+  });
+  it('기존 세계에 통째로 합치면 이 세계의 시작·장르는 그대로, 개요는 덧붙인다', async () => {
+    const { wholePicks } = await import('./borrow');
+    const r = borrow(sampleWorld, romanceSample, wholePicks(romanceSample), { whole: true });
+    expect(r.world.start.locationId).toBe(sampleWorld.start.locationId);
+    expect(r.world.overview).toContain(`[${romanceSample.manifest.name}]`);
+    expect(errors(r.world)).toEqual([]);
+  });
+});
+
+describe('하위 직업 관리 (v0.67)', () => {
+  it('세계 직업의 하위 직업 이름·숨기기를 따르고, 프리셋에는 장르 이름이 있다', async () => {
+    const { subclassOptions, subclassLabel, classesFor } = await import('./classes');
+    const knight = classesFor(romanceSample).find((c) => c.id === 'knight')!;
+    expect(knight.subclasses!.map((s) => s.name)).toEqual(['결투의 명수', '맹세한 호위']);
+    const sheet = { classId: 'fighter', role: 'knight', subclass: 'guardian' };
+    expect(subclassOptions(romanceSample, sheet).map((o) => o.name)).toEqual(['결투의 명수', '맹세한 호위']);
+    expect(subclassLabel(romanceSample, sheet)).toBe('맹세한 호위');
+    const w: WorldPackage = { ...structuredClone(sampleWorld), classes: [{ id: 'k', name: '기사', base: 'fighter', subclasses: [{ base: 'champion', name: '창기사', blurb: '돌격' }, { base: 'guardian', name: '', hidden: true }] }] };
+    const opts = subclassOptions(w, { classId: 'fighter', role: 'k' });
+    expect(opts.map((o) => [o.id, o.name, o.blurb])).toEqual([['champion', '창기사', '돌격']]);
+    expect(subclassOptions(sampleWorld, { classId: 'fighter' }).map((o) => o.name)).toEqual(['챔피언', '수호자']);
+    expect(errors(w)).toEqual([]);
+    const bad: WorldPackage = { ...w, classes: [{ id: 'k', name: '기사', base: 'fighter', subclasses: [{ base: 'thief', name: 'x' }] }] };
+    expect(validateWorld(bad).some((i) => i.path === 'classes[0].subclasses[0].base' && i.level === 'error')).toBe(true);
+  });
+});

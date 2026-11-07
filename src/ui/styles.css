@@ -702,3 +702,10 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 .lib-gallery figure { margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .lib-gallery img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: zoom-in; }
 .lib-gallery figcaption { font-size: .66rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.class-editor .sub-row { border-top: 1px dashed var(--border); padding: 6px 0; display: flex; flex-direction: column; gap: 4px; }
+.class-editor .sub-row.off { opacity: .55; }
+.class-editor .sub-row p { margin: 0; }
+.universe-wrap { flex: none; display: flex; flex-direction: column; gap: 3px; }
+.universe-wrap .universe { flex: 1; }
+.universe-whole { font-size: .72rem; padding: 2px 6px; }
+.universe-whole.on, .universe-wrap.whole .universe { border-color: var(--accent); color: var(--accent); }

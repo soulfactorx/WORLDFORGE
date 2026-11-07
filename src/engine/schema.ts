@@ -847,6 +847,14 @@ export interface WorldClass {
   skills?: string[];
   /** 고를 수 있는 기술 후보 (비우면 base 직업의 후보) */
   skillOptions?: string[];
+  /** 하위 직업 (v0.67): 3레벨에 고른다. base = 엔진 하위 직업 ID (규칙은 그대로), 이름·소개를 바꾸거나 숨긴다 */
+  subclasses?: WorldSubclass[];
+}
+export interface WorldSubclass {
+  base: string;
+  name: string;
+  blurb?: string;
+  hidden?: boolean;
 }
 
 /** 시간 흐름 (v0.58): 한 턴에 게임 속 시간이 얼마나 흐르는가. 휴식(1시간·8시간)은 따로 */

@@ -1,4 +1,4 @@
-import { classLabel } from '../engine/classes';
+import { classLabel, subclassLabel, subclassOptions } from '../engine/classes';
 import { useRs } from './reskin';
 import type { WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
@@ -51,7 +51,7 @@ function FameBox({ world, state }: { world: WorldPackage; state: GameState }) {
 }
 
 /** 하위 직업·능력치 향상/특성 고르기 (플레이어 레벨업 뒤, 고를 때까지 대기) */
-function BuildChoices({ sheet, onChoose, disabled }: { sheet: CharacterSheet; onChoose: (kind: BuildChoiceKind, value: string) => void; disabled?: boolean }) {
+function BuildChoices({ sheet, onChoose, disabled, world }: { sheet: CharacterSheet; onChoose: (kind: BuildChoiceKind, value: string) => void; disabled?: boolean; world?: WorldPackage }) {
   const rs = useRs();
   const asi = sheet.pending?.[0];
   if (!needsSubclass(sheet) && asi === undefined) return null;
@@ -60,9 +60,9 @@ function BuildChoices({ sheet, onChoose, disabled }: { sheet: CharacterSheet; on
       {needsSubclass(sheet) && (
         <fieldset>
           <legend>★ 하위 직업 고르기 (3레벨)</legend>
-          {subclassesOf(sheet.classId).map((s) => (
+          {subclassOptions(world, sheet, rs).map((s) => (
             <button key={s.id} className="build-option" disabled={disabled} onClick={() => onChoose('subclass', s.id)}>
-              <b>{rs(s.name)}</b> <span className="small muted">{rs(s.blurb)}</span>
+              <b>{s.name}</b> {s.blurb && <span className="small">{s.blurb} </span>}<span className="small muted">{s.blurb ? `규칙: ${s.ruleBlurb}` : s.ruleBlurb}</span>
             </button>
           ))}
         </fieldset>
@@ -91,7 +91,7 @@ export function CharacterPanel({ sheet, party = {}, onChoose, disabled, world, s
     <aside className="sheet">
       <div className="row">
         <b>{sheet.name}</b>
-        <span className="muted small">{classLabel(world, sheet, rs)}{sheet.subclass && SUBCLASSES[sheet.subclass] ? ` (${rs(SUBCLASSES[sheet.subclass]!.name)})` : ''} {sheet.level}레벨 · 숙련 보너스 {sign(proficiencyBonus(sheet.level))}</span>
+        <span className="muted small">{classLabel(world, sheet, rs)}{sheet.subclass ? ` (${subclassLabel(world, sheet, rs)})` : ''} {sheet.level}레벨 · 숙련 보너스 {sign(proficiencyBonus(sheet.level))}</span>
         <span className="spacer" />
         <span>HP {sheet.hp}/{sheet.maxHp}</span>
       </div>
@@ -103,9 +103,9 @@ export function CharacterPanel({ sheet, party = {}, onChoose, disabled, world, s
       {Object.entries(CLASS_KITS[sheet.classId]?.features ?? {}).some(([lv]) => Number(lv) <= sheet.level) && (
         <p className="small muted">능력: {Object.entries(CLASS_KITS[sheet.classId]!.features!).filter(([lv]) => Number(lv) <= sheet.level).flatMap(([, f]) => f).join(' · ')}</p>
       )}
-      {subFeatures.length > 0 && <p className="small muted">{rs(SUBCLASSES[sheet.subclass!]!.name)}: {subFeatures.map(rs).join(' · ')}</p>}
+      {subFeatures.length > 0 && <p className="small muted">{subclassLabel(world, sheet, rs)}: {subFeatures.map(rs).join(' · ')}</p>}
       {(sheet.feats?.length ?? 0) > 0 && <p className="small muted">특성: {sheet.feats!.map((f) => FEATS[f]?.name ?? f).join(' · ')}</p>}
-      {onChoose && <BuildChoices sheet={sheet} onChoose={onChoose} disabled={disabled} />}
+      {onChoose && <BuildChoices sheet={sheet} onChoose={onChoose} disabled={disabled} {...(world ? { world } : {})} />}
       {world && state && <FameBox world={world} state={state} />}
       <div className="ability-grid">
         {ABILITIES.map((a) => (
@@ -130,7 +130,7 @@ export function CharacterPanel({ sheet, party = {}, onChoose, disabled, world, s
           {Object.entries(party).map(([id, c]) => (
             <div key={id} className="row small">
               <b>{c.name}</b>
-              <span className="muted">{classLabel(world, c, rs)}{c.subclass && SUBCLASSES[c.subclass] ? ` (${rs(SUBCLASSES[c.subclass]!.name)})` : ''} {c.level}레벨</span>
+              <span className="muted">{classLabel(world, c, rs)}{c.subclass ? ` (${subclassLabel(world, c, rs)})` : ''} {c.level}레벨</span>
               <span className="spacer" />
               {Object.entries(c.resources ?? {}).map(([k, r]) => <span key={k} className="muted">{rs(RESOURCE_LABEL[k] ?? k)} {r.cur}/{r.max}</span>)}
               <span>HP {c.hp}/{c.maxHp}</span>

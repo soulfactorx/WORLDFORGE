@@ -141,7 +141,15 @@ export interface BorrowOptions {
   placeAt?: string;
   /** 가져온 장소를 이 장소와 길로 잇는다 (가져온 장소끼리 이어진 게 없을 때) */
   linkTo?: string;
+  /** 세계 통째로 (v0.67): 세계 설정(장르·개요·문체·시작·달력·시간)과 칭호·관계 사건·돌발 사건도 */
+  whole?: boolean;
 }
+
+/** 아직 아무것도 없는 새 세계인가 (통째로 가져오면 원래 세계의 설정을 그대로 쓴다) */
+export const isBlankWorld = (w: WorldPackage) => !w.characters.length && !(w.quests?.length) && !(w.arcs?.length) && w.locations.length <= 1 && !(w.assets?.length);
+
+/** 세계 통째로 가져올 때 고를 것: 이 세계의 모든 항목 */
+export const wholePicks = (w: WorldPackage): BorrowPick[] => catalogOf(w).map((e) => ({ kind: e.kind, id: e.id }));
 export interface BorrowResult {
   world: WorldPackage;
   /** 저장소에서 복사해야 할 이미지 (원래 세계 → 대상 세계) */
@@ -225,10 +233,12 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
     if (x.cards) { x.cards = x.cards.map((q) => ({ ...q, who: q.who === 'player' ? q.who : map(q.who) ?? q.who })).filter((q) => q.who === 'player' || [...idMap.values()].includes(q.who) || w.characters.some((c) => c.id === q.who)); if (!x.cards.length) delete x.cards; }
     return x;
   };
+  const remap = (v: unknown): unknown => (typeof v === 'string' ? idMap.get(v) ?? v : Array.isArray(v) ? v.map(remap) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, remap(x)])) : v);
   const home = (o.placeAt && w.locations.some((l) => l.id === o.placeAt)) ? o.placeAt : w.start.locationId;
 
   // ---- 옮기기
-  for (const f of source.factions ?? []) if (factionIds.has(f.id)) { w.factions.push({ ...structuredClone(f), id: map(f.id)!, ...(f.actions?.length ? { actions: undefined } : {}) }); count('faction'); if (f.actions?.length) notes.push(`세력 "${f.name}"의 세력 행동은 다른 세계의 조건을 가리켜 빼고 가져왔습니다.`); }
+  // 세력 행동·인물 목표·장면 조건 등 안의 ID는 새 ID로 바꾸고, 이 세계에 없는 것을 가리키는 부분만 나중에 정리한다 (v0.67)
+  for (const f of source.factions ?? []) if (factionIds.has(f.id)) { const x = remap(structuredClone(f)) as typeof f; x.id = map(f.id)!; if (!x.actions?.length) delete x.actions; w.factions.push(x); count('faction'); }
   for (const i of source.items ?? []) if (itemIds.has(i.id)) { w.items.push({ ...structuredClone(i), id: map(i.id)! }); count('item'); }
   for (const m of source.monsters ?? []) if (want('monster').has(m.id)) { w.monsters.push({ ...structuredClone(m), id: map(m.id)! }); count('monster'); }
   for (const c of source.claims) if (claimIds.has(c.id)) { const x: Claim = { ...structuredClone(c), id: map(c.id)! }; if (c.relatesTo) { const r = map(c.relatesTo); if (r) x.relatesTo = r; else delete x.relatesTo; } w.claims.push(x); count('knowledge'); }
@@ -251,7 +261,7 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
     if (x.discoveries) { x.discoveries = x.discoveries.map((d) => ({ ...d, claim: map(d.claim) ?? '' })).filter((d) => d.claim); if (!x.discoveries.length) delete x.discoveries; }
     if (x.pickups) x.pickups = x.pickups.map((p) => ({ ...p, itemId: map(p.itemId) ?? p.itemId }));
     if (x.shop) { x.shop = { ...x.shop, items: x.shop.items.map((id) => map(id) ?? id) }; if (x.shop.factionId) { const f = map(x.shop.factionId); if (f) x.shop.factionId = f; else delete x.shop.factionId; } }
-    if (x.board) { delete x.board; notes.push(`장소 "${l.name}"의 의뢰판은 임무를 가리켜 빼고 가져왔습니다.`); }
+    if (x.board) x.board = remap(x.board) as typeof x.board;
     w.locations.push(x); count('location');
   }
   if (locs.length) {
@@ -271,8 +281,8 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
     x.locationId = map(c.locationId) ?? home;
     if (x.schedule) { x.schedule = x.schedule.map((s) => ({ ...s, locationId: map(s.locationId) ?? '' })).filter((s) => s.locationId); if (!x.schedule.length) delete x.schedule; }
     if (x.faction) { const f = map(x.faction); if (f) x.faction = f; else delete x.faction; }
-    if (x.gives) x.gives = x.gives.map(({ condition: _c, ...g }) => ({ ...g, itemId: map(g.itemId) ?? g.itemId }));
-    if (x.goals?.length) { delete x.goals; notes.push(`인물 "${c.name}"의 목표는 다른 세계의 조건·효과를 가리켜 빼고 가져왔습니다.`); }
+    if (x.gives) x.gives = remap(x.gives) as typeof x.gives;
+    if (x.goals?.length) x.goals = remap(x.goals) as typeof x.goals;
     if (x.companion?.role && !classIds.has(x.companion.role) && !idMap.has(x.companion.role)) delete x.companion.role;
     else if (x.companion?.role && idMap.has(x.companion.role)) x.companion.role = idMap.get(x.companion.role)!;
     w.characters.push(x); count('character');
@@ -287,13 +297,12 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
     x.id = map(s.id)!;
     if (x.npcId) { const n = map(x.npcId); if (n) x.npcId = n; else delete x.npcId; }
     if (x.locationId) { const l = map(x.locationId); if (l) x.locationId = l; else delete x.locationId; }
-    if (x.start) { delete x.start; notes.push(`장면 "${s.name}"의 시작 조건은 다른 세계의 것을 가리켜 뺐습니다 — 장면 탭에서 다시 정하세요.`); }
+    if (x.start) x.start = remap(x.start) as typeof x.start;
     const img = (id: string | undefined) => (id ? map(id) ?? id : id);
     x.image = img(x.image);
     x.phases = x.phases?.map((p) => ({ ...p, ...(p.image ? { image: img(p.image)! } : {}) }));
     x.actions = x.actions.map((a) => ({ ...a, ...(a.image ? { image: img(a.image)! } : {}) }));
-    x.ends = x.ends.map((e) => { const { effects: _e, ...rest } = e as typeof e & { effects?: unknown }; return { ...rest, ...(e.image ? { image: img(e.image)! } : {}), ...(e.rewards ? { rewards: fixRewards(e.rewards) } : {}) }; });
-    if (s.ends.some((e) => (e as { effects?: unknown[] }).effects?.length)) notes.push(`장면 "${s.name}"의 끝 효과는 다른 세계의 플래그·인물을 가리킬 수 있어 뺐습니다.`);
+    x.ends = x.ends.map((e) => { const r = remap(e) as typeof e; return { ...r, ...(e.image ? { image: img(e.image)! } : {}), ...(e.rewards ? { rewards: fixRewards(r.rewards!) } : {}) }; });
     w.scenes.push(x); count('scene');
   }
   const copies: BorrowResult['copies'] = [];
@@ -313,13 +322,48 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
   if (!w.relations.length) delete w.relations;
 
   // ---- 이야기 장치: 통째로 복사하고, 안의 ID를 모두 새 ID로 (v0.64)
-  const remap = (v: unknown): unknown => (typeof v === 'string' ? idMap.get(v) ?? v : Array.isArray(v) ? v.map(remap) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, remap(x)])) : v);
   for (const k of Object.keys(LOGIC) as LogicKind[]) {
     const ids = want(k);
     if (!ids.size) continue;
     const key = LOGIC[k];
     const list = ((w as unknown as Record<string, unknown[] | undefined>)[key] ??= []);
     for (const x of listOf(source, k)) if (ids.has(x.id)) { list.push(remap(structuredClone(x))); count(k); }
+  }
+
+  // ---- 세계 통째로 (v0.67): 세계 설정과 나머지 장치
+  if (o.whole) {
+    const blank = isBlankWorld(target);
+    const R = <T,>(v: T) => remap(structuredClone(v)) as T;
+    if (blank || !target.genre) { if (source.genre) w.genre = structuredClone(source.genre); }
+    const join = (mine: string | undefined, theirs: string | undefined) => (!theirs ? mine : !mine?.trim() || blank ? theirs : `${mine}\n\n[${source.manifest.name}]\n${theirs}`);
+    const ov = join(w.overview, source.overview); if (ov) w.overview = ov;
+    const gm = join(w.gmNotes, source.gmNotes); if (gm) w.gmNotes = gm;
+    if (source.style && (!w.style?.trim() || blank)) w.style = source.style;
+    if (source.calendar && (!w.calendar || blank)) w.calendar = structuredClone(source.calendar);
+    if (source.time && (!w.time || blank)) w.time = structuredClone(source.time);
+    if (source.simulation && !w.simulation) w.simulation = structuredClone(source.simulation);
+    for (const key of ['titles', 'relationBeats', 'randomEvents', 'starts'] as const) {
+      const theirs = (source as unknown as Record<string, { id?: string }[] | undefined>)[key];
+      if (!theirs?.length) continue;
+      const list = ((w as unknown as Record<string, unknown[] | undefined>)[key] ??= []);
+      for (const x of theirs) {
+        const copy = R(x) as { id?: string };
+        if (copy.id) { let n = copy.id; for (let i = 2; list.some((y) => (y as { id?: string }).id === n); i++) n = `${copy.id}-${i}`; copy.id = n; }
+        list.push(copy);
+      }
+    }
+    if (blank) {
+      // 빈 새 세계: 원래 세계의 시작을 그대로 — 자리만 잡아 둔 "시작 장소"는 쓰지 않으면 지운다
+      const start = R(source.start);
+      if (w.locations.some((l) => l.id === start.locationId)) {
+        w.start = start;
+        const ph = target.locations[0];
+        if (ph && ph.id !== start.locationId && !w.characters.some((c) => c.locationId === ph.id)) {
+          w.locations = w.locations.filter((l) => l.id !== ph.id).map((l) => ({ ...l, connections: l.connections.filter((x) => x !== ph.id) }));
+        }
+      }
+      notes.push(`「${source.manifest.name}」의 세계 설정(장르·개요·문체·시작 장면·달력·시간 규칙)을 그대로 썼습니다.`);
+    } else notes.push(`「${source.manifest.name}」의 개요·GM 메모는 이 세계 것 뒤에 덧붙였고, 이 세계에 이미 있는 설정(장르·문체·달력·시작)은 그대로 두었습니다.`);
   }
 
   // ---- 정리: 가져온 것 안에서 이 세계에 없는 것(임무·조우·선택·플래그…)을 가리키는 부분을 뺀다
@@ -384,3 +428,4 @@ function pruneDangling(w: WorldPackage, base: Record<string, number>, notes: str
     }
   }
 }
+

@@ -3,7 +3,8 @@ import { CLASS_PRESETS, GENRE_CLASS_PRESET, presetById } from '../data/classPres
 import { genreOf } from '../data/genres';
 import { ABILITY_NAMES, CLASSES, SKILL_IDS, SKILLS } from '../engine/character/rules';
 import { classesFor } from '../engine/classes';
-import type { WorldClass, WorldPackage } from '../engine/schema';
+import type { WorldClass, WorldPackage, WorldSubclass } from '../engine/schema';
+import { subclassesOf } from '../engine/character/build';
 import { useState } from 'react';
 import { Area, Select, Text } from './form';
 
@@ -79,6 +80,33 @@ export function ClassEditor({ world, onChange }: { world: WorldPackage; onChange
                         </label>
                       ))}
                     </div>
+                  </fieldset>
+                )}
+                {base && subclassesOf(c.base).length > 0 && (
+                  <fieldset>
+                    <legend className="small">하위 직업 (3레벨에 고름) — 규칙은 그대로, 이름·소개를 이 세계에 맞게</legend>
+                    {subclassesOf(c.base).map((sd) => {
+                      const own = c.subclasses?.find((x) => x.base === sd.id);
+                      const upSub = (patch: Partial<WorldSubclass>) => {
+                        const rest = (c.subclasses ?? []).filter((x) => x.base !== sd.id);
+                        const next: WorldSubclass = { base: sd.id, name: own?.name ?? '', ...(own?.blurb ? { blurb: own.blurb } : {}), ...(own?.hidden ? { hidden: true } : {}), ...patch };
+                        if (!next.blurb) delete next.blurb;
+                        if (!next.hidden) delete next.hidden;
+                        const keep = next.name.trim() || next.blurb || next.hidden;
+                        const list = keep ? [...rest, next].sort((x, y) => subclassesOf(c.base).findIndex((s2) => s2.id === x.base) - subclassesOf(c.base).findIndex((s2) => s2.id === y.base)) : rest;
+                        set(i, { subclasses: list.length ? list : undefined });
+                      };
+                      return (
+                        <div key={sd.id} className={`sub-row${own?.hidden ? ' off' : ''}`}>
+                          <div className="row">
+                            <label className="grow">이름 <span className="muted small">(규칙: {sd.name})</span><input value={own?.name ?? ''} placeholder={sd.name} onChange={(e) => upSub({ name: e.target.value })} /></label>
+                            <label className="check small"><input type="checkbox" checked={!!own?.hidden} onChange={(e) => upSub({ hidden: e.target.checked })} /> 숨기기</label>
+                          </div>
+                          <label className="small">소개 (비우면 규칙 설명만)<input value={own?.blurb ?? ''} placeholder={sd.blurb} onChange={(e) => upSub({ blurb: e.target.value })} /></label>
+                          <p className="small muted">규칙: {sd.blurb}</p>
+                        </div>
+                      );
+                    })}
                   </fieldset>
                 )}
                 <div className="row">
