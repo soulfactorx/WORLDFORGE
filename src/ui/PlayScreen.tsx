@@ -40,7 +40,7 @@ import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/diges
 import { type BackgroundMode, type ImageSize, loadPlayPrefs } from './playPrefs';
 import { ScenePanel } from './ScenePanel';
 import { availableScenes, sceneDef } from '../engine/scene';
-import { abandonSceneEvents, narrateScene, narrateSceneTurn, narrationMode, sceneActionEvents, startSceneEvents } from '../gm/scene';
+import { abandonSceneEvents, narrateScene, narrateSceneTurn, narrationMode, sceneActionEvents, startSceneEvents, sceneOpponent } from '../gm/scene';
 import { CodexPanel } from './CodexPanel';
 import { recordEnding } from './collection';
 import { XpBar } from './Rewards';
@@ -454,7 +454,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}
           onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
       ) : state.scene && sceneNow ? (
-        <ScenePanel def={sceneNow} run={state.scene} sheet={state.player.sheet} busy={streaming !== null} pkg={world.manifest.id}
+        <ScenePanel def={sceneNow} run={state.scene} sheet={state.player.sheet} opp={sceneOpponent(world, state, sceneNow)} busy={streaming !== null} pkg={world.manifest.id}
           npcName={sceneNow.npcId ? world.characters.find((c) => c.id === sceneNow.npcId)?.name : undefined}
           onAct={(id) => commitScene((s) => sceneActionEvents(world, s, id))}
           onQuit={() => commitScene((s) => abandonSceneEvents(world, s))} />

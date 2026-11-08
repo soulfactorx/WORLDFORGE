@@ -86,15 +86,32 @@ export function applyReactions(def: SceneDef, run: SceneRun, roll?: () => number
   return { run: r, texts, images };
 }
 
-/** 행동마다 쓸 수 있는가와 판정 이점 */
-export function sceneActions(def: SceneDef, run: SceneRun, sheet?: GameState['player']['sheet']) {
+/** 상대가 맞서는 기술 (v0.79): 설득·기만은 통찰로, 은신은 지각으로 … 없으면 같은 판정 */
+const OPPOSE: Partial<Record<string, string>> = {
+  'skill:persuasion': 'skill:insight', 'skill:deception': 'skill:insight', 'skill:performance': 'skill:insight', 'skill:intimidation': 'ability:wis',
+  'skill:stealth': 'skill:perception', 'skill:sleight_of_hand': 'skill:perception', 'skill:insight': 'skill:deception',
+  'skill:athletics': 'skill:athletics', 'skill:acrobatics': 'skill:athletics',
+};
+/** 상대 보정 (−2 ~ +5로 묶음) */
+export function opposeMod(action: SceneAction, opp?: GameState['player']['sheet']): { value: number; label: string } | null {
+  if (!opp || !action.check) return null;
+  const spec = parseCheck(OPPOSE[action.check] ?? action.check);
+  if (!spec) return null;
+  const value = Math.max(-2, Math.min(5, checkModifier(opp, spec).total));
+  return { value, label: spec.kind === 'skill' ? SKILLS[spec.skill].name : spec.ability };
+}
+
+/** 행동마다 쓸 수 있는가와 판정 이점 · 실제 DC (상대 보정 포함) */
+export function sceneActions(def: SceneDef, run: SceneRun, sheet?: GameState['player']['sheet'], opp?: GameState['player']['sheet']) {
   return def.actions.map((action) => {
     const why = action.phases?.length && (!run.phase || !action.phases.includes(run.phase)) ? '지금 단계에서는 못 한다'
       : action.once && run.used.includes(action.id) ? '이미 했다'
       : action.requires && !sceneCond(action.requires, run) ? '아직 때가 아니다' : '';
     const spec = parseCheck(action.check);
     const gm = gaugeMods(def, run, action).reduce((a, m) => a + m.value, 0);
-    return { action, ok: !why, why, spec, mode: edgeOf(def, run, action), mod: spec && sheet ? checkModifier(sheet, spec).total + gm : undefined, gaugeMod: gm };
+    const om = def.oppose === false ? null : opposeMod(action, opp);
+    return { action, ok: !why, why, spec, mode: edgeOf(def, run, action), mod: spec && sheet ? checkModifier(sheet, spec).total + gm : undefined, gaugeMod: gm,
+      dc: (action.dc ?? 12) + (om?.value ?? 0), ...(om ? { oppose: om } : {}) };
   });
 }
 

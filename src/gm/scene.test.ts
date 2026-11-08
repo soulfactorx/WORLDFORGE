@@ -13,7 +13,7 @@ import { startEvents } from './turn';
 
 /** 장면 엔진 (v0.47): 사용자 정의 수치·상태·단계·행동 */
 const haggle: SceneDef = {
-  id: 'scene/haggle', name: '여관 값 흥정', description: '일제와 방값을 두고 흥정한다', npcId: 'npc/ilse',
+  id: 'scene/haggle', name: '여관 값 흥정', description: '일제와 방값을 두고 흥정한다', npcId: 'npc/ilse', oppose: false,
   gauges: [{ id: 'patience', name: '인내심', start: 3, min: 0, max: 5 }, { id: 'deal', name: '합의', start: 0, max: 10 }],
   states: [{ id: 'charmed', name: '기분 좋음', edge: 1 }],
   phases: [{ id: 'talk', name: '이야기' }, { id: 'close', name: '마무리' }],

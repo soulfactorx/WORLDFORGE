@@ -38,6 +38,7 @@ import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
 import { WorldAudit } from './WorldAudit';
+import { NpcStatsEditor } from './NpcStatsEditor';
 import type { LlmSettings } from '../llm/types';
 
 /**
@@ -355,7 +356,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <Area label="외형" value={c.appearance} onChange={(appearance) => up({ appearance })} rows={2} />
               <Area label="성격" value={c.personality} onChange={(personality) => up({ personality })} rows={2} />
               <Area label="말투" value={c.speech} onChange={(speech) => up({ speech })} rows={2} />
-              <Select label="성별 (이미지 고르기용)" value={c.gender ?? ''} options={[['', '정하지 않음'], ['F', '여성'], ['M', '남성']] as const} onChange={(g) => up({ gender: g || undefined })} />
+              <Select label="성별" value={c.gender ?? ''} options={[['', '정하지 않음'], ['F', '여성'], ['M', '남성']] as const} onChange={(g) => up({ gender: g || undefined })} />
+              <NpcStatsEditor c={c} w={w} onChange={(stats) => up({ stats })} />
               <Area label="배경 (이 인물만 아는 과거)" value={c.background} onChange={(background) => up({ background: background || undefined })} rows={3} />
               <Area label="첫 만남의 말 (참고)" value={c.greeting} onChange={(greeting) => up({ greeting: greeting || undefined })} rows={2} />
               <PortraitPicker c={c} w={w} onChange={(portrait) => up({ portrait })} />
@@ -551,7 +553,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       {tab === 'encounters' && (
         <JsonField label="돌발 사건 표 (이동·휴식 때 엔진이 굴린다 — 비워 두면 기본 표: 기습·뜻밖의 발견·길손·수군거림. 끄려면 [])" value={w.randomEvents ?? null} rows={6}
           onChange={(randomEvents) => set({ randomEvents: Array.isArray(randomEvents) ? randomEvents : undefined })}
-          help='예: [{ "id": "rand/merchant", "name": "떠돌이 상인", "kind": "meeting", "text": "짐을 잔뜩 진 상인이 손을 흔든다", "where": ["loc/old-road"], "weight": 2, "cooldownDays": 3 }, { "id": "rand/wolves", "name": "늑대 떼", "kind": "ambush", "text": "덤불 속에서 늑대가 튀어나온다!", "where": ["loc/forest-clearing"], "enemies": [{ "monsterId": "wolf", "zone": 2 }] }] · kind: ambush(기습)·meeting(만남)·news(소문)·opportunity(기회) · effects로 플래그·아이템·돈 등을 줄 수 있다' />
+          help='예: [{ "id": "rand/merchant", "name": "떠돌이 상인", "kind": "meeting", "text": "짐을 잔뜩 진 상인이 손을 흔든다", "where": ["loc/old-road"], "weight": 2, "cooldownDays": 3 }, { "id": "rand/wolves", "name": "늑대 떼", "kind": "ambush", "text": "덤불 속에서 늑대가 튀어나온다!", "where": ["loc/forest-clearing"], "enemies": [{ "monsterId": "wolf", "zone": 2 }] }] · 인물을 적으로: "monsterId": "npc:인물ID" (그 인물의 직업·레벨·능력치로 싸움) · kind: ambush(기습)·meeting(만남)·news(소문)·opportunity(기회) · effects로 플래그·아이템·돈 등을 줄 수 있다' />
       )}
       {tab === 'encounters' && (w.encounters ?? []).length > 0 && (
         <ul className="small">

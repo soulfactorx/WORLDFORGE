@@ -7,6 +7,7 @@ import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
 import { appearanceOf, epithetOf, knowsName } from '../engine/names';
+import { npcStatLine } from '../engine/npcStats';
 import { allTitles, rankOf, renownOf, renownTier } from '../engine/renown';
 import { classesFor, classLabel, subclassLabel } from '../engine/classes';
 import { profileLine } from '../engine/profile';
@@ -115,7 +116,7 @@ export function playerLines(world: WorldPackage, state: GameState): string[] {
 }
 
 export function buildDirectorContext(world: WorldPackage, state: GameState): string {
-  const npcs = presentCharacters(world, state).map((c) => `- ${c.id}: ${appearanceOf(c)}`);
+  const npcs = presentCharacters(world, state).map((c) => `- ${c.id}: ${appearanceOf(c)} [능력: ${npcStatLine(world, state, c)}]`);
   return [
     ...worldBrief(world, true),
     ...sceneHeader(world, state), '',
@@ -168,6 +169,8 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     ...worldBrief(world, false, 1200),
     `## 너는 ${npc.name} [${npc.id}]`,
     `외형: ${appearanceOf(npc)}`,
+    `능력: ${npcStatLine(world, state, npc)} (말과 행동이 이 능력에 어울리게 — 약한 능력을 과장하지 않는다)`,
+    ...(npc.stats?.traits && traitImpression(world, { traits: npc.stats.traits }) ? [`너의 성향: ${traitImpression(world, { traits: npc.stats.traits })}`] : []),
     `성격: ${npc.personality}`,
     `말투: ${npc.speech}`,
     ...(npc.background ? [`배경: ${npc.background}`] : []),
@@ -236,7 +239,7 @@ export function activeGoals(world: WorldPackage, state: GameState) {
 
 export function buildNarratorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => [
-    `- ${knowsName(state, c.id) ? c.name : `${epithetOf(c)} (플레이어가 아직 이름을 모름 — 이름을 쓰지 말고 외형으로 부른다)`} [${c.id}] — 외형: ${appearanceOf(c)} — 플레이어를 대하는 태도: ${stageFor(world, state.relationships, c.id)}`,
+    `- ${knowsName(state, c.id) ? c.name : `${epithetOf(c)} (플레이어가 아직 이름을 모름 — 이름을 쓰지 말고 외형으로 부른다)`} [${c.id}] — 외형: ${appearanceOf(c)} — 능력: ${npcStatLine(world, state, c)} — 플레이어를 대하는 태도: ${stageFor(world, state.relationships, c.id)}`,
     ...canonBlock(world, state, c.id),
   ].join('\n'));
   return [

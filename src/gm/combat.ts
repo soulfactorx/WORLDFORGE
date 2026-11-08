@@ -12,7 +12,10 @@ import type { LlmClient } from '../llm/types';
 import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
 import { scenarioEvents } from './scenario';
-import { encounterDifficulty, MONSTERS, monsterTable } from '../engine/combat/monsters';
+import { encounterDifficulty, type MonsterDef, MONSTERS, monsterTable } from '../engine/combat/monsters';
+import { npcSheet, npcXp } from '../engine/npcStats';
+import { appearanceOf, displayName } from '../engine/names';
+import type { CharacterSheet } from '../engine/character/sheet';
 import { CLASS_KITS } from '../engine/combat/cards';
 import type { EncounterSpec, Gear } from '../engine/combat/combat';
 import { adaptiveMode } from '../engine/randomEvents';
@@ -154,10 +157,18 @@ export function beginAdhocEncounter(world: WorldPackage, state: GameState, spec:
 function startEncounterSpec(world: WorldPackage, state: GameState, enc: EncounterSpec, turn: number, opts: EncounterOptions): GameEvent[] {
   const rng = createRng(state.rngState);
   const companions: CompanionEntry[] = Object.entries(state.party).map(([id, sheet]) => ({ id, name: sheet.name, sheet, order: state.partyOrders[id], cards: state.grantedCards?.[id] }));
-  const combat = startCombat(enc, state.player.sheet, rng, companions, playerGear(world, state), monsterTable(world));
+  // 인물 적 (v0.79): 지금 레벨의 캐릭터 시트로 (동료이거나 죽은 인물은 빠진다)
+  const npcs: Record<string, { name: string; sheet: CharacterSheet; look?: string }> = {};
+  for (const e of enc.enemies) {
+    if (!e.monsterId.startsWith('npc:')) continue;
+    const c = world.characters.find((x) => x.id === e.monsterId.slice(4));
+    if (c && !state.party[c.id] && !state.deadNpcs.includes(c.id)) npcs[e.monsterId] = { name: displayName(state, c), sheet: npcSheet(world, state, c), look: appearanceOf(c) };
+  }
+  const table = { ...monsterTable(world), ...Object.fromEntries(Object.entries(npcs).map(([id, n]) => [id, { xp: npcXp(n.sheet.level) } as MonsterDef])) };
+  const combat = startCombat(enc, state.player.sheet, rng, companions, playerGear(world, state), monsterTable(world), npcs);
   // 예전에 힘들던 적 (설계 v4 E4): 파티에게 아주 쉬운 조우면 적이 기세에 눌려 일찍 달아난다
   const levels = [state.player.sheet.level, ...companions.map((c) => c.sheet.level)];
-  const diff = encounterDifficulty(enc.enemies.map((e) => e.monsterId), levels, monsterTable(world));
+  const diff = encounterDifficulty(enc.enemies.map((e) => e.monsterId), levels, table);
   if (diff.xp <= diff.budget[0] / 2) {
     for (const c of Object.values(combat.combatants)) if (c.side === 'enemy' && c.role !== 'boss') c.fleeAt = Math.max(c.fleeAt ?? 0, 0.6);
     combat.overmatched = true;

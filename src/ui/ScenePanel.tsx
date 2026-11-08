@@ -9,20 +9,20 @@ import { AssetImage } from './AssetImage';
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
 /** 장면 패널 (v0.47): 수치 막대 · 상태 · 단계 · 행동 카드 · 기록 */
-export function ScenePanel({ def, run, sheet, busy, npcName, pkg, onAct, onQuit }: {
-  def: SceneDef; run: SceneRun; sheet: GameState['player']['sheet']; busy: boolean; npcName?: string; pkg: string;
+export function ScenePanel({ def, run, sheet, opp, busy, npcName, pkg, onAct, onQuit }: {
+  def: SceneDef; run: SceneRun; sheet: GameState['player']['sheet']; opp?: GameState['player']['sheet']; busy: boolean; npcName?: string; pkg: string;
   onAct: (actionId: string) => void; onQuit: () => void;
 }) {
   const rs = useRs();
   const phase = def.phases?.find((p) => p.id === run.phase);
-  const acts = sceneActions(def, run, sheet).filter((a) => !a.action.phases?.length || a.ok || a.why !== '지금 단계에서는 못 한다');
+  const acts = sceneActions(def, run, sheet, opp).filter((a) => !a.action.phases?.length || a.ok || a.why !== '지금 단계에서는 못 한다');
   const checkName = (c?: string) => {
     const [k, id] = (c ?? '').split(':');
     return k === 'skill' ? SKILLS[id as keyof typeof SKILLS]?.name : k === 'ability' ? ABILITY_NAMES[id as keyof typeof ABILITY_NAMES] : undefined;
   };
   return (
     <section className="scene-panel" aria-label={`장면: ${def.name}`}>
-      <div className="row"><b>🎭 {rs(def.name)}</b>{npcName && <span className="small muted">— {rs(npcName)}</span>}<span className="spacer" />
+      <div className="row"><b>🎭 {rs(def.name)}</b>{npcName && <span className="small muted">— {rs(npcName)}{opp ? ` (${opp.level}레벨 ${opp.roleName ?? ''})` : ''}</span>}<span className="spacer" />
         <span className="small muted">{phase ? `${rs(phase.name)} · ` : ''}{run.round}차례{def.maxRounds ? ` / ${def.maxRounds}` : ''}</span></div>
       {run.image && <AssetImage pkg={pkg} id={run.image} alt={def.name} className="scene-art" zoom />}
       {phase?.text && <p className="small muted">{rs(phase.text)}</p>}
@@ -41,12 +41,12 @@ export function ScenePanel({ def, run, sheet, busy, npcName, pkg, onAct, onQuit 
         <div className="row scene-states">{run.states.map((id) => { const st = def.states?.find((x) => x.id === id); return <span key={id} className={`tag ${st?.edge === 1 ? 'confirmed' : st?.edge === -1 ? 'stage-hostile' : ''}`} title={st?.text}>{rs(st?.name ?? id)}</span>; })}</div>
       )}
       <div className="scene-actions">
-        {acts.map(({ action: a, ok, why, mode, mod, gaugeMod }) => (
+        {acts.map(({ action: a, ok, why, mode, mod, gaugeMod, dc, oppose }) => (
           <button key={a.id} type="button" disabled={busy || !ok} onClick={() => onAct(a.id)} title={why || rs(a.text ?? '')} className={a.image ? 'has-art' : undefined}>
             {a.image && <AssetImage pkg={pkg} id={a.image} alt="" className="act-art" />}
             <b>{rs(a.name)}</b>
             <span className="small muted">
-              {a.check ? `${checkName(a.check)} ${mod !== undefined ? fmt(mod) : ''}${gaugeMod ? ` (수치 ${fmt(gaugeMod)})` : ''} vs ${a.dc ?? 12}` : '판정 없음'}
+              {a.check ? `${checkName(a.check)} ${mod !== undefined ? fmt(mod) : ''}${gaugeMod ? ` (수치 ${fmt(gaugeMod)})` : ''} vs ${dc}${oppose ? ` (상대 ${oppose.label} ${fmt(oppose.value)})` : ''}` : '판정 없음'}
               {mode === 'advantage' && <span className="edge up"> ▲이점</span>}{mode === 'disadvantage' && <span className="edge down"> ▼불리</span>}
               {why && ` · ${why}`}
             </span>

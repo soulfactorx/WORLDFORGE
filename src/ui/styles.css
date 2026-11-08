@@ -828,3 +828,12 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .audit-patches { display: flex; flex-direction: column; gap: 10px; }
 .audit-patch { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
 .audit-before { margin: 0; white-space: pre-wrap; word-break: break-word; }
+
+/* NPC 캐릭터 데이터 (v0.79) */
+.npc-stats { display: flex; flex-direction: column; gap: 8px; }
+.npc-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.npc-traits { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.npc-traits label { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; }
+.npc-traits label > span:first-child, .npc-traits label { min-width: 0; }
+.npc-traits input[type=range] { grid-column: 1 / 2; }
+.npc-preview { margin: 0; padding-left: 1.1em; word-break: break-word; }

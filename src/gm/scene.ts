@@ -12,10 +12,18 @@ import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
 import type { LlmClient } from '../llm/types';
 import { rewardEvents, scenarioEvents } from './scenario';
+import { npcSheet } from '../engine/npcStats';
 import { effectEvents } from './story';
 import { buildNarratorContext } from './context';
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+/** 장면의 상대 시트 (v0.79): 상대 인물이 있고 맞서기를 끄지 않았으면 */
+export function sceneOpponent(world: WorldPackage, state: GameState, def: SceneDef) {
+  if (!def.npcId || def.oppose === false) return undefined;
+  const c = world.characters.find((x) => x.id === def.npcId);
+  return c ? npcSheet(world, state, c) : undefined;
+}
 
 export function startSceneEvents(world: WorldPackage, state: GameState, sceneId: string): GameEvent[] {
   const def = availableScenes(world, state).find((d) => d.id === sceneId);
@@ -41,7 +49,7 @@ export function sceneActionEvents(world: WorldPackage, state: GameState, actionI
   const run = state.scene;
   const def = run && sceneDef(world, run.sceneId);
   if (!run || !def) throw new Error('진행 중인 장면이 없다');
-  const opt = sceneActions(def, run, state.player.sheet).find((a) => a.action.id === actionId);
+  const opt = sceneActions(def, run, state.player.sheet, sceneOpponent(world, state, def)).find((a) => a.action.id === actionId);
   if (!opt) throw new Error('없는 행동이다');
   if (!opt.ok) throw new Error(opt.why);
   const a = opt.action;
@@ -53,11 +61,11 @@ export function sceneActionEvents(world: WorldPackage, state: GameState, actionI
     const m = checkModifier(state.player.sheet, opt.spec);
     const gm = gaugeMods(def, run, a);
     const total = m.total + gm.reduce((x, g) => x + g.value, 0);
-    const t = d20Test(rng, total, a.dc ?? 12, opt.mode);
+    const t = d20Test(rng, total, opt.dc, opt.mode);
     success = t.success || t.natural20;
     great = success && (t.natural20 || t.total >= t.dc + 5);
     const gmText = gm.map((g) => ` ${g.label}${fmt(g.value)}`).join('');
-    rollText = ` — ${m.label} d20(${t.rolls.join('/')}) ${fmt(m.total)}${gmText} = ${t.total} vs ${t.dc}${opt.mode === 'advantage' ? ' (이점)' : opt.mode === 'disadvantage' ? ' (불리)' : ''} → ${great && a.great ? '대성공' : success ? '성공' : '실패'}`;
+    rollText = ` — ${m.label} d20(${t.rolls.join('/')}) ${fmt(m.total)}${gmText} = ${t.total} vs ${t.dc}${opt.oppose ? ` (상대 ${opt.oppose.label} ${fmt(opt.oppose.value)})` : ''}${opt.mode === 'advantage' ? ' (이점)' : opt.mode === 'disadvantage' ? ' (불리)' : ''} → ${great && a.great ? '대성공' : success ? '성공' : '실패'}`;
   }
   const delta = success ? (great && a.great ? a.great : a.success) : a.failure;
   const acted = applyDelta(def, run, delta);

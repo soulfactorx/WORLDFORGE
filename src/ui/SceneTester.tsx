@@ -5,7 +5,7 @@ import type { WorldPackage } from '../engine/schema';
 import { validateWorld } from '../engine/package/validate';
 import type { GameState } from '../engine/state/state';
 import { sandboxAct, sandboxState, simulateScene, testSheet, type SimResult } from '../gm/sceneTest';
-import { abandonSceneEvents } from '../gm/scene';
+import { abandonSceneEvents, sceneOpponent } from '../gm/scene';
 import { applyEvent } from '../engine/state/state';
 import { AssetImage } from './AssetImage';
 import { ScenePanel } from './ScenePanel';
@@ -49,7 +49,7 @@ export function SceneTester({ w, sceneId, onClose }: { w: WorldPackage; sceneId:
           <ul className="small scene-tester-issues">{issues.map((i, k) => <li key={k} className={i.level === 'error' ? 'err' : 'warn'}>{i.level === 'error' ? '⛔' : '⚠'} {i.path.replace(`scenes[${idx}]`, '') || '(장면)'} — {i.message}</li>)}</ul>
         )}
         {err && <p className="small err" role="alert">{err}</p>}
-        {state?.scene && <ScenePanel def={def} run={state.scene} sheet={state.player.sheet} busy={false} pkg={w.manifest.id}
+        {state?.scene && <ScenePanel def={def} run={state.scene} sheet={state.player.sheet} opp={sceneOpponent(w, state, def)} busy={false} pkg={w.manifest.id}
           npcName={def.npcId ? w.characters.find((c) => c.id === def.npcId)?.name : undefined} onAct={act} onQuit={quit} />}
         {state && !state.scene && result && (
           <section className="scene-tester-result">

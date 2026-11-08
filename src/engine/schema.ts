@@ -114,6 +114,8 @@ export interface Character {
   portrait?: string;
   /** 성별 (이미지 고르기용, v0.13) */
   gender?: 'M' | 'F';
+  /** 캐릭터 데이터 (v0.79): 주인공과 같은 직업·레벨·능력치·성향. 전투·장면 판정에 쓰이고, 플레이 시간에 따라 자란다 */
+  stats?: NpcStats;
   /** 이 인물의 목표 (설계 v4 E7) */
   goals?: NpcGoal[];
   /** 외부에서 가져온 인물의 출처 (v0.12) */
@@ -243,6 +245,8 @@ export interface SceneDef {
   description: string;
   /** 상대 인물 (그 인물이 있어야 열린다) */
   npcId?: EntityId;
+  /** 상대의 능력이 맞선다 (v0.79, 상대 인물이 있으면 기본 켬): 판정 DC에 상대의 맞서는 기술 보정이 더해진다 */
+  oppose?: boolean;
   /** 이 장소에서만 */
   locationId?: EntityId;
   /** 열리는 조건 (기본 항상) */
@@ -417,6 +421,24 @@ export interface Shop {
   factionId?: EntityId;
   /** 플레이어의 물건을 사 주는가 (기본 예) */
   buys?: boolean;
+}
+
+/** NPC 캐릭터 데이터 (v0.79) */
+export interface NpcStats {
+  /** 세계 직업 ID (직업 탭) — 규칙은 그 직업의 base */
+  role?: string;
+  /** 규칙 직업 (role이 없을 때) */
+  classId?: string;
+  /** 기준 레벨 (기본 1) */
+  level?: number;
+  /** 성장: follow = 주인공 레벨 + offset (기준 레벨 아래로는 안 내려감, 기본) · time = 며칠마다 1레벨 · fixed = 그대로 */
+  growth?: 'follow' | 'time' | 'fixed';
+  offset?: number;
+  everyDays?: number;
+  /** 능력치 (없으면 직업 추천 배열) */
+  abilities?: { str: number; dex: number; con: number; int: number; wis: number; cha: number };
+  /** 성향 (주인공과 같은 축) */
+  traits?: Record<string, number>;
 }
 
 export interface CompanionSpec {

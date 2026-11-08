@@ -127,6 +127,8 @@ export function validateWorld(input: unknown): Issue[] {
 
   const locIds = new Set(locations.map((l) => l?.id));
   const charIds = new Set(characters.map((c) => c?.id));
+  // 인물도 적이 될 수 있다 (v0.79): "npc:인물ID" — 그 인물의 직업·레벨·능력치로 싸운다
+  for (const c of characters) if (c?.id) MT[`npc:${c.id}`] = true;
   const factIds = new Set(facts.map((f) => f?.id));
   const claimIds = new Set(claims.map((c) => c?.id));
   const encIds = new Set(encounters.map((e) => e?.id));
@@ -170,6 +172,14 @@ export function validateWorld(input: unknown): Issue[] {
     }
     if (!locIds.has(c.locationId)) err(`${p}.locationId`, `없는 장소 "${c.locationId}"`);
     if (!IMPROV.includes(c.improvisation)) err(`${p}.improvisation`, 'none / minor / free 중 하나입니다.');
+    if (c.stats) {
+      const st = c.stats;
+      if (st.role !== undefined && !classesFor(input as unknown as WorldPackage).some((k) => k.id === st.role)) warn(`${p}.stats.role`, `이 세계의 직업 목록에 없는 직업 "${st.role}" — 기본 전사로 계산됩니다.`);
+      if (st.classId !== undefined && !CLASSES[st.classId]) err(`${p}.stats.classId`, `알 수 없는 규칙 직업 "${st.classId}"`);
+      if (st.level !== undefined && !(Number.isInteger(st.level) && st.level >= 1 && st.level <= 10)) err(`${p}.stats.level`, '레벨은 1~10입니다.');
+      if (st.growth !== undefined && !['follow', 'time', 'fixed'].includes(st.growth)) err(`${p}.stats.growth`, 'follow / time / fixed 중 하나입니다.');
+      if (st.abilities) for (const a of ABILS) { const v = (st.abilities as Record<string, number>)[a]; if (!(typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 30)) err(`${p}.stats.abilities.${a}`, '능력치는 1~30 정수입니다.'); }
+    }
     if (c.companion) {
       if (!CLASSES[c.companion.classId]) err(`${p}.companion.classId`, `알 수 없는 직업 "${c.companion.classId}" (${Object.keys(CLASSES).join(', ')})`);
       if (c.companion.role !== undefined) {

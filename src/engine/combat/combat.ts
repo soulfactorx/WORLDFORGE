@@ -16,6 +16,7 @@
  */
 import type { Ability } from '../character/rules';
 import { type Abilities, type CharacterSheet, resourcesOf } from '../character/sheet';
+import { npcXp } from '../npcStats';
 import { abilityModifier, d20Test, type RollMode } from '../dice/dice';
 import { type Rng, rollDie } from '../dice/rng';
 import { proficiencyBonus, SKILLS } from '../character/rules';
@@ -290,7 +291,8 @@ function companionStartZone(c: CompanionEntry): number {
   return c.order?.mode === 'hold_back' || c.sheet.classId === 'wizard' ? 0 : 1;
 }
 
-export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng, companions: CompanionEntry[] = [], gear: Gear = {}, table: Record<string, MonsterDef> = MONSTERS): CombatState {
+export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng, companions: CompanionEntry[] = [], gear: Gear = {}, table: Record<string, MonsterDef> = MONSTERS,
+  npcs: Record<string, { name: string; sheet: CharacterSheet; look?: string }> = {}): CombatState {
   const list: Combatant[] = [playerCombatant(sheet, gear)];
   for (const c of companions) {
     if (c.sheet.hp > 0) list.push(sheetCombatant(c.sheet, c.id, c.name, false, companionStartZone(c), c.cards?.length ? { cards: c.cards } : {}));
@@ -298,6 +300,14 @@ export function startCombat(enc: EncounterSpec, sheet: CharacterSheet, rng: Rng,
   const counts: Record<string, number> = {};
   for (const e of enc.enemies) {
     counts[e.monsterId] = (counts[e.monsterId] ?? 0) + 1;
+    // 인물 적 (v0.79): 그 인물의 캐릭터 시트로 싸운다. 크게 다치면 물러난다 (이야기 속 인물이 함부로 죽지 않게)
+    if (e.monsterId.startsWith('npc:')) {
+      const n = npcs[e.monsterId];
+      if (!n) continue;
+      const c = sheetCombatant(n.sheet, `${e.monsterId}#${counts[e.monsterId]}`, n.name, false, Math.min(ZONE_COUNT - 1, Math.max(2, e.zone)));
+      list.push({ ...c, side: 'enemy', xp: npcXp(n.sheet.level), fleeAt: 0.25, ...(n.look ? { look: n.look } : {}) });
+      continue;
+    }
     list.push(monsterCombatant(e.monsterId, counts[e.monsterId]!, Math.min(ZONE_COUNT - 1, Math.max(2, e.zone)), table));
   }
   for (const c of list) c.initiative = rollDie(rng, 20) + abilityModifier(c.abilities.dex) + (c.initBonus ?? 0);

@@ -5,6 +5,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { aiFill, applyPatches, scanWorld, type Gap, type Patch } from '../gm/worldgen/audit';
 import { createLlmClient } from '../llm';
+import { classesFor } from '../engine/classes';
 import type { WorldPackage } from '../engine/schema';
 import type { LlmSettings } from '../llm/types';
 
@@ -90,6 +91,8 @@ export function WorldAudit({ w, settings, onApply, onGoto, onAction, onClose }: 
                 {p.before.trim() && <p className="small muted audit-before">지금: {p.before}</p>}
                 {p.field === 'character.gender'
                   ? <select value={p.value} onChange={(e) => edit(p.key, e.target.value)}><option value="M">남성</option><option value="F">여성</option></select>
+                  : p.field === 'character.class'
+                  ? <select value={p.value} onChange={(e) => edit(p.key, e.target.value)}>{classesFor(w).map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}</select>
                   : <textarea rows={Math.min(8, Math.max(2, Math.ceil(p.value.length / 60)))} value={p.value} onChange={(e) => edit(p.key, e.target.value)} />}
                 {p.reason && <p className="small muted">근거: {p.reason}</p>}
               </div>
