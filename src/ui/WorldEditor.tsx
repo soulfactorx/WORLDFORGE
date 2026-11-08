@@ -37,6 +37,7 @@ import { generateScenario } from '../gm/worldgen/generate';
 import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
+import { WorldAudit } from './WorldAudit';
 import type { LlmSettings } from '../llm/types';
 
 /**
@@ -109,6 +110,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [genRequest, setGenRequest] = useState('');
   const [importing, setImporting] = useState(!!initialCard);
   const [library, setLibrary] = useState(!!openLibrary);
+  const [auditing, setAuditing] = useState(false);
   const [packUi, setPackUi] = useState<null | 'import' | 'character' | 'rules'>(null);
 
   async function aiScenario() {
@@ -154,6 +156,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         <h2>세계관 제작 — {w.manifest.name}</h2>
         {w.manifest.crossover?.length ? <span className="small muted" title="만계서고에서 불러온 원래 세계">🌌 크로스오버: {w.manifest.crossover.map((c) => c.name).join(' · ')}</span> : null}
         <span className="spacer" />
+        <button onClick={() => setAuditing((v) => !v)} title="빈칸·잘못 채운 칸·빠진 설정을 찾고 AI로 채운다">🩺 AI 점검·마무리</button>
         <button onClick={() => setLibrary((v) => !v)} title="만들어 둔 다른 세계(우주)의 인물·장소·임무·이야기 흐름·이미지 등을 AI 없이 불러온다">🌌 만계서고에서 불러오기</button>
         <button onClick={onDone}>닫기</button>
         {w.manifest.private ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용 (내보내기 불가)</span>
@@ -166,6 +169,12 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           setLibrary(false);
           setStatus(`🌌 만계서고에서 불러왔습니다 — ${notes.join(' / ')} · 저장을 눌러야 반영됩니다.`);
         }} />
+      )}
+      {auditing && (
+        <WorldAudit w={w} settings={settings} onClose={() => setAuditing(false)}
+          onApply={(nw, summary) => { setW(nw); setStatus(summary); }}
+          onGoto={(p) => setTab(tabForPath(p))}
+          onAction={(a) => setTab(a === 'scenario' ? 'quests' : a === 'scenes' ? 'scenes' : 'images')} />
       )}
       {status && <p className="status small">{status}</p>}
       {!approved && (
@@ -181,7 +190,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
       {approved && alreadySaved && notes && notes.length > 0 && (
         <div className="ai-draft small">
-          <b>✦ AI가 카드로 만든 세계입니다.</b> 라이브러리에 저장되었습니다. 내용을 검토하고 고친 뒤 다시 <b>저장</b>하세요.
+          <b>✦ AI가 카드로 만든 세계입니다.</b> 라이브러리에 저장되었습니다. 내용을 검토하고 고친 뒤 다시 <b>저장</b>하세요. <button type="button" className="small" onClick={() => setAuditing(true)}>🩺 AI로 빈칸·놓친 설정 점검</button>
           <details><summary>정리하면서 알게 된 것 {notes.length}건</summary><ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></details>
         </div>
       )}
