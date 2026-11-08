@@ -138,13 +138,17 @@ export async function generateWorld(
 }
 
 export async function generateScenario(
-  llm: LlmClient, world: WorldPackage, onStage: (stage: string) => void, signal?: AbortSignal, request = '',
+  llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal, request = '',
 ): Promise<{ world: WorldPackage; notes: string[] }> {
-  onStage('이야기 만드는 중 (임무·조우·결말)…');
+  onStage('세계 요약을 보내는 중…', 2, 5);
+  onStage('AI가 임무·조우·결말을 쓰는 중…', 5, 90);
   const draft = await llm.json<ScenarioDraft>({
     system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${genreOf(world.genre?.id).combat === 'rare' ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : ''}`,
     user: `${worldSummary(world)}\n\n## 쓸 수 있는 적 (이 세계의 장르)\n${monstersOfWorld(world).map((m) => `- ${m.id}: ${m.name} · ${m.role} · 경험치 ${m.xp} · ${m.look}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 12000, effort: 'medium',
   }, scenarioDraftSchema(Object.keys(monsterTable(world))), signal);
-  return addScenario(world, draft);
+  onStage('받은 초안을 세계에 맞춰 정리하고 검사하는 중…', 92, 99);
+  const r = addScenario(world, draft);
+  onStage('완료', 100, 100);
+  return r;
 }

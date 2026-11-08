@@ -188,15 +188,17 @@ export function scenesFromDraft(world: WorldPackage, drafts: SceneDraft[]): { sc
 
 /** AI로 장면 만들기 → 세계에 더한다 */
 export async function generateScenes(
-  llm: LlmClient, world: WorldPackage, onStage: (stage: string) => void, signal?: AbortSignal, request = '', count = 3,
+  llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal, request = '', count = 3,
 ): Promise<{ world: WorldPackage; notes: string[] }> {
-  onStage('장면 만드는 중 (협상·추격·대결·데이트…)…');
+  onStage('AI가 장면을 쓰는 중 (협상·추격·대결·데이트…)…', 5, 90);
   const draft = await llm.json<{ scenes: SceneDraft[] }>({
     system: `${SCENES_SYSTEM}\n- ${genreGuide(world)}`,
     user: `${worldSummary(world)}${world.scenes?.length ? `\n\n## 이미 있는 장면 (겹치지 않게)\n${world.scenes.map((s) => `- ${s.name}`).join('\n')}` : ''}\n\n## 만들 개수\n${count}개${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 12000, effort: 'medium',
   }, SCENES_DRAFT_SCHEMA, signal);
+  onStage('받은 장면을 정리하고 검사하는 중…', 92, 99);
   const r = scenesFromDraft(world, draft?.scenes ?? []);
   const next: WorldPackage = { ...world, ...(r.flags.length ? { flags: [...(world.flags ?? []), ...r.flags] } : {}), ...(r.scenes.length ? { scenes: [...(world.scenes ?? []), ...r.scenes] } : {}) };
+  onStage('완료', 100, 100);
   return { world: next, notes: [...(r.scenes.length ? [`장면 ${r.scenes.length}개를 만들었습니다: ${r.scenes.map((s) => s.name).join(', ')}. 편집기 장면 탭에서 다듬을 수 있습니다.`] : ['장면을 만들지 못했습니다. 편집기 장면 탭에서 "AI로 장면 추가"로 다시 시도할 수 있습니다.']), ...r.notes] };
 }

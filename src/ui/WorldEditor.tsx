@@ -38,6 +38,7 @@ import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
 import { WorldAudit } from './WorldAudit';
+import { GenProgress, useGenProgress } from './GenProgress';
 import { NpcStatsEditor } from './NpcStatsEditor';
 import type { LlmSettings } from '../llm/types';
 
@@ -91,41 +92,39 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [questView, setQuestView] = useState<'form' | 'json'>('form');
   const [sceneView, setSceneView] = useState<'form' | 'json'>('form');
   const [pruneOnSave, setPruneOnSave] = useState<string[]>([]);
-  const [sceneStage, setSceneStage] = useState('');
   const [sceneRequest, setSceneRequest] = useState('');
+  const sceneGen = useGenProgress();
   async function genScenes() {
     if (!settings) return;
-    setSceneStage('장면 만드는 중…');
     try {
-      const r = await generateScenes(createLlmClient(settings), w, setSceneStage, undefined, sceneRequest);
+      const r = await sceneGen.run('장면 요청을 보내는 중…', (on, sig) => generateScenes(createLlmClient(settings), w, on, sig, sceneRequest));
+      if (!r) { setStatus('장면 만들기를 중단했습니다.'); return; }
       setW(r.world);
       setStatus(r.notes.join(' '));
     } catch (e) { setStatus(`장면 생성 실패: ${(e as Error).message}`); }
-    finally { setSceneStage(''); }
   }
   const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
   const [approved, setApproved] = useState(!draftNotes || !!alreadySaved);
-  const [genStage, setGenStage] = useState('');
   const [genRequest, setGenRequest] = useState('');
   const [importing, setImporting] = useState(!!initialCard);
   const [library, setLibrary] = useState(!!openLibrary);
   const [auditing, setAuditing] = useState(false);
   const [packUi, setPackUi] = useState<null | 'import' | 'character' | 'rules'>(null);
 
+  const scenarioGen = useGenProgress();
   async function aiScenario() {
     if (!settings) return;
     try {
-      const r = await generateScenario(createLlmClient(settings), w, setGenStage, undefined, genRequest);
+      const r = await scenarioGen.run('세계 요약을 보내는 중…', (on, sig) => generateScenario(createLlmClient(settings), w, on, sig, genRequest));
+      if (!r) { setStatus('임무·조우·결말 만들기를 중단했습니다.'); return; }
       setW({ ...r.world, manifest: { ...r.world.manifest, aiAssisted: true } });
       setNotes(r.notes);
       setApproved(false);
       setStatus('AI가 임무·조우·결말 초안을 덧붙였습니다. 검토 후 저장하세요.');
     } catch (e) {
       setStatus(`❌ ${(e as Error).message}`);
-    } finally {
-      setGenStage('');
     }
   }
   const issues = useMemo(() => validateWorld(w), [w]);
@@ -526,9 +525,10 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             <button type="button" className={sceneView === 'json' ? 'primary' : ''} onClick={() => setSceneView('json')}>JSON</button>
           </div>
           <div className="row">
-            <input value={sceneRequest} placeholder="(선택) 원하는 장면 — 예: 라이벌과의 비무, 상인과의 흥정" disabled={!!sceneStage} onChange={(e) => setSceneRequest(e.target.value)} />
-            <button type="button" disabled={!settings || !!sceneStage} onClick={genScenes}>{sceneStage || '✦ AI로 장면 추가'}</button>
+            <input value={sceneRequest} placeholder="(선택) 원하는 장면 — 예: 라이벌과의 비무, 상인과의 흥정" disabled={sceneGen.busy} onChange={(e) => setSceneRequest(e.target.value)} />
+            <button type="button" disabled={!settings || sceneGen.busy} onClick={genScenes}>{sceneGen.busy ? '만드는 중…' : '✦ AI로 장면 추가'}</button>
           </div>
+          <GenProgress stage={sceneGen.stage} pct={sceneGen.pct} onCancel={sceneGen.cancel} steps={['장면 요청 보내기', 'AI가 장면 쓰기', '정리·검사']} />
           {sceneView === 'form' ? <SceneForms w={w} set={set} /> : <JsonField label="장면" value={w.scenes ?? []} onChange={(scenes) => set({ scenes: Array.isArray(scenes) && scenes.length ? scenes : undefined })} rows={20}
             help={`예: { "id": "scene/haggle", "name": "값 흥정", "description": "상인과 값을 두고 흥정한다 (GM용)", "npcId": "npc/…", "start": { "all": [] }, "gauges": [{ "id": "patience", "name": "인내심", "start": 5, "min": 0, "max": 5 }, { "id": "deal", "name": "합의", "start": 0, "max": 10 }], "states": [{ "id": "warm", "name": "호의", "edge": 1 }], "phases": [{ "id": "talk", "name": "탐색" }, { "id": "close", "name": "담판" }], "likes": ["칭찬"], "dislikes": ["위협"], "actions": [{ "id": "praise", "name": "물건 칭찬", "check": "skill:persuasion", "dc": 12, "tags": ["칭찬"], "success": { "gauges": { "deal": 3 }, "addStates": ["warm"] }, "failure": { "gauges": { "patience": -1 } } }, { "id": "final", "name": "마지막 제안", "phases": ["close"], "check": "skill:insight", "dc": 14, "success": { "gauges": { "deal": 5 } }, "failure": { "gauges": { "patience": -2 } } }], "ends": [{ "id": "deal", "name": "거래 성사", "when": { "gauge": "deal", "gte": 10 }, "outcome": "success", "effects": [{ "setFlag": "…" }], "rewards": { "money": 20 } }, { "id": "walk", "name": "결렬", "when": { "gauge": "patience", "lte": 0 }, "outcome": "failure" }], "maxRounds": 8, "timeoutEnd": "walk" } · 판정: skill:${SKILL_IDS.join('/')} 또는 ability:str/dex/con/int/wis/cha · 장면 조건: gauge(gte·lte)·state·phase·round·all·any · 수치 기본 범위 0~100`} />}
         </>
@@ -572,10 +572,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           </p>}
           {settings && (
             <div className="row">
-              <input value={genRequest} placeholder="(선택) 원하는 이야기 방향 — 예: 배신하는 동료가 있는 메인 임무" onChange={(e) => setGenRequest(e.target.value)} />
-              <button type="button" disabled={!!genStage} onClick={aiScenario}>{genStage || '✦ AI로 임무·조우·결말 추가'}</button>
+              <input value={genRequest} placeholder="(선택) 원하는 이야기 방향 — 예: 배신하는 동료가 있는 메인 임무" disabled={scenarioGen.busy} onChange={(e) => setGenRequest(e.target.value)} />
+              <button type="button" disabled={scenarioGen.busy} onClick={aiScenario}>{scenarioGen.busy ? '만드는 중…' : '✦ AI로 임무·조우·결말 추가'}</button>
             </div>
           )}
+          <GenProgress stage={scenarioGen.stage} pct={scenarioGen.pct} onCancel={scenarioGen.cancel} steps={['세계 요약 보내기', 'AI가 임무·조우·결말 쓰기', '정리·검사']} />
           <div className="row"><b>보기:</b>
             <button type="button" className={questView === 'form' ? 'primary' : ''} onClick={() => setQuestView('form')}>폼</button>
             <button type="button" className={questView === 'json' ? 'primary' : ''} onClick={() => setQuestView('json')}>JSON</button>
