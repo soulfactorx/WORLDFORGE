@@ -899,3 +899,10 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .toast-close { flex: none; padding: 2px 8px; min-height: 32px; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .editor-save.saved { background: #2e7d4f; border-color: #2e7d4f; color: #fff; }
+
+/* 세계 규칙 (v0.83): 인물 반응 줄 */
+.rule-reaction { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--border); min-width: 0; }
+.rule-reaction:first-of-type { border-top: 0; }
+.rule-rel { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; min-width: 0; }
+.rule-rel > label { flex: 1 1 140px; min-width: 0; }
+.rule-rel > button { min-height: 36px; min-width: 36px; }

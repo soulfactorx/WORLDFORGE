@@ -615,6 +615,33 @@ export function validateWorld(input: unknown): Issue[] {
     });
   };
   deferredEffects.forEach(([l, p]) => checkEffects(l, p));
+  // ---- 세계 규칙 (v0.83)
+  const worldRules = arr<NonNullable<WorldPackage['rules']>[number]>('rules', false);
+  worldRules.forEach((r, i) => {
+    const p = `rules[${i}]`;
+    if (!isObj(r)) { err(p, '규칙은 객체입니다.'); return; }
+    register(r.id, p);
+    text(r.name, `${p}.name`);
+    const tr = r.trigger as unknown;
+    if (!isObj(tr) || (tr.kind !== 'action' && tr.kind !== 'state')) err(`${p}.trigger`, '발동 방식은 action(플레이어 행동) 또는 state(세계 상태)입니다.');
+    else if (tr.kind === 'action') {
+      const kws = Array.isArray(tr.keywords) ? tr.keywords : [];
+      if (!(isStr(tr.describe) && tr.describe.trim()) && !kws.some((k) => isStr(k) && k.trim())) err(`${p}.trigger`, '어떤 행동인지 묘사하거나 낱말을 하나 이상 적으세요.');
+      if (tr.keywords !== undefined && !Array.isArray(tr.keywords)) err(`${p}.trigger.keywords`, '낱말은 목록입니다.');
+    } else checkCond(tr.condition, `${p}.trigger.condition`);
+    if (r.requires) checkCond(r.requires, `${p}.requires`);
+    checkEffects(r.effects, `${p}.effects`);
+    if (r.reactions !== undefined && !Array.isArray(r.reactions)) err(`${p}.reactions`, '반응은 목록입니다.');
+    (Array.isArray(r.reactions) ? r.reactions : []).forEach((re, j) => {
+      const q = `${p}.reactions[${j}]`;
+      if (!isObj(re)) { err(q, '반응은 객체입니다.'); return; }
+      if (re.npcId !== 'present' && !charIds.has(re.npcId)) err(`${q}.npcId`, `없는 인물 "${String(re.npcId)}"`);
+      text(re.text, `${q}.text`);
+    });
+    const rep = r.repeat;
+    if (rep !== undefined && rep !== 'once' && rep !== 'always' && !(typeof rep === 'number' && rep >= 1 && rep <= 1000)) err(`${p}.repeat`, '반복은 once/always 또는 1 이상의 턴 수입니다.');
+    if (!(r.effects ?? []).length && !(r.reactions ?? []).length && !r.outcome?.trim() && !r.announce?.trim()) warn(p, '결과(효과·반응·결과 지시)가 없어 발동해도 아무 일이 없습니다.');
+  });
   // ---- 세계만의 적
   customMonsters.forEach((m, i) => {
     const p = `monsters[${i}]`;

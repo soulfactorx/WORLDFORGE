@@ -376,7 +376,7 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
     if (source.calendar && (!w.calendar || blank)) w.calendar = structuredClone(source.calendar);
     if (source.time && (!w.time || blank)) w.time = structuredClone(source.time);
     if (source.simulation && !w.simulation) w.simulation = structuredClone(source.simulation);
-    for (const key of ['titles', 'relationBeats', 'randomEvents', 'starts'] as const) {
+    for (const key of ['titles', 'relationBeats', 'randomEvents', 'starts', 'rules'] as const) {
       const theirs = (source as unknown as Record<string, { id?: string }[] | undefined>)[key];
       if (!theirs?.length) continue;
       const list = ((w as unknown as Record<string, unknown[] | undefined>)[key] ??= []);

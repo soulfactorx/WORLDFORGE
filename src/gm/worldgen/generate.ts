@@ -9,6 +9,7 @@ import type { LlmClient } from '../../llm/types';
 import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
 import { generateScenes } from './scenes';
+import { generateRules } from './rules';
 import { addScenario, scenarioDraftSchema, type ScenarioDraft, WORLD_DRAFT_SCHEMA, type WorldDraft, worldFromDraft } from './draft';
 
 /**
@@ -68,6 +69,8 @@ export interface GenerateOptions {
   withScenario: boolean;
   /** 장면(협상·추격·대결…)까지 만들기 (v0.51, 기본 예) */
   withScenes?: boolean;
+  /** 세계 규칙(행동 → 결과 · 연쇄 반응)까지 만들기 (v0.83, 기본 예) */
+  withRules?: boolean;
   author?: string;
   /** 장르 프로필 ID (설계 v3 2장) */
   genre?: string;
@@ -131,7 +134,18 @@ export async function generateWorld(
       notes = [...notes, `장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`];
     }
   }
-  onStage('인물·장소에 기본 이미지 고르는 중…', scenesEnd, 97);
+  // 세계 규칙 (v0.83): 임무·플래그·장면이 생긴 뒤에 만들어 그것들과 잇는다
+  if (opts.withRules !== false) {
+    try {
+      const r = await generateRules(llm, world, (st) => onStage(st, scenesEnd, scenesEnd + 4), signal, opts.prompt.slice(0, 1500));
+      world = r.world;
+      notes = [...notes, ...r.notes];
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      notes = [...notes, `세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`];
+    }
+  }
+  onStage('인물·장소에 기본 이미지 고르는 중…', opts.withRules !== false ? scenesEnd + 4 : scenesEnd, 97);
   const st = await assignStockImages(world, llm, signal);
   world = { ...world, assets: st.assets };
   if (st.added) notes = [...notes, `인물·장소 ${st.added}곳에 앱 내장 기본 이미지를 붙였습니다. 편집기 이미지 탭에서 바꿀 수 있습니다.`];

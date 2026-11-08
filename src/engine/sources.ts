@@ -53,6 +53,7 @@ export function removeSource(world: WorldPackage, hash: string): RemoveResult {
     ...(w.assets ? { assets: w.assets.filter((a) => !A.has(a.id) && !(a.characterId && C.has(a.characterId))) } : {}),
     ...(w.relations ? { relations: w.relations.filter((r) => !C.has(r.a) && !C.has(r.b)) } : {}),
     ...(w.relationBeats ? { relationBeats: w.relationBeats.filter((b) => !C.has(b.npcId)) } : {}),
+    ...(w.rules ? { rules: w.rules.map((r) => (r.reactions?.some((x) => C.has(x.npcId)) ? { ...r, reactions: r.reactions.filter((x) => !C.has(x.npcId)) } : r)) } : {}),
     ...(w.quests ? { quests: w.quests.map((q) => { const { giver, target, ...rest } = q; return { ...rest, ...(giver && !C.has(giver) ? { giver } : {}), ...(target && !C.has(target) ? { target } : {}) }; }) } : {}),
     ...(w.scenes ? { scenes: w.scenes.map((s) => (s.npcId && C.has(s.npcId) ? (({ npcId: _n, ...r }) => r)(s) : s)) } : {}),
   };

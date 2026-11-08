@@ -13,6 +13,7 @@ import { progressEvents } from './progression';
 import { relationshipEvents, reputationEvent } from './relationship';
 import { arcTransitions, choiceToOffer, clockUpdates, dueWorldEvents } from '../engine/story';
 import { effectEvents } from './story';
+import { stateRuleEvents } from './rules';
 import { currentDay, factionActionsOn, npcLocationOf, rumorSpreadOn } from '../engine/world';
 import { epithetOf, knowsName } from '../engine/names';
 import { gainEvent, moneyEvent } from './economy';
@@ -64,6 +65,8 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
     }
     push({ type: 'sim_day', day: today });
   }
+  // 세계 규칙 (v0.83): 조건이 막 참이 된 상태 규칙 → 그 효과로 아래 시계·임무·결말이 이어진다
+  stateRuleEvents(world, s).events.forEach(push);
   // 이야기 엔진: 시계 → 연표 사건 → 줄기·장 → 결정적 선택 (이 결과로 임무가 진행될 수 있으므로 먼저)
   for (const u of clockUpdates(world, s)) {
     push({ type: 'clock_changed', clockId: u.clock.id, value: u.value, minutes: u.minutes, ...(u.onFired.length ? { onFired: u.onFired } : {}) });
@@ -157,6 +160,8 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
       }
     }
   }
+  // 임무·관계·목표가 바꾼 상태로 다시 한 번 (장면·결말 전에)
+  stateRuleEvents(world, s).events.forEach(push);
   // 장면 (v0.47): 저절로 시작하는 장면
   if (!s.scene && !s.combat) {
     const auto = availableScenes(world, s, { auto: true })[0];

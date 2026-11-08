@@ -56,6 +56,8 @@ export interface GameState {
   reputation: Record<EntityId, number>;
   /** 관계 사건: 열린 턴과 닫혔는지 */
   beats: Record<EntityId, { turn: number; done: boolean; approached?: number }>;
+  /** 세계 규칙 발동 기록 (v0.83): 횟수 · 마지막 턴 · 상태 규칙이 지금 참인지(가장자리 감지) */
+  rules?: Record<EntityId, { count: number; lastTurn: number; active?: boolean }>;
   /** NPC 목표 (설계 v4 E7) */
   npcGoals?: Record<EntityId, { startedAt: number; done?: boolean; stopped?: boolean }>;
   /** 찾아온 인물: 이 턴까지 그 장소에 머문다 */
@@ -302,6 +304,15 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const cur = rep[e.factionId] ?? e.base ?? 0;
       return { ...s, reputation: { ...rep, [e.factionId]: Math.max(-100, Math.min(100, cur + e.delta)) },
         log: [...s.log, { turn, kind: 'relation', text: `${e.name} 평판 ${e.delta > 0 ? '+' : ''}${e.delta} — ${e.reason}` }] };
+    }
+    case 'rule_fired': {
+      const prev = s.rules?.[e.ruleId];
+      const rules = { ...(s.rules ?? {}), [e.ruleId]: { count: (prev?.count ?? 0) + 1, lastTurn: turn, ...(e.by === 'state' ? { active: true } : prev?.active !== undefined ? { active: prev.active } : {}) } };
+      return { ...s, rules, ...(e.announce ? { log: [...s.log, { turn, kind: 'omen' as const, text: `⚖ ${e.announce}` }] } : {}) };
+    }
+    case 'rule_state': {
+      const prev = s.rules?.[e.ruleId] ?? { count: 0, lastTurn: -1 };
+      return { ...s, rules: { ...(s.rules ?? {}), [e.ruleId]: { ...prev, active: e.active } } };
     }
     case 'beat_opened':
       return { ...s, beats: { ...(s.beats ?? {}), [e.beatId]: { turn, done: false } } };

@@ -671,6 +671,30 @@ export interface StoryFlag {
 // ------------------------------------------------------------ 이야기 엔진 (설계 v3 5장)
 
 /** 이야기 효과: 결정적 선택·진행 시계·연표 사건이 일으키는 상태 변화 (엔진이 적용) */
+/**
+ * 세계 규칙 (v0.83). 이 세계에서 "무엇을 하면 무슨 일이 일어나는가".
+ * - action: 플레이어의 행동·말이 이 묘사에 해당하면 (GM 판단 AI가 판단하거나, 낱말이 들어 있으면)
+ * - state: 세계 상태 조건이 참이 되는 순간 (플래그·장소·수치·임무 등 — 다른 규칙의 효과로 연쇄된다)
+ */
+export interface WorldRule {
+  id: EntityId;
+  name: string;
+  trigger: { kind: 'action'; describe: string; keywords?: string[] } | { kind: 'state'; condition: Condition };
+  /** 이것도 참이어야 발동 (장소·관계·플래그 등) */
+  requires?: Condition;
+  /** 엔진이 바로 적용하는 결과 (플래그·평판·관계·성향·수치·아이템·돈·시계·지식 …) */
+  effects?: StoryEffect[];
+  /** 서술·NPC에게 주는 결과 지시 (GM용 — 예: "경비병이 호루라기를 분다") */
+  outcome?: string;
+  /** 인물 반응: present = 그 자리의 모든 인물. 관계 변화는 엔진이 적용, 글은 NPC 연기·서술에 */
+  reactions?: { npcId: EntityId | 'present'; text: string; relationship?: Partial<Record<RelationAxis, number>> }[];
+  /** 기록에 보이는 한 줄 (비우면 보이지 않고 서술로만 드러난다) */
+  announce?: string;
+  /** once = 한 번만 · always = 매번 · 숫자 = 그 턴 수만큼 쉬었다가 다시 */
+  repeat?: 'once' | 'always' | number;
+  enabled?: boolean;
+}
+
 export type StoryEffect =
   | { setFlag: string }
   | { moveNpc: EntityId; to: EntityId }
@@ -814,6 +838,8 @@ export interface WorldPackage {
   factions?: Faction[];
   relations?: NpcRelation[];
   relationBeats?: RelationBeat[];
+  /** 세계 규칙 (v0.83): 특정 행동·말·상태가 일어나면 생기는 결과·연쇄 반응·인물 반응 */
+  rules?: WorldRule[];
   /** 세계 수치 (설계 v4 E6) */
   vars?: WorldVar[];
   /** 장면 (v0.47) */

@@ -19,6 +19,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
   const [rating, setRating] = useState<WorldPackage['manifest']['contentRating']>('teen');
   const [withScenario, setWithScenario] = useState(true);
   const [withScenes, setWithScenes] = useState(true);
+  const [withRules, setWithRules] = useState(true);
   const [genre, setGenre] = useState<NonNullable<WorldPackage['genre']>>({ id: 'high_fantasy' });
   const [stage, setStage] = useState('');
   // 진행률 (v0.46.3 — 카드 세계 만들기와 같은 방식): 긴 AI 호출 중에는 다음 단계 쪽으로 천천히 차오른다
@@ -38,7 +39,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
     abort.current = new AbortController();
     setPct({ at: 0, next: 2, since: Date.now(), start: Date.now() });
     try {
-      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, withScenes, genre: genre.id, ...(genre.custom ? { genreCustom: genre.custom } : {}) }, onStage, abort.current.signal);
+      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, withScenes, withRules, genre: genre.id, ...(genre.custom ? { genreCustom: genre.custom } : {}) }, onStage, abort.current.signal);
       onDraft(r.world, r.notes);
     } catch (e) {
       if (!abort.current.signal.aborted) setError((e as Error).message);
@@ -74,8 +75,9 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
         </label>
         <label className="check"><input type="checkbox" checked={withScenario} disabled={busy} onChange={(e) => setWithScenario(e.target.checked)} /> 임무·결말까지 만들기</label>
         <label className="check"><input type="checkbox" checked={withScenes} disabled={busy} onChange={(e) => setWithScenes(e.target.checked)} /> 장면(협상·추격·대결·데이트…)까지 만들기</label>
+        <label className="check"><input type="checkbox" checked={withRules} disabled={busy} onChange={(e) => setWithRules(e.target.checked)} /> 세계 규칙(행동 → 결과 · 연쇄 반응)까지 만들기</label>
       </div>
-      <p className="muted small">AI 호출 {1 + (withScenario ? 1 : 0) + (withScenes ? 1 : 0)}회 · 설정한 모델과 API 키를 씁니다. 큰 응답이라 시간이 조금 걸립니다.</p>
+      <p className="muted small">AI 호출 {1 + (withScenario ? 1 : 0) + (withScenes ? 1 : 0) + (withRules ? 1 : 0)}회 · 설정한 모델과 API 키를 씁니다. 큰 응답이라 시간이 조금 걸립니다.</p>
       <div className="row">
         <button onClick={() => (busy ? abort.current?.abort() : onCancel())}>{busy ? '중단' : '취소'}</button>
         <button className="primary" disabled={!settings || busy || prompt.trim().length < 10} onClick={run}>{busy ? '만드는 중…' : '초안 만들기'}</button>
@@ -89,7 +91,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
           <div className="gen-progress" role="status" aria-live="polite">
             <div className="row"><span className="spinner" /> <b>{shown}%</b> <span className="small">{stage}</span><span className="spacer" /><span className="small muted">{Math.floor(sec / 60)}분 {sec % 60}초</span></div>
             <div className="progress-bar"><span style={{ width: `${shown}%` }} /></div>
-            <span className="small muted">{['세계', ...(withScenario ? ['임무·결말'] : []), ...(withScenes ? ['장면'] : []), '기본 이미지', '검사'].map((x, i) => `${i + 1}) ${x}`).join(' → ')} · 큰 응답이라 몇 분 걸릴 수 있습니다. 화면을 떠나지 마세요.</span>
+            <span className="small muted">{['세계', ...(withScenario ? ['임무·결말'] : []), ...(withScenes ? ['장면'] : []), ...(withRules ? ['세계 규칙'] : []), '기본 이미지', '검사'].map((x, i) => `${i + 1}) ${x}`).join(' → ')} · 큰 응답이라 몇 분 걸릴 수 있습니다. 화면을 떠나지 마세요.</span>
           </div>
         );
       })()}

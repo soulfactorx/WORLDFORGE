@@ -16,7 +16,7 @@ import { classesFor } from '../../engine/classes';
 import { genreOf } from '../../data/genres';
 
 export type GapArea = 'world' | 'character' | 'location' | 'faction' | 'structure' | 'check';
-export type GapAction = 'scenario' | 'encounters' | 'scenes' | 'images' | 'goto';
+export type GapAction = 'scenario' | 'encounters' | 'scenes' | 'rules' | 'images' | 'goto';
 /** 채울 수 있는 칸 */
 export type FillField =
   | 'world.overview' | 'world.gmNotes' | 'world.openingScene'
@@ -70,6 +70,7 @@ export function scanWorld(w: WorldPackage): Gap[] {
   if (!(w.endings ?? []).length) add({ key: 'structure.endings', area: 'structure', level: 'warning', label: '결말 없음', detail: '이야기가 끝나는 지점이 없다', action: 'scenario' });
   if (!(w.encounters ?? []).length) add({ key: 'structure.encounters', area: 'structure', level: 'suggest', label: '조우 없음',
     detail: genreOf(w.genre?.id, w.genre?.custom).combat === 'rare' ? '전투·위기가 없다 — 이 장르는 전투가 드물어 없어도 괜찮다' : '전투·위기가 없다', action: 'encounters' });
+  if (!(w.rules ?? []).length) add({ key: 'structure.rules', area: 'structure', level: 'suggest', label: '세계 규칙 없음', detail: '특정 행동의 결과·연쇄 반응·인물 반응을 정한 규칙이 없다 — 세계가 플레이어 행동에 덜 반응한다', action: 'rules' });
   if (!(w.scenes ?? []).length) add({ key: 'structure.scenes', area: 'structure', level: 'suggest', label: '장면 없음', detail: '협상·추격 같은 수치 장면이 없다', action: 'scenes' });
   const miss = missingImages(w);
   if (miss.characters.length + miss.locations.length) add({ key: 'structure.images', area: 'structure', level: 'suggest', label: '이미지 없는 곳', detail: `인물 ${miss.characters.length} · 장소 ${miss.locations.length}`, action: 'images' });

@@ -35,6 +35,8 @@ import { CardImportDialog } from './CardImportDialog';
 import { josa } from '../engine/text/josa';
 import { generateScenario } from '../gm/worldgen/generate';
 import { generateScenes } from '../gm/worldgen/scenes';
+import { generateRules } from '../gm/worldgen/rules';
+import { RuleForms } from './RuleForms';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
 import { WorldAudit } from './WorldAudit';
@@ -51,14 +53,14 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'player' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
+type Tab = 'basic' | 'rules' | 'player' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
-  ['basic', '기본'], ['player', '주인공'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
+  ['basic', '기본'], ['rules', '⚖ 세계 규칙'], ['player', '주인공'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
   ['encounters', '조우'], ['scenes', '장면'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 /** 탭 묶음 (v0.82) */
 const TAB_GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
-  { id: 'world', label: '🌍 세계', tabs: ['basic', 'locations', 'knowledge', 'relations', 'tools'] },
+  { id: 'world', label: '🌍 세계', tabs: ['basic', 'rules', 'locations', 'knowledge', 'relations', 'tools'] },
   { id: 'people', label: '👥 인물', tabs: ['characters', 'player', 'classes'] },
   { id: 'story', label: '📜 이야기', tabs: ['quests', 'story', 'scenes', 'encounters', 'items'] },
   { id: 'data', label: '🗂 자료', tabs: ['images', 'json'] },
@@ -72,6 +74,7 @@ function tabForPath(path: string): Tab {
   if (/^locations\[\d+\]\.board/.test(path)) return 'quests';
   if (path.startsWith('time')) return 'basic';
   if (path.startsWith('manifest') || path.startsWith('start') || path.startsWith('style') || path.startsWith('overview') || path.startsWith('gmNotes')) return 'basic';
+  if (path.startsWith('rules')) return 'rules';
   if (path.startsWith('classes')) return 'classes';
   if (path.startsWith('playerProfile') || path.startsWith('traits')) return 'player';
   if (path.startsWith('assets')) return 'images';
@@ -113,6 +116,17 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       setW(r.world);
       setStatus(r.notes.join(' '));
     } catch (e) { setStatus(`장면 생성 실패: ${(e as Error).message}`); }
+  }
+  const [ruleRequest, setRuleRequest] = useState('');
+  const ruleGen = useGenProgress();
+  async function genRules() {
+    if (!settings) return;
+    try {
+      const r = await ruleGen.run('세계 요약을 보내는 중…', (on, sig) => generateRules(createLlmClient(settings), w, on, sig, ruleRequest));
+      if (!r) { setStatus('규칙 만들기를 중단했습니다.'); return; }
+      setW(r.world);
+      setStatus(r.notes.join(' '));
+    } catch (e) { setStatus(`규칙 생성 실패: ${(e as Error).message}`); }
   }
   const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
@@ -202,7 +216,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         <WorldAudit w={w} settings={settings} onClose={() => setAuditing(false)}
           onApply={(nw, summary) => { setW(nw); setStatus(summary); }}
           onGoto={(p) => setTab(tabForPath(p))}
-          onAction={(a) => { setTab(a === 'scenario' ? 'quests' : a === 'encounters' ? 'encounters' : a === 'scenes' ? 'scenes' : 'images'); if (a === 'encounters') void aiScenario('encounters'); }} />
+          onAction={(a) => { setTab(a === 'scenario' ? 'quests' : a === 'encounters' ? 'encounters' : a === 'scenes' ? 'scenes' : a === 'rules' ? 'rules' : 'images'); if (a === 'encounters') void aiScenario('encounters'); if (a === 'rules') void genRules(); }} />
       )}
       <Toast message={status} onClose={() => setStatus('')} ms={status.length > 80 ? 9000 : 5000} />
       {!approved && (
@@ -478,6 +492,22 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               )}
             </div>
           )} />
+      )}
+
+      {tab === 'rules' && (
+        <>
+          <p className="muted small">
+            이 세계의 인과 법칙입니다. <b>행동 규칙</b>은 플레이어의 행동·말이 묘사에 해당하거나 낱말이 들어 있으면 발동하고, <b>상태 규칙</b>은 조건(플래그·세계 수치·성향·관계·임무 결과…)이 참이 되는 순간 발동합니다.
+            결과(효과)는 엔진이 확정해 임무·결말·장면·조우 조건으로 이어지고, 인물 반응은 NPC 연기와 서술에 들어갑니다. 효과로 세운 플래그·수치가 다른 규칙을 깨우면 연쇄 반응이 됩니다 (한 번에 4단계까지).
+          </p>
+          <div className="row">
+            <input value={ruleRequest} placeholder="(선택) 예: 신전의 금기, 의심" disabled={ruleGen.busy} onChange={(e) => setRuleRequest(e.target.value)} />
+            <button type="button" disabled={!settings || ruleGen.busy} onClick={() => void genRules()}>{ruleGen.busy ? '만드는 중…' : '✦ AI로 규칙 만들기'}</button>
+          </div>
+          {!settings && <p className="small muted">AI 설정을 하면 세계에 어울리는 규칙을 AI로 만들 수 있습니다.</p>}
+          <GenProgress stage={ruleGen.stage} pct={ruleGen.pct} onCancel={ruleGen.cancel} steps={['세계 요약 보내기', 'AI가 규칙 쓰기', '정리·검사']} />
+          <RuleForms w={w} set={set} />
+        </>
       )}
 
       {tab === 'relations' && (

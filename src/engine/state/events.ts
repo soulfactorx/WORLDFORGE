@@ -90,6 +90,10 @@ export type GameEvent =
   | { type: 'reputation_changed'; factionId: EntityId; name: string; delta: number; reason: string; base?: number }
   /** 관계 사건이 열리고 닫힌다 (설계 v3 4.2) */
   | { type: 'beat_opened'; beatId: EntityId; npcId: EntityId; name: string }
+  /** 세계 규칙 발동 (v0.83) */
+  | { type: 'rule_fired'; ruleId: EntityId; name: string; by: 'action' | 'state'; announce?: string }
+  /** 상태 규칙의 조건이 참/거짓으로 바뀜 (가장자리 감지 — 다시 거짓이 되면 다음에 참이 될 때 또 발동할 수 있다) */
+  | { type: 'rule_state'; ruleId: EntityId; active: boolean }
   | { type: 'beat_closed'; beatId: EntityId }
   /** 이야기 엔진 (설계 v3 5장) */
   | { type: 'arc_started'; arcId: EntityId; name: string; chapter: string }

@@ -43,6 +43,7 @@ export function allConditions(w: WorldPackage): { where: string; cond: Condition
   for (const c of w.clocks ?? []) c.tick.forEach((t) => { if ('on' in t) add(`시계 "${c.name}" 눈금`, t.on); });
   for (const e of w.events ?? []) { add(`사건 "${e.name}"`, e.when.condition); add(`사건 "${e.name}" 막힘`, e.unless); }
   for (const b of w.relationBeats ?? []) add(`관계 사건 "${b.name}"`, b.condition);
+  for (const r of w.rules ?? []) { if (r.trigger.kind === 'state') add(`세계 규칙 "${r.name}"`, r.trigger.condition); add(`세계 규칙 "${r.name}" 추가 조건`, r.requires); }
   for (const f of w.factions ?? []) for (const a of f.actions ?? []) add(`세력 "${f.name}" ${a.name}`, a.condition);
   for (const c of w.characters) (c.gives ?? []).forEach((g) => add(`${c.name}이(가) 건넬 것`, g.condition));
   for (const l of w.locations) for (const j of l.board?.jobs ?? []) { add(`의뢰 "${j.name}" 완료`, j.complete); add(`의뢰 "${j.name}" 조건`, j.requires); }
@@ -60,6 +61,7 @@ export function flagFlows(w: WorldPackage): FlagFlow[] {
   for (const c of w.clocks ?? []) for (const a of c.at) for (const f of flagsSet(a.effects)) get(f).setBy.push(`시계 "${c.name}" ${a.segment}칸`);
   for (const e of w.events ?? []) for (const f of flagsSet(e.effects)) get(f).setBy.push(`사건 "${e.name}"`);
   for (const a of w.arcs ?? []) a.chapters.forEach((ch, i) => flagsSet(ch.effects).forEach((f) => get(f).setBy.push(`줄기 "${a.name}" ${i + 1}장 끝`)));
+  for (const r of w.rules ?? []) for (const f of flagsSet(r.effects)) get(f).setBy.push(`세계 규칙 "${r.name}"`);
   for (const f of w.factions ?? []) for (const a of f.actions ?? []) for (const fl of flagsSet(a.effects)) get(fl).setBy.push(`세력 "${f.name}" ${a.name}`);
   for (const { where, cond } of allConditions(w)) for (const f of flagsIn(cond)) get(f).readBy.push(where);
   for (const b of w.relationBeats ?? []) if (b.resolveFlag) get(b.resolveFlag).readBy.push(`관계 사건 "${b.name}" 닫힘`);

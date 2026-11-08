@@ -27,6 +27,7 @@ import { RATING_GUIDE } from '../../engine/rating';
 import { worldFromDraft, type WorldDraft } from './draft';
 import { generateScenario } from './generate';
 import { generateScenes } from './scenes';
+import { generateRules } from './rules';
 import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
 import { translateToKorean } from './translate';
@@ -47,6 +48,8 @@ export interface CardWorldDraft {
   timeline: { key: string; when: string; title: string; statement: string; status: 'past' | 'ongoing' | 'future'; secrecy: number; protected_topic: string; known_by: string[]; rumor_by: string[] }[];
   starts: { key: string; name: string; description: string; location: string; opening_scene: string; knows: string[] }[];
   plot_request: string;
+  /** v0.83: 원작에 적힌 세계의 법칙·금기·인과 */
+  world_rules?: string[];
   /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경 */
   overview?: string;
   genre?: string;
@@ -91,6 +94,7 @@ export const CARD_WORLD_SCHEMA = obj({
     knows: { type: 'array', items: str, description: '이 방식으로 시작하면 플레이어가 처음부터 아는 timeline key (예: 원작을 읽은 빙의자라면 앞으로의 사건)' },
   })),
   plot_request: { type: 'string', description: '임무·결말 설계자에게 줄 원작 줄거리·갈등·결말 방향 요약 (10줄 이내)' },
+  world_rules: { type: 'array', items: str, description: '원작 설정에 적힌 "세계 안의" 법칙·금기·인과 (예: "신전에서 피를 흘리면 저주를 받는다", "황제의 이름을 부르면 처형된다", "계약을 어기면 각인이 타오른다", 인물이 특정 행동에 어떻게 반응하는지). 한 줄에 하나, 원작에 있는 것만, 최대 12개. AI 출력 형식·상태창 같은 운영 지시는 넣지 않는다. 없으면 []' },
   overview: { type: 'string', description: '플레이어도 알아도 되는 세계 개요 3~6문장 (한국어): 시대·지역·분위기·사회의 큰 규칙. 원작의 비밀·반전은 쓰지 않는다' },
   genre: { type: 'string', enum: [...GENRES.map((g) => g.id), 'custom'], description: `원작에 가장 가까운 장르: ${GENRES.map((g) => `${g.id}=${g.label}(${g.description})`).join(', ')}, custom=어느 것과도 맞지 않음 (아래 genre_custom을 채운다)` },
   genre_custom: obj({
@@ -133,6 +137,8 @@ export interface CardWorldOptions {
   withScenes?: boolean;
   /** 인물 대표 이미지 → 작은 초상화 data URL (브라우저에서만) */
   makePortrait?: (blob: Blob) => Promise<string | undefined>;
+  /** 세계 규칙까지 만들기 (v0.83, 기본 예) — 원작의 법칙·금기를 규칙으로 옮긴다 */
+  withRules?: boolean;
   /** 규칙이 놓친 인물을 AI가 로어북에서 찾기 (기본 켬) */
   aiFindCharacters?: boolean;
   /** 외국어 인물·설정 글을 한국어로 번역 (기본 켬) */
@@ -460,7 +466,19 @@ export async function cardToWorld(
       notes.push(`장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`);
     }
   }
-  onStage('검사 중…', 90, 91);
+  // 6) 세계 규칙 (v0.83): 원작의 법칙·금기·인과 → 행동 규칙·상태 규칙 (임무·플래그·장면이 생긴 뒤라 그것들과 잇는다)
+  if (opts.withRules !== false) {
+    try {
+      const src = (d.world_rules ?? []).map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 16).map((x) => `- ${x}`).join('\n');
+      const r = await generateRules(llm, world, (st) => onStage(st, 90, 94), signal, `원작 카드를 바탕으로 한 세계다. 원작의 법칙·금기와 인물들의 반응 방식을 규칙으로 옮기고, 원작 줄거리의 갈등이 플레이어 행동으로 번지게 한다.\n${cut(d.plot_request ?? '', 1200)}`, src ? 8 : 5, src);
+      world = r.world;
+      notes.push(...r.notes);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      notes.push(`세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`);
+    }
+  }
+  onStage('검사 중…', 94, 95);
   return { world, notes, issues: validateWorld(world), images };
 }
 
