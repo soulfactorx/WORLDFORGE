@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cached, repairJson, robust } from './robust';
+import { cached, repairJson, resetTokenBoost, robust, tokenBoost } from './robust';
 import { LlmHttpError, LlmRefusalError, LlmTruncatedError, type LlmClient } from './types';
 
 const seq = (outs: (() => unknown)[]) => {
@@ -52,5 +52,27 @@ describe('재시도 안내에 단계 이름 (v0.37.10)', () => {
     await robust(c, { baseDelayMs: 5000, onRetry: (_n, _w, label) => seen.push(label) }).json({ system: '', user: '', maxTokens: 100, label: '번역 3/8 묶음' }, {});
     expect(seen).toEqual(['번역 3/8 묶음']);
     expect(Date.now() - t0).toBeLessThan(2000);
+  });
+
+  it('잘려서 늘린 한도로 성공하면 그 한도를 기억해 다음 요청부터 처음부터 쓴다 (v0.83.1)', async () => {
+    resetTokenBoost();
+    const a = seq([() => { throw new LlmTruncatedError('{"a":['); }, () => ({ a: 1 })]);
+    await robust(a.c, { baseDelayMs: 1, learnKey: 'm' }).json({ system: 's', user: 'u', maxTokens: 1000 }, {});
+    expect(a.calls.map((x) => x.maxTokens)).toEqual([1000, 1500]);
+    expect(tokenBoost('m')).toBe(1.5);
+    // 새 클라이언트·다른 단계여도 같은 모델이면 재시도 없이 한 번에
+    const b = seq([() => ({ b: 1 })]);
+    await robust(b.c, { baseDelayMs: 1, learnKey: 'm' }).json({ system: 's2', user: 'u2', maxTokens: 4000 }, {});
+    expect(b.calls.map((x) => x.maxTokens)).toEqual([6000]);
+    expect(b.calls[0]!.system).toBe('s2'); // "짧게" 지시는 붙이지 않는다
+    // 다른 모델은 따로
+    const c = seq([() => ({ c: 1 })]);
+    await robust(c.c, { baseDelayMs: 1, learnKey: 'other' }).json({ system: 's', user: 'u', maxTokens: 4000 }, {});
+    expect(c.calls[0]!.maxTokens).toBe(4000);
+    // 모델이 그 한도를 받지 못하면 배운 배율을 버리고 원래 한도로
+    const d = seq([() => { throw new LlmHttpError(400, 'LLM 요청 실패 (400): max_tokens is too large'); }, () => ({ d: 1 })]);
+    await robust(d.c, { baseDelayMs: 1, learnKey: 'm' }).json({ system: 's', user: 'u', maxTokens: 4000 }, {});
+    expect(d.calls.map((x) => x.maxTokens)).toEqual([6000, 4000]);
+    expect(tokenBoost('m')).toBe(1);
   });
 });

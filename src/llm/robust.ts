@@ -39,7 +39,38 @@ export function repairJson(text: string): unknown {
 const retryable = (e: unknown) => e instanceof LlmJsonError || e instanceof LlmTruncatedError || (e instanceof LlmHttpError && (e.status === 0 || e.status === 408 || e.status === 429 || e.status >= 500))
   || (e instanceof TypeError) /* fetch 네트워크 오류 */ || /overloaded|rate.?limit|timeout|network|ECONN|529|503|502/i.test(String((e as Error)?.message ?? ''));
 
-export interface RobustOptions { attempts?: number; baseDelayMs?: number; maxTokensCap?: number; onRetry?: (attempt: number, reason: string, label?: string) => void }
+export interface RobustOptions {
+  attempts?: number; baseDelayMs?: number; maxTokensCap?: number; onRetry?: (attempt: number, reason: string, label?: string) => void;
+  /** 늘린 한도를 기억할 이름 (보통 모델 이름). 같은 이름이면 클라이언트를 새로 만들어도 이어서 쓴다 */
+  learnKey?: string;
+}
+
+/**
+ * 배운 출력 한도 배율 (v0.83.1): 잘려서 한도를 늘려 성공하면 그 배율을 기억해 이후 요청에 처음부터 쓴다.
+ * 같은 모델로 이어지는 단계(카드 변환의 세계 구조 → 임무 → 장면 → 규칙…)가 매번 잘렸다가 다시 하지 않게.
+ * max_tokens는 상한일 뿐이라 늘려도 실제로 쓴 만큼만 든다.
+ */
+const BOOST_KEY = 'wf.llm.tokenBoost';
+const MAX_BOOST = 4;
+const boosts = new Map<string, number>();
+let boostsLoaded = false;
+function loadBoosts() {
+  if (boostsLoaded) return;
+  boostsLoaded = true;
+  try { const raw = globalThis.localStorage?.getItem(BOOST_KEY); if (raw) for (const [k, v] of Object.entries(JSON.parse(raw) as Record<string, number>)) if (Number.isFinite(v) && v > 1) boosts.set(k, Math.min(MAX_BOOST, v)); } catch { /* 저장소 없음 */ }
+}
+function saveBoosts() {
+  try { globalThis.localStorage?.setItem(BOOST_KEY, JSON.stringify(Object.fromEntries(boosts))); } catch { /* 저장소 없음 */ }
+}
+export function tokenBoost(key: string): number { loadBoosts(); return boosts.get(key) ?? 1; }
+export function learnTokenBoost(key: string, factor: number) {
+  loadBoosts();
+  const f = Math.min(MAX_BOOST, Math.round(factor * 100) / 100);
+  if (f > (boosts.get(key) ?? 1)) { boosts.set(key, f); saveBoosts(); }
+}
+export function resetTokenBoost(key?: string) { loadBoosts(); if (key) boosts.delete(key); else boosts.clear(); saveBoosts(); }
+/** 모델이 받을 수 없는 한도라는 오류 */
+const tooManyTokens = (e: unknown) => (e as { status?: number })?.status === 400 && /max_?tokens|max_completion|maximum.*tokens|output.*tokens/i.test(String((e as Error)?.message ?? ''));
 
 export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
   const attempts = o.attempts ?? 3, base = o.baseDelayMs ?? 2000, cap = o.maxTokensCap ?? 32000;
@@ -69,13 +100,25 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
       }
     },
     async json<T>(req: LlmRequest, schema: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
-      let r = req;
+      const key = o.learnKey;
+      let boost = key ? tokenBoost(key) : 1;
+      let r = boost > 1 ? { ...req, maxTokens: Math.min(cap, Math.round(req.maxTokens * boost)) } : req;
       let lastTruncated = '';
       let resumes = 0;
       for (let i = 1; ; i++) {
         const mark = hiddenMark();
-        try { return await llm.json<T>(r, schema, signal); } catch (e) {
+        try {
+          const out = await llm.json<T>(r, schema, signal);
+          if (key && r.maxTokens > req.maxTokens) learnTokenBoost(key, r.maxTokens / req.maxTokens);
+          return out;
+        } catch (e) {
           if (signal?.aborted || e instanceof LlmRefusalError) throw e;
+          // 늘린 한도를 모델이 받지 못함 → 배운 배율을 버리고 원래 한도로 (재시도 횟수에 넣지 않는다)
+          if (boost > 1 && tooManyTokens(e) && key) {
+            resetTokenBoost(key); boost = 1; i--;
+            r = { ...r, maxTokens: req.maxTokens };
+            continue;
+          }
           // 모바일에서 앱을 벗어나 연결이 끊김 → 돌아온 뒤 다시 (재시도 횟수와 따로)
           if (hiddenSince(mark) && resumes < 3 && (retryable(e) || (e as Error)?.name === 'AbortError')) {
             resumes++; i--;

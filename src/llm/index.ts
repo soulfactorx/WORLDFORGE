@@ -27,7 +27,7 @@ export function createLlmClient(s: LlmSettings, opts?: RobustOptions & { sink?: 
     let c = cache.get(model);
     if (!c) {
       const ms = { ...s, model };
-      c = traced(metered(robust(s.provider === 'anthropic' ? createAnthropicClient(ms) : createOpenAiCompatibleClient(ms), opts), model, opts?.sink), s, model);
+      c = traced(metered(robust(s.provider === 'anthropic' ? createAnthropicClient(ms) : createOpenAiCompatibleClient(ms), { ...opts, learnKey: `${s.provider}:${s.baseUrl ?? ''}:${model}` }), model, opts?.sink), s, model);
       cache.set(model, c);
     }
     return c;
