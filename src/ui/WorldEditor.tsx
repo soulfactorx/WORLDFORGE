@@ -367,10 +367,10 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       )}
 
       {tab === 'characters' && (
-        <div className="row">
-          <button type="button" onClick={() => setImporting((v) => !v)}>⇩ CHARX · 캐릭터 카드 가져오기</button>
-          <button type="button" onClick={() => setPackUi((v) => (v === 'import' ? null : 'import'))}>⇩ 패키지 넣기 (.chp·.rule)</button>
-          <button type="button" onClick={() => setPackUi((v) => (v === 'character' ? null : 'character'))}>⇧ 인물 패키지 내보내기</button>
+        <div className="tool-row">
+          <button type="button" className={`small${importing ? ' on' : ''}`} onClick={() => setImporting((v) => !v)}>⇩ 캐릭터 카드</button>
+          <button type="button" className={`small${packUi === 'import' ? ' on' : ''}`} onClick={() => setPackUi((v) => (v === 'import' ? null : 'import'))} title="인물·규칙 패키지 (.chp·.rule) 넣기">⇩ 패키지 넣기</button>
+          <button type="button" className={`small${packUi === 'character' ? ' on' : ''}`} onClick={() => setPackUi((v) => (v === 'character' ? null : 'character'))} title="인물 패키지 (.chp) 내보내기">⇧ 인물 패키지</button>
         </div>
       )}
       {(tab === 'characters' || tab === 'items') && packUi === 'import' && (

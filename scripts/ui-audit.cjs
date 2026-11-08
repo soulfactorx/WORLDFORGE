@@ -72,8 +72,8 @@ const SCREENS = [
   ['장면 시험', async (p) => { await editorTab(p, '장면'); await p.click('button:has-text("추가하고 바로 테스트")'); await p.waitForSelector('.scene-tester'); await p.click('button:has-text("자동 200회")'); }],
   ['AI 사용량', async (p) => { await home(p); await tool(p, 'AI 사용량'); }],
   ['저장소 관리', async (p) => { await home(p); await tool(p, '저장소 관리'); await p.waitForSelector('.storage-worlds, .storage h3'); await p.evaluate(() => document.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''))); }],
-  ['AI 점검·마무리', async (p) => { await editorTab(p, '기본'); await p.click('button:has-text("AI 점검·마무리")'); await p.waitForSelector('.audit-panel'); await p.evaluate(() => document.querySelectorAll('.audit-panel details').forEach((d) => d.setAttribute('open', ''))); }],
-  ['만계서고', async (p) => { await editorTab(p, '주인공'); await p.click('button:has-text("만계서고에서 불러오기")'); await p.waitForSelector('.lib-cell'); }],
+  ['AI 점검·마무리', async (p) => { await editorTab(p, '기본'); await p.click('[aria-label="AI 점검·마무리"]'); await p.waitForSelector('.audit-panel'); await p.evaluate(() => document.querySelectorAll('.audit-panel details').forEach((d) => d.setAttribute('open', ''))); }],
+  ['만계서고', async (p) => { await editorTab(p, '주인공'); await p.click('[aria-label="만계서고에서 불러오기"]'); await p.waitForSelector('.lib-cell'); }],
 ];
 
 async function audit(page, vp) {

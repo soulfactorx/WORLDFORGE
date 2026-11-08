@@ -888,3 +888,6 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .editor-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
 .editor-tabs button { flex: none; white-space: nowrap; }
 .tab-badge { display: inline-block; min-width: 1.3em; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: #c0392b; color: #fff; font-size: .72rem; line-height: 1.4; text-align: center; }
+.tool-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; }
+.tool-row button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-row button.on { border-color: var(--accent); color: var(--accent); }
