@@ -39,7 +39,12 @@ async function editor(page) {
   await page.locator('.saves li', { hasText: '장미 정원' }).locator('button:has-text("⋯")').click();
   await page.click('.menu-pop button:has-text("복제해서 편집")');
 }
-async function editorTab(page, tab) { await editor(page); await page.click(`.tabs button:has-text("${tab}")`); }
+const TAB_GROUP = { 기본: '세계', 장소: '세계', 지식: '세계', '관계·세력': '세계', '보드·지도·시뮬레이터': '세계', 인물: '인물', 주인공: '인물', 직업: '인물', '임무·플래그·결말': '이야기', '이야기 흐름': '이야기', 장면: '이야기', 조우: '이야기', '아이템·상점': '이야기', 이미지: '자료', 'JSON 전체': '자료' };
+async function editorTab(page, tab) {
+  await editor(page);
+  await page.click(`.editor-groups button:has-text("${TAB_GROUP[tab]}")`);
+  await page.click(`.editor-tabs button:text-is("${tab}")`);
+}
 const EDITOR_TABS = ['기본', '주인공', '직업', '보드·지도·시뮬레이터', '장소', '인물', '관계·세력', '지식', '아이템·상점', '조우', '임무·플래그·결말', '이야기 흐름', '이미지', 'JSON 전체'];
 
 const SCREENS = [

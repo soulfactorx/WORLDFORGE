@@ -866,3 +866,25 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .genre-custom { display: flex; flex-direction: column; gap: 8px; }
 .genre-custom-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
 .genre-in-gen { border: none; padding: 0; margin: 0; flex: 1 1 100%; min-width: 0; }
+
+/* 세계관 편집기 정리 (v0.82) */
+.editor-bar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 6px; padding: 8px 0; margin-top: -8px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.editor-close { flex: none; min-width: 40px; font-size: 1.1rem; padding: 4px 8px; }
+.editor-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.editor-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.05rem; }
+.editor-title .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-dirty { color: var(--accent); font-weight: 600; }
+.editor-tool { flex: none; padding: 6px 10px; }
+.editor-tool.on { border-color: var(--accent); color: var(--accent); }
+.editor-save { flex: none; padding: 6px 16px; }
+@media (max-width: 760px) { .editor-tool .tool-label { display: none; } .editor-tool { min-width: 40px; padding: 6px 8px; } }
+.editor-alerts { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--surface); }
+.editor-alerts > summary { cursor: pointer; padding: 4px 0; }
+.editor-alerts .err { color: #c0392b; } .editor-alerts .warn { color: #b9770e; }
+.editor-nav { display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.editor-groups { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.editor-groups button { padding: 8px 6px; font-weight: 600; white-space: nowrap; }
+.editor-groups button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.editor-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+.editor-tabs button { flex: none; white-space: nowrap; }
+.tab-badge { display: inline-block; min-width: 1.3em; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: #c0392b; color: #fff; font-size: .72rem; line-height: 1.4; text-align: center; }

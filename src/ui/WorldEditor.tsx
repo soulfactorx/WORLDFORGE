@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { SKILL_IDS } from '../engine/character/rules';
 import { SceneForms } from './SceneForms';
@@ -54,6 +54,13 @@ type Tab = 'basic' | 'player' | 'classes' | 'tools' | 'locations' | 'characters'
 const TABS: [Tab, string][] = [
   ['basic', '기본'], ['player', '주인공'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
   ['encounters', '조우'], ['scenes', '장면'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
+];
+/** 탭 묶음 (v0.82) */
+const TAB_GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
+  { id: 'world', label: '🌍 세계', tabs: ['basic', 'locations', 'knowledge', 'relations', 'tools'] },
+  { id: 'people', label: '👥 인물', tabs: ['characters', 'player', 'classes'] },
+  { id: 'story', label: '📜 이야기', tabs: ['quests', 'story', 'scenes', 'encounters', 'items'] },
+  { id: 'data', label: '🗂 자료', tabs: ['images', 'json'] },
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
 const STATES = [['rumor', '소문'], ['partial', '들은 이야기'], ['confirmed', '확인됨'], ['mistaken', '잘못 앎'], ['secret', '비밀']] as const;
@@ -114,6 +121,17 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [importing, setImporting] = useState(!!initialCard);
   const [library, setLibrary] = useState(!!openLibrary);
   const [auditing, setAuditing] = useState(false);
+  // 저장 안 된 변경 (v0.82): 처음 열었을 때 이후로 바뀌면 표시하고, 닫을 때 확인한다
+  const [dirty, setDirty] = useState(false);
+  const firstW = useRef(true);
+  useEffect(() => { if (firstW.current) { firstW.current = false; return; } setDirty(true); }, [w]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const close = () => { if (!dirty || confirm('저장하지 않은 변경이 있습니다. 저장하지 않고 닫을까요?')) onDone(); };
   const [packUi, setPackUi] = useState<null | 'import' | 'character' | 'rules'>(null);
 
   const scenarioGen = useGenProgress();
@@ -142,6 +160,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       // 뺀 출처 카드의 이미지 파일은 저장할 때 지운다 (저장하지 않고 닫으면 그대로)
       if (pruneOnSave.length) { await deleteAssets(w.manifest.id, pruneOnSave.filter((id) => !(w.assets ?? []).some((a) => a.id === id))); setPruneOnSave([]); }
       setApproved(true);
+      setDirty(false);
       setStatus(`저장했습니다 (${w.manifest.id}@${w.manifest.version}).${hasErrors(issues) ? ' 오류를 고쳐야 플레이할 수 있습니다.' : ''}`);
     } catch (e) {
       setStatus(`❌ ${(e as Error).message}`);
@@ -155,16 +174,19 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
 
   return (
     <section className="panel editor">
-      <div className="row">
-        <h2>세계관 제작 — {w.manifest.name}</h2>
-        {w.manifest.crossover?.length ? <span className="small muted" title="만계서고에서 불러온 원래 세계">🌌 크로스오버: {w.manifest.crossover.map((c) => c.name).join(' · ')}</span> : null}
-        <span className="spacer" />
-        <button onClick={() => setAuditing((v) => !v)} title="빈칸·잘못 채운 칸·빠진 설정을 찾고 AI로 채운다">🩺 AI 점검·마무리</button>
-        <button onClick={() => setLibrary((v) => !v)} title="만들어 둔 다른 세계(우주)의 인물·장소·임무·이야기 흐름·이미지 등을 AI 없이 불러온다">🌌 만계서고에서 불러오기</button>
-        <button onClick={onDone}>닫기</button>
-        {w.manifest.private ? <span className="small muted" title={PRIVATE_NOTE}>🔒 개인용 (내보내기 불가)</span>
-          : shareBlocked(w) ? <span className="small muted" title={MATURE_NOTE}>🔞 성인 등급 (내보내기 불가)</span> : <button onClick={exportFile}>.wpk 내보내기</button>}
-        <button className="primary" onClick={save}>저장</button>
+      {/* 편집기 상단 바 (v0.82): 닫기 · 제목·저장 상태 · 도구 · 저장 — 스크롤해도 붙어 있다 */}
+      <div className="editor-bar">
+        <button type="button" className="editor-close" onClick={close} title="닫기" aria-label="닫기">←</button>
+        <div className="editor-title">
+          <b title={w.manifest.name}>{w.manifest.name || '새 세계'}</b>
+          <span className="small muted">세계관 제작{w.manifest.crossover?.length ? ` · 🌌 ${w.manifest.crossover.map((c) => c.name).join('·')}` : ''}{dirty ? <span className="editor-dirty"> · ● 저장 안 됨</span> : ''}</span>
+        </div>
+        <button type="button" className={`editor-tool${auditing ? ' on' : ''}`} onClick={() => setAuditing((v) => !v)} title="빈칸·잘못 채운 칸·빠진 설정을 찾고 AI로 채운다" aria-label="AI 점검·마무리">🩺<span className="tool-label"> AI 점검</span></button>
+        <button type="button" className={`editor-tool${library ? ' on' : ''}`} onClick={() => setLibrary((v) => !v)} title="만들어 둔 다른 세계의 인물·장소·임무·이미지 등을 AI 없이 불러온다" aria-label="만계서고에서 불러오기">🌌<span className="tool-label"> 만계서고</span></button>
+        {w.manifest.private ? <button type="button" className="editor-tool" disabled title={PRIVATE_NOTE} aria-label="개인용 — 내보내기 불가">🔒</button>
+          : shareBlocked(w) ? <button type="button" className="editor-tool" disabled title={MATURE_NOTE} aria-label="성인 등급 — 내보내기 불가">🔞</button>
+          : <button type="button" className="editor-tool" onClick={exportFile} title=".wpk 파일로 내보내기" aria-label=".wpk 내보내기">⤓<span className="tool-label"> 내보내기</span></button>}
+        <button type="button" className="primary editor-save" onClick={() => void save()}>저장</button>
       </div>
       {library && (
         <WorldLibrary target={w} onClose={() => setLibrary(false)} onApply={(nw, notes) => {
@@ -224,7 +246,15 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           </ul>
         </fieldset>
       )}
-      <IssueList issues={issues} onPick={(p) => setTab(tabForPath(p))} limit={8} />
+      {/* 점검 알림 (v0.82): 한 줄로 접고, 오류가 있으면 펼쳐 둔다 */}
+      {(() => {
+        const errs = issues.filter((i) => i.level === 'error').length, warns = issues.length - errs;
+        const nd = imageNeeds(w).length;
+        if (!issues.length && !nd) return null;
+        return (
+          <details className="editor-alerts" open={errs > 0}>
+            <summary>{errs ? <b className="err">⛔ 오류 {errs}</b> : <span>✔ 오류 없음</span>}{warns ? <span className="warn"> · ⚠ 경고 {warns}</span> : null}{nd ? <span className="muted"> · 🖼 이미지 없는 곳 {nd}</span> : null}<span className="small muted"> — 눌러서 {errs ? '접기' : '보기'}</span></summary>
+        <IssueList issues={issues} onPick={(p) => setTab(tabForPath(p))} limit={8} />
       {(() => { const nd = imageNeeds(w); return nd.length > 0 && tab !== 'images' && (
         <p className="small">🖼 진짜 이미지가 없는 인물 {nd.filter((x) => x.kind === 'character').length}명 · 장소 {nd.filter((x) => x.kind === 'location').length}곳 (앱 내장 그림으로 대신하는 중)
           {' '}<button className="small" onClick={() => setTab('images')}>이미지 탭에서 보기·올리기</button></p>
@@ -239,9 +269,34 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <span className="muted"> — 경고는 플레이를 막지 않습니다. 아무도 모르는 연표는 NPC가 말해 줄 수 없을 뿐입니다.</span>
         </p>
       )}
-      <div className="tabs">
-        {TABS.filter(([id]) => !(id === 'json' && shareBlocked(w))).map(([id, label]) => <button key={id} type="button" className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>{label}</button>)}
-      </div>
+          </details>
+        );
+      })()}
+      {/* 탭 묶음 (v0.82): 세계 · 인물 · 이야기 · 자료 → 그 안의 탭 (가로로 넘기기) */}
+      {(() => {
+        const label = (id: Tab) => TABS.find(([t]) => t === id)?.[1] ?? id;
+        const count = (ids: Tab[]) => issues.filter((i) => ids.includes(tabForPath(i.path))).reduce((n, i) => n + (i.level === 'error' ? 1 : 0), 0);
+        const group = TAB_GROUPS.find((g) => g.tabs.includes(tab)) ?? TAB_GROUPS[0]!;
+        const visible = (id: Tab) => !(id === 'json' && shareBlocked(w));
+        return (
+          <nav className="editor-nav" aria-label="편집 탭">
+            <div className="editor-groups" role="tablist">
+              {TAB_GROUPS.map((g) => { const n = count(g.tabs); return (
+                <button key={g.id} type="button" role="tab" aria-selected={g === group} className={g === group ? 'on' : ''} onClick={() => setTab(g.tabs.find(visible)!)}>
+                  {g.label}{n ? <span className="tab-badge" title={`오류 ${n}`}>{n}</span> : null}
+                </button>
+              ); })}
+            </div>
+            <div className="editor-tabs" role="tablist">
+              {group.tabs.filter(visible).map((id) => { const n = count([id]); return (
+                <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>
+                  {label(id)}{n ? <span className="tab-badge">{n}</span> : null}
+                </button>
+              ); })}
+            </div>
+          </nav>
+        );
+      })()}
 
       {tab === 'basic' && (
         <div className="form-grid">
