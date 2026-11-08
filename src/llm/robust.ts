@@ -5,6 +5,7 @@
  * - 응답이 길이 제한에 걸려 잘리면 → 더 긴 한도와 "더 짧게" 지시로 다시 요청, 마지막에는 잘린 JSON을 복구해 쓴다
  * - cached(): 같은 요청(시스템·사용자 글·스키마)의 결과를 저장해 두고 다시 쓴다 → 중간에 멈춰도 끝난 단계는 다시 하지 않는다
  */
+import { announceResume, hiddenMark, hiddenSince, whenVisible } from './visibility';
 import { LlmHttpError, LlmJsonError, LlmRefusalError, LlmTruncatedError, type LlmClient, type LlmRequest } from './types';
 
 const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((res, rej) => {
@@ -44,11 +45,24 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
   const attempts = o.attempts ?? 3, base = o.baseDelayMs ?? 2000, cap = o.maxTokensCap ?? 32000;
   return {
     async stream(req, onText, signal) {
+      let quiet = false; // 백그라운드로 끊겨 다시 할 때는 화면에 이미 일부가 나갔으므로 새 글은 내보내지 않고 다 받은 뒤 결과로만 돌려준다
+      let resumes = 0;
       for (let i = 1; ; i++) {
         let sent = false;
-        try { return await llm.stream(req, (d) => { sent = true; onText(d); }, signal); } catch (e) {
+        const mark = hiddenMark();
+        try { return await llm.stream(req, (d) => { sent = true; if (!quiet) onText(d); }, signal); } catch (e) {
+          if (signal?.aborted || e instanceof LlmRefusalError) throw e;
+          // 모바일에서 앱을 벗어나 연결이 끊김 → 돌아온 뒤 다시 (재시도 횟수와 따로, 최대 3번)
+          if (hiddenSince(mark) && resumes < 3 && (retryable(e) || (e as Error)?.name === 'AbortError')) {
+            resumes++; i--;
+            o.onRetry?.(resumes, '앱을 벗어나 연결이 끊겨 돌아온 뒤 다시 요청합니다', req.label);
+            await whenVisible(signal);
+            announceResume(req.label);
+            if (sent) quiet = true;
+            continue;
+          }
           // 글이 이미 나가기 시작했으면 다시 하지 않는다 (화면에 중복이 생긴다)
-          if (signal?.aborted || sent || e instanceof LlmRefusalError || i >= attempts || !retryable(e)) throw e;
+          if (sent || i >= attempts || !retryable(e)) throw e;
           o.onRetry?.(i, (e as Error).message, req.label);
           await sleep(base * i, signal);
         }
@@ -57,9 +71,19 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
     async json<T>(req: LlmRequest, schema: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
       let r = req;
       let lastTruncated = '';
+      let resumes = 0;
       for (let i = 1; ; i++) {
+        const mark = hiddenMark();
         try { return await llm.json<T>(r, schema, signal); } catch (e) {
           if (signal?.aborted || e instanceof LlmRefusalError) throw e;
+          // 모바일에서 앱을 벗어나 연결이 끊김 → 돌아온 뒤 다시 (재시도 횟수와 따로)
+          if (hiddenSince(mark) && resumes < 3 && (retryable(e) || (e as Error)?.name === 'AbortError')) {
+            resumes++; i--;
+            o.onRetry?.(resumes, '앱을 벗어나 연결이 끊겨 돌아온 뒤 다시 요청합니다', req.label);
+            await whenVisible(signal);
+            announceResume(req.label);
+            continue;
+          }
           if (e instanceof LlmTruncatedError) {
             lastTruncated = e.text;
             r = { ...r, maxTokens: Math.min(cap, Math.round(r.maxTokens * 1.5)), system: `${req.system}\n- (중요) 앞선 응답이 길이 제한에 걸려 잘렸다. 각 설명을 짧게 줄이고 항목 수를 줄여, 같은 형식의 완전한 JSON을 출력한다.` };

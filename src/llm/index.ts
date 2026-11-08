@@ -3,6 +3,7 @@ import { createOpenAiCompatibleClient } from './openai-compatible';
 import type { LlmClient, LlmRequest, LlmSettings, Meter, RoleGroup } from './types';
 import { finishCall, traceCall } from '../debug/trace';
 import { robust, type RobustOptions } from './robust';
+import { holdAwake } from './visibility';
 import { type CallRecord, metered, type Role, roleOf } from './metrics';
 
 /** 역할 → 모델 묶음 */
@@ -31,9 +32,10 @@ export function createLlmClient(s: LlmSettings, opts?: RobustOptions & { sink?: 
     }
     return c;
   };
+  // AI 처리 중에는 화면이 꺼지지 않게 (모바일, v0.79.8)
   return {
-    stream: (req, onText, signal) => forModel(modelFor(s, req.system)).stream(req, onText, signal),
-    json: (req, schema, signal) => forModel(modelFor(s, req.system)).json(req, schema, signal),
+    stream: (req, onText, signal) => holdAwake(() => forModel(modelFor(s, req.system)).stream(req, onText, signal)),
+    json: (req, schema, signal) => holdAwake(() => forModel(modelFor(s, req.system)).json(req, schema, signal)),
   };
 }
 
