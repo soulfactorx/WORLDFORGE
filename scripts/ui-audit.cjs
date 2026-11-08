@@ -20,9 +20,10 @@ async function home(page) {
 }
 /** 상단 도구 열기: 모바일이면 ☰ 메뉴를 먼저 연다 */
 async function tool(page, label) {
-  const menu = page.locator('.topbar-menu-btn');
-  if (await menu.isVisible()) await menu.click();
-  await page.click(`.topbar-tools [aria-label="${label}"]`);
+  const inline = page.locator(`.topbar-tools [aria-label="${label}"]`);
+  if (await inline.isVisible()) { await inline.click(); return; }
+  await page.click('.topbar-menu-btn');
+  await page.click(`.topbar-menu.open [aria-label="${label}"]`);
 }
 async function play(page) {
   await home(page);
@@ -49,7 +50,7 @@ const EDITOR_TABS = ['기본', '⚖ 세계 규칙', '주인공', '직업', '보�
 
 const SCREENS = [
   ['홈: 플레이', home],
-  ['상단 메뉴 열기', async (p) => { await home(p); const m = p.locator('.topbar-menu-btn'); if (await m.isVisible()) await m.click(); }],
+  ['상단 메뉴 열기', async (p) => { await home(p); await p.click('.topbar-menu-btn'); }],
   ['홈: 세계관', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세계관")'); }],
   ['홈: 세이브', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세이브")'); }],
   ['주인공 만들기', async (p) => { await home(p); await p.click('button:has-text("주인공 만들고 시작")'); }],

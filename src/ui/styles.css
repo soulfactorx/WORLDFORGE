@@ -833,25 +833,26 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .npc-traits input[type=range] { grid-column: 1 / 2; }
 .npc-preview { margin: 0; padding-left: 1.1em; word-break: break-word; }
 
-/* 상단 바 (v0.79.7): 로고·버전 | 도구 | 설정 — 모바일은 도구를 ☰ 메뉴로 */
+/* 상단 바 (v0.83.3): 로고·버전 | 자주 쓰는 도구 · 설정 · ☰ — 나머지는 ☰ 메뉴 */
 .topbar { position: relative; flex-wrap: nowrap; }
-.topbar-brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.topbar-ver { display: inline; }
-.topbar-tools { display: flex; align-items: center; gap: 6px; }
-.topbar-tools > button, .topbar-tools > a { padding: 6px 10px; }
-.topbar-tools > a { color: inherit; text-decoration: none; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-size: .9rem; }
-.topbar-menu-btn { display: none; }
+.topbar-brand { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.topbar-ver { display: inline-flex; align-items: center; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: .78rem; line-height: 1.4; white-space: nowrap; }
+.topbar-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.topbar-tools > button { padding: 6px 10px; }
+.topbar-menu-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 36px; font-size: 1.05rem; }
+.topbar-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 50; display: none; flex-direction: column; align-items: stretch; gap: 4px; padding: 8px; min-width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+.topbar-menu > button, .topbar-menu > a { text-align: left; min-height: 40px; display: flex; align-items: center; gap: 6px; padding: 6px 10px; color: inherit; text-decoration: none; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); white-space: nowrap; }
+.topbar-menu.open { display: flex; }
+.topbar-menu .mobile-only { display: none; }
+.topbar-menu-ver { padding: 6px 4px 0; border-top: 1px solid var(--border); margin-top: 4px; }
 @media (max-width: 900px) { .topbar-tools .tool-label { display: none; } }
 @media (max-width: 600px) {
   .topbar { gap: 6px; }
-  .topbar-brand { align-items: center; gap: 6px; }
-  .topbar-ver { font-size: .72rem; }
-  .topbar-menu-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; font-size: 1.1rem; }
+  .topbar-brand { gap: 6px; flex-shrink: 1; min-width: 0; }
+  .topbar-ver { font-size: .72rem; padding: 1px 6px; }
   .topbar .topbar-settings { padding: 6px 10px; min-width: 40px; }
-  .topbar-tools { display: none; position: absolute; top: calc(100% + 4px); right: 0; z-index: 50; flex-direction: column; align-items: stretch; gap: 4px; padding: 8px; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
-  .topbar-tools.open { display: flex; }
-  .topbar-tools .tool-label { display: inline; }
-  .topbar-tools > button, .topbar-tools > a { text-align: left; min-height: 40px; display: flex; align-items: center; gap: 6px; }
+  .topbar-tools { display: none; }
+  .topbar-menu .mobile-only { display: flex; }
 }
 
 /* GM 스타일 (v0.80) */

@@ -29,7 +29,7 @@ export function App() {
   // 메뉴 밖을 누르거나 Esc면 닫는다
   useEffect(() => {
     if (!menuOpen) return;
-    const close = (e: Event) => { if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.topbar-tools, .topbar-menu-btn')) setMenuOpen(false); };
+    const close = (e: Event) => { if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.topbar-menu, .topbar-menu-btn')) setMenuOpen(false); };
     document.addEventListener('pointerdown', close); document.addEventListener('keydown', close);
     return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
   }, [menuOpen]);
@@ -47,17 +47,23 @@ export function App() {
           <span className="muted small nowrap topbar-ver" title={__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'}><span className="wide-only">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · </span>v{__APP_VERSION__}</span>
         </span>
         <span className="spacer" />
-        {/* PC: 도구를 한 줄에 · 모바일: ☰ 메뉴로 접는다 (v0.79.7) */}
-        <nav className={`topbar-tools${menuOpen ? ' open' : ''}`} aria-label="도구" onClick={() => setMenuOpen(false)}>
-          {debug && view.name !== 'play' && <button onClick={() => setShowDebug(true)} title="디버그 기록: 세계 만들기 등 모든 AI 호출" aria-label="디버그 기록">🐞<span className="tool-label"> 디버그</span></button>}
+        {/* PC: 자주 쓰는 도구만 한 줄에, 나머지는 ☰ 메뉴 · 모바일: 모두 ☰ 메뉴 (v0.83.3) */}
+        <nav className="topbar-tools" aria-label="도구">
           <button onClick={() => setView({ name: 'usage' })} title="AI 사용량" aria-label="AI 사용량">📊<span className="tool-label"> 사용량</span></button>
           <button onClick={() => setView({ name: 'storage' })} title="저장소 관리" aria-label="저장소 관리">💾<span className="tool-label"> 저장소</span></button>
-          {__BUILD_TARGET__ === 'web' && <a className="nowrap" href="./worldforge-offline.html" download title="오프라인 HTML 받기">⤓<span className="tool-label"> 오프라인 HTML</span></a>}
-          <InstallButton />
-          <a className="nowrap" href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">⌥<span className="tool-label"> 소스 (GPL)</span></a>
         </nav>
         <button className="topbar-settings" onClick={() => setView({ name: 'settings' })} title="AI 설정" aria-label="AI 설정">⚙<span className="wide-only"> AI 설정</span></button>
         <button className="topbar-menu-btn" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label="메뉴" title="메뉴">☰</button>
+        {/* 늘 그려 둔다 (앱 설치 버튼이 브라우저 알림을 놓치지 않게) — 열림은 CSS로 */}
+        <nav className={`topbar-menu${menuOpen ? ' open' : ''}`} aria-label="더 보기" aria-hidden={!menuOpen} onClick={() => setMenuOpen(false)}>
+            <button className="mobile-only" onClick={() => setView({ name: 'usage' })} aria-label="AI 사용량">📊 사용량</button>
+            <button className="mobile-only" onClick={() => setView({ name: 'storage' })} aria-label="저장소 관리">💾 저장소</button>
+            {debug && view.name !== 'play' && <button onClick={() => setShowDebug(true)} title="디버그 기록: 세계 만들기 등 모든 AI 호출" aria-label="디버그 기록">🐞 디버그</button>}
+            {__BUILD_TARGET__ === 'web' && <a href="./worldforge-offline.html" download title="오프라인 HTML 받기">⤓ 오프라인 HTML</a>}
+            <InstallButton />
+            <a href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">⌥ 소스 (GPL)</a>
+            <span className="topbar-menu-ver muted small">WORLDFORGE {__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} v{__APP_VERSION__}</span>
+        </nav>
       </header>
       <main>
         {view.name === 'settings' && (
