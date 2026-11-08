@@ -200,6 +200,15 @@ const DIRECTOR_SYSTEM = `너는 1인칭 TRPG의 게임 마스터 판단 모듈�
 - trait_shift: 행동이 "주인공의 성향" 축을 분명히 드러낼 때만 그 축을 움직인다 (말뿐인 다짐보다 실제 행동). 플레이어의 성향이 이야기 갈림길에 쓰이므로 공정하게 판단한다.
 - time_spent: 이 행동이 게임 속에서 실제로 걸리는 시간을 고른다. 말 몇 마디는 moment, 살펴보기·흥정은 short, 꼼꼼한 수색·긴 대화·식사는 long, 하루 일과·긴 기다림은 hours. 이동·휴식 시간은 엔진이 따로 더한다.`;
 
+/** 행동 없이 "이어서" 진행 (v0.79.9) */
+export const CONTINUE_INPUT = '(이어서) 지금 흐름에 맡기고 지켜본다';
+const CONTINUE_DIRECTOR = `## 이번 턴은 "이어서 진행"이다
+플레이어는 특별한 행동 없이 지금 흐름을 지켜본다. 직전 서술의 마지막 순간에서 이야기가 자연스럽게 다음으로 흘러가게 연출한다:
+- 그 자리의 인물이 자기 성격·목표대로 먼저 말하거나 움직인다 (speakers에 넣는다). 기다리던 대답이 오고, 하던 일이 이어진다.
+- 판정은 걸지 않는다 (check_kind=none). 이동·조우·플래그는 정말 자연스러운 흐름일 때만.
+- time_spent는 moment 또는 short.`;
+const CONTINUE_NARRATOR = '플레이어는 특별한 행동 없이 흐름을 지켜본다 — 직전 서술의 마지막 순간에서 바로 이어, 인물들이 먼저 움직이고 상황이 자연스럽게 한 걸음 나아가게 쓴다. 플레이어의 새 행동·대사·결정은 지어내지 않는다 (듣고, 보고, 기다리는 것까지만).';
+
 const NARRATOR_SYSTEM = `너는 1인칭 TRPG의 서술자이자 NPC 연기자다. 한국어 2인칭("당신은 …")으로 장면을 서술한다.
 규칙:
 - 엔진이 확정한 결과(판정 성공/실패, 이동)를 그대로 따른다. 결과를 바꾸거나 새 판정을 만들지 않는다.
@@ -263,6 +272,9 @@ export async function runTurn(
   const rejected: string[] = [];
 
   const declared = parseUse(use);
+  // 빈 입력 = "이어서" (v0.79.9): 플레이어는 특별한 행동 없이 흐름을 지켜보고, 장면이 자연스럽게 다음으로 흘러간다
+  const continuing = !input.trim() || input.trim() === CONTINUE_INPUT;
+  if (continuing) input = CONTINUE_INPUT;
   push({ type: 'player_input', text: input, ...(declared ? { use } : {}) });
   // 결정적 선택: 엔진이 검증하고 효과를 먼저 적용한다 (AI는 그 결과를 서술만 한다)
   let decided = '';
@@ -278,7 +290,7 @@ export async function runTurn(
   // 1) Director
   onStage('GM이 행동을 판단하는 중');
   const d = await llm.json<DirectorOutput>(
-    { system: DIRECTOR_SYSTEM, user: `${buildDirectorContext(world, s)}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}${declared ? `\n\n## 플레이어가 쓰겠다고 한 것\n${declared.kind === 'skill' ? `${SKILLS[declared.skill].name} 기술 (${declared.skill})` : `${ABILITY_NAMES[declared.ability]} 능력 (${declared.ability})`} — 결과가 불확실하면 이것으로 판정한다` : ''}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
+    { system: DIRECTOR_SYSTEM, user: `${buildDirectorContext(world, s)}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}${declared ? `\n\n## 플레이어가 쓰겠다고 한 것\n${declared.kind === 'skill' ? `${SKILLS[declared.skill].name} 기술 (${declared.skill})` : `${ABILITY_NAMES[declared.ability]} 능력 (${declared.ability})`} — 결과가 불확실하면 이것으로 판정한다` : ''}${continuing ? `\n\n${CONTINUE_DIRECTOR}` : ''}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
     DIRECTOR_SCHEMA, signal,
   );
 
@@ -475,7 +487,7 @@ export async function runTurn(
   const narration = await llm.stream(
     {
       system: narratorSystem(world),
-      user: `${buildNarratorContext(world, s)}\n\n## 플레이어 소지품 (엔진 확정)\n${inventoryLine(world, s)}\n\n## 플레이어 행동\n${d.action_summary}\n\n## 엔진 확정 결과\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음'}\n\n## 확정된 NPC 반응 (이 대사를 그대로 사용)\n${reactions.length ? reactions.join('\n') : '(없음)'}`,
+      user: `${buildNarratorContext(world, s)}\n\n## 플레이어 소지품 (엔진 확정)\n${inventoryLine(world, s)}\n\n## 플레이어 행동\n${continuing ? CONTINUE_NARRATOR : d.action_summary}\n\n## 엔진 확정 결과\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음'}\n\n## 확정된 NPC 반응 (이 대사를 그대로 사용)\n${reactions.length ? reactions.join('\n') : '(없음)'}`,
       maxTokens: 4000,
     },
     onNarration, signal,

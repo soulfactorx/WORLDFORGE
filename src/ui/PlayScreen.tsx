@@ -3,7 +3,7 @@ import type { WorldPackage } from '../engine/schema';
 import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
 import { applyEvent, replay, type GameState, type LogEntry } from '../engine/state/state';
-import { runTurn } from '../gm/turn';
+import { runTurn, CONTINUE_INPUT } from '../gm/turn';
 import { metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
 import { DebugPanel, useDebugOn } from './DebugPanel';
@@ -205,8 +205,9 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   useEffect(() => () => { stopMusic(); stopSpeaking(); }, []);
 
   async function submit(choice?: string, choiceUse?: string, decision?: { choiceId: string; optionId: string }) {
-    const text = (choice ?? input).trim();
-    if (!state || !text || streaming !== null) return;
+    // 선택지도 입력도 없으면 "이어서" — 지금 흐름대로 자연스럽게 다음으로 (v0.79.9)
+    const text = (choice ?? input).trim() || CONTINUE_INPUT;
+    if (!state || streaming !== null) return;
     const turnUse = choice !== undefined ? choiceUse : use || undefined;
     if (choice === undefined) setUse('');
     setRewards([]); setShowRecap(false); followNow();
@@ -499,11 +500,11 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           </optgroup>
         </select>
         <textarea
-          value={input} rows={2} placeholder="선택지를 누르거나 직접 행동을 적으세요 (예: 주변을 자세히 살펴본다)"
+          value={input} rows={2} placeholder="선택지를 누르거나 직접 행동을 적으세요 — 비워 두고 누르면 흐름대로 이어서"
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
         />
-        <button className="primary" disabled={streaming !== null}>행동</button>
+        <button className="primary" disabled={streaming !== null} title={input.trim() ? '적은 행동을 한다' : '행동을 적지 않으면 지금 흐름대로 자연스럽게 이어서 진행한다'}>{input.trim() ? '행동' : '이어서 ▶'}</button>
       </form>
       </>
       )}

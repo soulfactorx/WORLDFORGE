@@ -67,3 +67,22 @@ describe('선택지의 마지막 장면 (v0.79.5)', () => {
     expect(lastScene('가'.repeat(900)).startsWith('…')).toBe(true);
   });
 });
+
+describe('이어서 진행 (v0.79.9)', () => {
+  it('빈 입력이면 판단·서술 AI에 "흐름대로 이어서"를 알리고, 기록에는 (이어서)로 남는다', async () => {
+    const { runTurn: run, startEvents: begin, CONTINUE_INPUT } = await import('./turn');
+    const s0 = replay(begin(sampleWorld, legacyCharacter('나'), 1).map((event, seq) => ({ saveId: 's', seq, turn: 0, event })));
+    const users: Record<string, string> = {};
+    const llm: LlmClient = {
+      stream: async (r, on) => { users.narr = r.user; on('이어지는 서술'); return '이어지는 서술'; },
+      json: async <T,>(r: { system: string; user: string }) => {
+        if (r.system.includes('판단 모듈')) { users.dir = r.user; return { action_summary: '지켜본다', check_kind: 'none', check_skill: '', check_ability: 'wis', check_dc_tier: 'easy', check_mode: 'normal', check_reason: '', move_to: '', speakers: [], start_encounter: '', rest: 'none', discover: [], set_flags: [], scene_image: '', time_spent: 'moment' } as T; }
+        if (r.system.includes('안내자')) return { summary: 's', suggestion: '', choices: [{ text: 'a', skill: '', kind: 'advance' }] } as T;
+        return { facts: [] } as T;
+      } };
+    const r = await run(llm, sampleWorld, s0, '   ', () => {});
+    expect(users.dir).toContain('## 이번 턴은 "이어서 진행"이다');
+    expect(users.narr).toContain('플레이어는 특별한 행동 없이 흐름을 지켜본다');
+    expect(r.state.log.find((l) => l.kind === 'player')?.text).toBe(CONTINUE_INPUT);
+  });
+});
