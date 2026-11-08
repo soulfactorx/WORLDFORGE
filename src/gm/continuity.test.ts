@@ -34,8 +34,12 @@ describe('이야기 이어 쓰기 (v0.79.3)', () => {
     expect(last).toContain('이 장소에서 2번째 턴이다'); // 턴 2에 도착 → 턴 3은 두 번째
     // 안내: 줄거리는 받되, 방금 서술은 따로 한 번만
     const g = guide.at(-1)!;
-    expect(g.match(/마지막 순간-3\./g)?.length).toBe(1);
+    expect(g.match(/마지막 순간-3\./g)?.length).toBe(2); // 방금 서술 + 마지막 장면 (줄거리 쪽엔 앞부분만)
     expect(g).not.toContain('## 직전 서술');
+    // 선택지는 방금 서술의 마지막 장면·방금 한 행동·지금 있는 사람에서 이어진다 (v0.79.5)
+    expect(g).toContain('## 방금 서술의 마지막 장면 (선택지는 여기서 바로 이어진다)\n서술3의 첫 문장');
+    expect(g).toContain('## 플레이어가 방금 한 행동\n말을 건다');
+    expect(g).toContain('## 지금 이 자리에 있는 사람');
   });
 
   it('장면 매 차례 서술은 장면 직전 이야기와 이 장면에서 앞서 쓴 서술을 받아 이어 쓴다', async () => {
@@ -53,5 +57,13 @@ describe('이야기 이어 쓰기 (v0.79.3)', () => {
     expect(user).toContain('## 장면 직전 이야기\n여관 문을 밀고 들어선다');
     expect(user).toContain('(직전 서술 — 여기서 이어 쓴다) 첫 차례 서술');
     expect(user.indexOf('첫 차례 서술')).toBeLessThan(user.indexOf('## 방금 차례'));
+  });
+});
+
+describe('선택지의 마지막 장면 (v0.79.5)', () => {
+  it('서술의 마지막 두 문단만, 길면 끝부분', async () => {
+    const { lastScene } = await import('./guide');
+    expect(lastScene('첫 문단.\n\n둘째 문단.\n\n셋째 문단 — 그가 대답을 기다린다.')).toBe('둘째 문단.\n\n셋째 문단 — 그가 대답을 기다린다.');
+    expect(lastScene('가'.repeat(900)).startsWith('…')).toBe(true);
   });
 });

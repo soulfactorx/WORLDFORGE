@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
 import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
-import { replay, type GameState, type LogEntry } from '../engine/state/state';
+import { applyEvent, replay, type GameState, type LogEntry } from '../engine/state/state';
 import { runTurn } from '../gm/turn';
 import { metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
@@ -28,7 +28,7 @@ import { AssetImage } from './AssetImage';
 import { RichText } from './RichText';
 import { ReskinContext } from './reskin';
 import { reskinner } from '../engine/genre';
-import { basicGuide, CHOICE_KINDS, type ChoiceKind } from '../gm/guide';
+import { basicGuide, CHOICE_KINDS, gmGuide, type ChoiceKind } from '../gm/guide';
 import { calendarDate } from '../engine/calendar';
 import { ABILITIES, ABILITY_NAMES, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { checkModifier } from '../engine/character/sheet';
@@ -249,9 +249,12 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         setError(`전투 서술 실패: ${(e as Error).message}`);
         text = '전투가 끝났다.';
       }
+      // 전투 뒤 선택지도 방금 일어난 일에서 이어지게 (v0.79.5: 정해진 문구 대신 AI 안내)
+      const narr: GameEvent = { type: 'narration', text };
+      const guide = await guideAfter(applyEvent(after, narr, after.turn), text);
       await appendEvents(saveId, [
-        { saveId, seq: seq++, turn: after.turn, event: { type: 'narration', text } },
-        { saveId, seq: seq++, turn: after.turn, event: basicGuide(world, after) },
+        { saveId, seq: seq++, turn: after.turn, event: narr },
+        { saveId, seq: seq++, turn: after.turn, event: guide },
       ]);
       setStreaming(null);
     }
@@ -286,11 +289,13 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     };
     if (sceneId && !after.scene && def) {
       const extra: GameEvent[] = [];
+      let text = '';
       if (mode !== 'fixed' && settings) {
-        const text = await narrate('장면을 서술하는 중', (on, sig) => narrateScene(createLlmClient(settings), world, after, def, [...log, ...lines], on, sig), '장면이 끝났다.');
+        text = await narrate('장면을 서술하는 중', (on, sig) => narrateScene(createLlmClient(settings), world, after, def, [...log, ...lines], on, sig), '장면이 끝났다.');
         extra.push({ type: 'narration', text });
       }
-      extra.push(basicGuide(world, after));
+      // 장면이 끝난 뒤 선택지도 그 결과에서 이어지게 (v0.79.5)
+      extra.push(text ? await guideAfter(applyEvent(after, extra[0]!, after.turn), text) : basicGuide(world, after));
       await appendEvents(saveId, extra.map((event) => ({ saveId, seq: seq++, turn: after.turn, event })));
       setStreaming(null);
     } else if (after.scene && def && mode === 'ai' && settings && lines.length) {
@@ -300,6 +305,14 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     }
     if (dbg) { const fin = await loadEvents(saveId); await endDebug(dbg, { events: fin.filter((x) => x.seq >= firstSeq).map((x) => x.event), before: stateBefore, after: replay(fin) }); }
     await reload();
+  }
+
+  /** 서술 뒤 GM 안내: AI로 (실패하면 기본 안내) */
+  async function guideAfter(st: GameState, narration: string): Promise<GameEvent> {
+    if (!settings) return basicGuide(world, st);
+    setStage('다음 선택지를 고르는 중');
+    try { return await gmGuide(createLlmClient(settings), world, st, narration, abort.current?.signal); }
+    catch { return basicGuide(world, st); }
   }
 
   /** 소지품·상점: 이벤트를 현재 턴에 이어 저장한다 (AI 호출 없음) */
