@@ -10,7 +10,7 @@ import type { LlmSettings } from '../llm/types';
 const PRICE_KEY = 'worldforge.price.v1';
 type Price = { input: number; output: number };
 
-function loadPrice(model: string): Price | null {
+export function loadPrice(model: string): Price | null {
   try { return (JSON.parse(localStorage.getItem(PRICE_KEY) ?? '{}') as Record<string, Price>)[model] ?? null; } catch { return null; }
 }
 function savePrice(model: string, p: Price | null) {

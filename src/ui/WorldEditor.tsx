@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 import { SKILL_IDS } from '../engine/character/rules';
 import { SceneForms } from './SceneForms';
@@ -36,6 +36,7 @@ import { josa } from '../engine/text/josa';
 import { generateScenario } from '../gm/worldgen/generate';
 import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
+import { setUsageScope } from '../llm/usage';
 import type { LlmSettings } from '../llm/types';
 
 /**
@@ -84,6 +85,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   openLibrary?: boolean;
 }) {
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
+  useEffect(() => { setUsageScope({ world: w.manifest.id, worldName: w.manifest.name, area: 'editor' }); }, [w.manifest.id, w.manifest.name]);
   const [questView, setQuestView] = useState<'form' | 'json'>('form');
   const [sceneView, setSceneView] = useState<'form' | 'json'>('form');
   const [pruneOnSave, setPruneOnSave] = useState<string[]>([]);

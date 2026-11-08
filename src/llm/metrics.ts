@@ -3,6 +3,7 @@
  * 기록은 이 브라우저에만 남는다 (최근 500건). 비용은 사용자가 정한 단가로 계산한다 — 단가를 앱이 지어내지 않는다.
  */
 import type { LlmClient, LlmRequest, Meter } from './types';
+import { recordUsage } from './usage';
 
 export type Role = 'director' | 'actor' | 'narrator' | 'recorder' | 'guide' | 'combat' | 'worldgen' | 'card' | 'translate' | 'image' | 'other';
 
@@ -23,6 +24,8 @@ export interface CallRecord {
   estimated?: boolean;
   ok: boolean;
   error?: string;
+  /** 요청 이름 (예: "인물 찾기 2/5 묶음") */
+  label?: string;
 }
 
 /** 턴 감사: 엔진이 AI 제안을 거부한 일 */
@@ -67,7 +70,7 @@ function save() {
 
 export const metrics = {
   get(): Store { return (store ??= load()); },
-  addCall(r: CallRecord) { const s = this.get(); s.calls = [...s.calls, r].slice(-LIMIT); save(); },
+  addCall(r: CallRecord) { const s = this.get(); s.calls = [...s.calls, r].slice(-LIMIT); save(); void recordUsage(r); },
   addTurn(r: TurnRecord) { const s = this.get(); s.turns = [...s.turns, r].slice(-LIMIT); save(); },
   clear() { store = { calls: [], turns: [] }; save(); },
   subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; },
@@ -82,10 +85,10 @@ export function metered(llm: LlmClient, model: string, sink: (r: CallRecord) => 
     try {
       const out = await run({ ...req, meter });
       if (meter.calls === 0) { meter.calls = 1; meter.estimated = true; meter.input = Math.ceil((req.system.length + req.user.length) / 2); meter.output = Math.ceil(outLen(out) / 2); }
-      sink({ at: Date.now(), role, model, ms: Math.round(performance.now() - t0), input: meter.input, output: meter.output, calls: meter.calls, ...(meter.estimated ? { estimated: true } : {}), ok: true });
+      sink({ at: Date.now(), role, model, ms: Math.round(performance.now() - t0), input: meter.input, output: meter.output, calls: meter.calls, ...(meter.estimated ? { estimated: true } : {}), ok: true, ...(req.label ? { label: req.label } : {}) });
       return out;
     } catch (e) {
-      if ((e as Error)?.name !== 'AbortError') sink({ at: Date.now(), role, model, ms: Math.round(performance.now() - t0), input: meter.input, output: meter.output, calls: Math.max(1, meter.calls), ok: false, error: String((e as Error)?.message ?? e).slice(0, 160) });
+      if ((e as Error)?.name !== 'AbortError') sink({ at: Date.now(), role, model, ms: Math.round(performance.now() - t0), input: meter.input, output: meter.output, calls: Math.max(1, meter.calls), ok: false, error: String((e as Error)?.message ?? e).slice(0, 160), ...(req.label ? { label: req.label } : {}) });
       throw e;
     }
   };

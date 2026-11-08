@@ -1,4 +1,5 @@
 import type { DebugEntry } from '../debug/trace';
+import type { UsageRow } from '../llm/usage';
 import Dexie, { type EntityTable } from 'dexie';
 import type { StoredEvent } from '../engine/state/events';
 import type { StoredPackage } from './packages';
@@ -40,6 +41,8 @@ class WorldforgeDB extends Dexie {
   genCache!: EntityTable<{ key: string; ns: string; value: unknown; at: number }, 'key'>;
   /** 디버그 기록 (v0.57) */
   debug!: EntityTable<DebugEntry, 'id'>;
+  /** AI 사용량 (v0.76) */
+  usage!: EntityTable<UsageRow, 'id'>;
   constructor() {
     super('worldforge');
     this.version(1).stores({
@@ -96,6 +99,18 @@ class WorldforgeDB extends Dexie {
       userArt: 'id, kind, createdAt',
       genCache: 'key, ns, at',
       debug: 'id, saveId, at',
+    });
+    // v0.76: AI 사용량 (세계관별·일자별·기능별)
+    this.version(8).stores({
+      saves: 'id, updatedAt',
+      events: '[saveId+seq], saveId',
+      packages: 'key, id, updatedAt',
+      imports: 'id, importedAt',
+      assets: 'key, pkg',
+      userArt: 'id, kind, createdAt',
+      genCache: 'key, ns, at',
+      debug: 'id, saveId, at',
+      usage: '++id, at, world, role',
     });
   }
 }

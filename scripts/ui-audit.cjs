@@ -58,6 +58,7 @@ const SCREENS = [
     await p.locator('.img-pick-cell').first().click();
   }],
   ['장면 시험', async (p) => { await editorTab(p, '장면'); await p.click('button:has-text("추가하고 바로 테스트")'); await p.waitForSelector('.scene-tester'); await p.click('button:has-text("자동 200회")'); }],
+  ['AI 사용량', async (p) => { await home(p); await p.click('.topbar-icon[aria-label="AI 사용량"]'); }],
   ['만계서고', async (p) => { await editorTab(p, '주인공'); await p.click('button:has-text("만계서고에서 불러오기")'); await p.waitForSelector('.lib-cell'); }],
 ];
 

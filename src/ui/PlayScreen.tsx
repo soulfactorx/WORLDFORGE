@@ -18,6 +18,7 @@ import { CombatPanel } from './CombatPanel';
 import { AvControls } from './AvControls';
 import { moodOf, playSfx, setMusic, sfxForLog, speak, stopMusic, stopSpeaking, type Sfx } from './audio';
 import { createLlmClient } from '../llm';
+import { setUsageScope } from '../llm/usage';
 import type { LlmSettings } from '../llm/types';
 import { appendEvents, loadEvents, undoLastTurn } from '../storage/db';
 import { CharacterPanel } from './CharacterPanel';
@@ -76,6 +77,7 @@ export function PlayScreen(props: { saveId: string; settings: LlmSettings; onExi
       const w = await findWorld(meta.packageId, meta.packageVersion);
       setNeed(`${meta.packageId}@${meta.packageVersion}`);
       setWorld(w ?? 'missing');
+      if (w) setUsageScope({ world: w.manifest.id, worldName: w.manifest.name, saveId: props.saveId, area: 'play' });
     })();
   }, [props.saveId]);
   if (world === null) return <p className="muted">불러오는 중…</p>;

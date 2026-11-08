@@ -1,12 +1,14 @@
 import { Lightbox } from './Lightbox';
 import { DebugPanel, DebugToggle, useDebugOn } from './DebugPanel';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { setUsageScope, type UsageArea } from '../llm/usage';
 import type { LlmSettings } from '../llm/types';
 import { loadSettings } from '../storage/settings';
 import { PlayScreen } from './PlayScreen';
 import { SaveList } from './SaveList';
 import { SettingsPanel } from './SettingsPanel';
 import { QualityPanel } from './QualityPanel';
+import { UsagePanel } from './UsagePanel';
 import { WorldEditor } from './WorldEditor';
 import { WorldGenPanel } from './WorldGenPanel';
 import { CardWorldPanel } from './CardWorldPanel';
@@ -15,13 +17,18 @@ import { UserArtManager } from './UserArtManager';
 import type { WorldPackage } from '../engine/schema';
 import { blankWorld } from '../storage/packages';
 
-type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean; library?: boolean } | { name: 'worldgen' } | { name: 'cardworld'; file: File; extras?: File[] } | { name: 'userart' };
+type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean; library?: boolean } | { name: 'worldgen' } | { name: 'cardworld'; file: File; extras?: File[] } | { name: 'userart' } | { name: 'usage' };
 
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
   const [view, setView] = useState<View>(settings ? { name: 'saves' } : { name: 'settings' });
   const debug = useDebugOn();
   const [showDebug, setShowDebug] = useState(false);
+  // AI 사용량: 지금 어느 화면에서 쓰는지 (플레이·편집 화면은 세계관까지 다시 정한다)
+  useEffect(() => {
+    const area: Record<string, UsageArea> = { play: 'play', editor: 'editor', worldgen: 'worldgen', cardworld: 'card', settings: 'settings' };
+    setUsageScope({ area: area[view.name] ?? 'other', ...(view.name === 'cardworld' ? { worldName: view.file.name } : {}) });
+  }, [view]);
 
   return (
     <div className="app">
@@ -34,7 +41,8 @@ export function App() {
           <a className="small nowrap" href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">소스<span className="wide-only"> (GPL)</span></a>
         </span>
         {debug && view.name !== 'play' && <button className="small" onClick={() => setShowDebug(true)} title="디버그 기록: 세계 만들기 등 모든 AI 호출">🐞</button>}
-        <button className="topbar-settings" onClick={() => setView({ name: 'settings' })}>AI 설정</button>
+        <button className="topbar-icon" onClick={() => setView({ name: 'usage' })} title="AI 사용량" aria-label="AI 사용량">📊<span className="wide-only"> 사용량</span></button>
+        <button className="topbar-settings" onClick={() => setView({ name: 'settings' })} title="AI 설정" aria-label="AI 설정">⚙<span className="wide-only"> AI 설정</span></button>
       </header>
       <main>
         {view.name === 'settings' && (
@@ -46,6 +54,7 @@ export function App() {
         )}
         {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world, library) => setView({ name: 'editor', world, ...(library ? { library: true } : {}) })} onGenerate={() => setView({ name: 'worldgen' })} onUserArt={() => setView({ name: 'userart' })}
           onCard={(file, extras) => setView({ name: 'cardworld', file, ...(extras?.length ? { extras } : {}) })} />}
+        {view.name === 'usage' && <UsagePanel onClose={() => setView({ name: 'saves' })} />}
         {view.name === 'userart' && <UserArtManager onClose={() => setView({ name: 'saves' })} />}
         {view.name === 'cardworld' && <CardWorldPanel file={view.file} {...(view.extras ? { extraFiles: view.extras } : {})} settings={settings} onCancel={() => setView({ name: 'saves' })}
           onDone={(world, notes) => setView({ name: 'editor', world, notes, saved: true })}
