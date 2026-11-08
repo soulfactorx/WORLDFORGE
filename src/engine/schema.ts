@@ -108,6 +108,8 @@ export interface Character {
   secretFear?: number;
   /** 배경 이야기 — 이 인물 자신이 아는 과거 (NPC 연기에만 쓰임, v0.12) */
   background?: string;
+  /** 이름을 모를 때 부르는 말 (v0.79.2, 예: "앞치마 차림의 하숙집 주인") — 없으면 외형에서 짧은 명사구를 찾는다 */
+  alias?: string;
   /** 처음 만났을 때의 말 (참고용, v0.12) */
   greeting?: string;
   /** 초상화 data URL (png/jpeg/webp, 최대 300KB, v0.12) */

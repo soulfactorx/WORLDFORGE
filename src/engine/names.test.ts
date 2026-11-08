@@ -27,4 +27,11 @@ describe('자리표시 외형 (v0.75.1)', () => {
     expect(hit?.level).toBe('warning');
     expect(hit?.message).toContain('낯선 인물');
   });
+
+  it('외형 문장을 통째로 호칭으로 쓰지 않는다 (v0.79.2): 호칭 칸 → 짧은 명사구 → 낯선 …', () => {
+    expect(epithetOf(npc('앞치마 위로 소매를 접어 올린 팔뚝에 힘이 들어가 있다', 'F'))).toBe('낯선 여자');
+    expect(epithetOf(npc('소매를 걷어붙이고 국자를 든 채', 'F'))).toBe('낯선 여자');
+    expect(epithetOf(npc('큰 안경을 쓴 작은 체구의 소녀. 카디건 소매가 길다'))).toBe('큰 안경을 쓴 작은 체구의 소녀');
+    expect(epithetOf({ ...npc('앞치마 위로 소매를 접어 올린 팔뚝에 힘이 들어가 있다', 'F'), alias: '앞치마 차림의 하숙집 주인' })).toBe('앞치마 차림의 하숙집 주인');
+  });
 });

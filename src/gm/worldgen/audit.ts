@@ -5,7 +5,7 @@
  * 3) AI 검토 메모: 모순·놓친 설정을 글로만 알려 준다 (자동으로 바꾸지 않는다)
  * 카드의 system prompt 같은 원문은 넘기지 않는다 — 세계 데이터만 넘긴다.
  */
-import { isPlaceholderText } from '../../engine/names';
+import { epithetOf, isPlaceholderText, usesFallbackEpithet } from '../../engine/names';
 import { validateWorld } from '../../engine/package/validate';
 import { RATING_GUIDE } from '../../engine/rating';
 import { genreGuide } from '../../engine/genre';
@@ -19,7 +19,7 @@ export type GapAction = 'scenario' | 'scenes' | 'images' | 'goto';
 /** 채울 수 있는 칸 */
 export type FillField =
   | 'world.overview' | 'world.gmNotes' | 'world.openingScene'
-  | 'character.appearance' | 'character.personality' | 'character.speech' | 'character.gender' | 'character.background' | 'character.class'
+  | 'character.appearance' | 'character.personality' | 'character.speech' | 'character.gender' | 'character.background' | 'character.class' | 'character.alias'
   | 'location.description' | 'faction.description';
 
 export interface Gap {
@@ -40,7 +40,7 @@ export interface Gap {
 const short = (s: string | undefined) => !s || isPlaceholderText(s) || s.trim().length < 12;
 const LABEL: Record<FillField, string> = {
   'world.overview': '세계 개요', 'world.gmNotes': 'GM 메모', 'world.openingScene': '시작 장면',
-  'character.appearance': '외형', 'character.personality': '성격', 'character.speech': '말투', 'character.gender': '성별', 'character.background': '배경 이야기', 'character.class': '직업',
+  'character.appearance': '외형', 'character.personality': '성격', 'character.speech': '말투', 'character.gender': '성별', 'character.background': '배경 이야기', 'character.class': '직업', 'character.alias': '호칭 (이름을 모를 때)',
   'location.description': '장소 묘사', 'faction.description': '세력 설명',
 };
 export const fieldLabel = (f: FillField) => LABEL[f];
@@ -57,6 +57,7 @@ export function scanWorld(w: WorldPackage): Gap[] {
     for (const f of ['appearance', 'personality', 'speech'] as const) {
       if (isPlaceholderText(c[f]) || (c[f] ?? '').trim().length < 4) add({ key: `character.${f}:${c.id}`, area: 'character', level: 'warning', label: `${c.name} — ${LABEL[`character.${f}`]}`, detail: c[f]?.trim() ? `"${c[f].trim().slice(0, 30)}" — 내용이 아님` : '비어 있음', fill: { field: `character.${f}`, id: c.id } });
     }
+    if (usesFallbackEpithet(c)) add({ key: `character.alias:${c.id}`, area: 'character', level: 'warning', label: `${c.name} — 호칭`, detail: `이름을 모를 때 "${epithetOf(c)}"로 불림 — 외형에서 짧은 호칭을 찾지 못함`, fill: { field: 'character.alias', id: c.id } });
     if (!c.gender) add({ key: `character.gender:${c.id}`, area: 'character', level: 'suggest', label: `${c.name} — 성별`, detail: '정해지지 않음 (호칭·이미지 고르기에 쓰임)', fill: { field: 'character.gender', id: c.id } });
     if (!c.stats?.role && !c.stats?.classId && !c.companion) add({ key: `character.class:${c.id}`, area: 'character', level: 'suggest', label: `${c.name} — 직업`, detail: '캐릭터 데이터가 없음 (기본 전사로 계산됨 — 전투·장면 판정에 쓰임)', fill: { field: 'character.class', id: c.id } });
     if (short(c.background)) add({ key: `character.background:${c.id}`, area: 'character', level: 'suggest', label: `${c.name} — 배경 이야기`, detail: '비어 있음 (NPC 연기에 쓰임)', fill: { field: 'character.background', id: c.id } });
@@ -99,6 +100,7 @@ const SYSTEM = `너는 세계관 설계자이자 점검 담당이다. 이미 만
 - 이미 있는 설정(이름·관계·사건·장소)과 모순되지 않게 한다. 새 고유명사(새 인물·새 장소)를 만들지 않는다.
 - 외형 1~3문장, 성격 2~3문장, 말투 1~2문장(대사 예 하나), 배경 2~4문장, 장소 묘사 2~4문장(감각 위주), 세력 설명 1~3문장, 세계 개요 3~6문장(플레이어에게 공개해도 되는 것만), GM 메모 3~6문장(숨은 진실·갈등·결말 방향), 시작 장면 3~6문장(2인칭 "당신은").
 - 성별 칸은 이름·설정으로 분명할 때만 M 또는 F, 아니면 "".
+- 호칭 칸은 이름을 모르는 사람이 이 인물을 부를 짧은 명사구 4~14자 (예: "앞치마 차림의 하숙집 주인", "흉터 난 용병"). 이름을 넣지 않는다.
 - 직업 칸은 아래 '직업 목록'의 ID 하나만 (그 인물의 설정에 가장 가까운 것).
 - "원문에 없음", "알 수 없음" 같은 글을 쓰지 않는다. 채울 근거가 너무 없으면 그 칸은 건너뛴다.
 - notes에는 자동으로 고치지 않을 것만: 설정끼리의 모순, 이어지지 않는 장소, 쓰이지 않는 인물, 결말로 가는 길이 없는 점 등. 짧게.
@@ -128,6 +130,7 @@ export function currentValue(w: WorldPackage, field: FillField, id?: string): st
     case 'world.openingScene': return w.start?.openingScene ?? '';
     case 'location.description': return w.locations.find((l) => l.id === id)?.description ?? '';
     case 'faction.description': return w.factions?.find((f) => f.id === id)?.description ?? '';
+    case 'character.alias': return w.characters.find((x) => x.id === id)?.alias ?? '';
     case 'character.class': { const c = w.characters.find((x) => x.id === id); return c?.stats?.role ?? ''; }
     default: { const c = w.characters.find((x) => x.id === id); const k = field.split('.')[1] as 'appearance'; return (c?.[k] as string | undefined) ?? ''; }
   }
@@ -178,6 +181,7 @@ export function applyPatches(w: WorldPackage, patches: Patch[]): WorldPackage {
         const c = out.characters.find((x) => x.id === p.id);
         if (!c) break;
         if (p.field === 'character.gender') { if (p.value === 'M' || p.value === 'F') c.gender = p.value; break; }
+        if (p.field === 'character.alias') { c.alias = p.value; break; }
         if (p.field === 'character.class') { c.stats = { ...(c.stats ?? {}), role: p.value }; break; }
         const k = p.field.split('.')[1] as 'appearance' | 'personality' | 'speech' | 'background';
         c[k] = p.value;

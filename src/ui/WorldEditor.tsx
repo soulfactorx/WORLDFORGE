@@ -38,6 +38,7 @@ import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
 import { WorldAudit } from './WorldAudit';
+import { epithetOf } from '../engine/names';
 import { GenProgress, useGenProgress } from './GenProgress';
 import { NpcStatsEditor } from './NpcStatsEditor';
 import type { LlmSettings } from '../llm/types';
@@ -352,6 +353,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             <div className="form-grid">
               <Text label="ID" value={c.id} onChange={(id) => up({ id })} />
               <Text label="이름" value={c.name} onChange={(name) => up({ name })} />
+              <Text label={`이름을 모를 때 부르는 말 (비우면: "${epithetOf({ ...c, alias: undefined })}")`} value={c.alias ?? ''} onChange={(alias) => up({ alias: alias.trim() ? alias : undefined })} />
               <Area label="외형" value={c.appearance} onChange={(appearance) => up({ appearance })} rows={2} />
               <Area label="성격" value={c.personality} onChange={(personality) => up({ personality })} rows={2} />
               <Area label="말투" value={c.speech} onChange={(speech) => up({ speech })} rows={2} />

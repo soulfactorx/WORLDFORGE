@@ -19,12 +19,26 @@ export const knowsName = (s: GameState, id: EntityId) => !s.namesKnown || s.name
 const PLACEHOLDER = /^[\s(（[\-—–·*]*(원문에\s*(?:없음|없다|언급\s*없음)|(?:외형|성격|말투)?\s*(?:정보|설명|묘사)\s*없음|알\s*수\s*없음|언급\s*없음|없음|미상|불명|미정|n\/?a|unknown|none|not\s+(?:specified|mentioned)|\?+|-+)[\s)）\].。]*$/i;
 export const isPlaceholderText = (s: string | undefined | null) => !s || !s.trim() || PLACEHOLDER.test(s.trim());
 
-/** 외형 첫 구절로 만든 별칭 (예: "턱수염이 희끗한 중년 경비병"). 외형이 없거나 자리표시면 "낯선 남자/여자/인물" */
+/** 명사구로 끝나는가 (조사·어미로 끝나는 구절은 호칭이 될 수 없다: "팔뚝에 힘이", "소매를 걷고") */
+const ENDS_WITH_PARTICLE = /(이|가|을|를|은|는|에|에서|에게|고|며|면서|서|다|요|게|지|도|와|과|로|으로|의|던|한|하는|인데|지만|채|듯|듯이|만큼|동안|때)$/;
+function nounPhrase(s: string): string | null {
+  const t = s.replace(/[“”"'.…]/g, '').trim();
+  if (!t || t.length > 18) return null;
+  const last = t.split(/\s+/).at(-1)!;
+  if ((last.length >= 2 && ENDS_WITH_PARTICLE.test(last)) || /^(채|듯|때|뿐|중|척)$/.test(last)) return null;
+  return t;
+}
+
+/** 이름을 모를 때 부르는 말: 호칭(alias) → 외형 첫 구절이 짧은 명사구면 그것 → "낯선 남자/여자/인물" */
 export function epithetOf(c: Character): string {
+  if (c.alias?.trim() && !isPlaceholderText(c.alias)) return c.alias.trim();
   const first = isPlaceholderText(c.appearance) ? '' : (c.appearance ?? '').split(/[.。,，\n]/)[0]!.trim();
-  if (first && !isPlaceholderText(first)) return first.length > 24 ? `${first.slice(0, 23)}…` : first;
+  const np = first ? nounPhrase(first) : null;
+  if (np && !isPlaceholderText(np)) return np;
   return c.gender === 'M' ? '낯선 남자' : c.gender === 'F' ? '낯선 여자' : '낯선 인물';
 }
+/** 호칭이 따로 없어 기본 말("낯선 …")로 불리는가 */
+export const usesFallbackEpithet = (c: Character) => /^낯선 (남자|여자|인물)$/.test(epithetOf(c)) && !c.alias;
 
 /** AI에게 넘길 외형 — 자리표시면 지어내지 않게 알려 준다 */
 export const appearanceOf = (c: Character) => (isPlaceholderText(c.appearance) ? '(정해지지 않음 — 구체적인 생김새를 지어내지 말고 모호하게 묘사)' : c.appearance);
