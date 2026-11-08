@@ -11,13 +11,13 @@ import type { LlmSettings } from '../llm/types';
 
 const LEVEL: Record<Gap['level'], string> = { error: '⛔ 오류', warning: '⚠ 고칠 것', suggest: '💡 채우면 좋은 것' };
 const AREA: Record<Gap['area'], string> = { world: '세계', character: '인물', location: '장소', faction: '세력', structure: '구조', check: '검사기' };
-const ACTION_LABEL = { scenario: '임무·플래그·결말 탭에서 AI로 추가', scenes: '장면 탭에서 AI로 추가', images: '이미지 탭에서 자동 배정', goto: '해당 칸으로 가기' } as const;
+const ACTION_LABEL = { scenario: '임무·플래그·결말 탭에서 AI로 추가', encounters: '✦ AI로 조우 만들기', scenes: '장면 탭에서 AI로 추가', images: '이미지 탭에서 자동 배정', goto: '해당 칸으로 가기' } as const;
 
 export function WorldAudit({ w, settings, onApply, onGoto, onAction, onClose }: {
   w: WorldPackage; settings?: LlmSettings | null;
   onApply: (next: WorldPackage, summary: string) => void;
   onGoto: (path: string) => void;
-  onAction: (a: 'scenario' | 'scenes' | 'images') => void;
+  onAction: (a: 'scenario' | 'encounters' | 'scenes' | 'images') => void;
   onClose: () => void;
 }) {
   const gaps = useMemo(() => scanWorld(w), [w]);
@@ -62,7 +62,7 @@ export function WorldAudit({ w, settings, onApply, onGoto, onAction, onClose }: 
                 {g.fill ? <label className="check"><input type="checkbox" checked={pick.has(g.key)} onChange={(e) => setPick((s) => { const n = new Set(s); if (e.target.checked) n.add(g.key); else n.delete(g.key); return n; })} />
                   <span><span className="tag">{AREA[g.area]}</span> {g.label} <span className="small muted">— {g.detail}</span></span></label>
                   : <span><span className="tag">{AREA[g.area]}</span> {g.label} <span className="small muted">— {g.detail}</span></span>}
-                {g.action && g.action !== 'goto' && <button type="button" className="small" onClick={() => onAction(g.action as 'scenario' | 'scenes' | 'images')}>{ACTION_LABEL[g.action]}</button>}
+                {g.action && g.action !== 'goto' && <button type="button" className="small" onClick={() => onAction(g.action as 'scenario' | 'encounters' | 'scenes' | 'images')}>{ACTION_LABEL[g.action]}</button>}
                 {g.action === 'goto' && g.path && <button type="button" className="small" onClick={() => onGoto(g.path!)}>{ACTION_LABEL.goto}</button>}
               </li>
             ))}

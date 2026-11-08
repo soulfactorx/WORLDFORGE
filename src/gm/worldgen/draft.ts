@@ -444,9 +444,17 @@ export function addScenario(world: WorldPackage, raw: ScenarioDraft): { world: W
     for (let n = 2; flagTaken.has(id); n++) id = `${id}_${n}`;
     flagTaken.add(id); flagMap.set(f.key, id);
   }
-  const byExisting = (prefix: string, list: { id: string }[]) => {
+  // AI가 ID를 조금 다르게 적어도 찾는다 (v0.79.4): 그대로 · 접두사 없이 · 소문자 · slug · 이름으로
+  const byExisting = (prefix: string, list: { id: string; name?: string }[]) => {
     const m = new Map(list.map((x) => [x.id.replace(`${prefix}/`, ''), x.id]));
-    return (k: string) => (list.some((x) => x.id === k) ? k : m.get(slug(k)));
+    const lower = new Map(list.map((x) => [x.id.toLowerCase(), x.id]));
+    const names = new Map(list.filter((x) => x.name).map((x) => [x.name!.replace(/\s+/g, '').toLowerCase(), x.id]));
+    return (k: string) => {
+      if (!k) return undefined;
+      const t = k.trim();
+      if (list.some((x) => x.id === t)) return t;
+      return m.get(t) ?? m.get(t.replace(`${prefix}/`, '')) ?? lower.get(t.toLowerCase()) ?? lower.get(`${prefix}/${t}`.toLowerCase()) ?? m.get(slug(t)) ?? names.get(t.replace(/\s+/g, '').toLowerCase());
+    };
   };
   const refs: Refs = {
     loc: byExisting('loc', w.locations), npc: byExisting('npc', w.characters), claim: byExisting('claim', w.claims),

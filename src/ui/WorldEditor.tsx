@@ -115,15 +115,15 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [packUi, setPackUi] = useState<null | 'import' | 'character' | 'rules'>(null);
 
   const scenarioGen = useGenProgress();
-  async function aiScenario() {
+  async function aiScenario(focus: 'all' | 'encounters' = 'all') {
     if (!settings) return;
     try {
-      const r = await scenarioGen.run('세계 요약을 보내는 중…', (on, sig) => generateScenario(createLlmClient(settings), w, on, sig, genRequest));
-      if (!r) { setStatus('임무·조우·결말 만들기를 중단했습니다.'); return; }
+      const r = await scenarioGen.run('세계 요약을 보내는 중…', (on, sig) => generateScenario(createLlmClient(settings), w, on, sig, genRequest, focus));
+      if (!r) { setStatus(focus === 'encounters' ? '조우 만들기를 중단했습니다.' : '임무·조우·결말 만들기를 중단했습니다.'); return; }
       setW({ ...r.world, manifest: { ...r.world.manifest, aiAssisted: true } });
       setNotes(r.notes);
       setApproved(false);
-      setStatus('AI가 임무·조우·결말 초안을 덧붙였습니다. 검토 후 저장하세요.');
+      setStatus(`${focus === 'encounters' ? 'AI가 조우를 덧붙였습니다' : 'AI가 임무·조우·결말 초안을 덧붙였습니다'} — ${r.notes.filter((n) => n.startsWith('추가됨') || n.startsWith('⚠')).join(' / ')}. 검토 후 저장하세요.`);
     } catch (e) {
       setStatus(`❌ ${(e as Error).message}`);
     }
@@ -175,7 +175,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         <WorldAudit w={w} settings={settings} onClose={() => setAuditing(false)}
           onApply={(nw, summary) => { setW(nw); setStatus(summary); }}
           onGoto={(p) => setTab(tabForPath(p))}
-          onAction={(a) => setTab(a === 'scenario' ? 'quests' : a === 'scenes' ? 'scenes' : 'images')} />
+          onAction={(a) => { setTab(a === 'scenario' ? 'quests' : a === 'encounters' ? 'encounters' : a === 'scenes' ? 'scenes' : 'images'); if (a === 'encounters') void aiScenario('encounters'); }} />
       )}
       {status && <p className="status small">{status}</p>}
       {!approved && (
@@ -548,6 +548,13 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           )}
         </>
       )}
+      {tab === 'encounters' && settings && (
+        <>
+          <div className="row"><span className="small muted">조우 {(w.encounters ?? []).length}개</span><span className="spacer" />
+            <button type="button" disabled={scenarioGen.busy} onClick={() => void aiScenario('encounters')}>{scenarioGen.busy ? '만드는 중…' : '✦ AI로 조우 만들기'}</button></div>
+          <GenProgress stage={scenarioGen.stage} pct={scenarioGen.pct} onCancel={scenarioGen.cancel} steps={['세계 요약 보내기', 'AI가 조우 쓰기', '정리·검사']} />
+        </>
+      )}
       {tab === 'encounters' && (
         <JsonField label="조우" value={w.encounters ?? []} onChange={(encounters) => set({ encounters })} rows={18}
           help={`이 세계의 적: ${monstersOfWorld(w).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건`} />
@@ -575,7 +582,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           {settings && (
             <div className="row">
               <input value={genRequest} placeholder="(선택) 원하는 이야기 방향 — 예: 배신하는 동료가 있는 메인 임무" disabled={scenarioGen.busy} onChange={(e) => setGenRequest(e.target.value)} />
-              <button type="button" disabled={scenarioGen.busy} onClick={aiScenario}>{scenarioGen.busy ? '만드는 중…' : '✦ AI로 임무·조우·결말 추가'}</button>
+              <button type="button" disabled={scenarioGen.busy} onClick={() => void aiScenario()}>{scenarioGen.busy ? '만드는 중…' : '✦ AI로 임무·조우·결말 추가'}</button>
+              <button type="button" disabled={scenarioGen.busy} onClick={() => void aiScenario('encounters')}>✦ 조우만 추가</button>
             </div>
           )}
           <GenProgress stage={scenarioGen.stage} pct={scenarioGen.pct} onCancel={scenarioGen.cancel} steps={['세계 요약 보내기', 'AI가 임무·조우·결말 쓰기', '정리·검사']} />

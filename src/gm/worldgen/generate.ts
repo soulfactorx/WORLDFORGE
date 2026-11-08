@@ -139,16 +139,26 @@ export async function generateWorld(
 
 export async function generateScenario(
   llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal, request = '',
+  /** encounters: 조우만 만든다 (v0.79.4 — 점검에서 "조우 없음"을 고칠 때) */
+  focus: 'all' | 'encounters' = 'all',
 ): Promise<{ world: WorldPackage; notes: string[] }> {
   onStage('세계 요약을 보내는 중…', 2, 5);
-  onStage('AI가 임무·조우·결말을 쓰는 중…', 5, 90);
+  onStage(focus === 'encounters' ? 'AI가 조우를 쓰는 중…' : 'AI가 임무·조우·결말을 쓰는 중…', 5, 90);
+  const rare = genreOf(world.genre?.id).combat === 'rare';
+  const focusRule = focus === 'encounters'
+    ? `\n- 이번 요청은 조우만이다: 조우를 2~3개 반드시 만든다. 장소(location)는 아래 장소 목록의 key를 그대로, 적(monster)은 "쓸 수 있는 적" 목록의 ID만. 임무·결말·플래그는 빈 배열로 둔다.${rare ? '\n- 전투가 드문 장르이므로 이 세계에 어울리는 현실적인 위기(불량배·소매치기·사나운 짐승 등)로 만든다.' : ''}`
+    : rare ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : '';
   const draft = await llm.json<ScenarioDraft>({
-    system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${genreOf(world.genre?.id).combat === 'rare' ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : ''}`,
+    system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${focusRule}`,
     user: `${worldSummary(world)}\n\n## 쓸 수 있는 적 (이 세계의 장르)\n${monstersOfWorld(world).map((m) => `- ${m.id}: ${m.name} · ${m.role} · 경험치 ${m.xp} · ${m.look}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 12000, effort: 'medium',
   }, scenarioDraftSchema(Object.keys(monsterTable(world))), signal);
   onStage('받은 초안을 세계에 맞춰 정리하고 검사하는 중…', 92, 99);
-  const r = addScenario(world, draft);
+  const r = addScenario(world, focus === 'encounters' ? { ...draft, quests: [], endings: [], flags: [] } : draft);
+  // 무엇이 실제로 더해졌는지 (v0.79.4): 뺀 것이 있으면 이유와 함께
+  const added = (k: 'quests' | 'encounters' | 'endings' | 'flags') => (r.world[k]?.length ?? 0) - (world[k]?.length ?? 0);
+  r.notes.unshift(`추가됨 — 임무 ${added('quests')} · 조우 ${added('encounters')} · 결말 ${added('endings')} · 플래그 ${added('flags')}`);
+  if (focus === 'encounters' && added('encounters') === 0) r.notes.unshift('⚠ 조우가 하나도 추가되지 않았습니다. 아래 메모(장소·적이 맞지 않아 뺀 것)를 확인하고 다시 시도하거나, 조우 탭에서 직접 만들어 주세요.');
   onStage('완료', 100, 100);
   return r;
 }

@@ -13,9 +13,10 @@ import type { WorldPackage } from '../../engine/schema';
 import type { LlmClient } from '../../llm/types';
 import { missingImages } from './stock';
 import { classesFor } from '../../engine/classes';
+import { genreOf } from '../../data/genres';
 
 export type GapArea = 'world' | 'character' | 'location' | 'faction' | 'structure' | 'check';
-export type GapAction = 'scenario' | 'scenes' | 'images' | 'goto';
+export type GapAction = 'scenario' | 'encounters' | 'scenes' | 'images' | 'goto';
 /** 채울 수 있는 칸 */
 export type FillField =
   | 'world.overview' | 'world.gmNotes' | 'world.openingScene'
@@ -67,7 +68,8 @@ export function scanWorld(w: WorldPackage): Gap[] {
   // 빠진 구조
   if (!(w.quests ?? []).length) add({ key: 'structure.quests', area: 'structure', level: 'warning', label: '임무 없음', detail: '플레이어가 무엇을 할지 정해 주는 임무가 없다', action: 'scenario' });
   if (!(w.endings ?? []).length) add({ key: 'structure.endings', area: 'structure', level: 'warning', label: '결말 없음', detail: '이야기가 끝나는 지점이 없다', action: 'scenario' });
-  if (!(w.encounters ?? []).length) add({ key: 'structure.encounters', area: 'structure', level: 'suggest', label: '조우 없음', detail: '전투·위기가 없다', action: 'scenario' });
+  if (!(w.encounters ?? []).length) add({ key: 'structure.encounters', area: 'structure', level: 'suggest', label: '조우 없음',
+    detail: genreOf(w.genre?.id).combat === 'rare' ? '전투·위기가 없다 — 이 장르는 전투가 드물어 없어도 괜찮다' : '전투·위기가 없다', action: 'encounters' });
   if (!(w.scenes ?? []).length) add({ key: 'structure.scenes', area: 'structure', level: 'suggest', label: '장면 없음', detail: '협상·추격 같은 수치 장면이 없다', action: 'scenes' });
   const miss = missingImages(w);
   if (miss.characters.length + miss.locations.length) add({ key: 'structure.images', area: 'structure', level: 'suggest', label: '이미지 없는 곳', detail: `인물 ${miss.characters.length} · 장소 ${miss.locations.length}`, action: 'images' });
