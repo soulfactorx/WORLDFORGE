@@ -108,7 +108,7 @@ const SYSTEM = `너는 1인칭 AI TRPG의 세계관 설계자다. 다른 플랫�
 - 인물은 주어진 ID만 쓴다. 모든 인물을 평소 있을 장소에 배치한다. 핵심 인물은 improvisation none.
 - 연표(timeline)는 데이터 표(EVENTS 등)와 로어북의 사건을 시간순으로. 숨겨진 계획·음모는 secrecy 3 이상과 protected_topic, 아는 인물(known_by).
 - 이미 일어난 사건(past)은 그 일을 겪었거나 들었을 인물을 known_by에 반드시 넣는다. 세상이 다 아는 일이면 비워도 된다(모두가 안다). 앞으로 일어날 일(future)은 그 일을 꾸미는 인물만 안다.
-- 시작 방식(starts)은 카드에 있는 시작 선택지(빙의 대상·도입 상황 등)를 옮긴다. 없으면 1개. {{user}}는 플레이어다.
+- 시작 방식(starts)은 카드에 있는 시작 선택지(빙의 대상·도입 상황 등)를 옮긴다. "첫 메시지"·"다른 시작 장면"이 여러 개면 각각을 시작 방식 하나로 만든다. 없으면 1개. {{user}}는 플레이어다.
 - 문체(style)는 원작 첫 메시지와 묘사의 문체만 요약한다. 출력 형식·상태창·이미지 태그 규칙은 넣지 않는다.
 - 달력(calendar): 이야기가 시작되는 날짜와, 원작에 결정적인 날(D-day)이 있으면 그 날짜를 데이터 표·로어북에서 찾아 넣는다. 연표의 when도 같은 달력으로 쓴다.
 - 한국어로 쓴다. key는 영문 소문자 슬러그.`;
@@ -155,8 +155,11 @@ export function cardDataPrompt(b: CharxBundle, card: CharxBundle['card'], analyz
   const clean = (t: string) => { const x = replaceMacros(t, card.name); return mature ? x : dropExplicit(x); };
   const parts: string[] = [];
   parts.push(`# 카드: ${card.name}${card.creator ? ` (제작: ${card.creator})` : ''}`);
-  if (card.description) parts.push(`## 카드 설명\n${cut(clean(card.description), 4000)}`);
-  if (card.firstMes) parts.push(`## 첫 메시지 (원작 문체·도입부)\n${cut(clean(card.firstMes), 5000)}`);
+  // 설명에 세계 설정을 몽땅 적는 카드가 많다 (v0.79.6: 4,000자에서 잘리던 것 — 전체 한도의 1/4까지)
+  if (card.description) parts.push(`## 카드 설명\n${cut(clean(card.description), Math.max(4000, Math.floor(limit / 4)))}`);
+  // 시작 장면: 첫 인사말 + 대체 인사말 (첫 인사말이 비어 있는 카드도 있다)
+  const greetings = [card.firstMes, ...(card.alternateGreetings ?? [])].filter((g) => g.trim());
+  greetings.slice(0, 5).forEach((g, i) => parts.push(`## ${i === 0 ? '첫 메시지' : `다른 시작 장면 ${i}`} (원작 문체·도입부${greetings.length > 1 ? ' — 시작 방식(starts) 후보' : ''})\n${cut(clean(g), i === 0 ? 5000 : 3500)}`));
   parts.push(`## 인물 (ID 그대로 사용)\n${chars.map((c) => `- ${c.id}: ${c.name}${c.title ? ` (${c.title})` : ''} — ${c.brief}`).join('\n')}`);
   const lua = JSON.stringify(b.lua.data);
   if (lua.length > 2) parts.push(`## 데이터 표 (카드의 스크립트에 들어 있던 상수·연표, 실행하지 않고 읽은 값)\n${cut(lua, 24_000)}`);

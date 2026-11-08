@@ -29,6 +29,8 @@ export interface NormalizedCard {
   personality: string;
   scenario: string;
   firstMes: string;
+  /** 대체 인사말 (v0.79.6): 첫 인사말이 비어 있고 여기에만 시작 장면이 있는 카드가 있다 */
+  alternateGreetings?: string[];
   mesExample: string;
   creator: string;
   version: string;
@@ -133,13 +135,13 @@ export function normalize(raw: unknown, format: CardFormat): NormalizedCard {
   if (count(risu.sdData) || count(risu.newGenData)) unsupported.push('이미지 생성 설정');
   if (isObj(ext.depth_prompt) && str(ext.depth_prompt.prompt)) unsupported.push('깊이 프롬프트 (AI에게 넘기지 않음)');
   if (Array.isArray(d.group_only_greetings) && d.group_only_greetings.length) unsupported.push(`그룹 전용 인사말 ${d.group_only_greetings.length}개`);
-  if (Array.isArray(d.alternate_greetings) && d.alternate_greetings.length) unsupported.push(`대체 인사말 ${d.alternate_greetings.length}개 (첫 인사말만 사용)`);
   if (Array.isArray(d.assets) && d.assets.length > 1) unsupported.push(`추가 에셋 ${d.assets.length - 1}개 (초상화 1장만 사용)`);
   if (book && lore.some((e) => e.keys.length)) unsupported.push('로어북 키워드 자동 삽입 (키워드는 참고로만 보존)');
 
   return {
     format: fmt, name, nickname: str(d.nickname), description: str(d.description).trim(), personality: str(d.personality).trim(),
     scenario: str(d.scenario).trim(), firstMes: str(d.first_mes).trim(), mesExample: str(d.mes_example).trim(),
+    ...(Array.isArray(d.alternate_greetings) && d.alternate_greetings.some((g) => str(g).trim()) ? { alternateGreetings: (d.alternate_greetings as unknown[]).map((g) => str(g).trim()).filter(Boolean) } : {}),
     creator: str(d.creator), version: str(d.character_version), tags: Array.isArray(d.tags) ? (d.tags as unknown[]).map(String) : [],
     lore, ignoredPrompts, unsupported, images: [],
   };

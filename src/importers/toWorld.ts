@@ -42,9 +42,9 @@ export function cardFields(card: NormalizedCard) {
     name,
     appearance: guessAppearance(m(card.description)),
     personality: cut(m(card.personality) || cut(m(card.description), 400) || '(성격 정보 없음)', 800),
-    speech: card.mesExample ? cut(`대화 예시를 참고한 말투:\n${m(card.mesExample).replace(/<START>/gi, '').trim()}`, 900) : card.firstMes ? '첫 인사말의 말투를 따른다.' : '(말투 정보 없음)',
+    speech: card.mesExample ? cut(`대화 예시를 참고한 말투:\n${m(card.mesExample).replace(/<START>/gi, '').trim()}`, 900) : (card.firstMes || card.alternateGreetings?.length) ? '첫 인사말의 말투를 따른다.' : '(말투 정보 없음)',
     background: cut(m(card.description), 2000),
-    greeting: cut(m(card.firstMes), 800),
+    greeting: cut(m(card.firstMes || card.alternateGreetings?.[0] || ''), 800),
   };
 }
 
