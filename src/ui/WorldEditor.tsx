@@ -38,6 +38,7 @@ import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
 import { WorldAudit } from './WorldAudit';
+import { Toast } from './Toast';
 import { GenrePicker } from './GenrePicker';
 import { GmStylePicker } from './GmStylePicker';
 import { epithetOf } from '../engine/names';
@@ -123,6 +124,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   const [auditing, setAuditing] = useState(false);
   // 저장 안 된 변경 (v0.82): 처음 열었을 때 이후로 바뀌면 표시하고, 닫을 때 확인한다
   const [dirty, setDirty] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
   const firstW = useRef(true);
   useEffect(() => { if (firstW.current) { firstW.current = false; return; } setDirty(true); }, [w]);
   useEffect(() => {
@@ -161,7 +163,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       if (pruneOnSave.length) { await deleteAssets(w.manifest.id, pruneOnSave.filter((id) => !(w.assets ?? []).some((a) => a.id === id))); setPruneOnSave([]); }
       setApproved(true);
       setDirty(false);
-      setStatus(`저장했습니다 (${w.manifest.id}@${w.manifest.version}).${hasErrors(issues) ? ' 오류를 고쳐야 플레이할 수 있습니다.' : ''}`);
+      setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000);
+      setStatus(`✔ 저장했습니다 (${w.manifest.id}@${w.manifest.version}).${hasErrors(issues) ? ' 오류를 고쳐야 플레이할 수 있습니다.' : ''}`);
     } catch (e) {
       setStatus(`❌ ${(e as Error).message}`);
     }
@@ -186,7 +189,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         {w.manifest.private ? <button type="button" className="editor-tool" disabled title={PRIVATE_NOTE} aria-label="개인용 — 내보내기 불가">🔒</button>
           : shareBlocked(w) ? <button type="button" className="editor-tool" disabled title={MATURE_NOTE} aria-label="성인 등급 — 내보내기 불가">🔞</button>
           : <button type="button" className="editor-tool" onClick={exportFile} title=".wpk 파일로 내보내기" aria-label=".wpk 내보내기">⤓<span className="tool-label"> 내보내기</span></button>}
-        <button type="button" className="primary editor-save" onClick={() => void save()}>저장</button>
+        <button type="button" className={`primary editor-save${savedFlash ? ' saved' : ''}`} onClick={() => void save()}>{savedFlash ? '✔ 저장됨' : '저장'}</button>
       </div>
       {library && (
         <WorldLibrary target={w} onClose={() => setLibrary(false)} onApply={(nw, notes) => {
@@ -201,7 +204,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           onGoto={(p) => setTab(tabForPath(p))}
           onAction={(a) => { setTab(a === 'scenario' ? 'quests' : a === 'encounters' ? 'encounters' : a === 'scenes' ? 'scenes' : 'images'); if (a === 'encounters') void aiScenario('encounters'); }} />
       )}
-      {status && <p className="status small">{status}</p>}
+      <Toast message={status} onClose={() => setStatus('')} ms={status.length > 80 ? 9000 : 5000} />
       {!approved && (
         <div className="ai-draft small">
           <b>✦ AI가 만든 초안입니다.</b> 아직 라이브러리에 등록되지 않았습니다. 내용을 읽고 고친 뒤 <b>저장</b>하면 승인됩니다.

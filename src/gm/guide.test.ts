@@ -13,8 +13,9 @@ describe('GM 안내', () => {
     const s = state();
     const g = s.log.at(-1)!;
     expect(g.kind).toBe('guide');
-    expect(g.choices!.length).toBe(4);
-    expect(g.choiceKinds).toEqual(['advance', 'bond', 'bold', 'wild']);
+    expect(g.choices!.length).toBe(5);
+    expect(g.choiceKinds).toEqual(['advance', 'bond', 'bold', 'wild', 'move']);
+    expect(g.choices!.at(-1)).toMatch(/(으로|로) 향한다$/); // 이동 선택지 (v0.82.1)
     expect(g.choices).not.toContain('주변을 자세히 살펴본다');
   });
   it('AI 안내: 플레이어가 아는 것만 보내고, 형식이 잘못되면 기본 안내', async () => {
@@ -22,7 +23,8 @@ describe('GM 안내', () => {
     let sent = '';
     const llm = (out: unknown): LlmClient => ({ stream: async () => '', json: async <T,>(r: { user: string }) => { sent = r.user; return out as T; } });
     const g = await gmGuide(llm({ summary: '요약', suggestion: '제안', choices: ['a', 'b', 'c', 'd', 'e'] }), sampleWorld, s, '서술');
-    expect(g).toEqual({ type: 'gm_guide', summary: '요약', suggestion: '제안', choices: ['a', 'b', 'c', 'd'] });
+    expect(g.type === 'gm_guide' && g.choices.slice(0, 4)).toEqual(['a', 'b', 'c', 'd']);
+    expect(g.type === 'gm_guide' && g.choices[4]).toMatch(/향한다/); // 엔진이 고른 이동 선택지
     for (const f of sampleWorld.facts) expect(sent).not.toContain(f.statement);
     expect(await gmGuide(llm({ facts: [] }), sampleWorld, s, '서술')).toEqual(basicGuide(sampleWorld, s));
   });
@@ -33,9 +35,12 @@ describe('GM 안내', () => {
     let sys = '', user = '';
     const llm: LlmClient = { stream: async () => '', json: async <T,>(r: { system: string; user: string }) => { sys = r.system; user = r.user; return { summary: '안개 속에서 누군가 당신을 지켜본다.', suggestion: '저 시선의 주인이 궁금하지 않은가?', choices: [
       { text: '마을로 향한다', skill: '', kind: 'advance' }, { text: '장로를 떠본다', skill: 'insight', kind: 'bond' },
-      { text: '제단을 부순다', skill: 'athletics', kind: 'bold' }, { text: '제단에 피 한 방울을 떨어뜨린다', skill: '', kind: 'wild' }] } as T; } };
+      { text: '제단을 부순다', skill: 'athletics', kind: 'bold' }, { text: '제단에 피 한 방울을 떨어뜨린다', skill: '', kind: 'wild' }],
+      move: { text: '개 짖는 소리를 따라 마을로 내려간다', location: 'loc/village-gate' } } as T; } };
     const g = await gmGuide(llm, { ...sampleWorld, style: '건조하고 음산한 문체' }, s, '서술');
-    expect(g.type === 'gm_guide' && g.choiceKinds).toEqual(['advance', 'bond', 'bold', 'wild']);
+    expect(g.type === 'gm_guide' && g.choiceKinds).toEqual(['advance', 'bond', 'bold', 'wild', 'move']);
+    expect(g.type === 'gm_guide' && g.choices[4]).toContain('마을 입구'); // AI 글에 장소 이름이 없으면 붙인다
+    expect(sys).toContain('move: 이동 선택지');
     expect(sys).toContain('wild');
     expect(sys).toContain('건조하고 음산한 문체');
     expect(user).toContain('이야기가 정체되어 있다');

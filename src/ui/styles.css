@@ -891,3 +891,11 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .tool-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; }
 .tool-row button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tool-row button.on { border-color: var(--accent); color: var(--accent); }
+
+/* 아래쪽 알림 (v0.82.1) */
+.toast { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 900; display: flex; align-items: flex-start; gap: 8px; width: min(560px, calc(100vw - 24px)); padding: 10px 12px; border-radius: 10px; background: var(--surface); color: var(--text); border: 1px solid var(--accent); box-shadow: 0 8px 28px rgba(0,0,0,.35); animation: toast-in .18s ease-out; }
+.toast-error { border-color: #c0392b; }
+.toast-text { flex: 1 1 auto; min-width: 0; white-space: pre-wrap; word-break: break-word; font-size: .9rem; }
+.toast-close { flex: none; padding: 2px 8px; min-height: 32px; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.editor-save.saved { background: #2e7d4f; border-color: #2e7d4f; color: #fff; }

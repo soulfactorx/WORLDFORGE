@@ -30,7 +30,7 @@ describe('턴: 고른 기술 · 서술에 나온 인물 이미지', () => {
     expect(r.state.log.find((l) => l.kind === 'player')!.text).toContain('[설득]');
     expect(llm.users[0]).toContain('플레이어가 쓰겠다고 한 것');
     const guide = r.events.at(-1)!;
-    expect(guide.type === 'gm_guide' && guide.choiceSkills).toEqual(['persuasion', '']);
+    expect(guide.type === 'gm_guide' && guide.choiceSkills?.slice(0, 2)).toEqual(['persuasion', '']);
   });
   it('판정이 필요 없으면 고른 기술이 있어도 굴리지 않는다', async () => {
     const r = await runTurn(mock('조용하다.', 'none'), sampleWorld, start(), '인사한다', () => {}, undefined, undefined, 'skill:persuasion');
