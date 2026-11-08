@@ -69,7 +69,7 @@ interface Probe {
   judge: (r: { events: GameEvent[]; state: GameState; narration: string; before: GameState }) => { pass: boolean; detail: string };
 }
 
-const at = (loc: string) => (s: GameState): GameState => ({ ...s, player: { ...s.player, locationId: loc }, arrivedTurn: s.turn });
+const at = (loc: string) => (s: GameState): GameState => ({ ...s, player: { ...s.player, locationId: loc }, arrivedTurn: s.turn + 1 });
 
 /** 이 세계의 비밀 명제 중 이 인물이 아직 털어놓을 수 없는 것의 핵심 낱말 */
 const SECRET_WORDS = ['소환진', '다시 작동', '소환했'];

@@ -13,6 +13,9 @@ export interface LogEntry {
   turn: number;
   kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide' | 'omen';
   text: string;
+  /** 서술: 그때의 게임 속 시각(분)과 장소 (v0.79.3 — 이야기를 이어 쓰기 위해) */
+  at?: number;
+  loc?: string;
   images?: import('./events').NarrationImage[];
   /** guide: 진행 제안과 선택지 */
   suggestion?: string;
@@ -154,7 +157,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, rngState: e.rngState, log: [...s.log, { turn, kind: 'check', text }] };
     }
     case 'narration':
-      return { ...s, log: [...s.log, { turn, kind: 'narration', text: e.text, ...(e.images?.length ? { images: e.images } : {}) }] };
+      return { ...s, log: [...s.log, { turn, kind: 'narration', text: e.text, at: s.worldMinutes, loc: s.player.locationId, ...(e.images?.length ? { images: e.images } : {}) }] };
     case 'moved':
       return { ...s, player: { ...s.player, locationId: e.to }, arrivedTurn: turn, visited: (s.visited ?? []).includes(e.to) ? s.visited : [...(s.visited ?? []), e.to] };
     case 'knowledge_revealed': {

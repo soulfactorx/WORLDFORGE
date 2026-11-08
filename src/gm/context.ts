@@ -88,8 +88,75 @@ function exits(world: WorldPackage, state: GameState): string[] {
   return loc.connections.map((id) => `- ${id}: ${world.locations.find((x) => x.id === id)?.name ?? id}`);
 }
 
-function recentLog(state: GameState, n = 8): string[] {
-  return state.log.slice(-n).map((e) => `[${e.kind}] ${e.text}`);
+const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const dayPart = (m: number) => { const h = Math.floor(m / 60) % 24; return h < 5 ? '한밤' : h < 9 ? '이른 아침' : h < 12 ? '오전' : h < 14 ? '한낮' : h < 18 ? '오후' : h < 21 ? '저녁' : '밤'; };
+const span = (min: number) => (min >= 1440 ? `${Math.floor(min / 1440)}일 ${Math.round((min % 1440) / 60)}시간` : min >= 60 ? `${Math.floor(min / 60)}시간${min % 60 ? ` ${min % 60}분` : ''}` : `${min}분`);
+const clip = (t: string, n: number) => { const x = t.replace(/\s+/g, ' ').trim(); return x.length > n ? `${x.slice(0, n - 1)}…` : x; };
+/** 서술의 앞부분 몇 문장 (줄거리용) */
+const gist = (t: string, n = 120) => clip(t.split(/(?<=[.!?。…”"])\s+/).slice(0, 2).join(' '), n);
+
+/** 장면·전투가 시작되기 직전의 서술과, 그 뒤 지금까지 이 장면에서 있었던 일 (v0.79.3) */
+export function sceneSoFar(state: GameState, startMark = '🎭 장면 시작'): { before: string; since: string[]; lastNarration: string } {
+  const log = state.log;
+  let start = -1;
+  for (let i = log.length - 1; i >= 0; i--) if (log[i]!.text.startsWith(startMark)) { start = i; break; }
+  const upto = start >= 0 ? start : log.length;
+  let before = '';
+  for (let i = upto - 1; i >= 0; i--) if (log[i]!.kind === 'narration') { before = log[i]!.text; break; }
+  const after = start >= 0 ? log.slice(start + 1) : [];
+  const narr = after.filter((e) => e.kind === 'narration');
+  const lastNarration = narr.at(-1)?.text ?? '';
+  const lastIdx = after.lastIndexOf(narr.at(-1)!);
+  const since = after.filter((e) => e.kind !== 'guide').map((e) => (e.kind !== 'narration' ? `[${e.kind}] ${clip(e.text, 240)}`
+    : after.indexOf(e) === lastIdx ? `(직전 서술 — 여기서 이어 쓴다) ${e.text}` : `(서술) ${clip(e.text, 350)}`));
+  return { before: clip(before.slice(-900), 900), since, lastNarration };
+}
+
+/**
+ * 이야기의 흐름 (v0.79.3): 매 서술이 처음부터 다시 쓰는 것처럼 되지 않게
+ * - 지금까지의 줄거리: 지난 턴마다 플레이어 행동 → 서술 앞부분 (시각·장소)
+ * - 직전 서술 전문: 여기서 바로 이어 쓴다
+ * - 그 뒤 엔진이 기록한 것: 이번 턴의 판정·관계·발견 등
+ * - 흐른 시간: 직전 서술 이후 몇 분, 지금 시간대
+ * mode 'brief'(GM 안내용): 직전 서술은 따로 받으므로 줄거리만
+ */
+export function storyThread(world: WorldPackage, state: GameState, opts: { chronicle?: number; lastChars?: number; mode?: 'narrate' | 'brief' } = {}): string[] {
+  const { chronicle = 10, lastChars = 2200, mode = 'narrate' } = opts;
+  const log = state.log;
+  let lastIdx = -1;
+  for (let i = log.length - 1; i >= 0; i--) if (log[i]!.kind === 'narration') { lastIdx = i; break; }
+  const locName = (id?: string) => (id ? world.locations.find((l) => l.id === id)?.name ?? '' : '');
+  // 줄거리: 서술 하나마다 바로 앞의 플레이어 행동과 짝짓는다
+  const beats: string[] = [];
+  let pendingInput = '';
+  const upto = mode === 'brief' ? log.length : Math.max(0, lastIdx);
+  for (let i = 0; i < upto; i++) {
+    const e = log[i]!;
+    if (e.kind === 'player') pendingInput = e.text;
+    if (e.kind === 'narration') {
+      const when = [e.at !== undefined ? hhmm(e.at) : '', locName(e.loc)].filter(Boolean).join(' · ');
+      beats.push(`- 턴 ${e.turn}${when ? ` (${when})` : ''}: ${pendingInput ? `당신 「${clip(pendingInput, 50)}」 → ` : ''}${gist(e.text)}`);
+      pendingInput = '';
+    }
+  }
+  const out: string[] = [];
+  if (beats.length) out.push('## 지금까지의 줄거리 (오래된 것부터 — 이미 일어난 일, 다시 쓰지 않는다)', ...(beats.length > chronicle ? [`- (그 전 ${beats.length - chronicle}턴 생략)`] : []), ...beats.slice(-chronicle), '');
+  if (mode === 'brief') return out;
+  const prev = lastIdx >= 0 ? log[lastIdx]! : undefined;
+  if (prev) {
+    const since = prev.at !== undefined ? state.worldMinutes - prev.at : undefined;
+    out.push(`## 직전 서술 (턴 ${prev.turn}${prev.at !== undefined ? ` · ${hhmm(prev.at)}` : ''}${prev.loc ? ` · ${locName(prev.loc)}` : ''}) — 이 마지막 순간에서 바로 이어 쓴다`,
+      prev.text.length > lastChars ? `…${prev.text.slice(-lastChars)}` : prev.text, '');
+    const guide = log.slice(lastIdx + 1).find((e) => e.kind === 'guide');
+    if (guide) out.push('## 그때 GM이 짚은 상황 (참고)', clip(guide.text, 300), '');
+    if (since !== undefined) {
+      const moved = prev.loc && prev.loc !== state.player.locationId;
+      out.push('## 시간의 흐름 (엔진 확정)', `직전 서술 이후 ${since > 0 ? `${span(since)} 흘렀다` : '거의 시간이 흐르지 않았다'} → 지금 ${hhmm(state.worldMinutes)} (${dayPart(state.worldMinutes)}).${since >= 60 ? ' 빛·소리·사람들의 움직임이 그만큼 달라져 있다.' : ''}${moved ? ` 장소가 바뀌었다: ${locName(prev.loc)} → ${locName(state.player.locationId)}.` : ''}`, '');
+    }
+  }
+  const now = log.slice(lastIdx + 1).filter((e) => e.kind !== 'guide');
+  if (now.length) out.push('## 이번 턴에 엔진이 기록한 것', ...now.map((e) => `[${e.kind}] ${clip(e.text, 300)}`), '');
+  return out;
 }
 
 function playerKnowledge(world: WorldPackage, state: GameState): string[] {
@@ -102,7 +169,9 @@ function playerKnowledge(world: WorldPackage, state: GameState): string[] {
 /** 이 장소에 머문 시간 — 조우 조건("두 턴 이상 머물면")은 이것으로 판단한다 (엔진 확정) */
 function stayLines(state: GameState): string[] {
   if (state.arrivedTurn === undefined) return [];
-  const n = Math.max(1, state.turn - state.arrivedTurn);
+  // 도착한 턴이 1번째, 그다음 턴이 2번째 (v0.79.3: 이동한 다음 턴도 "방금 도착"으로 세던 것 수정). 게임 시작(턴 0)은 턴 1이 첫 턴
+  const base = state.arrivedTurn === 0 ? 1 : state.arrivedTurn;
+  const n = Math.max(1, state.turn - base + 1);
   return ['## 이 장소에 머문 시간 (엔진 확정)', n === 1 ? '이번이 이 장소에서의 첫 턴이다 (방금 도착했다).' : `이 장소에서 ${n}번째 턴이다.`, ''];
 }
 
@@ -125,7 +194,7 @@ export function buildDirectorContext(world: WorldPackage, state: GameState): str
     '## 이동 가능한 곳', ...exits(world, state), '',
     '## 이 장소에 있는 인물', ...(npcs.length ? npcs : ['(없음)']), '',
     '## 플레이어와 동행 중인 동료', ...partyLines(world, state), '',
-    '## 최근 진행', ...recentLog(state),
+    ...storyThread(world, state, { chronicle: 6, lastChars: 1200 }),
   ].join('\n');
 }
 
@@ -191,6 +260,8 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     ...relationLines(world, state, npc), '',
     ...beatLines(world, state, npc),
     '## 이 낯선 이와의 지난 대화', ...(state.npcMemory[npc.id]?.length ? state.npcMemory[npc.id]! : ['(처음 만난다)']), '',
+    // 방금 눈앞에서 벌어진 일 (v0.79.3) — 대화가 매번 처음인 것처럼 되지 않게
+    ...(() => { let t = ''; for (let i = state.log.length - 1; i >= 0; i--) if (state.log[i]!.kind === 'narration') { t = state.log[i]!.text; break; } return t ? ['## 방금 네 눈앞에서 벌어진 일 (이어서 반응한다)', clip(t.slice(-600), 600), ''] : []; })(),
     '## 동행', ...(state.party[npc.id]
       ? ['너는 지금 이 낯선 이와 함께 다니는 동료다. 크게 실망하거나 위험이 지나치면 떠날 수 있다.']
       : npc.companion
@@ -237,7 +308,7 @@ export function activeGoals(world: WorldPackage, state: GameState) {
   }));
 }
 
-export function buildNarratorContext(world: WorldPackage, state: GameState): string {
+export function buildNarratorContext(world: WorldPackage, state: GameState, opts: { thread?: Parameters<typeof storyThread>[2] } = {}): string {
   const npcs = presentCharacters(world, state).map((c) => [
     `- ${knowsName(state, c.id) ? c.name : `${epithetOf(c)} (플레이어가 아직 이름을 모름 — 이름을 쓰지 말고 이 호칭이나 생김새로 자연스럽게 부른다)`} [${c.id}] — 외형: ${appearanceOf(c)} — 능력: ${npcStatLine(world, state, c)} — 플레이어를 대하는 태도: ${stageFor(world, state.relationships, c.id)}`,
     ...canonBlock(world, state, c.id),
@@ -253,7 +324,8 @@ export function buildNarratorContext(world: WorldPackage, state: GameState): str
     '## 플레이어의 몸 상태', `HP ${state.player.sheet.hp}/${state.player.sheet.maxHp}${state.player.sheet.hp <= state.player.sheet.maxHp / 3 ? ' (심하게 다침)' : ''}`, '',
     ...worldMood(world, state),
     '## 플레이어가 알고 있는 것', ...playerKnowledge(world, state), '',
-    '## 최근 진행', ...recentLog(state),
+    ...stayLines(state),
+    ...storyThread(world, state, opts.thread ?? {}),
   ].join('\n');
 }
 

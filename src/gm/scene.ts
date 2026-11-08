@@ -14,7 +14,10 @@ import type { LlmClient } from '../llm/types';
 import { rewardEvents, scenarioEvents } from './scenario';
 import { npcSheet } from '../engine/npcStats';
 import { effectEvents } from './story';
-import { buildNarratorContext } from './context';
+import { buildNarratorContext, sceneSoFar } from './context';
+
+/** 장면 한 차례 = 게임 속 3분 */
+export const SCENE_ROUND_MINUTES = 3;
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
@@ -77,9 +80,11 @@ export function sceneActionEvents(world: WorldPackage, state: GameState, actionI
   // 이번 차례의 그림: 행동 결과의 그림, 반작용의 그림 (v0.50)
   const images = [...new Set([delta?.image, ...re.images].filter((x): x is string => !!x))];
   const ev: GameEvent = { type: 'scene_action', run: next, line, rngState: rng.state(), ...(images.length ? { images } : {}) };
-  const s1 = applyEvent(state, ev, state.turn);
+  // 한 차례에 게임 속 시간 몇 분 (v0.79.3: 장면이 시간 없이 지나가던 것 수정)
+  const tick: GameEvent = { type: 'time_advanced', minutes: SCENE_ROUND_MINUTES };
+  const s1 = applyEvent(applyEvent(state, ev, state.turn), tick, state.turn);
   const end = sceneEndOf(def, next);
-  return [ev, ...(end ? endEvents(world, s1, def, end.id) : [])];
+  return [ev, tick, ...(end ? endEvents(world, s1, def, end.id) : [])];
 }
 
 /** 그만두기: 효과 없이 끝난다 (다시 할 수 있는 장면이 아니면 다시 열리지 않는다) */
@@ -100,11 +105,12 @@ export async function narrateScene(
   return llm.stream({
     system: `너는 1인칭 TRPG의 서술자다. 한국어 2인칭("당신은 …")으로, 방금 끝난 장면을 2~4문단으로 생생하게 요약한다.
 - 장면 기록의 판정 결과와 끝(결과)을 그대로 따른다. 결과를 바꾸거나 새 사건을 만들지 않는다.
+- 차례마다 쓴 서술이 있으면 그 흐름을 이어 마무리한다 (같은 묘사를 되풀이하지 않는다). 장면 전의 이야기와 자연스럽게 이어지게 한다.
 - 수치(주사위, 게이지 숫자)는 서술에 쓰지 않는다. 게이지 이름은 분위기로 녹인다.
 - 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
 - ${genreGuide(world)}
 - ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
-    user: `${buildNarratorContext(world, after)}\n\n## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}\n\n## 장면 기록\n${log.map(rs).join('\n')}\n\n## 끝\n${res?.outcome === 'abandoned' ? '플레이어가 도중에 그만두었다.' : `${end?.name ?? ''}${end?.text ? ` — ${end.text}` : ''}`}`,
+    user: `${buildNarratorContext(world, after)}\n\n## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}\n\n## 장면 기록\n${log.map(rs).join('\n')}${(() => { const so = sceneSoFar(after); return so.lastNarration ? `\n\n## 이 장면에서 차례마다 이미 쓴 서술 (되풀이하지 말고 이어서 맺는다)\n${so.since.filter((x) => x.startsWith('(')).slice(-4).join('\n')}` : ''; })()}\n\n## 끝\n${res?.outcome === 'abandoned' ? '플레이어가 도중에 그만두었다.' : `${end?.name ?? ''}${end?.text ? ` — ${end.text}` : ''}`}`,
     maxTokens: 2500,
   }, onText, signal);
 }
@@ -129,9 +135,11 @@ export async function narrateSceneTurn(
 - 기록의 판정 결과(성공·실패·대성공)와 상대의 반작용을 그대로 따른다. 결과를 바꾸거나 새 사건·결말을 만들지 않는다.
 - 숫자(주사위, 수치)는 쓰지 않는다. 수치의 높고 낮음은 분위기와 몸짓으로 보여 준다.
 - 장면은 아직 끝나지 않았다. 마무리하지 말고, 다음 행동을 대신 정하지 않는다.
+- "이 장면에서 지금까지"의 마지막 서술에서 바로 이어 쓴다. 앞 차례에서 쓴 묘사·표현을 되풀이하지 않고, 이번 차례에 달라진 것(형세·상대의 표정·거리)을 보여 준다.
+- 첫 차례면 "장면 직전 이야기"에서 자연스럽게 장면으로 들어간다.
 - ${genreGuide(world)}
 - ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
-    user: `## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}${phase ? `\n지금 단계: ${phase}` : ''}\n\n## 지금 형세\n${[...gauges, ...(states.length ? [`상태: ${states.join(', ')}`] : [])].join('\n') || '(없음)'}\n\n## 방금 차례 (확정)\n${rs(line)}`,
+    user: `${(() => { const so = sceneSoFar(after); return `## 장면 직전 이야기\n${so.before || '(없음)'}\n\n## 이 장면에서 지금까지 (오래된 것부터)\n${so.since.slice(-12).join('\n') || '(첫 차례)'}\n\n`; })()}## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}${phase ? `\n지금 단계: ${phase}` : ''}\n\n## 지금 형세\n${[...gauges, ...(states.length ? [`상태: ${states.join(', ')}`] : [])].join('\n') || '(없음)'}\n\n## 방금 차례 (확정)\n${rs(line)}`,
     maxTokens: 600,
   }, onText, signal);
 }
