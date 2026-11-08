@@ -793,3 +793,26 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
 button.linklike { background: none; border: none; padding: 0; color: var(--accent); font-weight: 600; text-align: left; text-decoration: underline; word-break: break-all; }
 .topbar .topbar-icon { margin-left: auto; }
 .topbar .topbar-icon ~ .topbar-settings { margin-left: 0; }
+.topbar .topbar-icon ~ .topbar-icon2 { margin-left: 0; }
+
+/* 저장소 관리 (v0.77) */
+.storage-orphans { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px dashed var(--accent); border-radius: 8px; }
+.storage-orphans ul { margin: 0; padding-left: 1.1em; }
+.storage-orphans button { align-self: flex-start; }
+.storage-worlds { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.storage-world details { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.storage-world summary { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 8px 10px; cursor: pointer; min-width: 0; }
+.storage-world summary .usage-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.storage-world-body { display: flex; flex-direction: column; gap: 8px; padding: 0 10px 10px; }
+.storage-item { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; }
+.storage-item > span { min-width: 0; flex: 1 1 220px; }
+.storage-files { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.storage-files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name del" "info del"; gap: 2px 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }
+.storage-files .usage-name { grid-area: name; }
+.storage-files .small { grid-area: info; }
+.storage-files .row-del { grid-area: del; }
+@media (max-width: 600px) {
+  .topbar { gap: 6px; }
+  .topbar .topbar-icon, .topbar .topbar-icon2, .topbar .topbar-settings { padding: 6px 8px; min-width: 36px; }
+}
+@media (max-width: 420px) { .topbar-ver { display: none; } }

@@ -9,6 +9,7 @@ import { SaveList } from './SaveList';
 import { SettingsPanel } from './SettingsPanel';
 import { QualityPanel } from './QualityPanel';
 import { UsagePanel } from './UsagePanel';
+import { StoragePanel } from './StoragePanel';
 import { WorldEditor } from './WorldEditor';
 import { WorldGenPanel } from './WorldGenPanel';
 import { CardWorldPanel } from './CardWorldPanel';
@@ -17,7 +18,7 @@ import { UserArtManager } from './UserArtManager';
 import type { WorldPackage } from '../engine/schema';
 import { blankWorld } from '../storage/packages';
 
-type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean; library?: boolean } | { name: 'worldgen' } | { name: 'cardworld'; file: File; extras?: File[] } | { name: 'userart' } | { name: 'usage' };
+type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean; library?: boolean } | { name: 'worldgen' } | { name: 'cardworld'; file: File; extras?: File[] } | { name: 'userart' } | { name: 'usage' } | { name: 'storage' };
 
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
@@ -34,7 +35,7 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <button className="brand" onClick={() => setView({ name: 'saves' })}>WORLDFORGE</button>
-        <span className="muted small nowrap" title={__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'}><span className="wide-only">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · </span>v{__APP_VERSION__}</span>
+        <span className="muted small nowrap topbar-ver" title={__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'}><span className="wide-only">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · </span>v{__APP_VERSION__}</span>
         <span className="topbar-links">
           {__BUILD_TARGET__ === 'web' && <a className="small nowrap" href="./worldforge-offline.html" download title="오프라인 HTML 받기">오프라인<span className="wide-only"> HTML 받기</span></a>}
           <InstallButton />
@@ -42,6 +43,7 @@ export function App() {
         </span>
         {debug && view.name !== 'play' && <button className="small" onClick={() => setShowDebug(true)} title="디버그 기록: 세계 만들기 등 모든 AI 호출">🐞</button>}
         <button className="topbar-icon" onClick={() => setView({ name: 'usage' })} title="AI 사용량" aria-label="AI 사용량">📊<span className="wide-only"> 사용량</span></button>
+        <button className="topbar-icon2" onClick={() => setView({ name: 'storage' })} title="저장소 관리" aria-label="저장소 관리">💾<span className="wide-only"> 저장소</span></button>
         <button className="topbar-settings" onClick={() => setView({ name: 'settings' })} title="AI 설정" aria-label="AI 설정">⚙<span className="wide-only"> AI 설정</span></button>
       </header>
       <main>
@@ -54,6 +56,7 @@ export function App() {
         )}
         {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world, library) => setView({ name: 'editor', world, ...(library ? { library: true } : {}) })} onGenerate={() => setView({ name: 'worldgen' })} onUserArt={() => setView({ name: 'userart' })}
           onCard={(file, extras) => setView({ name: 'cardworld', file, ...(extras?.length ? { extras } : {}) })} />}
+        {view.name === 'storage' && <StoragePanel onClose={() => setView({ name: 'saves' })} />}
         {view.name === 'usage' && <UsagePanel onClose={() => setView({ name: 'saves' })} />}
         {view.name === 'userart' && <UserArtManager onClose={() => setView({ name: 'saves' })} />}
         {view.name === 'cardworld' && <CardWorldPanel file={view.file} {...(view.extras ? { extraFiles: view.extras } : {})} settings={settings} onCancel={() => setView({ name: 'saves' })}
