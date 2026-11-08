@@ -6,7 +6,7 @@ import { npcLocationOf } from '../engine/world';
 import type { Character, EntityId, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { calendarDate } from '../engine/calendar';
-import { epithetOf, knowsName } from '../engine/names';
+import { appearanceOf, epithetOf, knowsName } from '../engine/names';
 import { allTitles, rankOf, renownOf, renownTier } from '../engine/renown';
 import { classesFor, classLabel, subclassLabel } from '../engine/classes';
 import { profileLine } from '../engine/profile';
@@ -115,7 +115,7 @@ export function playerLines(world: WorldPackage, state: GameState): string[] {
 }
 
 export function buildDirectorContext(world: WorldPackage, state: GameState): string {
-  const npcs = presentCharacters(world, state).map((c) => `- ${c.id}: ${c.appearance}`);
+  const npcs = presentCharacters(world, state).map((c) => `- ${c.id}: ${appearanceOf(c)}`);
   return [
     ...worldBrief(world, true),
     ...sceneHeader(world, state), '',
@@ -167,7 +167,7 @@ export function buildActorContext(world: WorldPackage, state: GameState, npc: Ch
     // 세계의 공개 배경은 이 세계에 사는 인물이라면 안다 (v0.54)
     ...worldBrief(world, false, 1200),
     `## 너는 ${npc.name} [${npc.id}]`,
-    `외형: ${npc.appearance}`,
+    `외형: ${appearanceOf(npc)}`,
     `성격: ${npc.personality}`,
     `말투: ${npc.speech}`,
     ...(npc.background ? [`배경: ${npc.background}`] : []),
@@ -236,7 +236,7 @@ export function activeGoals(world: WorldPackage, state: GameState) {
 
 export function buildNarratorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => [
-    `- ${knowsName(state, c.id) ? c.name : `${epithetOf(c)} (플레이어가 아직 이름을 모름 — 이름을 쓰지 말고 외형으로 부른다)`} [${c.id}] — 외형: ${c.appearance} — 플레이어를 대하는 태도: ${stageFor(world, state.relationships, c.id)}`,
+    `- ${knowsName(state, c.id) ? c.name : `${epithetOf(c)} (플레이어가 아직 이름을 모름 — 이름을 쓰지 말고 외형으로 부른다)`} [${c.id}] — 외형: ${appearanceOf(c)} — 플레이어를 대하는 태도: ${stageFor(world, state.relationships, c.id)}`,
     ...canonBlock(world, state, c.id),
   ].join('\n'));
   return [

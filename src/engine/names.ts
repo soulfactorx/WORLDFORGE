@@ -12,11 +12,22 @@ import type { GameState } from './state/state';
 /** namesKnown이 없는 이전 세이브는 모두 아는 것으로 본다 (이전 동작 유지) */
 export const knowsName = (s: GameState, id: EntityId) => !s.namesKnown || s.namesKnown.includes(id) || !!s.party[id];
 
-/** 외형 첫 구절로 만든 별칭 (예: "턱수염이 희끗한 중년 경비병") */
+/**
+ * 비어 있음을 뜻하는 자리표시 글 (v0.75.1) — AI 정리나 카드에서 "원문에 없음", "(외형 정보 없음)" 같은 글이 그대로 들어오는 일이 있다.
+ * 이런 글이 외형이면 별칭으로 쓰지 않는다 (이름 모르는 인물이 "원문에 없음"으로 불리던 문제).
+ */
+const PLACEHOLDER = /^[\s(（[\-—–·*]*(원문에\s*(?:없음|없다|언급\s*없음)|(?:외형|성격|말투)?\s*(?:정보|설명|묘사)\s*없음|알\s*수\s*없음|언급\s*없음|없음|미상|불명|미정|n\/?a|unknown|none|not\s+(?:specified|mentioned)|\?+|-+)[\s)）\].。]*$/i;
+export const isPlaceholderText = (s: string | undefined | null) => !s || !s.trim() || PLACEHOLDER.test(s.trim());
+
+/** 외형 첫 구절로 만든 별칭 (예: "턱수염이 희끗한 중년 경비병"). 외형이 없거나 자리표시면 "낯선 남자/여자/인물" */
 export function epithetOf(c: Character): string {
-  const first = (c.appearance ?? '').split(/[.。,，\n]/)[0]!.trim();
-  return first ? (first.length > 24 ? `${first.slice(0, 23)}…` : first) : '낯선 인물';
+  const first = isPlaceholderText(c.appearance) ? '' : (c.appearance ?? '').split(/[.。,，\n]/)[0]!.trim();
+  if (first && !isPlaceholderText(first)) return first.length > 24 ? `${first.slice(0, 23)}…` : first;
+  return c.gender === 'M' ? '낯선 남자' : c.gender === 'F' ? '낯선 여자' : '낯선 인물';
 }
+
+/** AI에게 넘길 외형 — 자리표시면 지어내지 않게 알려 준다 */
+export const appearanceOf = (c: Character) => (isPlaceholderText(c.appearance) ? '(정해지지 않음 — 구체적인 생김새를 지어내지 말고 모호하게 묘사)' : c.appearance);
 
 export const displayName = (s: GameState, c: Character) => (knowsName(s, c.id) ? c.name : epithetOf(c));
 

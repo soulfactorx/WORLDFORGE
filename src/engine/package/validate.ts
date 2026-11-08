@@ -2,6 +2,7 @@
  * 세계관 패키지 검사기 (설계서 PART 5.2-8 Package Builder, 설계 리뷰 5.2절 패키지 린터).
  * 오류(error)가 하나라도 있으면 플레이할 수 없다. 경고(warning)는 제작자에게 알리기만 한다.
  */
+import { isPlaceholderText } from '../names';
 import { CLASSES, SKILL_IDS } from '../character/rules';
 import { STD_ITEMS } from '../../data/items';
 import { QUEST_TYPES, RARITIES, type Rewards } from '../schema';
@@ -164,6 +165,9 @@ export function validateWorld(input: unknown): Issue[] {
   characters.forEach((c, i) => {
     const p = `characters[${i}]`;
     for (const k of ['name', 'appearance', 'personality', 'speech'] as const) text(c[k], `${p}.${k}`);
+    for (const k of ['appearance', 'personality', 'speech'] as const) {
+      if (typeof c[k] === 'string' && c[k].trim() && isPlaceholderText(c[k])) warn(`${p}.${k}`, `"${c[k].trim()}" — 내용이 아니라 '없음'을 뜻하는 글입니다. ${k === 'appearance' ? '이름을 모를 때 이 인물은 외형으로 불리므로, 짧게라도 생김새를 적어 주세요 (지금은 "낯선 인물"로 불립니다).' : '짧게라도 채워 주세요.'}`);
+    }
     if (!locIds.has(c.locationId)) err(`${p}.locationId`, `없는 장소 "${c.locationId}"`);
     if (!IMPROV.includes(c.improvisation)) err(`${p}.improvisation`, 'none / minor / free 중 하나입니다.');
     if (c.companion) {
