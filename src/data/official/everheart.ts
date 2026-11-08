@@ -1161,3 +1161,6 @@ everheartWorld.gmNotes = '아카데미 장학생 리아는 병약하다고 알�
     ...everheartWorld.endings!,
   ];
 }
+
+// GM 스타일 (v0.80)
+everheartWorld.gmStyle = { preset: 'warm' };

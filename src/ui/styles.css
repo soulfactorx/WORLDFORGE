@@ -853,3 +853,10 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
   .topbar-tools .tool-label { display: inline; }
   .topbar-tools > button, .topbar-tools > a { text-align: left; min-height: 40px; display: flex; align-items: center; gap: 6px; }
 }
+
+/* GM 스타일 (v0.80) */
+.gm-style { display: flex; flex-direction: column; gap: 10px; }
+.gm-style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+@media (max-width: 600px) { .gm-style-card { padding: 8px; } .gm-style-card .small { font-size: .75rem; } }
+.gm-style-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 10px; min-width: 0; white-space: normal; }
+.gm-style-card.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }

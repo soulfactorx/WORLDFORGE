@@ -20,6 +20,7 @@ import { moodOf, playSfx, setMusic, sfxForLog, speak, stopMusic, stopSpeaking, t
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
 import { resumeEvents } from '../llm/visibility';
+import { setGmStyleOverride } from '../data/gmStyles';
 import type { LlmSettings } from '../llm/types';
 import { appendEvents, loadEvents, undoLastTurn } from '../storage/db';
 import { CharacterPanel } from './CharacterPanel';
@@ -101,6 +102,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const [streaming, setStreaming] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [stage, setStage] = useState('');
+  // GM 스타일: 플레이 설정이 세계 설정보다 우선 (v0.80). 화면을 떠나면 원래대로
+  useEffect(() => { setGmStyleOverride(loadPlayPrefs().gmStyle); return () => setGmStyleOverride(undefined); }, []);
   // 모바일에서 앱을 벗어나 끊긴 AI 요청을 돌아와 다시 보낼 때 알린다 (v0.79.8)
   useEffect(() => {
     const on = () => setStage('앱을 벗어난 사이 연결이 끊겨 다시 요청하는 중…');

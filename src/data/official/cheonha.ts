@@ -1041,3 +1041,6 @@ cheonhaWorld.gmNotes = "무림맹 총관 종리휘가 내부의 배신자다(장
     ...cheonhaWorld.endings!,
   ];
 }
+
+// GM 스타일 (v0.80)
+cheonhaWorld.gmStyle = { preset: 'cinematic' };

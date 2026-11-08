@@ -1,3 +1,4 @@
+import { gmStyleText } from '../data/gmStyles';
 import { loyaltyOf, OBEY_LOYALTY, relationshipOf } from '../engine/relationship';
 import { genreGuide, levelCapOf, reskinner } from '../engine/genre';
 import { RATING_GUIDE } from '../engine/rating';
@@ -233,7 +234,7 @@ export async function narrateCombat(
 - "전투 직전 이야기"의 마지막 순간에서 바로 이어 쓴다 (왜 싸움이 시작됐는지가 자연스럽게 이어지게). 장소를 처음 보는 것처럼 다시 소개하지 않는다.
 - 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
 - ${genreGuide(world)}
-- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
+- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}`,
     user: `## 전투 직전 이야기\n${(() => { let t = ''; for (let i = after.log.length - 1; i >= 0; i--) if (after.log[i]!.kind === 'narration') { t = after.log[i]!.text; break; } return t ? t.slice(-1200) : '(없음)'; })()}\n\n## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'}${c.look ? ` — ${c.look}` : c.monsterId && MONSTERS[c.monsterId] ? ` — ${MONSTERS[c.monsterId]!.look}` : ''})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
     maxTokens: 3000,
   }, onText, signal);

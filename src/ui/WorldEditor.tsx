@@ -38,6 +38,7 @@ import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
 import { WorldAudit } from './WorldAudit';
+import { GmStylePicker } from './GmStylePicker';
 import { epithetOf } from '../engine/names';
 import { GenProgress, useGenProgress } from './GenProgress';
 import { NpcStatsEditor } from './NpcStatsEditor';
@@ -280,6 +281,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           </fieldset>
           <Area label="세계 개요 — 플레이어도 아는 배경·분위기·규칙 (모든 AI가 참고하고, 수첩 맨 위 '세계 소개'에 보인다 · 2500자까지)" value={w.overview} rows={6} onChange={(overview) => set({ overview: overview || undefined })} />
           <Area label="GM 메모 — 숨은 설정·연출 지침 (Director만 참고하고 플레이어에게 직접 말하지 않는다 · 2500자까지)" value={w.gmNotes} rows={4} onChange={(gmNotes) => set({ gmNotes: gmNotes || undefined })} />
+          <GmStylePicker w={w} onChange={(gmStyle) => set({ gmStyle })} />
           <Area label="서술 문체 참고 (선택, 1500자까지)" value={w.style} rows={4} onChange={(style) => set({ style: style || undefined })} />
           <JsonField label="시작 방식 선택지 (선택: [{ id, name, description, locationId, openingScene, knows }])" value={w.starts ?? []} rows={8} onChange={(starts) => set({ starts: starts.length ? starts : undefined })} />
         </div>

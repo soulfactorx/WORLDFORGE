@@ -14,6 +14,7 @@ import { displayName } from '../engine/names';
 import { mentionedImages, traceImages } from '../engine/assets';
 import { debugNote, imageNote } from '../debug/trace';
 import { RATING_GUIDE } from '../engine/rating';
+import { gmStyleText } from '../data/gmStyles';
 import { genreGuide, genreProfile } from '../engine/genre';
 import { SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { checkModifier } from '../engine/character/sheet';
@@ -119,7 +120,7 @@ export async function gmGuide(llm: LlmClient, world: WorldPackage, s: GameState,
     .map((x) => `${x.k}(${SKILLS[x.k].name}) ${x.m >= 0 ? '+' : ''}${x.m}${sheet.skillProficiencies.includes(x.k) ? ' 숙련' : ''}`);
   const pace = pacing(s);
   const out = await llm.json<GuideOutput>({
-    system: `${GUIDE_SYSTEM}\n- ${genreGuide(world)}${genreProfile(world).combat === 'rare' ? ' 선택지는 대화·사교·관계·음모를 중심으로 하되, wild는 사교계의 금기를 건드리는 쪽으로.' : ''}${world.style?.trim() ? `\n- 이 세계의 문체: ${cut(world.style.trim(), 400)}` : ''}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
+    system: `${GUIDE_SYSTEM}\n- ${genreGuide(world)}${genreProfile(world).combat === 'rare' ? ' 선택지는 대화·사교·관계·음모를 중심으로 하되, wild는 사교계의 금기를 건드리는 쪽으로.' : ''}${world.style?.trim() ? `\n- 이 세계의 문체: ${cut(world.style.trim(), 400)}` : ''}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'guide')}`,
     user: `${buildNarratorContext(world, s, { thread: { mode: 'brief' } })}\n\n## 플레이어 캐릭터의 강한 기술\n${strong.join(', ')}\n\n## 수첩의 임무 목표 (플레이어가 아는 것)\n${quests.join('\n') || '(없음)'}\n\n## 이야기 흐름 (엔진 확인)\n${pace.line}\n\n## 지난 선택지 (겹치지 않게)\n${pace.previous.join('\n') || '(없음)'}\n\n## 플레이어가 방금 한 행동\n${lastInput(s) || '(없음 — 장면 시작)'}\n\n## 지금 이 자리에 있는 사람 (선택지는 이 사람들만 짚는다)\n${presentCharacters(world, s).map((c) => `- ${displayName(s, c)}${s.party[c.id] ? ' (동료)' : ''}`).join('\n') || '(아무도 없다)'}\n\n## 방금 서술 (데이터)\n<narration>\n${cut(narration, 4000)}\n</narration>\n\n## 방금 서술의 마지막 장면 (선택지는 여기서 바로 이어진다)\n${lastScene(narration)}`,
     maxTokens: 1500, // 평가에서 한도(1200)에 닿은 적이 있다 — 잘리면 기본 안내로 떨어지므로 여유를 둔다
   }, GUIDE_SCHEMA, signal);

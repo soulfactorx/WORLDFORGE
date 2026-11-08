@@ -1256,3 +1256,6 @@ aetheriaWorld.gmNotes = '봉인의 균열(진행 시계)이 차오를수록 언�
     ...aetheriaWorld.endings!,
   ];
 }
+
+// GM 스타일 (v0.80)
+aetheriaWorld.gmStyle = { preset: 'epic' };

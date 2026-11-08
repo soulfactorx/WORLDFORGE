@@ -3,6 +3,7 @@
  * 오류(error)가 하나라도 있으면 플레이할 수 없다. 경고(warning)는 제작자에게 알리기만 한다.
  */
 import { isPlaceholderText } from '../names';
+import { gmStyleById } from '../../data/gmStyles';
 import { CLASSES, SKILL_IDS } from '../character/rules';
 import { STD_ITEMS } from '../../data/items';
 import { QUEST_TYPES, RARITIES, type Rewards } from '../schema';
@@ -162,6 +163,13 @@ export function validateWorld(input: unknown): Issue[] {
       text(d.hint, `${p}.discoveries[${j}].hint`);
     });
   });
+
+  // ---- GM 스타일 (v0.80)
+  const gs = (w as { gmStyle?: { preset?: unknown; custom?: unknown } }).gmStyle;
+  if (gs !== undefined) {
+    if (gs.preset !== undefined && !gmStyleById(String(gs.preset))) warn('gmStyle.preset', `알 수 없는 GM 스타일 "${String(gs.preset)}" — 기본으로 연출합니다.`);
+    if (gs.custom !== undefined && typeof gs.custom !== 'string') err('gmStyle.custom', '글이어야 합니다.');
+  }
 
   // ---- 인물
   characters.forEach((c, i) => {

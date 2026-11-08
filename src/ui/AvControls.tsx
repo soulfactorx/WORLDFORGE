@@ -1,3 +1,4 @@
+import { GM_STYLES, setGmStyleOverride } from '../data/gmStyles';
 import { DebugToggle } from './DebugPanel';
 import { useEffect, useRef, useState } from 'react';
 import { type BackgroundMode, type DisplayLevel, IMAGE_SIZES, type ImageSize, loadPlayPrefs, savePlayPrefs, SCENE_NARRATIONS, type SceneNarration } from './playPrefs';
@@ -66,6 +67,12 @@ export function AvControls({ onChange }: { onChange: () => void }) {
           <label className="small av-vol">장면 서술
             <select value={play.sceneNarration} onChange={(e) => { const p = { ...play, sceneNarration: e.target.value as SceneNarration }; setPlay(p); savePlayPrefs(p); onChange(); }}>
               {SCENE_NARRATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <label className="small av-vol">GM 스타일
+            <select value={play.gmStyle} onChange={(e) => { const p = { ...play, gmStyle: e.target.value }; setPlay(p); savePlayPrefs(p); setGmStyleOverride(p.gmStyle); onChange(); }}>
+              <option value="world">세계관 설정 따름</option>
+              {GM_STYLES.map((g) => <option key={g.id} value={g.id}>{g.emoji} {g.name}</option>)}
             </select>
           </label>
           <label className="small av-vol">표시 수준

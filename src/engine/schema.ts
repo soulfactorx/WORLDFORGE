@@ -847,6 +847,8 @@ export interface WorldPackage {
   genre?: { id: string; levelCap?: number; currency?: string; terms?: Record<string, string> };
   /** 달력 (v0.15): 게임 시작일과 카운트다운. 하루가 지나면 날짜가 넘어간다 (월 길이는 양력 기준) */
   calendar?: Calendar;
+  /** GM 스타일 (v0.80): 프리셋 + 사용자 정의 연출 지시 */
+  gmStyle?: { preset?: string; custom?: string };
   /** 서술 문체 지침 (v0.13). 서술 AI에게 참고로 준다 */
   style?: string;
   /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경·분위기·규칙. 모든 AI가 참고하고 수첩 "세계 소개"에 보인다 */

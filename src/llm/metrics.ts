@@ -36,7 +36,9 @@ export interface TurnRecord {
 }
 
 /** 시스템 프롬프트로 역할을 알아낸다 (프롬프트는 이 앱이 쓴 것) */
-export function roleOf(system: string): Role {
+export function roleOf(fullSystem: string): Role {
+  // 역할은 프롬프트 첫머리의 정체성 문장으로 정한다 (v0.80: 뒤에 붙는 GM 스타일·사용자 글에 낱말이 섞여도 흔들리지 않게)
+  const system = fullSystem.slice(0, 400);
   if (system.includes('판단 모듈')) return 'director';
   if (system.includes('한 명의 NPC')) return 'actor';
   if (system.includes('기록관')) return 'recorder';

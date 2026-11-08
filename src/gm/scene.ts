@@ -1,6 +1,7 @@
 /**
  * 장면 엔진 이벤트 (v0.47): 시작 · 행동(판정) · 끝(효과·보상) · 서술.
  */
+import { gmStyleText } from '../data/gmStyles';
 import { genreGuide, reskinner } from '../engine/genre';
 import { RATING_GUIDE } from '../engine/rating';
 import { createRng } from '../engine/dice/rng';
@@ -109,7 +110,7 @@ export async function narrateScene(
 - 수치(주사위, 게이지 숫자)는 서술에 쓰지 않는다. 게이지 이름은 분위기로 녹인다.
 - 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
 - ${genreGuide(world)}
-- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
+- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}`,
     user: `${buildNarratorContext(world, after)}\n\n## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}\n\n## 장면 기록\n${log.map(rs).join('\n')}${(() => { const so = sceneSoFar(after); return so.lastNarration ? `\n\n## 이 장면에서 차례마다 이미 쓴 서술 (되풀이하지 말고 이어서 맺는다)\n${so.since.filter((x) => x.startsWith('(')).slice(-4).join('\n')}` : ''; })()}\n\n## 끝\n${res?.outcome === 'abandoned' ? '플레이어가 도중에 그만두었다.' : `${end?.name ?? ''}${end?.text ? ` — ${end.text}` : ''}`}`,
     maxTokens: 2500,
   }, onText, signal);
@@ -138,7 +139,7 @@ export async function narrateSceneTurn(
 - "이 장면에서 지금까지"의 마지막 서술에서 바로 이어 쓴다. 앞 차례에서 쓴 묘사·표현을 되풀이하지 않고, 이번 차례에 달라진 것(형세·상대의 표정·거리)을 보여 준다.
 - 첫 차례면 "장면 직전 이야기"에서 자연스럽게 장면으로 들어간다.
 - ${genreGuide(world)}
-- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
+- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}`,
     user: `${(() => { const so = sceneSoFar(after); return `## 장면 직전 이야기\n${so.before || '(없음)'}\n\n## 이 장면에서 지금까지 (오래된 것부터)\n${so.since.slice(-12).join('\n') || '(첫 차례)'}\n\n`; })()}## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}${phase ? `\n지금 단계: ${phase}` : ''}\n\n## 지금 형세\n${[...gauges, ...(states.length ? [`상태: ${states.join(', ')}`] : [])].join('\n') || '(없음)'}\n\n## 방금 차례 (확정)\n${rs(line)}`,
     maxTokens: 600,
   }, onText, signal);
