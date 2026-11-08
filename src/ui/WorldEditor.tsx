@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { Area, ItemList, JsonField, LabLink, Num, Select, Text } from './form';
+import { AutoPlayPanel, LabPanel } from './WorldLab';
 import { SKILL_IDS } from '../engine/character/rules';
 import { SceneForms } from './SceneForms';
 import { PortraitPicker } from './PortraitPicker';
@@ -53,16 +54,17 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'rules' | 'player' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
+type Tab = 'basic' | 'rules' | 'lab' | 'autoplay' | 'player' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
-  ['basic', '기본'], ['rules', '⚖ 세계 규칙'], ['player', '주인공'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
+  ['basic', '기본'], ['rules', '⚖ 세계 규칙'], ['player', '주인공'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['lab', '상태 시험대'], ['autoplay', '자동 플레이·전체 점검'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
   ['encounters', '조우'], ['scenes', '장면'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 /** 탭 묶음 (v0.82) */
 const TAB_GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
-  { id: 'world', label: '🌍 세계', tabs: ['basic', 'rules', 'locations', 'knowledge', 'relations', 'tools'] },
+  { id: 'world', label: '🌍 세계', tabs: ['basic', 'rules', 'locations', 'knowledge', 'relations'] },
   { id: 'people', label: '👥 인물', tabs: ['characters', 'player', 'classes'] },
   { id: 'story', label: '📜 이야기', tabs: ['quests', 'story', 'scenes', 'encounters', 'items'] },
+  { id: 'test', label: '🧪 시험', tabs: ['lab', 'autoplay', 'tools'] },
   { id: 'data', label: '🗂 자료', tabs: ['images', 'json'] },
 ];
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
@@ -131,6 +133,9 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   // 성인·개인용 세계의 JSON 편집 (v0.83.2): manifest는 빼고 보여 주고, 고친 값에는 원래 manifest를 다시 붙인다
   const lockedRef = useRef<{ w: WorldPackage; rest: unknown } | null>(null);
   const lockedJson = useMemo(() => (lockedRef.current?.w === w ? lockedRef.current.rest : (({ manifest: _m, ...rest }) => rest)(w)), [w]);
+  // 시험실 (v0.84): 각 탭의 🧪 버튼이 이 항목을 상태 시험대에서 연다
+  const [labFocus, setLabFocus] = useState<{ kind: string; id: string; n: number } | null>(null);
+  const openLab = (kind: string, id: string) => { setLabFocus((f) => ({ kind, id, n: (f?.n ?? 0) + 1 })); setTab('lab'); };
   const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
@@ -193,6 +198,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   }
 
   return (
+    <LabLink.Provider value={openLab}>
     <section className="panel editor">
       {/* 편집기 상단 바 (v0.82): 닫기 · 제목·저장 상태 · 도구 · 저장 — 스크롤해도 붙어 있다 */}
       <div className="editor-bar">
@@ -660,7 +666,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       {tab === 'encounters' && (w.encounters ?? []).length > 0 && (
         <ul className="small">
           {(w.encounters ?? []).map((e) => { const d = encounterDifficulty(e.enemies.map((x) => x.monsterId), [1, 1], monsterTable(w)); const d3 = encounterDifficulty(e.enemies.map((x) => x.monsterId), [3, 3], monsterTable(w));
-            return <li key={e.id}><b>{e.name}</b> — 적 경험치 {d.xp} · 1레벨 2인: <b>{DIFFICULTY_LABEL[d.difficulty]}</b> · 3레벨 2인: {DIFFICULTY_LABEL[d3.difficulty]}</li>; })}
+            return <li key={e.id}><b>{e.name}</b> — 적 경험치 {d.xp} · 1레벨 2인: <b>{DIFFICULTY_LABEL[d.difficulty]}</b> · 3레벨 2인: {DIFFICULTY_LABEL[d3.difficulty]} <button type="button" className="small" onClick={() => openLab('encounter', e.id)} title="상태 시험대에서 자동 전투로 승률을 본다">🧪 전투 시험</button></li>; })}
         </ul>
       )}
 
@@ -754,6 +760,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       {tab === 'basic' && (w.manifest.includes ?? []).length > 0 && (
         <p className="small muted">넣은 패키지: {(w.manifest.includes ?? []).map((x) => `${x.name} (${x.type === 'character' ? '인물' : '규칙'} · ${x.id}@${x.version})`).join(', ')}</p>
       )}
+      {tab === 'lab' && <LabPanel w={w} focus={labFocus} />}
+      {tab === 'autoplay' && <AutoPlayPanel w={w} />}
       {tab === 'tools' && (
         <>
           <h4>지도</h4>
@@ -820,5 +828,6 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         </>
       )}
     </section>
+    </LabLink.Provider>
   );
 }

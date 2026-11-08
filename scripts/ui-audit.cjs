@@ -40,13 +40,13 @@ async function editor(page) {
   await page.locator('.saves li', { hasText: '장미 정원' }).locator('button:has-text("⋯")').click();
   await page.click('.menu-pop button:has-text("복제해서 편집")');
 }
-const TAB_GROUP = { 기본: '세계', '⚖ 세계 규칙': '세계', 장소: '세계', 지식: '세계', '관계·세력': '세계', '보드·지도·시뮬레이터': '세계', 인물: '인물', 주인공: '인물', 직업: '인물', '임무·플래그·결말': '이야기', '이야기 흐름': '이야기', 장면: '이야기', 조우: '이야기', '아이템·상점': '이야기', 이미지: '자료', 'JSON 전체': '자료' };
+const TAB_GROUP = { 기본: '세계', '⚖ 세계 규칙': '세계', 장소: '세계', 지식: '세계', '관계·세력': '세계', '보드·지도·시뮬레이터': '시험', '상태 시험대': '시험', '자동 플레이·전체 점검': '시험', 인물: '인물', 주인공: '인물', 직업: '인물', '임무·플래그·결말': '이야기', '이야기 흐름': '이야기', 장면: '이야기', 조우: '이야기', '아이템·상점': '이야기', 이미지: '자료', 'JSON 전체': '자료' };
 async function editorTab(page, tab) {
   await editor(page);
   await page.click(`.editor-groups button:has-text("${TAB_GROUP[tab]}")`);
   await page.click(`.editor-tabs button:text-is("${tab}")`);
 }
-const EDITOR_TABS = ['기본', '⚖ 세계 규칙', '주인공', '직업', '보드·지도·시뮬레이터', '장소', '인물', '관계·세력', '지식', '아이템·상점', '조우', '임무·플래그·결말', '이야기 흐름', '이미지', 'JSON 전체'];
+const EDITOR_TABS = ['기본', '⚖ 세계 규칙', '주인공', '직업', '보드·지도·시뮬레이터', '장소', '인물', '관계·세력', '지식', '아이템·상점', '조우', '임무·플래그·결말', '이야기 흐름', '상태 시험대', '자동 플레이·전체 점검', '이미지', 'JSON 전체'];
 
 const SCREENS = [
   ['홈: 플레이', home],
@@ -71,6 +71,21 @@ const SCREENS = [
     await p.locator('.rule-reaction select').nth(1).selectOption('trust');
     await p.click('button:has-text("＋ 효과 추가")');
     await p.click('button:has-text("＋ 조건 넣기")');
+  }],
+  ['시험대: 항목 펼침', async (p) => {
+    await editorTab(p, '임무·플래그·결말');
+    await p.click('button:has-text("🧪 이 항목 시험")');
+    await p.waitForSelector('.lab-row-body');
+    await p.click('.lab-box button:has-text("▶ 엔진 한 단계")');
+    await p.evaluate(() => document.querySelectorAll('.lab details').forEach((d) => d.setAttribute('open', '')));
+  }],
+  ['자동 플레이 결과', async (p) => {
+    await editorTab(p, '자동 플레이·전체 점검');
+    await p.locator('label:has-text("실행 횟수") select').selectOption('10');
+    await p.locator('label:has-text("한 번에 걸음") select').selectOption('100');
+    await p.click('button:has-text("▶ 자동 플레이")');
+    await p.waitForSelector('.lab-stats', { timeout: 60000 });
+    await p.evaluate(() => document.querySelectorAll('.lab details').forEach((d) => d.setAttribute('open', '')));
   }],
   ['편집: 그림 고르기', async (p) => {
     await editorTab(p, '장면');

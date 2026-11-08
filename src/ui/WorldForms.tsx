@@ -147,7 +147,7 @@ function ChapterXp({ value, onChange }: { value: Chapter['xp']; onChange: (v: Ch
 
 export function ChoiceForms({ w, set }: { w: WorldPackage; set: Set }) {
   return (
-    <ItemList<DecisiveChoice> title="결정적 선택" items={w.choices ?? []} onChange={(choices) => set({ choices })}
+    <ItemList<DecisiveChoice> title="결정적 선택" testKind="choice" items={w.choices ?? []} onChange={(choices) => set({ choices })}
       make={(n) => ({ id: `choice/new-${n}`, name: '새 결정', prompt: '무엇을 할 것인가?', when: { all: [] }, options: [{ id: 'a', text: '첫째 길', effects: [] }, { id: 'b', text: '둘째 길', effects: [] }] })}
       render={(c, up) => (
         <div className="form-grid">

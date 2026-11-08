@@ -50,7 +50,7 @@ function Reactions({ rule, w, up }: { rule: WorldRule; w: WorldPackage; up: (p: 
 
 export function RuleForms({ w, set }: { w: WorldPackage; set: Set }) {
   return (
-    <ItemList<WorldRule> title="세계 규칙" items={w.rules ?? []} onChange={(rules) => set({ rules })}
+    <ItemList<WorldRule> title="세계 규칙" testKind="rule" items={w.rules ?? []} onChange={(rules) => set({ rules })}
       make={(n) => ({ id: `rule/new-${n}`, name: '새 규칙', trigger: { kind: 'action', describe: '' }, outcome: '' })}
       render={(r, up) => {
         const rep = r.repeat ?? 'once';

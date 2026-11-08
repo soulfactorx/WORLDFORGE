@@ -14,7 +14,7 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
   const chars = [['', '(없음)'], ...w.characters.map((c) => [c.id, c.name] as const)] as const;
   const claims = [['', '(없음)'], ...w.claims.map((c) => [c.id, c.statement.slice(0, 40)] as const)] as const;
   return (
-    <ItemList<Quest> title="임무" items={w.quests ?? []} onChange={(quests) => set({ quests })}
+    <ItemList<Quest> title="임무" testKind="quest" items={w.quests ?? []} onChange={(quests) => set({ quests })}
       make={(n) => ({ id: `quest/new-${n}`, name: '새 임무', kind: 'side', start: { all: [] }, stages: [{ objective: '목표', hint: '', complete: UNSET_CONDITION }] })}
       render={(q, up) => (
         <div className="form-grid">
@@ -73,7 +73,7 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
 export function FlagForms({ w, set }: { w: WorldPackage; set: Set }) {
   const locs = [['', '(어디서나)'], ...w.locations.map((l) => [l.id, l.name] as const)] as const;
   return (
-    <ItemList<StoryFlag> title="플래그" items={w.flags ?? []} onChange={(flags) => set({ flags })}
+    <ItemList<StoryFlag> title="플래그" testKind="flag" items={w.flags ?? []} onChange={(flags) => set({ flags })}
       make={(n) => ({ id: `flag_${n}`, when: '플레이어가 무엇을 했을 때' })}
       render={(f, up) => (
         <div className="form-grid">
@@ -88,7 +88,7 @@ export function FlagForms({ w, set }: { w: WorldPackage; set: Set }) {
 
 export function EndingForms({ w, set }: { w: WorldPackage; set: Set }) {
   return (
-    <ItemList<Ending> title="결말" items={w.endings ?? []} onChange={(endings) => set({ endings })}
+    <ItemList<Ending> title="결말" testKind="ending" items={w.endings ?? []} onChange={(endings) => set({ endings })}
       make={(n) => ({ id: `ending/new-${n}`, name: '새 결말', condition: { all: [{ flag: w.flags?.[0]?.id ?? '' }] }, epilogue: '' })}
       render={(e, up) => (
         <div className="form-grid">

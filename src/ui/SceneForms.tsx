@@ -184,7 +184,7 @@ export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
         ))}
       </div>
       {testing && (w.scenes ?? []).some((s) => s.id === testing) && <SceneTester w={w} sceneId={testing} onClose={() => setTesting(null)} />}
-      <ItemList<SceneDef> title="장면" items={scenes} onChange={save}
+      <ItemList<SceneDef> title="장면" testKind="scene" items={scenes} onChange={save}
         make={(n) => ({ id: `scene/new-${n}`, name: '새 장면', description: '', gauges: [{ id: 'progress', name: '진척', start: 0, min: 0, max: 10 }],
           actions: [{ id: 'try', name: '시도', check: 'skill:persuasion', dc: 12, success: { gauges: { progress: 3 } } }],
           ends: [{ id: 'done', name: '성공', when: { gauge: 'progress', gte: 10 }, outcome: 'success' }, { id: 'timeout', name: '시간 초과', when: { round: 99 }, outcome: 'failure' }], maxRounds: 8, timeoutEnd: 'timeout' })}

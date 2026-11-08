@@ -1,5 +1,8 @@
 /** 편집기 공용 입력 컴포넌트 */
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
+
+/** 시험실로 보내기 (v0.84): 항목 목록의 🧪 버튼이 쓴다 */
+export const LabLink = createContext<((kind: string, id: string) => void) | null>(null);
 
 // ---------------------------------------------------------------- 작은 입력 컴포넌트
 
@@ -44,9 +47,12 @@ export function JsonField<T>({ label, value, onChange, rows = 10, help }: { labe
 }
 
 /** 목록 + 선택한 항목 편집 */
-export function ItemList<T extends { id: string }>({ items, onChange, make, render, title }: {
+export function ItemList<T extends { id: string }>({ items, onChange, make, render, title, testKind }: {
   items: T[]; onChange: (items: T[]) => void; make: (n: number) => T; render: (item: T, set: (patch: Partial<T>) => void) => React.ReactNode; title: string;
+  /** 시험실에서 이 항목을 시험하는 버튼 (v0.84) */
+  testKind?: string;
 }) {
+  const lab = useContext(LabLink);
   const [sel, setSel] = useState(0);
   const [q, setQ] = useState('');
   const cur = items[sel];
@@ -69,6 +75,7 @@ export function ItemList<T extends { id: string }>({ items, onChange, make, rend
         <div className="item-form">
           {render(cur, (patch) => onChange(items.map((x, i) => (i === sel ? { ...x, ...patch } : x))))}
           <div className="row">
+            {testKind && lab && <button type="button" onClick={() => lab(testKind, cur.id)} title="시험실에서 이 항목을 시험한다 (AI 없이)">🧪 이 항목 시험</button>}
             <span className="spacer" />
             <button type="button" onClick={() => { if (confirm(`"${cur.id}"을(를) 삭제할까요?`)) { onChange(items.filter((_, i) => i !== sel)); setSel(Math.max(0, sel - 1)); } }}>삭제</button>
           </div>
