@@ -128,6 +128,9 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       setStatus(r.notes.join(' '));
     } catch (e) { setStatus(`규칙 생성 실패: ${(e as Error).message}`); }
   }
+  // 성인·개인용 세계의 JSON 편집 (v0.83.2): manifest는 빼고 보여 주고, 고친 값에는 원래 manifest를 다시 붙인다
+  const lockedRef = useRef<{ w: WorldPackage; rest: unknown } | null>(null);
+  const lockedJson = useMemo(() => (lockedRef.current?.w === w ? lockedRef.current.rest : (({ manifest: _m, ...rest }) => rest)(w)), [w]);
   const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
@@ -294,18 +297,17 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         const label = (id: Tab) => TABS.find(([t]) => t === id)?.[1] ?? id;
         const count = (ids: Tab[]) => issues.filter((i) => ids.includes(tabForPath(i.path))).reduce((n, i) => n + (i.level === 'error' ? 1 : 0), 0);
         const group = TAB_GROUPS.find((g) => g.tabs.includes(tab)) ?? TAB_GROUPS[0]!;
-        const visible = (id: Tab) => !(id === 'json' && shareBlocked(w));
         return (
           <nav className="editor-nav" aria-label="편집 탭">
             <div className="editor-groups" role="tablist">
               {TAB_GROUPS.map((g) => { const n = count(g.tabs); return (
-                <button key={g.id} type="button" role="tab" aria-selected={g === group} className={g === group ? 'on' : ''} onClick={() => setTab(g.tabs.find(visible)!)}>
+                <button key={g.id} type="button" role="tab" aria-selected={g === group} className={g === group ? 'on' : ''} onClick={() => setTab(g.tabs[0]!)}>
                   {g.label}{n ? <span className="tab-badge" title={`오류 ${n}`}>{n}</span> : null}
                 </button>
               ); })}
             </div>
             <div className="editor-tabs" role="tablist">
-              {group.tabs.filter(visible).map((id) => { const n = count([id]); return (
+              {group.tabs.map((id) => { const n = count([id]); return (
                 <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>
                   {label(id)}{n ? <span className="tab-badge">{n}</span> : null}
                 </button>
@@ -802,6 +804,21 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
 
       {tab === 'images' && <AssetGallery world={w} settings={settings} onChange={(assets) => set({ assets })} />}
       {tab === 'json' && !shareBlocked(w) && <JsonField label="패키지 전체 (world.json)" value={w} onChange={(v) => setW(v)} rows={30} />}
+      {tab === 'json' && shareBlocked(w) && (
+        <>
+          <p className="muted small">
+            {w.manifest.private ? '🔒 개인용' : '🔞 성인 등급'} 세계는 <b>manifest(ID·버전·등급·개인용 표시)를 뺀 나머지 전체</b>를 여기서 보고 고칠 수 있습니다.
+            이름·설명은 기본 탭에서 바꿉니다. 등급·개인용 표시는 잠겨 있고, 내보내기·공유 제한은 그대로입니다.
+          </p>
+          <JsonField label="세계 데이터 전체 (manifest 제외)" value={lockedJson} rows={30}
+            onChange={(v) => {
+              const { manifest: _ignored, ...rest } = (v ?? {}) as Partial<WorldPackage>;
+              const next = { ...(rest as Omit<WorldPackage, 'manifest'>), manifest: w.manifest } as WorldPackage;
+              lockedRef.current = { w: next, rest: v };
+              setW(next);
+            }} />
+        </>
+      )}
     </section>
   );
 }
