@@ -148,7 +148,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
       <li key={packageKey(w)} className={selected && packageKey(selected.world) === packageKey(w) ? 'current' : ''}>
         <span className="grow">
           <b>{w.manifest.name}</b>
-          <span className="muted small"> {genreOf(w.genre?.id).label} · {RATING[w.manifest.contentRating]}{endingsLabel(w) ? ` · ${endingsLabel(w)}` : ''}</span>
+          <span className="muted small"> {genreOf(w.genre?.id, w.genre?.custom).label} · {RATING[w.manifest.contentRating]}{endingsLabel(w) ? ` · ${endingsLabel(w)}` : ''}</span>
           <span className="badges">
             {w.manifest.private && <span className="need-badge" title={PRIVATE_NOTE}>🔒 개인용</span>}
             {!w.manifest.private && shareBlocked(w) && <span className="need-badge" title={MATURE_NOTE}>🔞 성인</span>}
@@ -218,7 +218,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
             </label>
             {world && (
               <p className="muted small">
-                {genreOf(world.genre?.id).label} · 등급 {RATING[world.manifest.contentRating]}{world.manifest.author && <> · 제작 {world.manifest.author}</>}{world.manifest.aiAssisted && <> · ✦ AI 보조</>}{world.manifest.private && <> · 🔒 개인용 (원작: {world.manifest.private.source})</>}
+                {genreOf(world.genre?.id, world.genre?.custom).label} · 등급 {RATING[world.manifest.contentRating]}{world.manifest.author && <> · 제작 {world.manifest.author}</>}{world.manifest.aiAssisted && <> · ✦ AI 보조</>}{world.manifest.private && <> · 🔒 개인용 (원작: {world.manifest.private.source})</>}
               </p>
             )}
             {overview && (

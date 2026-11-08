@@ -131,7 +131,7 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
             <div key={s.key} className={`universe-wrap${whole ? ' whole' : ''}`}>
               <button type="button" className={`universe${from === s.key ? ' on' : ''}`} onClick={() => { setFrom(s.key); setLimit(PAGE); }} title={s.world.overview ?? ''}>
                 <b>{s.world.manifest.name}</b>
-                <span>{genreOf(s.world.genre?.id).label}{s.builtin ? ' · 내장' : ''}{s.world.manifest.private ? ' · 🔒' : ''}{s.world.manifest.contentRating === 'mature' ? ' · 🔞' : ''}</span>
+                <span>{genreOf(s.world.genre?.id, s.world.genre?.custom).label}{s.builtin ? ' · 내장' : ''}{s.world.manifest.private ? ' · 🔒' : ''}{s.world.manifest.contentRating === 'mature' ? ' · 🔞' : ''}</span>
                 <span>인물 {s.world.characters.length} · 장소 {s.world.locations.length} · 임무 {s.world.quests?.length ?? 0}{s.world.manifest.crossover?.length ? ` · 🌌${s.world.manifest.crossover.length}` : ''}</span>
               </button>
               <button type="button" className={`small universe-whole${whole ? ' on' : ''}`} onClick={() => toggleWhole(s)} title="이 세계의 모든 것(인물·장소·임무·이야기 흐름·이미지…)과 세계 설정(장르·개요·문체·시작·달력·시간)을 통째로 담는다">{whole ? '✓ 통째로 담음' : '⬇ 통째로 담기'}</button>

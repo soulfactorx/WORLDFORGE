@@ -50,6 +50,7 @@ export interface CardWorldDraft {
   /** 세계 개요 (v0.54): 플레이어도 알아도 되는 배경 */
   overview?: string;
   genre?: string;
+  genre_custom?: { label: string; tone: string; combat: 'often' | 'sometimes' | 'rare'; base: 'high_fantasy' | 'wuxia' | 'romance' | 'fighting' };
   calendar: { era: string; start_year: number; start_month: number; start_day: number; countdown_label: string; countdown_year: number; countdown_month: number; countdown_day: number };
 }
 
@@ -91,7 +92,13 @@ export const CARD_WORLD_SCHEMA = obj({
   })),
   plot_request: { type: 'string', description: '임무·결말 설계자에게 줄 원작 줄거리·갈등·결말 방향 요약 (10줄 이내)' },
   overview: { type: 'string', description: '플레이어도 알아도 되는 세계 개요 3~6문장 (한국어): 시대·지역·분위기·사회의 큰 규칙. 원작의 비밀·반전은 쓰지 않는다' },
-  genre: { type: 'string', enum: GENRES.map((g) => g.id), description: `원작에 가장 가까운 장르: ${GENRES.map((g) => `${g.id}=${g.label}(${g.description})`).join(', ')}` },
+  genre: { type: 'string', enum: [...GENRES.map((g) => g.id), 'custom'], description: `원작에 가장 가까운 장르: ${GENRES.map((g) => `${g.id}=${g.label}(${g.description})`).join(', ')}, custom=어느 것과도 맞지 않음 (아래 genre_custom을 채운다)` },
+  genre_custom: obj({
+    label: { type: 'string', description: 'genre=custom일 때 장르 이름 (예: 스팀펑크 모험). 아니면 ""' },
+    tone: { type: 'string', description: 'genre=custom일 때 장르의 분위기 지침 2~4문장 (서술·대사의 맛). 아니면 ""' },
+    combat: { type: 'string', enum: ['often', 'sometimes', 'rare'] },
+    base: { type: 'string', enum: ['high_fantasy', 'wuxia', 'romance', 'fighting'], description: '직업·성향 기본값을 빌려 올 가장 가까운 장르' },
+  }),
   calendar: obj({
     era: { type: 'string', description: '연호 (예: 제국력). 없으면 ""' },
     start_year: { type: 'integer', description: '이야기가 시작되는 날의 연도. 날짜 정보가 없으면 0' }, start_month: int, start_day: int,
@@ -350,7 +357,9 @@ export async function cardToWorld(
     beliefs,
     ...(starts.length ? { starts } : {}),
     ...(d.style?.trim() ? { style: cut(d.style.trim(), 1500) } : {}),
-    genre: { id: GENRES.some((g) => g.id === d.genre) ? d.genre! : 'high_fantasy' },
+    genre: d.genre === 'custom' && d.genre_custom?.tone?.trim()
+      ? { id: 'custom', custom: { label: cut(d.genre_custom.label || '원작 장르', 30), tone: cut(d.genre_custom.tone, 600), combat: d.genre_custom.combat, base: d.genre_custom.base } }
+      : { id: GENRES.some((g) => g.id === d.genre) ? d.genre! : 'high_fantasy' },
     ...(d.calendar?.start_year > 0 ? { calendar: {
       era: d.calendar.era ?? '', year: d.calendar.start_year, month: clamp(d.calendar.start_month, 1, 12), day: clamp(d.calendar.start_day, 1, 31),
       ...(d.calendar.countdown_year > 0 && d.calendar.countdown_label ? { countdown: { label: cut(d.calendar.countdown_label, 20), year: d.calendar.countdown_year, month: clamp(d.calendar.countdown_month, 1, 12), day: clamp(d.calendar.countdown_day, 1, 31) } } : {}),

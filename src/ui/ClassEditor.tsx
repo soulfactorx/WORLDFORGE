@@ -22,7 +22,7 @@ export function ClassEditor({ world, onChange }: { world: WorldPackage; onChange
     <div className="class-editor">
       <p className="muted small">
         주인공 만들기에서 고르는 <b>직업</b>입니다. 이름·소개·잘하는 것·기술은 이 세계에 맞게 바꾸고, 생명력·주문·전투 능력 같은 <b>규칙은 &lsquo;규칙 직업&rsquo;</b>(d20 기본 8직업)을 따릅니다.
-        예: 로맨스의 &lsquo;사교계 인사&rsquo; = 규칙상 바드. 비워 두면 장르({genreOf(world.genre?.id).label}) 기본 프리셋을 씁니다.
+        예: 로맨스의 &lsquo;사교계 인사&rsquo; = 규칙상 바드. 비워 두면 장르({genreOf(world.genre?.id, world.genre?.custom).label}) 기본 프리셋을 씁니다.
       </p>
       <div className="row">
         <label>프리셋

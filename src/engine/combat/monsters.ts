@@ -3,6 +3,7 @@
  * 하이 판타지: SRD 5.2.1 (CC-BY-4.0) 몬스터를 기반으로 이 게임의 존 전투에 맞게 옮김.
  * 무협: 자체 창작.
  */
+import { genreKey } from '../genre';
 import type { Ability } from '../character/rules';
 import type { Abilities } from '../character/sheet';
 import type { CardDef, Condition, Inflict } from './cards';
@@ -303,5 +304,5 @@ export function monsterTable(world?: Pick<WorldPackage, 'monsters'>): Record<str
 
 /** 이 세계의 장르 적 + 세계만의 적 */
 export function monstersOfWorld(world: Pick<WorldPackage, 'monsters' | 'genre'>): MonsterDef[] {
-  return [...(world.monsters ?? []).map((m) => { try { return compileMonster(m); } catch { return null; } }).filter((x): x is MonsterDef => !!x), ...monstersFor(world.genre?.id)];
+  return [...(world.monsters ?? []).map((m) => { try { return compileMonster(m); } catch { return null; } }).filter((x): x is MonsterDef => !!x), ...monstersFor(genreKey(world))];
 }

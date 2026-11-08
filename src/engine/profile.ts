@@ -2,6 +2,7 @@
  * 주인공 정보 양식 (v0.68): 세계마다 시작할 때 고르거나 적는 것 (성별·나이·종족·신분·외모…).
  * 세계가 정하지 않으면 장르 기본 양식을 쓴다. AI는 이 정보를 알고 서술한다 (NPC에게 보이는 것만 NPC가 안다).
  */
+import { genreKey } from './genre';
 import type { CharacterSheet } from './character/sheet';
 import type { PlayerProfile, ProfileField, WorldPackage } from './schema';
 
@@ -18,7 +19,7 @@ export const PROFILE_PRESETS: Record<string, PlayerProfile> = {
 
 /** 이 세계의 주인공 양식 */
 export function profileFor(world: Pick<WorldPackage, 'playerProfile' | 'genre'>): PlayerProfile {
-  return world.playerProfile ?? PROFILE_PRESETS[world.genre?.id ?? 'high_fantasy'] ?? { fields: [age, looks] };
+  return world.playerProfile ?? PROFILE_PRESETS[world.genre?.id ?? 'high_fantasy'] ?? PROFILE_PRESETS[genreKey(world)] ?? { fields: [age, looks] };
 }
 export const gendersOf = (p: PlayerProfile) => (p.noGender ? [] : p.genders?.length ? p.genders : DEFAULT_GENDERS);
 

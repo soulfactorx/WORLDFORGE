@@ -2,6 +2,7 @@
  * 기본 이미지 배정 (v0.16): 이미지가 없는 인물·장소에 앱 내장 그림을 붙인다.
  * AI가 있으면 인물·장소 설명을 보고 고르고, 없거나 실패하면 낱말 규칙으로 고른다.
  */
+import { genreDataKey } from '../../data/genres';
 import { STOCK_ART, type StockArt } from '../../data/stockart';
 import type { AssetMeta, Character, Location, WorldPackage } from '../../engine/schema';
 import type { LlmClient } from '../../llm/types';
@@ -9,7 +10,7 @@ import { applyUserArt } from './imageNeeds';
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 /** 장르에 맞는 내장 그림 (무협은 무협 그림, 그 밖에는 서양풍 기본 그림) */
-const forGenre = (a: StockArt, genre?: string) => (genre === 'wuxia' ? !!a.genres?.includes('wuxia') : !a.genres?.length);
+const forGenre = (a: StockArt, genre?: string) => (genreDataKey(genre) === 'wuxia' ? !!a.genres?.includes('wuxia') : !a.genres?.length);
 const charArt = (genre?: string) => STOCK_ART.filter((a) => a.kind === 'character' && forGenre(a, genre));
 const sceneArt = (genre?: string) => STOCK_ART.filter((a) => a.kind === 'scene' && forGenre(a, genre));
 const CHAR_ART = charArt();

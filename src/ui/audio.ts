@@ -1,3 +1,4 @@
+import { genreDataKey } from '../data/genres';
 /**
  * 연출 (설계 v3 R10): 효과음 · 배경 음악 · 음성.
  * 소리 파일 없이 Web Audio로 합성한다 (오프라인 단일 파일에서도 동작, 저작권 걱정 없음).
@@ -155,7 +156,8 @@ export function stopMusic() {
 
 export function moodOf(genreId: string | undefined, inCombat: boolean): Mood {
   if (inCombat) return 'combat';
-  return genreId === 'wuxia' ? 'wuxia' : genreId === 'romance' ? 'romance' : 'fantasy';
+  const k = genreDataKey(genreId);
+  return k === 'wuxia' ? 'wuxia' : k === 'romance' ? 'romance' : 'fantasy';
 }
 
 // ---------------------------------------------------------------- 음성 (Web Speech)

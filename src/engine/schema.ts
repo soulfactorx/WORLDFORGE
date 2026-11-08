@@ -844,7 +844,7 @@ export interface WorldPackage {
   /** 시작 방식 선택지 (v0.13) */
   starts?: StartOption[];
   /** 장르 (설계 v3 2장): 프로필 ID와 세계별 설정 */
-  genre?: { id: string; levelCap?: number; currency?: string; terms?: Record<string, string> };
+  genre?: { id: string; levelCap?: number; currency?: string; terms?: Record<string, string>; /** id가 'custom'일 때 (v0.81) */ custom?: import('../data/genres').CustomGenre };
   /** 달력 (v0.15): 게임 시작일과 카운트다운. 하루가 지나면 날짜가 넘어간다 (월 길이는 양력 기준) */
   calendar?: Calendar;
   /** GM 스타일 (v0.80): 프리셋 + 사용자 정의 연출 지시 */

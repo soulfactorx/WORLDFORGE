@@ -88,9 +88,23 @@ export const CLASS_PRESETS: ClassPreset[] = [
       c('contract', '계약 파이터', 'warlock', '지하 격투장과 위험한 계약을 맺었다. 이기는 대가로 무언가를 잃는다.', '위협 · 비밀 · 집념', ['intimidation', 'deception']),
     ], { striker: ['일격필살', '철벽 가드'], technician: ['서브미션', '카운터 결투가'], trainer: ['회복 트레이너', '세컨드 파이터'], strategist: ['파괴 분석가', '예측 분석가'], showman: ['도발 쇼맨', '퍼포먼스 파이터'], street: ['골목 사냥꾼', '추적자'], guardian: ['정도의 무도가', '설욕의 무도가'], contract: ['지옥의 계약', '환영의 계약'] }),
   },
+  {
+    id: 'modern', label: '현대·근미래', description: '경호원·해커·의사·엔지니어·기자·형사·특수요원·오컬트 연구가',
+    classes: withSubs([
+      c('guard', '경호원', 'fighter', '몸으로 막고 몸으로 뚫는다. 근접전과 버티기의 전문가.', '격투 · 체력 · 위압', ['athletics', 'intimidation']),
+      c('hacker', '해커', 'rogue', '잠긴 문도 잠긴 서버도 연다. 들키지 않고 들어가 필요한 것만 가져온다.', '침입 · 은신 · 손재주', ['sleight_of_hand', 'stealth', 'investigation', 'deception']),
+      c('medic', '의사', 'cleric', '사람을 살리는 손. 위기에서 가장 먼저 찾게 되는 사람.', '치료 · 통찰 · 침착함', ['medicine', 'insight']),
+      c('engineer', '엔지니어', 'wizard', '원리를 알면 무엇이든 고치고 만든다. 지식이 곧 무기.', '분석 · 지식 · 장비', ['investigation', 'arcana']),
+      c('reporter', '기자', 'bard', '말로 문을 열고 사람을 움직인다. 진실을 쫓는 입담가.', '말솜씨 · 정보 · 인맥', ['persuasion', 'deception', 'insight']),
+      c('detective', '형사', 'ranger', '현장을 읽고 끝까지 쫓는다. 단서와 사람을 놓치지 않는다.', '추적 · 관찰 · 수사', ['perception', 'investigation', 'survival']),
+      c('agent', '특수요원', 'paladin', '임무와 신념으로 움직이는 요원. 동료를 지키는 방패.', '임무 · 정신력 · 리더십', ['athletics', 'persuasion']),
+      c('occultist', '오컬트 연구가', 'warlock', '설명할 수 없는 것과 거래한 사람. 그 대가는 아직 모른다.', '금지된 지식 · 위협 · 비밀', ['arcana', 'intimidation']),
+    ], { guard: ['철벽 경호', '방어 전문'], hacker: ['침입 전문', '근접 전문'], medic: ['응급 의학', '전장 의무병'], engineer: ['폭발물 전문', '예측 분석'], reporter: ['탐사 보도', '현장 기자'], detective: ['강력계', '추적 전문'], agent: ['신념의 요원', '복수의 요원'], occultist: ['악마의 계약', '요정의 계약'] }),
+  },
 ];
 
 /** 장르별 기본 프리셋 */
-export const GENRE_CLASS_PRESET: Record<string, string> = { high_fantasy: 'fantasy', wuxia: 'wuxia', romance: 'romance_court', fighting: 'fighting' };
+export const GENRE_CLASS_PRESET: Record<string, string> = { high_fantasy: 'fantasy', wuxia: 'wuxia', romance: 'romance_court', fighting: 'fighting',
+  dark_fantasy: 'fantasy', sf: 'modern', cyberpunk: 'modern', urban_fantasy: 'modern', horror: 'modern', mystery: 'modern', post_apoc: 'modern', joseon: 'wuxia', school: 'romance_academy' };
 
 export const presetById = (id: string) => CLASS_PRESETS.find((p) => p.id === id);

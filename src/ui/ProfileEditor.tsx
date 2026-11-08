@@ -18,7 +18,7 @@ export function ProfileEditor({ world, onChange, onTraits }: { world: WorldPacka
     <div className="profile-editor">
       <p className="muted small">
         플레이어가 <b>주인공 만들기</b>에서 고르거나 적는 것입니다. 정한 정보는 서술·판단 AI에게 전해지고, <b>사람들이 보고 아는 것</b>으로 표시한 칸(외모·종족 등)은 NPC도 압니다.
-        {!own && <> 지금은 장르({genreOf(world.genre?.id).label}) 기본 양식을 씁니다 — 아무 칸이나 고치면 이 세계 전용 양식이 됩니다.</>}
+        {!own && <> 지금은 장르({genreOf(world.genre?.id, world.genre?.custom).label}) 기본 양식을 씁니다 — 아무 칸이나 고치면 이 세계 전용 양식이 됩니다.</>}
       </p>
       <div className="row">
         {own && <button type="button" onClick={() => confirm('이 세계 전용 양식을 지우고 장르 기본 양식을 쓸까요?') && onChange(undefined)}>장르 기본으로 되돌리기</button>}
@@ -79,7 +79,7 @@ function TraitsEditor({ world, onChange }: { world: WorldPackage; onChange: (t: 
       <legend>성향 축 — 행동에 따라 움직이고 이야기 갈림길이 읽는다</legend>
       <p className="small muted">
         GM 판단 AI가 행동마다 축을 움직입니다 (한 턴 ±10까지). 임무·이야기 줄기·결정적 선택·결말의 조건에서 <b>주인공 성향</b>으로 읽고, 효과로 움직일 수도 있습니다. NPC는 뚜렷한 성향을 "인상"으로 느낍니다.
-        {!own && <> 지금은 장르({genreOf(world.genre?.id).label}) 기본 축을 씁니다.</>}
+        {!own && <> 지금은 장르({genreOf(world.genre?.id, world.genre?.custom).label}) 기본 축을 씁니다.</>}
       </p>
       <div className="row">
         {own && <button type="button" className="small" onClick={() => confirm('이 세계 전용 성향 축을 지우고 장르 기본 축을 쓸까요?') && onChange(undefined)}>장르 기본으로 되돌리기</button>}

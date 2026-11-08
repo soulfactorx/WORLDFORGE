@@ -4,7 +4,7 @@ import { createLlmClient } from '../llm';
 import type { LlmSettings } from '../llm/types';
 import type { WorldPackage } from '../engine/schema';
 import { confirmAdult } from './adult';
-import { GENRES } from '../data/genres';
+import { GenrePicker } from './GenrePicker';
 
 const EXAMPLE = '안개가 걷히지 않는 산골 수도원. 수도사들은 매일 밤 종을 치는데, 종소리가 멈추면 무언가가 깨어난다고 믿는다. 수도원장은 무언가를 숨기고 있고, 젊은 견습 수도사는 바깥세상을 동경한다.';
 
@@ -19,7 +19,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
   const [rating, setRating] = useState<WorldPackage['manifest']['contentRating']>('teen');
   const [withScenario, setWithScenario] = useState(true);
   const [withScenes, setWithScenes] = useState(true);
-  const [genre, setGenre] = useState('high_fantasy');
+  const [genre, setGenre] = useState<NonNullable<WorldPackage['genre']>>({ id: 'high_fantasy' });
   const [stage, setStage] = useState('');
   // 진행률 (v0.46.3 — 카드 세계 만들기와 같은 방식): 긴 AI 호출 중에는 다음 단계 쪽으로 천천히 차오른다
   const [pct, setPct] = useState({ at: 0, next: 0, since: 0, start: 0 });
@@ -38,7 +38,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
     abort.current = new AbortController();
     setPct({ at: 0, next: 2, since: Date.now(), start: Date.now() });
     try {
-      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, withScenes, genre }, onStage, abort.current.signal);
+      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, withScenes, genre: genre.id, ...(genre.custom ? { genreCustom: genre.custom } : {}) }, onStage, abort.current.signal);
       onDraft(r.world, r.notes);
     } catch (e) {
       if (!abort.current.signal.aborted) setError((e as Error).message);
@@ -60,11 +60,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
         <textarea rows={6} value={prompt} placeholder={EXAMPLE} disabled={busy} onChange={(e) => setPrompt(e.target.value)} />
       </label>
       <div className="row">
-        <label>장르
-          <select value={genre} disabled={busy} onChange={(e) => setGenre(e.target.value)}>
-            {GENRES.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
-          </select>
-        </label>
+        <fieldset className="genre-in-gen" disabled={busy}><GenrePicker value={genre} onChange={setGenre} compact /></fieldset>
         <label>규모
           <select value={size} disabled={busy} onChange={(e) => setSize(e.target.value as Size)}>
             <option value="small">작게 (장소 3~4, 인물 3~4)</option>

@@ -71,6 +71,8 @@ export interface GenerateOptions {
   author?: string;
   /** 장르 프로필 ID (설계 v3 2장) */
   genre?: string;
+  /** genre가 'custom'일 때 (v0.81) */
+  genreCustom?: import('../../data/genres').CustomGenre;
 }
 
 export interface GenerateResult {
@@ -105,13 +107,14 @@ export async function generateWorld(
   const scenesEnd = scenes ? 88 : scenEnd;
   onStage('세계 만드는 중 (장소·인물·비밀)…', 2, worldEnd);
   const draft = await llm.json<WorldDraft>({
-    system: `${WORLD_SYSTEM}\n- ${genreGuide({ genre: { id: opts.genre ?? 'high_fantasy' } })}${genreOf(opts.genre).combat === 'rare' ? '\n- 이 장르는 전투보다 관계·사교가 중심이다. 동료 후보보다 관계가 깊어질 수 있는 인물을 늘린다.' : ''}`,
-    user: `## 제작자 요청\n${opts.prompt}\n\n## 장르\n${genreOf(opts.genre).label}\n\n## 규모\n${SIZE_TEXT[opts.size]}\n\n## 콘텐츠 등급\n${RATING_TEXT[opts.contentRating]}`,
+    system: `${WORLD_SYSTEM}\n- ${genreGuide({ genre: { id: opts.genre ?? 'high_fantasy', ...(opts.genreCustom ? { custom: opts.genreCustom } : {}) } })}${genreOf(opts.genre, opts.genreCustom).combat === 'rare' ? '\n- 이 장르는 전투보다 관계·사교가 중심이다. 동료 후보보다 관계가 깊어질 수 있는 인물을 늘린다.' : ''}`,
+    user: `## 제작자 요청\n${opts.prompt}\n\n## 장르\n${genreOf(opts.genre, opts.genreCustom).label}\n\n## 규모\n${SIZE_TEXT[opts.size]}\n\n## 콘텐츠 등급\n${RATING_TEXT[opts.contentRating]}`,
     maxTokens: 16000, effort: 'medium',
   }, WORLD_DRAFT_SCHEMA, signal);
   const id = `ai.${Date.now().toString(36)}`;
   let { world, notes } = worldFromDraft(draft, { id, contentRating: opts.contentRating, author: opts.author });
-  world = { ...world, genre: { id: genreOf(opts.genre).id } };
+  const gp = genreOf(opts.genre, opts.genreCustom);
+  world = { ...world, genre: { id: gp.id, ...(gp.id === 'custom' && opts.genreCustom ? { custom: opts.genreCustom } : {}) } };
   if (opts.withScenario) {
     const r = await generateScenario(llm, world, (st) => onStage(st, worldEnd, scenEnd), signal);
     world = r.world;
@@ -144,7 +147,7 @@ export async function generateScenario(
 ): Promise<{ world: WorldPackage; notes: string[] }> {
   onStage('세계 요약을 보내는 중…', 2, 5);
   onStage(focus === 'encounters' ? 'AI가 조우를 쓰는 중…' : 'AI가 임무·조우·결말을 쓰는 중…', 5, 90);
-  const rare = genreOf(world.genre?.id).combat === 'rare';
+  const rare = genreOf(world.genre?.id, world.genre?.custom).combat === 'rare';
   const focusRule = focus === 'encounters'
     ? `\n- 이번 요청은 조우만이다: 조우를 2~3개 반드시 만든다. 장소(location)는 아래 장소 목록의 key를 그대로, 적(monster)은 "쓸 수 있는 적" 목록의 ID만. 임무·결말·플래그는 빈 배열로 둔다.${rare ? '\n- 전투가 드문 장르이므로 이 세계에 어울리는 현실적인 위기(불량배·소매치기·사나운 짐승 등)로 만든다.' : ''}`
     : rare ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : '';

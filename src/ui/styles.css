@@ -860,3 +860,9 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 @media (max-width: 600px) { .gm-style-card { padding: 8px; } .gm-style-card .small { font-size: .75rem; } }
 .gm-style-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 10px; min-width: 0; white-space: normal; }
 .gm-style-card.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* 장르 고르기 (v0.81) */
+.genre-picker { display: flex; flex-direction: column; gap: 8px; flex: 1 1 100%; min-width: 0; }
+.genre-custom { display: flex; flex-direction: column; gap: 8px; }
+.genre-custom-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.genre-in-gen { border: none; padding: 0; margin: 0; flex: 1 1 100%; min-width: 0; }

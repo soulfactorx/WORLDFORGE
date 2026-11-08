@@ -1,12 +1,14 @@
 /**
  * 장르 적용 (설계 v3 2.2): 엔진·세이브는 그대로 두고, 화면과 AI에 보이는 글만 장르 용어로 바꾼다.
  */
-import { genreOf } from '../data/genres';
+import { genreDataKey, genreOf } from '../data/genres';
 import { MAX_LEVEL } from './character/progression';
 import type { WorldPackage } from './schema';
 import { josa } from './text/josa';
 
-export const genreProfile = (w: Pick<WorldPackage, 'genre'>) => genreOf(w.genre?.id);
+export const genreProfile = (w: Pick<WorldPackage, 'genre'>) => genreOf(w.genre?.id, w.genre?.custom);
+/** 장르별 데이터(성향·양식·적·그림·음악)를 찾을 열쇠 — 새 장르·사용자 정의 장르는 바탕 장르 (v0.81) */
+export const genreKey = (w: Pick<WorldPackage, 'genre'> | undefined) => genreDataKey(w?.genre?.id, w?.genre?.custom);
 
 /** 세계의 최대 레벨 (엔진 상한 이하) */
 export const levelCapOf = (w: Pick<WorldPackage, 'genre'>) => Math.max(1, Math.min(MAX_LEVEL, w.genre?.levelCap ?? genreProfile(w).levelCap));

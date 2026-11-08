@@ -14,7 +14,7 @@ import type { GameState } from '../engine/state/state';
 import { npcLocation } from './context';
 import { boardHere, jobStatus } from '../engine/jobs';
 
-export const currencyName = (world: WorldPackage) => currencyOf(world, genreOf(world.genre?.id).currency);
+export const currencyName = (world: WorldPackage) => currencyOf(world, genreOf(world.genre?.id, world.genre?.custom).currency);
 
 export function gainEvent(world: WorldPackage, stack: ItemStack, reason: string, key?: string): GameEvent | null {
   const def = itemDef(world, stack.itemId);

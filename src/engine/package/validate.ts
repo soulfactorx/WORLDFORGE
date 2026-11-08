@@ -11,7 +11,7 @@ import { ALL_CARDS } from '../combat/combat';
 import { STAGES } from '../relationship';
 import { encounterDifficulty, MONSTERS, monsterTable } from '../combat/monsters';
 import type { Condition, WorldPackage } from '../schema';
-import { GENRES } from '../../data/genres';
+import { CUSTOM_GENRE_ID, GENRES } from '../../data/genres';
 import { stockDataUrl } from '../../data/stockart';
 import { MAX_LEVEL } from '../character/progression';
 import { classesFor } from '../classes';
@@ -834,7 +834,12 @@ export function validateWorld(input: unknown): Issue[] {
     const g = w.genre as unknown;
     if (!isObj(g) || !isStr(g.id)) err('genre', '장르 ID가 필요합니다.');
     else {
-      if (!GENRES.some((x) => x.id === g.id)) warn('genre.id', `알 수 없는 장르 "${g.id}" — 하이 판타지로 다룹니다.`);
+      if (g.id === CUSTOM_GENRE_ID) {
+        const c = isObj(g.custom) ? g.custom : undefined;
+        if (!c || !isStr(c.tone) || !c.tone.trim()) err('genre.custom.tone', '사용자 정의 장르는 분위기 지침(tone)이 필요합니다.');
+        if (c && (!isStr(c.label) || !c.label.trim())) warn('genre.custom.label', '사용자 정의 장르의 이름이 비어 있습니다.');
+        if (c && c.base !== undefined && !['high_fantasy', 'wuxia', 'romance', 'fighting'].includes(String(c.base))) err('genre.custom.base', '바탕 장르는 high_fantasy / wuxia / romance / fighting 중 하나입니다.');
+      } else if (!GENRES.some((x) => x.id === g.id)) warn('genre.id', `알 수 없는 장르 "${g.id}" — 하이 판타지로 다룹니다.`);
       if (g.levelCap !== undefined && (!Number.isInteger(g.levelCap) || (g.levelCap as number) < 1 || (g.levelCap as number) > MAX_LEVEL)) err('genre.levelCap', `최대 레벨은 1~${MAX_LEVEL}입니다.`);
     }
   }

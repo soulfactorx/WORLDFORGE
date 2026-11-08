@@ -28,7 +28,7 @@ import { AssetGallery } from './AssetGallery';
 import { ZoomImg } from './Lightbox';
 import { fillOrphanKnowledge } from '../gm/worldgen/fromCard';
 import { imageNeeds } from '../gm/worldgen/imageNeeds';
-import { GENRES, genreOf } from '../data/genres';
+import { genreOf } from '../data/genres';
 import { MAX_LEVEL } from '../engine/character/progression';
 import { IssueList } from './IssueList';
 import { CardImportDialog } from './CardImportDialog';
@@ -38,6 +38,7 @@ import { generateScenes } from '../gm/worldgen/scenes';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
 import { WorldAudit } from './WorldAudit';
+import { GenrePicker } from './GenrePicker';
 import { GmStylePicker } from './GmStylePicker';
 import { epithetOf } from '../engine/names';
 import { GenProgress, useGenProgress } from './GenProgress';
@@ -248,9 +249,9 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             ? <p className="small muted">패키지 ID: <code>{w.manifest.id}</code> (이미지가 연결되어 있어 바꿀 수 없습니다)</p>
             : <Text label="패키지 ID (작가.세계 형식, 소문자)" value={w.manifest.id} onChange={(id) => set({ manifest: { ...w.manifest, id } })} />}
           <Text label="이름" value={w.manifest.name} onChange={(name) => set({ manifest: { ...w.manifest, name } })} />
-          <Select label="장르" value={w.genre?.id ?? 'high_fantasy'} options={GENRES.map((g) => [g.id, `${g.label} — ${g.description}`] as const)} onChange={(id) => set({ genre: { ...w.genre, id } })} />
-          <Num label={`최대 레벨 (1~${MAX_LEVEL}, 비우면 장르 기본 ${genreOf(w.genre?.id).levelCap})`} value={w.genre?.levelCap} onChange={(levelCap) => set({ genre: { id: w.genre?.id ?? 'high_fantasy', ...w.genre, levelCap: levelCap ? Math.max(1, Math.min(MAX_LEVEL, levelCap)) : undefined } })} />
-          <Text label={`화폐 이름 (비우면 ${genreOf(w.genre?.id).currency})`} value={w.genre?.currency} onChange={(currency) => set({ genre: { id: w.genre?.id ?? 'high_fantasy', ...w.genre, currency: currency || undefined } })} />
+          <GenrePicker value={w.genre} onChange={(genre) => set({ genre })} />
+          <Num label={`최대 레벨 (1~${MAX_LEVEL}, 비우면 장르 기본 ${genreOf(w.genre?.id, w.genre?.custom).levelCap})`} value={w.genre?.levelCap} onChange={(levelCap) => set({ genre: { id: w.genre?.id ?? 'high_fantasy', ...w.genre, levelCap: levelCap ? Math.max(1, Math.min(MAX_LEVEL, levelCap)) : undefined } })} />
+          <Text label={`화폐 이름 (비우면 ${genreOf(w.genre?.id, w.genre?.custom).currency})`} value={w.genre?.currency} onChange={(currency) => set({ genre: { id: w.genre?.id ?? 'high_fantasy', ...w.genre, currency: currency || undefined } })} />
           <Text label="버전" value={w.manifest.version} onChange={(version) => set({ manifest: { ...w.manifest, version } })} placeholder="0.1.0" />
           <Text label="제작자" value={w.manifest.author} onChange={(author) => set({ manifest: { ...w.manifest, author } })} />
           <Text label="라이선스" value={w.manifest.license} onChange={(license) => set({ manifest: { ...w.manifest, license } })} placeholder="CC-BY-4.0" />
@@ -629,7 +630,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <p className="muted small">{STD_ITEMS.map((i) => `${i.id}(${i.name}·${i.price ?? 0})`).join(', ')}.</p>
             </details>
             <p className="muted small">
-              가격은 화폐 단위({w.genre?.currency ?? genreOf(w.genre?.id).currency})로, 팔 때는 절반. 상점에 세력(factionId)을 달면 평판이 좋을수록 싸고 아주 나쁘면 거래를 거절한다.
+              가격은 화폐 단위({w.genre?.currency ?? genreOf(w.genre?.id, w.genre?.custom).currency})로, 팔 때는 절반. 상점에 세력(factionId)을 달면 평판이 좋을수록 싸고 아주 나쁘면 거래를 거절한다.
               전리품은 조우 탭의 <code>{'"loot": { "money": 30, "items": [{ "itemId": "std/gem" }] }'}</code> (없으면 적 경험치에 비례한 돈). 임무 보상은 <code>{'"rewards": { "money": 50, "items": [...] }'}</code>.
             </p>
             <div className="form-grid">

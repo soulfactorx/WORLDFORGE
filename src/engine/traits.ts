@@ -2,6 +2,7 @@
  * 주인공 성향 (v0.69): 세계마다 축을 정하고(예: 자비 ↔ 냉혹), 시작할 때 기울기를 고르고,
  * 플레이 중 행동에 따라 GM 판단 AI가 움직이며(한 턴 ±10까지), 임무·줄기·선택·결말의 조건이 읽는다.
  */
+import { genreKey } from './genre';
 import type { CharacterSheet } from './character/sheet';
 import type { TraitAxis, WorldPackage } from './schema';
 
@@ -16,7 +17,7 @@ export const MAX_SHIFT = 10;
 /** 이 세계의 성향 축 (세계 정의 → 장르 기본) */
 export function traitsFor(world: Pick<WorldPackage, 'traits' | 'genre'>): TraitAxis[] {
   if (world.traits) return world.traits;
-  return TRAIT_PRESETS[world.genre?.id ?? 'high_fantasy'] ?? TRAIT_PRESETS.high_fantasy!;
+  return TRAIT_PRESETS[world.genre?.id ?? 'high_fantasy'] ?? TRAIT_PRESETS[genreKey(world)] ?? TRAIT_PRESETS.high_fantasy!;
 }
 export const clampTrait = (v: number) => Math.max(-100, Math.min(100, Math.round(v)));
 /** 지금 값 */

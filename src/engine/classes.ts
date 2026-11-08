@@ -1,6 +1,7 @@
 /**
  * 세계의 직업 (v0.56): 보이는 직업(이름·소개·기술) → 규칙상 직업(base).
  */
+import { genreKey } from './genre';
 import { GENRE_CLASS_PRESET, presetById } from '../data/classPresets';
 import { CLASSES, type SkillId } from './character/rules';
 import { SUBCLASSES, subclassesOf } from './character/build';
@@ -11,7 +12,7 @@ import type { WorldClass, WorldPackage } from './schema';
 export function classesFor(world: Pick<WorldPackage, 'classes' | 'genre'>): WorldClass[] {
   const own = (world.classes ?? []).filter((c) => CLASSES[c.base]);
   if (own.length) return own;
-  return presetById(GENRE_CLASS_PRESET[world.genre?.id ?? 'high_fantasy'] ?? 'fantasy')?.classes ?? presetById('fantasy')!.classes;
+  return presetById(GENRE_CLASS_PRESET[world.genre?.id ?? 'high_fantasy'] ?? GENRE_CLASS_PRESET[genreKey(world)] ?? 'fantasy')?.classes ?? presetById('fantasy')!.classes;
 }
 
 /** 고를 수 있는 기술 후보 */
