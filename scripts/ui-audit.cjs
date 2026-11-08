@@ -18,6 +18,12 @@ async function home(page) {
   await page.evaluate(() => { localStorage.clear(); localStorage.setItem('worldforge.llm', JSON.stringify({ provider: 'openai-compatible', baseUrl: 'http://x', model: 'm', apiKey: 'k' })); localStorage.setItem('worldforge.home.tab', 'play'); });
   await page.reload(); await page.waitForTimeout(400);
 }
+/** 상단 도구 열기: 모바일이면 ☰ 메뉴를 먼저 연다 */
+async function tool(page, label) {
+  const menu = page.locator('.topbar-menu-btn');
+  if (await menu.isVisible()) await menu.click();
+  await page.click(`.topbar-tools [aria-label="${label}"]`);
+}
 async function play(page) {
   await home(page);
   const sel = page.locator('label:has-text("세계관") select');
@@ -38,6 +44,7 @@ const EDITOR_TABS = ['기본', '주인공', '직업', '보드·지도·시뮬레
 
 const SCREENS = [
   ['홈: 플레이', home],
+  ['상단 메뉴 열기', async (p) => { await home(p); const m = p.locator('.topbar-menu-btn'); if (await m.isVisible()) await m.click(); }],
   ['홈: 세계관', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세계관")'); }],
   ['홈: 세이브', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세이브")'); }],
   ['주인공 만들기', async (p) => { await home(p); await p.click('button:has-text("주인공 만들고 시작")'); }],
@@ -58,8 +65,8 @@ const SCREENS = [
     await p.locator('.img-pick-cell').first().click();
   }],
   ['장면 시험', async (p) => { await editorTab(p, '장면'); await p.click('button:has-text("추가하고 바로 테스트")'); await p.waitForSelector('.scene-tester'); await p.click('button:has-text("자동 200회")'); }],
-  ['AI 사용량', async (p) => { await home(p); await p.click('.topbar-icon[aria-label="AI 사용량"]'); }],
-  ['저장소 관리', async (p) => { await home(p); await p.click('[aria-label="저장소 관리"]'); await p.waitForSelector('.storage-worlds, .storage h3'); await p.evaluate(() => document.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''))); }],
+  ['AI 사용량', async (p) => { await home(p); await tool(p, 'AI 사용량'); }],
+  ['저장소 관리', async (p) => { await home(p); await tool(p, '저장소 관리'); await p.waitForSelector('.storage-worlds, .storage h3'); await p.evaluate(() => document.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''))); }],
   ['AI 점검·마무리', async (p) => { await editorTab(p, '기본'); await p.click('button:has-text("AI 점검·마무리")'); await p.waitForSelector('.audit-panel'); await p.evaluate(() => document.querySelectorAll('.audit-panel details').forEach((d) => d.setAttribute('open', ''))); }],
   ['만계서고', async (p) => { await editorTab(p, '주인공'); await p.click('button:has-text("만계서고에서 불러오기")'); await p.waitForSelector('.lib-cell'); }],
 ];

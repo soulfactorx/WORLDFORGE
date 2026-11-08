@@ -25,6 +25,14 @@ export function App() {
   const [view, setView] = useState<View>(settings ? { name: 'saves' } : { name: 'settings' });
   const debug = useDebugOn();
   const [showDebug, setShowDebug] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // 메뉴 밖을 누르거나 Esc면 닫는다
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: Event) => { if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.topbar-tools, .topbar-menu-btn')) setMenuOpen(false); };
+    document.addEventListener('pointerdown', close); document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
+  }, [menuOpen]);
   // AI 사용량: 지금 어느 화면에서 쓰는지 (플레이·편집 화면은 세계관까지 다시 정한다)
   useEffect(() => {
     const area: Record<string, UsageArea> = { play: 'play', editor: 'editor', worldgen: 'worldgen', cardworld: 'card', settings: 'settings' };
@@ -34,17 +42,22 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <button className="brand" onClick={() => setView({ name: 'saves' })}>WORLDFORGE</button>
-        <span className="muted small nowrap topbar-ver" title={__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'}><span className="wide-only">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · </span>v{__APP_VERSION__}</span>
-        <span className="topbar-links">
-          {__BUILD_TARGET__ === 'web' && <a className="small nowrap" href="./worldforge-offline.html" download title="오프라인 HTML 받기">오프라인<span className="wide-only"> HTML 받기</span></a>}
-          <InstallButton />
-          <a className="small nowrap" href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">소스<span className="wide-only"> (GPL)</span></a>
+        <span className="topbar-brand">
+          <button className="brand" onClick={() => setView({ name: 'saves' })}>WORLDFORGE</button>
+          <span className="muted small nowrap topbar-ver" title={__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'}><span className="wide-only">{__BUILD_TARGET__ === 'single' ? '로컬 단일 파일' : '웹'} · </span>v{__APP_VERSION__}</span>
         </span>
-        {debug && view.name !== 'play' && <button className="small" onClick={() => setShowDebug(true)} title="디버그 기록: 세계 만들기 등 모든 AI 호출">🐞</button>}
-        <button className="topbar-icon" onClick={() => setView({ name: 'usage' })} title="AI 사용량" aria-label="AI 사용량">📊<span className="wide-only"> 사용량</span></button>
-        <button className="topbar-icon2" onClick={() => setView({ name: 'storage' })} title="저장소 관리" aria-label="저장소 관리">💾<span className="wide-only"> 저장소</span></button>
+        <span className="spacer" />
+        {/* PC: 도구를 한 줄에 · 모바일: ☰ 메뉴로 접는다 (v0.79.7) */}
+        <nav className={`topbar-tools${menuOpen ? ' open' : ''}`} aria-label="도구" onClick={() => setMenuOpen(false)}>
+          {debug && view.name !== 'play' && <button onClick={() => setShowDebug(true)} title="디버그 기록: 세계 만들기 등 모든 AI 호출" aria-label="디버그 기록">🐞<span className="tool-label"> 디버그</span></button>}
+          <button onClick={() => setView({ name: 'usage' })} title="AI 사용량" aria-label="AI 사용량">📊<span className="tool-label"> 사용량</span></button>
+          <button onClick={() => setView({ name: 'storage' })} title="저장소 관리" aria-label="저장소 관리">💾<span className="tool-label"> 저장소</span></button>
+          {__BUILD_TARGET__ === 'web' && <a className="nowrap" href="./worldforge-offline.html" download title="오프라인 HTML 받기">⤓<span className="tool-label"> 오프라인 HTML</span></a>}
+          <InstallButton />
+          <a className="nowrap" href="https://github.com/soulfactorx/WORLDFORGE" target="_blank" rel="noreferrer" title="GPL-3.0-or-later — 소스 코드">⌥<span className="tool-label"> 소스 (GPL)</span></a>
+        </nav>
         <button className="topbar-settings" onClick={() => setView({ name: 'settings' })} title="AI 설정" aria-label="AI 설정">⚙<span className="wide-only"> AI 설정</span></button>
+        <button className="topbar-menu-btn" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label="메뉴" title="메뉴">☰</button>
       </header>
       <main>
         {view.name === 'settings' && (
