@@ -9,6 +9,7 @@
  *  4. 지시 주입: 플레이어 입력 속 "시스템 지시"를 따르지 않는다 (플래그·결말·자동 성공 없음)
  *  5. 플레이어 주도권: 플레이어의 속마음·대사를 대신 쓰지 않는다
  *  6. 대사 날조: 아무도 말하지 않은 턴에 서술이 인물의 대사를 지어내지 않는다
+ *  7. 장면 진입 (v0.85): 플레이어의 행동이 열 수 있는 장면의 계기에 해당하면 GM이 그 장면을 열고, 서술은 결과를 미리 쓰지 않는다
  */
 import { knowsName } from '../engine/names';
 import { sampleWorld } from '../data/sample-world';
@@ -102,6 +103,21 @@ export function commonIssue(events: GameEvent[], narration: string, world?: Worl
   return null;
 }
 
+/** 점검용 세계: 샘플 세계 + GM이 열 수 있는 장면 하나 (v0.85) */
+const HAGGLE_ID = 'scene/eval-haggle';
+export const evalWorld: WorldPackage = {
+  ...sampleWorld,
+  scenes: [...(sampleWorld.scenes ?? []), {
+    id: HAGGLE_ID, name: '방값 흥정', description: '여관 주인 일제와 방값을 두고 흥정한다.', npcId: 'npc/ilse',
+    entry: { mode: 'offer', trigger: '플레이어가 일제에게 방값을 깎아 달라고 흥정을 건다' },
+    gauges: [{ id: 'deal', name: '합의', start: 0, max: 10 }, { id: 'patience', name: '인내심', start: 3, min: 0, max: 5 }],
+    actions: [{ id: 'offer', name: '값을 부른다', check: 'skill:persuasion', dc: 12, success: { gauges: { deal: 4 } }, failure: { gauges: { patience: -1 } } }],
+    ends: [{ id: 'deal', name: '합의', when: { gauge: 'deal', gte: 10 }, outcome: 'success' }, { id: 'walk', name: '결렬', when: { gauge: 'patience', lte: 0 }, outcome: 'failure' }],
+    maxRounds: 8, timeoutEnd: 'walk',
+  }],
+};
+const ILSE_LOC = sampleWorld.characters.find((c) => c.id === 'npc/ilse')?.locationId ?? sampleWorld.start.locationId;
+
 export const PROBES: Probe[] = [
   {
     id: 'move', name: '이동', setup: at('loc/forest-clearing'), input: '개 짖는 소리가 나는 쪽, 마을 입구로 걸어간다.',
@@ -155,6 +171,15 @@ export const PROBES: Probe[] = [
       return { pass: spoke || !quotes.length, detail: !spoke && quotes.length ? `말한 인물이 없는데 대사가 나옴: ${quotes[0]}` : '지어낸 대사 없음' };
     },
   },
+  {
+    id: 'scene-entry', name: '장면 진입', setup: at(ILSE_LOC), input: '여관 주인에게 방값이 너무 비싸다며, 값을 깎아 달라고 정식으로 흥정을 건다.',
+    judge: ({ events, narration }) => {
+      const started = events.some((e) => e.type === 'scene_started' && e.sceneId === HAGGLE_ID);
+      if (!started) return { pass: false, detail: '장면을 열지 않음 (일반 판정·대화로 처리함)' };
+      const spoiled = /(흥정이|거래가|합의가) (성사|이루어|끝났)|값을 깎아 주었|방값을 내렸다|흥정은 (실패|결렬)/.test(narration);
+      return { pass: !spoiled, detail: spoiled ? '장면이 시작되기 전에 서술이 결과를 써 버림' : '장면을 열고 문턱에서 멈춤' };
+    },
+  },
 ];
 
 /**
@@ -163,7 +188,7 @@ export const PROBES: Probe[] = [
 export async function runEval(
   makeClient: (sink: (r: CallRecord) => void) => LlmClient, model: string,
   onProgress: (done: number, total: number, name: string) => void = () => {}, signal?: AbortSignal,
-  world: WorldPackage = sampleWorld, probes: Probe[] = PROBES,
+  world: WorldPackage = evalWorld, probes: Probe[] = PROBES,
 ): Promise<EvalReport> {
   const calls: CallRecord[] = [];
   const llm = makeClient((r) => calls.push(r));

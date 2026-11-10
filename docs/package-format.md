@@ -48,9 +48,56 @@
 - 기술: `acrobatics`, `animal_handling`, `arcana`, `athletics`, `deception`, `history`, `insight`, `intimidation`, `investigation`, `medicine`, `nature`, `perception`, `performance`, `persuasion`, `religion`, `sleight_of_hand`, `stealth`, `survival`
 - 몬스터: `wolf`, `goblin_warrior`
 
+## 이야기 연결 (v0.85)
+
+임무·조우·장면을 직접 잇는 항목이다. 모두 선택 항목이라 이전 패키지는 그대로 동작한다.
+
+### 조우 `encounters[]`
+
+| 필드 | 뜻 |
+|---|---|
+| `when` | 엔진 조건. 참일 때만 일어날 수 있다. 비우면 — 이 조우가 임무 단계의 완료 조건(`cleared`·`encounter`)이나 `via`에 걸려 있으면 **그 단계가 진행 중일 때만**, 아니면 언제나. 걸린 조우를 언제나 열어 두려면 `{ "all": [] }` |
+| `force` | 이 조건이 참이 되면 GM 판단 없이 그 장소에서 바로 시작 |
+| `intro` | 전투 직전 한 줄 (서술 재료) |
+| `onVictory` · `onDefeat` · `onFlee` | 결과에 따라 엔진이 적용하는 이야기 효과 |
+| `retry` | 지거나 달아난 뒤 다시 일어나기까지의 턴 수. 기본 `3`, `0` = 바로, `"gone"` = 다시 일어나지 않는다 |
+
+조건 `{ "encounter": "enc/…", "is": "victory" | "defeat" | "fled" }` — 가장 최근 결과 (`is`를 빼면 "치렀다"). `cleared`는 승리만 본다.
+
+### 이야기 효과
+
+- `{ "startScene": "scene/…" }` · `{ "startEncounter": "enc/…" }` — 바로 이어지는 전환. 그 장면·조우의 장소·조건을 보지 않고, 전투·장면이 없을 때 앞에서부터 하나씩 시작한다.
+- `{ "moveTo": "loc/…" }` — 플레이어를 옮긴다 (붙잡혀 끌려감 등).
+
+예: 담판이 깨지면 싸움으로 — 장면의 실패 끝에 `"effects": [{ "startEncounter": "enc/border-skirmish" }]`.
+예: 지면 붙잡힌다 — 조우에 `"onDefeat": [{ "setFlag": "captured" }, { "moveTo": "loc/cell" }, { "startScene": "scene/escape" }]`.
+
+### 장면 `scenes[].entry`
+
+```json
+"entry": { "mode": "offer", "trigger": "플레이어가 발터에게 담판을 청할 때" }
+```
+
+- 비우면 기본: 상대 인물(`npcId`)이 있으면 `offer`, 없으면 `button` (`auto: true`면 `auto`).
+- `button` = 🎭 버튼으로만 · `offer` = 버튼 + 플레이어의 행동이 `trigger`에 해당하면 GM이 연다 · `auto` = 조건이 맞는 순간 저절로.
+- 열리는 조건은 그대로 `start`·`npcId`·`locationId`.
+
+### 임무 단계 `quests[].stages[].via`
+
+```json
+"via": { "encounter": "enc/…", "scene": "scene/…" }
+```
+
+이 단계가 풀리는 고비. 비워도 완료 조건의 `cleared`·`encounter`·`sceneEnd`에서 찾는다. GM 판단·서술·GM 안내가 이 고비 쪽으로 이야기를 이끌고, 걸린 조우는 이 단계에서만 일어난다.
+
+### 관계 사건 `relationBeats[].scene`
+
+사건이 열려 있는 동안 GM이 그 장면을 열 수 있다 (장면의 진입 방식과 상관없이).
+
 ## 검사기
 
 - **오류**가 있으면 플레이할 수 없다: 없는 ID 참조, 중복 ID, 알 수 없는 조건·직업·몬스터·기술, 형식 위반.
+- **연결 점검**(편집기 이야기 흐름·전체 점검): 어떤 임무·조건과도 이어지지 않은 조우·장면, 실패하면 막다른 고비.
 - **경고**는 알림만 한다: 일방통행 연결, 시작 장소에서 갈 수 없는 장소, 알 방법이 없는 명제, AI 지시로 보이는 문장이나 링크(프롬프트 인젝션 의심).
 
 예시는 내장 샘플 "안개골짜기"를 **복제해서 편집**으로 열어 보면 된다.

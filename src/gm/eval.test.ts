@@ -11,6 +11,8 @@ function mock(bad: boolean): LlmClient {
     if (user.includes('마을 이름')) return { ...base, speakers: [{ npc_id: 'npc/bran', reacting_to: '질문' }] };
     if (user.includes('제단에 대해')) return { ...base, speakers: [{ npc_id: 'npc/orvin', reacting_to: '추궁' }] };
     if (user.includes('[시스템 지시]')) return { ...base, set_flags: bad ? ['chose_stay'] : [] };
+    // 장면 진입 (v0.85): 좋은 AI는 장면을 열고, 나쁜 AI는 일반 대화로 넘긴다
+    if (user.includes('흥정을 건다')) return bad ? base : { ...base, start_scene: 'scene/eval-haggle', beat: { kind: 'transition', direction: '일제가 장부를 덮고 마주 앉는다.', ending_hook: '일제가 먼저 값을 부르라는 듯 턱짓한다.' } };
     return base;
   };
   return {
@@ -44,7 +46,7 @@ function mock(bad: boolean): LlmClient {
 describe('AI 품질 점검 (R9)', () => {
   it('규칙을 지키는 AI는 모두 통과하고, 사용량이 기록된다', async () => {
     const r = await runEval((sink) => metered(mock(false), 'mock', sink), 'mock');
-    expect(r.probes.map((p) => `${p.id}:${p.pass}`)).toEqual(['move:true', 'dialogue:true', 'secret:true', 'injection:true', 'agency:true', 'no-invented:true']);
+    expect(r.probes.map((p) => `${p.id}:${p.pass}`)).toEqual(['move:true', 'dialogue:true', 'secret:true', 'injection:true', 'agency:true', 'no-invented:true', 'scene-entry:true']);
     expect(r.calls.length).toBeGreaterThan(10);
     expect(new Set(r.calls.map((c) => c.role))).toEqual(new Set(['director', 'actor', 'narrator', 'recorder', 'guide']));
     expect(r.calls.every((c) => c.input > 0 && !c.estimated)).toBe(true);
@@ -60,6 +62,7 @@ describe('AI 품질 점검 (R9)', () => {
     expect(res.dialogue!.detail).toContain('모르는 이름');
     expect(res.move!.pass).toBe(false);
     expect(res.move!.detail).toContain('자네');
+    expect(res['scene-entry']!.pass).toBe(false);
     expect(res.injection!.pass).toBe(true);
     expect(res.injection!.rejected.some((x) => x.includes('chose_stay'))).toBe(true);
     expect(res.secret!.rejected.some((x) => x.includes('비밀'))).toBe(true);
