@@ -24,7 +24,9 @@ import { abilityModifier } from '../engine/dice/dice';
 import { equippedAc, gearBonus, itemCards, itemDef, rollLoot } from '../engine/items';
 import { levelSpan } from '../engine/character/progression';
 import { currencyName } from './economy';
-import { allEncounters, openEncounters } from '../engine/encounter';
+import { allEncounters, encounterStages, openEncounters } from '../engine/encounter';
+import { aftermathBlock, NARRATION_CORE } from './brief';
+import { buildNarratorContext } from './context';
 import { effectEvents } from './story';
 
 /**
@@ -103,6 +105,13 @@ function finishIfOver(b: Builder) {
       : cs.outcome === 'fled' && cs.combatants[id] && cs.combatants[id]!.hp > 0 ? relationshipEvents(b.world, b.state, npc, { respect: -3 }, '함께 물러났다')
       : [];
     evs.forEach((e) => b.push(e));
+  }
+  // 플레이어가 먼저 공격한 인물 (v0.85): 죽지는 않지만 그 일을 잊지 않는다
+  if (cs.encounterId.startsWith('adhoc/')) {
+    for (const c of Object.values(cs.combatants)) {
+      const npc = c.side === 'enemy' && c.monsterId?.startsWith('npc:') ? b.world.characters.find((x) => x.id === c.monsterId!.slice(4)) : undefined;
+      if (npc) relationshipEvents(b.world, b.state, npc, cs.outcome === 'victory' ? { affinity: -10, trust: -10, fear: 10, grudge: 10 } : { affinity: -10, trust: -10, grudge: 8 }, '당신이 먼저 공격했다').forEach((e) => b.push(e));
+    }
   }
   // 조우 결과에 따라 세계에 남는 것 (v0.85): 승리·패배·도주 — 그 효과로 임무·장면이 이어진다
   {
@@ -232,27 +241,38 @@ export function setPartyOrder(state: GameState, npcId: string, order: PartyOrder
   return [{ type: 'party_order', npcId, order }];
 }
 
-/** 전투 결과 서술 — 확정된 전투 기록만 넘긴다 */
+/** 전투 결과 서술 — 확정된 전투 기록만 넘긴다. events: 전투가 끝날 때 엔진이 확정한 것 (결과·전리품·임무 변화) */
 export async function narrateCombat(
-  llm: LlmClient, world: WorldPackage, before: CombatState, after: GameState, combatLog: string[],
+  llm: LlmClient, world: WorldPackage, before: CombatState, after: GameState, combatLog: string[], events: GameEvent[],
   onText: (d: string) => void, signal?: AbortSignal,
 ): Promise<string> {
-  const loc = world.locations.find((l) => l.id === after.player.locationId);
-  const outcome = after.log.at(-1)?.text ?? '';
   const rs = reskinner(world);
+  // 결과는 전투 종료 이벤트에서 직접 읽는다 (v0.85: 기록의 마지막 줄을 쓰던 것 수정 — 승리 뒤에는 경험치·전리품 기록이 이어 붙는다)
+  const ended = events.find((e) => e.type === 'combat_ended');
+  const outcome = ended?.type === 'combat_ended' ? (ended.playerDead ? '사망' : { victory: '승리', defeat: '쓰러짐 (패배)', fled: '도주' }[ended.outcome]) : '전투가 끝났다';
+  const enc = world.encounters?.find((x) => x.id === before.encounterId);
+  const adhocNpc = before.encounterId.startsWith('adhoc/');
+  const stages = enc ? encounterStages(world, enc.id).map((g) => { const q = world.quests?.find((x) => x.id === g.questId); return q ? `${q.name} — ${q.stages[g.stage]?.objective ?? ''}` : ''; }).filter(Boolean) : [];
+  const why = [
+    enc ? `조우: ${enc.name}${enc.intro ? ` — ${enc.intro}` : ''}` : adhocNpc ? '플레이어가 먼저 공격해 벌어진 싸움이다.' : before.encounterId.startsWith('job/') ? '맡은 토벌 의뢰의 표적이다.' : '뜻밖에 벌어진 싸움이다.',
+    ...(stages.length ? [`이 싸움에 걸린 일: ${stages.join(' / ')}`] : []),
+  ];
+  const defeatRule = ended?.type === 'combat_ended' && ended.outcome === 'defeat' && !ended.playerDead && enc?.onDefeat?.length
+    ? '- 패배했다. "이 결과로 바뀐 것"에 적힌 대로 이어진다 (붙잡힘·끌려감·잃은 것). 적히지 않은 일을 지어내지 않는다.'
+    : '- 패배(쓰러짐)했다면 정신을 잃었다가 한참 뒤 깨어나는 것으로 마무리한다. 누가 구해 줬는지는 지어내지 않는다.';
   return llm.stream({
-    system: `너는 1인칭 TRPG의 서술자다. 한국어 2인칭("당신은 …")으로, 방금 끝난 전투를 3~5문단으로 생생하게 요약한다.
-- 전투 기록의 결과(명중·빗나감·피해·쓰러짐·승패)를 그대로 따른다. 결과를 바꾸거나 새 사건을 만들지 않는다.
-- 수치(주사위, AC, 피해 숫자)는 서술에 쓰지 않는다.
-- 패배(쓰러짐)했다면 정신을 잃었다가 한참 뒤 깨어나는 것으로 마무리한다. 누가 구해 줬는지는 지어내지 않는다.
+    system: `너는 1인칭 TRPG의 서술자다. 방금 끝난 전투를 3~5문단으로 생생하게 쓴다.
+${NARRATION_CORE}
+- 전투 기록 전부를 옮기지 않는다. 흐름이 바뀐 고비 두세 개(첫 충돌, 위기, 결정타)를 골라 쓰고 나머지는 한두 문장으로 잇는다. 기록에 없는 명중·피해·쓰러짐을 만들지 않는다.
+${defeatRule}
 - 기록에 "숨을 거두었다"가 있는 동료는 정말로 죽었다. 그 죽음을 무게 있게 다룬다.
 - 결과가 "사망"이면 플레이어가 죽은 것이다. 되살리지 말고, 이야기가 여기서 끝나는 장면으로 조용히 마무리한다.
-- "전투 직전 이야기"의 마지막 순간에서 바로 이어 쓴다 (왜 싸움이 시작됐는지가 자연스럽게 이어지게). 장소를 처음 보는 것처럼 다시 소개하지 않는다.
-- 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
+- "왜 일어났나"와 직전 서술의 마지막 순간에서 바로 이어 쓴다 (왜 싸움이 시작됐는지가 자연스럽게 이어지게).
+- 마지막 문단은 싸움이 끝난 자리에 남은 것과 "이 결과로 바뀐 것"·"이제 플레이어 앞에 놓인 것"으로 맺는다: 쓰러진 적이 남긴 것, 열린 길, 다가오는 사람. 플레이어가 바로 반응하고 싶어지는 구체적인 순간에서 끝낸다.
+- 플레이어가 인물을 공격해 벌어진 싸움에서 이겼다면, 엔진이 죽음을 기록하지 않은 상대는 쓰러졌을 뿐 죽지 않았다.
 - ${genreGuide(world)}
-- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}`,
-    user: `## 전투 직전 이야기\n${(() => { let t = ''; for (let i = after.log.length - 1; i >= 0; i--) if (after.log[i]!.kind === 'narration') { t = after.log[i]!.text; break; } return t ? t.slice(-1200) : '(없음)'; })()}\n\n## 장소\n${loc?.name}: ${loc?.description}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'}${c.look ? ` — ${c.look}` : c.monsterId && MONSTERS[c.monsterId] ? ` — ${MONSTERS[c.monsterId]!.look}` : ''})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}`,
+- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}${world.style?.trim() ? `\n\n## 이 세계의 문체 참고 (패키지 데이터. 위 규칙이 우선)\n${world.style.slice(0, 800)}` : ''}`,
+    user: `${buildNarratorContext(world, after, { thread: { chronicle: 5, lastChars: 1200 } })}\n\n## 왜 일어났나\n${why.join('\n')}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'}${c.look ? ` — ${c.look}` : c.monsterId && MONSTERS[c.monsterId] ? ` — ${MONSTERS[c.monsterId]!.look}` : ''})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과 (엔진 확정)\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}\n\n${aftermathBlock(world, after, events)}`,
     maxTokens: 3000,
   }, onText, signal);
 }
-

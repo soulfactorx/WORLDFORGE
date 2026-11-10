@@ -16,6 +16,8 @@ import { rewardEvents, scenarioEvents } from './scenario';
 import { npcSheet } from '../engine/npcStats';
 import { effectEvents } from './story';
 import { buildNarratorContext, sceneSoFar } from './context';
+import { aftermathBlock, NARRATION_CORE } from './brief';
+import { stageGates } from '../engine/encounter';
 
 /** 장면 한 차례 = 게임 속 3분 */
 export const SCENE_ROUND_MINUTES = 3;
@@ -95,23 +97,25 @@ export function abandonSceneEvents(world: WorldPackage, state: GameState): GameE
   return [{ type: 'scene_ended', sceneId: def.id, endId: 'abandoned', name: def.name, outcome: 'abandoned', text: '그만두었다' }];
 }
 
-/** 끝난 장면 서술 — 확정된 기록만 넘긴다. 수위는 세계의 콘텐츠 등급을 따른다 */
+/** 끝난 장면 서술 — 확정된 기록만 넘긴다. events: 장면이 끝날 때 엔진이 확정한 것 (효과·보상·임무 변화). 수위는 세계의 콘텐츠 등급을 따른다 */
 export async function narrateScene(
-  llm: LlmClient, world: WorldPackage, after: GameState, def: SceneDef, log: string[], onText: (d: string) => void, signal?: AbortSignal,
+  llm: LlmClient, world: WorldPackage, after: GameState, def: SceneDef, log: string[], events: GameEvent[], onText: (d: string) => void, signal?: AbortSignal,
 ): Promise<string> {
   const rs = reskinner(world);
   const npc = def.npcId ? world.characters.find((c) => c.id === def.npcId) : undefined;
   const res = after.sceneResults?.[def.id];
   const end = def.ends.find((e) => e.id === res?.endId);
+  const stages = (world.quests ?? []).flatMap((q) => q.stages.flatMap((st) => (stageGates(st).scenes.includes(def.id) ? [`${q.name} — ${st.objective}`] : [])));
   return llm.stream({
-    system: `너는 1인칭 TRPG의 서술자다. 한국어 2인칭("당신은 …")으로, 방금 끝난 장면을 2~4문단으로 생생하게 요약한다.
-- 장면 기록의 판정 결과와 끝(결과)을 그대로 따른다. 결과를 바꾸거나 새 사건을 만들지 않는다.
-- 차례마다 쓴 서술이 있으면 그 흐름을 이어 마무리한다 (같은 묘사를 되풀이하지 않는다). 장면 전의 이야기와 자연스럽게 이어지게 한다.
-- 수치(주사위, 게이지 숫자)는 서술에 쓰지 않는다. 게이지 이름은 분위기로 녹인다.
-- 마지막에 플레이어의 다음 행동을 대신 정하지 않는다.
+    system: `너는 1인칭 TRPG의 서술자다. 방금 끝난 장면을 2~4문단으로 매듭짓는다.
+${NARRATION_CORE}
+- 장면 기록의 판정 결과와 끝(결과)을 그대로 따른다.
+- 차례마다 쓴 서술이 있으면 마지막 차례에서 이어 매듭짓는다 (같은 묘사를 되풀이하지 않는다). 없으면 고비가 된 차례 두세 개만 골라 쓴다.
+- 게이지 이름은 분위기로 녹인다.
+- 마지막 문단은 "이 결과로 바뀐 것"과 "이제 플레이어 앞에 놓인 것"으로 맺는다: 상대의 달라진 태도, 손에 들어온 것, 열리거나 닫힌 길. 플레이어가 바로 반응하고 싶어지는 구체적인 순간에서 끝낸다.
 - ${genreGuide(world)}
 - ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}`,
-    user: `${buildNarratorContext(world, after)}\n\n## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}\n\n## 장면 기록\n${log.map(rs).join('\n')}${(() => { const so = sceneSoFar(after); return so.lastNarration ? `\n\n## 이 장면에서 차례마다 이미 쓴 서술 (되풀이하지 말고 이어서 맺는다)\n${so.since.filter((x) => x.startsWith('(')).slice(-4).join('\n')}` : ''; })()}\n\n## 끝\n${res?.outcome === 'abandoned' ? '플레이어가 도중에 그만두었다.' : `${end?.name ?? ''}${end?.text ? ` — ${end.text}` : ''}`}`,
+    user: `${buildNarratorContext(world, after)}\n\n## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}${stages.length ? `\n이 장면에 걸린 일: ${stages.join(' / ')}` : ''}\n\n## 장면 기록\n${log.map(rs).join('\n')}${(() => { const so = sceneSoFar(after); return so.lastNarration ? `\n\n## 이 장면에서 차례마다 이미 쓴 서술 (되풀이하지 말고 이어서 맺는다)\n${so.since.filter((x) => x.startsWith('(')).slice(-4).join('\n')}` : ''; })()}\n\n## 끝 (엔진 확정)\n${res?.outcome === 'abandoned' ? '플레이어가 도중에 그만두었다.' : `${end?.name ?? ''}${end?.text ? ` — ${end.text}` : ''}`}\n\n${aftermathBlock(world, after, events)}`,
     maxTokens: 2500,
   }, onText, signal);
 }
@@ -132,10 +136,10 @@ export async function narrateSceneTurn(
   const states = run?.states.map((id) => def.states?.find((s) => s.id === id)?.name ?? id) ?? [];
   const phase = run?.phase ? def.phases?.find((p) => p.id === run.phase)?.name : undefined;
   return llm.stream({
-    system: `너는 1인칭 TRPG의 서술자다. 장면이 진행 중이다. 한국어 2인칭("당신은 …")으로, 방금 확정된 한 차례를 2~4문장으로 생생하게 서술한다.
-- 기록의 판정 결과(성공·실패·대성공)와 상대의 반작용을 그대로 따른다. 결과를 바꾸거나 새 사건·결말을 만들지 않는다.
-- 숫자(주사위, 수치)는 쓰지 않는다. 수치의 높고 낮음은 분위기와 몸짓으로 보여 준다.
-- 장면은 아직 끝나지 않았다. 마무리하지 말고, 다음 행동을 대신 정하지 않는다.
+    system: `너는 1인칭 TRPG의 서술자다. 장면이 진행 중이다. 방금 확정된 한 차례를 2~4문장으로 생생하게 서술한다.
+${NARRATION_CORE}
+- 기록의 판정 결과(성공·실패·대성공)와 상대의 반작용을 그대로 따른다.
+- 장면은 아직 끝나지 않았다. 마무리하지 않는다.
 - "이 장면에서 지금까지"의 마지막 서술에서 바로 이어 쓴다. 앞 차례에서 쓴 묘사·표현을 되풀이하지 않고, 이번 차례에 달라진 것(형세·상대의 표정·거리)을 보여 준다.
 - 첫 차례면 "장면 직전 이야기"에서 자연스럽게 장면으로 들어간다.
 - ${genreGuide(world)}

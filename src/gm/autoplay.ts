@@ -45,6 +45,13 @@ function placesIn(world: WorldPackage, s: GameState, c: Condition | undefined, o
   if ('all' in c) c.all.forEach((x) => placesIn(world, s, x, out));
   else if ('any' in c) c.any.forEach((x) => placesIn(world, s, x, out));
   else if ('at' in c && !('npcAt' in c)) out.add(c.at);
+  // 고비가 있는 곳 (v0.85): 조우의 장소, 장면의 장소·상대가 있는 곳
+  else if ('cleared' in c || 'encounter' in c) { const e = world.encounters?.find((x) => x.id === ('cleared' in c ? c.cleared : c.encounter)); if (e) out.add(e.locationId); }
+  else if ('sceneEnd' in c) {
+    const d = world.scenes?.find((x) => x.id === c.sceneEnd);
+    const npc = d?.npcId ? world.characters.find((x) => x.id === d.npcId) : undefined;
+    if (d?.locationId) out.add(d.locationId); else if (npc) out.add(npcLocationOf(s, npc));
+  }
   else if ('npcAt' in c) out.add(c.at);
   else if ('relationship' in c || 'stage' in c || 'inParty' in c) {
     const id = 'relationship' in c ? c.relationship : 'stage' in c ? c.stage : c.inParty;
@@ -206,6 +213,8 @@ export function autoRun(world: WorldPackage, seed: number, steps: number, style:
   let i = 0;
   for (; i < steps && !s.ending && !s.playerDead; i++) {
     s = { ...s, turn: s.turn + 1 };
+    // 강제 조우·전환 효과로 시작된 전투는 먼저 끝까지 (v0.85)
+    if (s.combat) { trace.push(`${i + 1}. 전투 진행 (저절로 시작됨)`); autoFinishCombat(world, s).events.forEach(push); scenarioEvents(world, s).events.forEach(push); continue; }
     // 저절로 시작한 장면은 먼저 끝까지
     if (s.scene) { trace.push(`${i + 1}. 장면 진행: ${sceneDef(world, s.scene.sceneId)?.name ?? s.scene.sceneId}`); playScene(world, s, null, rng).forEach(push); continue; }
     const list = candidates(world, s, rng);

@@ -121,6 +121,7 @@ export function describeEvent(world: WorldPackage, e: GameEvent): string | null 
     case 'quest_outcome': return `📜 임무 결과: ${e.questName} → ${e.name}`;
     case 'ending_reached': return `🏁 결말: ${e.name}`;
     case 'scene_started': return `🎭 장면 시작: ${e.name}`;
+    case 'transition_queued': return `↪ 이어지는 전환 예약: ${e.kind === 'scene' ? `장면 ${world.scenes?.find((x) => x.id === e.id)?.name ?? e.id}` : `전투 ${world.encounters?.find((x) => x.id === e.id)?.name ?? e.id}`}`;
     case 'scene_ended': return `🎭 장면 끝: ${e.name} (${e.outcome})`;
     case 'npc_moved': return `🚶 ${name(e.npcId)} → ${loc(e.to)}`;
     case 'npc_killed': return `✝ ${e.name} 죽음`;

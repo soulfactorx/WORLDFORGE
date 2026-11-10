@@ -249,25 +249,25 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     let after = replay(all);
     const stateBefore = state;
     let seq = (all.at(-1)?.seq ?? -1) + 1;
-    if (!after.combat) {
-      const startIdx = after.log.findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 시작'));
-      const combatLog = after.log.slice(startIdx).filter((l) => l.kind === 'combat').map((l) => l.text);
+    // 전투가 끝났는가: 종료 이벤트로 판단한다 (v0.85: 끝나자마자 다음 전투·장면이 이어질 수 있다)
+    if (events.some((e) => e.type === 'combat_ended')) {
+      const endIdx = after.log.findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 종료'));
+      const startIdx = after.log.slice(0, endIdx).findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 시작'));
+      const combatLog = after.log.slice(Math.max(0, startIdx), endIdx + 1).filter((l) => l.kind === 'combat').map((l) => l.text);
       setStreaming(''); setStage('전투를 서술하는 중'); setStartedAt(Date.now());
       abort.current = new AbortController();
       let text: string;
       try {
-        text = await narrateCombat(createLlmClient(settings), world, before, after, combatLog, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
+        text = await narrateCombat(createLlmClient(settings), world, before, after, combatLog, events, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
       } catch (e) {
         setError(`전투 서술 실패: ${(e as Error).message}`);
         text = '전투가 끝났다.';
       }
       // 전투 뒤 선택지도 방금 일어난 일에서 이어지게 (v0.79.5: 정해진 문구 대신 AI 안내)
       const narr: GameEvent = { type: 'narration', text };
-      const guide = await guideAfter(applyEvent(after, narr, after.turn), text);
-      await appendEvents(saveId, [
-        { saveId, seq: seq++, turn: after.turn, event: narr },
-        { saveId, seq: seq++, turn: after.turn, event: guide },
-      ]);
+      // 곧바로 다음 전투·장면이 이어지면 선택지를 만들지 않는다 (그것이 끝난 뒤에 만든다)
+      const extra: GameEvent[] = after.combat || after.scene ? [narr] : [narr, await guideAfter(applyEvent(after, narr, after.turn), text)];
+      await appendEvents(saveId, extra.map((event) => ({ saveId, seq: seq++, turn: after.turn, event })));
       setStreaming(null);
     }
     if (dbg) { const fin = await loadEvents(saveId); await endDebug(dbg, { events: fin.slice(all.length - events.length).map((x) => x.event), before: stateBefore, after: replay(fin) }); }
@@ -303,11 +303,11 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       const extra: GameEvent[] = [];
       let text = '';
       if (mode !== 'fixed' && settings) {
-        text = await narrate('장면을 서술하는 중', (on, sig) => narrateScene(createLlmClient(settings), world, after, def, [...log, ...lines], on, sig), '장면이 끝났다.');
+        text = await narrate('장면을 서술하는 중', (on, sig) => narrateScene(createLlmClient(settings), world, after, def, [...log, ...lines], events, on, sig), '장면이 끝났다.');
         extra.push({ type: 'narration', text });
       }
       // 장면이 끝난 뒤 선택지도 그 결과에서 이어지게 (v0.79.5)
-      extra.push(text ? await guideAfter(applyEvent(after, extra[0]!, after.turn), text) : basicGuide(world, after));
+      if (!after.combat && !after.scene) extra.push(text ? await guideAfter(applyEvent(after, extra[0]!, after.turn), text) : basicGuide(world, after));
       await appendEvents(saveId, extra.map((event) => ({ saveId, seq: seq++, turn: after.turn, event })));
       setStreaming(null);
     } else if (after.scene && def && mode === 'ai' && settings && lines.length) {
@@ -435,9 +435,12 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                     {e.choices.map((c, k) => {
                       const sk = e.choiceSkills?.[k];
                       const kind = CHOICE_KINDS[e.choiceKinds?.[k] as ChoiceKind];
+                      // 장면으로 들어가는 선택지 (v0.85): 지금도 열 수 있으면 바로 그 장면을 시작한다
+                      const sceneId = e.choiceScenes?.[k];
+                      const opens = sceneId ? scenesHere.find((d) => d.id === sceneId) : undefined;
                       return (
-                        <button key={k} type="button" className={kind ? `choice-${e.choiceKinds![k]}` : undefined} onClick={() => submit(c, sk ? `skill:${sk}` : undefined)} title={kind ? `${kind.label}: ${kind.desc}` : undefined}>
-                          {kind ? <span className="choice-kind">{kind.icon} {kind.label}</span> : `${k + 1}. `}{c}{sk && sk in SKILLS && <span className="skill-badge">🎲 {SKILLS[sk as SkillId].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
+                        <button key={k} type="button" className={kind ? `choice-${e.choiceKinds![k]}` : undefined} onClick={() => (opens ? commitScene((s) => startSceneEvents(world, s, opens.id)) : submit(c, sk ? `skill:${sk}` : undefined))} title={kind ? `${kind.label}: ${kind.desc}` : undefined}>
+                          {kind ? <span className="choice-kind">{opens ? '🎭 장면' : `${kind.icon} ${kind.label}`}</span> : `${k + 1}. `}{c}{!opens && sk && sk in SKILLS && <span className="skill-badge">🎲 {SKILLS[sk as SkillId].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
                         </button>
                       );
                     })}
