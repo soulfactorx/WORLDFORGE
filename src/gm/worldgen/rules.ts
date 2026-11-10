@@ -237,3 +237,18 @@ export async function generateRules(
     notes: [...(r.rules.length ? [`세계 규칙 ${r.rules.length}개를 만들었습니다: ${r.rules.map((x) => x.name).join(', ')}.${usedVars.length ? ` 새 세계 수치: ${usedVars.map((v) => v.name).join(', ')}.` : ''}`] : ['세계 규칙을 만들지 못했습니다.']), ...r.notes],
   };
 }
+
+/**
+ * 임무와 동시에 만든 규칙을 합친다 (v0.95). 규칙은 임무가 생기기 전의 세계를 보고 만들었으므로,
+ * 그 사이 본 줄기(임무·결말)가 더한 것은 그대로 두고 규칙과 규칙이 새로 만든 플래그·수치만 얹는다.
+ */
+export function mergeRules(main: WorldPackage, ruled: WorldPackage): WorldPackage {
+  const flagIds = new Set((main.flags ?? []).map((f) => f.id)), varIds = new Set((main.vars ?? []).map((v) => v.id));
+  const flags = (ruled.flags ?? []).filter((f) => !flagIds.has(f.id)), vars = (ruled.vars ?? []).filter((v) => !varIds.has(v.id));
+  return {
+    ...main,
+    ...(flags.length ? { flags: [...(main.flags ?? []), ...flags] } : {}),
+    ...(vars.length ? { vars: [...(main.vars ?? []), ...vars] } : {}),
+    ...(ruled.rules?.length ? { rules: ruled.rules } : {}),
+  };
+}

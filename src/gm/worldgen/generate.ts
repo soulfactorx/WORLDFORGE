@@ -9,7 +9,7 @@ import type { LlmClient } from '../../llm/types';
 import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
 import { generateScenes } from './scenes';
-import { generateRules } from './rules';
+import { generateRules, mergeRules } from './rules';
 import { generateSpine, spineOf } from './spine';
 import { linkWarnings } from '../../engine/package/flow';
 import { sceneEntry } from '../../engine/scene';
@@ -157,21 +157,21 @@ export async function generateWorld(
       notes = [...notes, `장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`];
     }
   }
+  // 세계 규칙 (v0.83) — v0.95: 임무·결말과 동시에 만든다 (차례로 하면 1~1.5분이 더 걸렸다). 장면과 그 플래그는 이미 있어 그대로 이어진다
+  const base = world;
+  const rulesTrack = opts.withRules !== false ? generateRules(llm, base, () => { /* 진행 표시는 임무 쪽이 한다 */ }, signal, opts.prompt.slice(0, 1500))
+    .then((r) => ({ world: r.world as WorldPackage | null, notes: r.notes }), (e) => ({ world: null, notes: signal?.aborted ? [] : [`세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`] })) : null;
   if (opts.withScenario) {
     const r = await generateScenario(llm, world, (st) => onStage(st, scenes ? scenesEnd - (scenEnd - worldEnd) : worldEnd + 4, scenesEnd), signal);
     world = r.world;
     notes = [...notes, ...r.notes];
   }
-  // 세계 규칙 (v0.83): 임무·플래그·장면이 생긴 뒤에 만들어 그것들과 잇는다
-  if (opts.withRules !== false) {
-    try {
-      const r = await generateRules(llm, world, (st) => onStage(st, scenesEnd, scenesEnd + 4), signal, opts.prompt.slice(0, 1500));
-      world = r.world;
-      notes = [...notes, ...r.notes];
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      notes = [...notes, `세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`];
-    }
+  if (rulesTrack) {
+    onStage('세계 규칙을 마무리하는 중…', scenesEnd, scenesEnd + 4);
+    const r = await rulesTrack;
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    if (r.world) world = mergeRules(world, r.world);
+    notes = [...notes, ...r.notes];
   }
   onStage('기본 이미지 고르기를 마무리하는 중…', opts.withRules !== false ? scenesEnd + 4 : scenesEnd, 97);
   const st = await stockP;

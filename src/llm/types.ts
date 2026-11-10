@@ -47,12 +47,15 @@ export interface Meter {
   /** 진단 (v0.93): 동시 요청 제한 때문에 차례를 기다린 시간(ms) · 실제로 보낸 출력 한도 (재시도 중 마지막 값) */
   waitMs?: number;
   sentMaxTokens?: number;
+  /** 진단 (v0.95): 출력 토큰 가운데 생각(추론)에 쓴 몫 — 제공자가 알려 줄 때만 */
+  reasoning?: number;
 }
 
 /** 사용량이 없으면 글자 수로 추정 (한국어 기준 대략 2글자당 1토큰) */
-export function addUsage(m: Meter | undefined, input: number | undefined, output: number | undefined, fallback: { inChars: number; outChars: number }) {
+export function addUsage(m: Meter | undefined, input: number | undefined, output: number | undefined, fallback: { inChars: number; outChars: number }, reasoning?: number) {
   if (!m) return;
   m.calls++;
+  if (reasoning) m.reasoning = (m.reasoning ?? 0) + reasoning;
   if (input === undefined || output === undefined) {
     m.estimated = true;
     m.input += Math.ceil(fallback.inChars / 2);

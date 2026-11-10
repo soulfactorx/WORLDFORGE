@@ -9,6 +9,11 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
   const url = `${(s.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '')}/chat/completions`;
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (s.apiKey) headers.authorization = `Bearer ${s.apiKey}`;
+  // v0.95: OpenRouter는 생각(추론) 깊이를 받는다. 생각하는 모델은 생각 토큰이 출력의 대부분이라 (번역 한 묶음에 답 1.5k·생각 7k)
+  // 깊이를 알리지 않으면 모든 호출이 모델 기본 깊이로 길게 생각한다. Claude 쪽과 같은 값(기본 low)을 보낸다.
+  // 다른 호환 서버는 모르는 칸을 거절할 수 있어 보내지 않는다.
+  const openRouter = /(^|\/\/|\.)openrouter\.ai(\/|:|$)/i.test(s.baseUrl ?? '');
+  const reasoning = (req: LlmRequest) => (openRouter ? { reasoning: { effort: req.effort ?? 'low' } } : {});
   const messages = (req: LlmRequest) => [
     { role: 'system', content: req.system },
     { role: 'user', content: req.user },
@@ -48,7 +53,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
     async json<T>(req: LlmRequest, schema: Record<string, unknown>, signal?: AbortSignal) {
       // 모든 호환 서버가 json_schema를 지원하지는 않으므로 프롬프트로 스키마를 알리고 json_object 모드를 요청한다.
       const reqBody = {
-        model: s.model, max_tokens: req.maxTokens, response_format: { type: 'json_object' },
+        model: s.model, max_tokens: req.maxTokens, response_format: { type: 'json_object' }, ...reasoning(req),
         messages: [
           { role: 'system', content: `${req.system}\n\n반드시 다음 JSON 스키마에 맞는 JSON 객체 하나만 출력한다:\n${JSON.stringify(schema)}` },
           { role: 'user', content: req.user },
@@ -61,7 +66,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
       const body = await res.json();
       const text: string = body.choices?.[0]?.message?.content ?? '';
       finishAttempt(at, { status: res.status, meta: { id: body.id, model: body.model, finish_reason: body.choices?.[0]?.finish_reason, usage: body.usage }, raw: text });
-      addUsage(req.meter, body.usage?.prompt_tokens, body.usage?.completion_tokens, { inChars: req.system.length + req.user.length + JSON.stringify(schema).length, outChars: text.length });
+      addUsage(req.meter, body.usage?.prompt_tokens, body.usage?.completion_tokens, { inChars: req.system.length + req.user.length + JSON.stringify(schema).length, outChars: text.length }, body.usage?.completion_tokens_details?.reasoning_tokens);
       const start = text.indexOf('{');
       if (body.choices?.[0]?.finish_reason === 'length') throw new LlmTruncatedError(start >= 0 ? text.slice(start) : text);
       const match = text.match(/\{[\s\S]*\}/);

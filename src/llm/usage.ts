@@ -62,7 +62,7 @@ export const dayKey = (at: number) => { const d = new Date(at); return `${d.getF
 export type { Role };
 
 // ---------------------------------------------------------------- 작업 타임라인 (v0.93)
-export interface RunStep { label: string; role: Role; model: string; startMs: number; ms: number; waitMs: number; input: number; output: number; calls: number; ok: boolean; maxTokens?: number; effort?: string; error?: string; tps: number }
+export interface RunStep { label: string; role: Role; model: string; startMs: number; ms: number; waitMs: number; input: number; output: number; calls: number; ok: boolean; maxTokens?: number; effort?: string; reasoning?: number; error?: string; tps: number }
 export interface RunTimeline { wallMs: number; sumMs: number; steps: RunStep[]; /** 동시에 돌던 요청의 최대 수 */ peak: number }
 
 /** 한 작업의 호출들을 시작 순서로 — 어느 단계가 얼마나 걸렸고, 순서대로였는지 동시에였는지 본다 */
@@ -72,7 +72,7 @@ export function runTimeline(rows: UsageRow[], roleLabel: (r: Role) => string = (
   const steps = rows.map((r): RunStep => {
     const work = Math.max(1, r.ms - (r.waitMs ?? 0));
     return { label: r.label ?? roleLabel(r.role), role: r.role, model: r.model, startMs: r.at - r.ms - t0, ms: r.ms, waitMs: r.waitMs ?? 0, input: r.input, output: r.output, calls: r.calls, ok: r.ok,
-      ...(r.maxTokens ? { maxTokens: r.maxTokens } : {}), ...(r.effort ? { effort: r.effort } : {}), ...(r.error ? { error: r.error } : {}), tps: Math.round((r.output / work) * 1000) };
+      ...(r.maxTokens ? { maxTokens: r.maxTokens } : {}), ...(r.effort ? { effort: r.effort } : {}), ...(r.reasoning ? { reasoning: r.reasoning } : {}), ...(r.error ? { error: r.error } : {}), tps: Math.round((r.output / work) * 1000) };
   }).sort((a, b) => a.startMs - b.startMs);
   const marks = steps.flatMap((s) => [[s.startMs + s.waitMs, 1], [s.startMs + s.ms, -1]] as [number, number][]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   let live = 0, peak = 0;
@@ -86,6 +86,6 @@ export function timelineText(name: string, t: RunTimeline): string {
   return [
     `# ${name} — 전체 ${s(t.wallMs)} · 호출 ${t.steps.length}건 (합계 ${s(t.sumMs)}) · 동시 최대 ${t.peak}`,
     '시작 | 걸림 | 대기 | 단계 | 모델 | 입력→출력 토큰 | 속도 | 출력 한도·노력 | 재시도',
-    ...t.steps.map((x) => `+${s(x.startMs)} | ${s(x.ms)} | ${x.waitMs ? s(x.waitMs) : '-'} | ${x.label} | ${x.model} | ${x.input}→${x.output} | ${x.tps}tok/s | ${x.maxTokens ?? '?'}${x.effort ? `·${x.effort}` : ''} | ${x.calls > 1 ? `${x.calls - 1}회` : '-'}${x.ok ? '' : ` | 실패: ${x.error ?? ''}`}`),
+    ...t.steps.map((x) => `+${s(x.startMs)} | ${s(x.ms)} | ${x.waitMs ? s(x.waitMs) : '-'} | ${x.label} | ${x.model} | ${x.input}→${x.output}${x.reasoning ? ` (생각 ${x.reasoning})` : ''} | ${x.tps}tok/s | ${x.maxTokens ?? '?'}${x.effort ? `·${x.effort}` : ''} | ${x.calls > 1 ? `${x.calls - 1}회` : '-'}${x.ok ? '' : ` | 실패: ${x.error ?? ''}`}`),
   ].join('\n');
 }

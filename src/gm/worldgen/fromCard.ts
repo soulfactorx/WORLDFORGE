@@ -28,7 +28,7 @@ import { worldFromDraft, type WorldDraft } from './draft';
 import { generateScenario, worldSummary } from './generate';
 import { generateSpine } from './spine';
 import { generateScenes } from './scenes';
-import { generateRules } from './rules';
+import { generateRules, mergeRules } from './rules';
 import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
 import { translateToKorean } from './translate';
@@ -482,6 +482,18 @@ export async function cardToWorld(
       notes.push(`장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`);
     }
   }
+  // 6) 세계 규칙 (v0.83): 원작의 법칙·금기·인과 → 행동 규칙·상태 규칙
+  // v0.95: 임무·결말과 동시에 만든다 (둘 다 1~1.5분짜리라 차례로 하면 그만큼 더 걸렸다). 장면과 장면의 플래그는 이미 있으므로 그것들과는 그대로 이어진다
+  const rulesTrack = opts.withRules !== false ? (async () => {
+    try {
+      const src = (d.world_rules ?? []).map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 16).map((x) => `- ${x}`).join('\n');
+      const r = await generateRules(llm, world, () => { /* 진행 표시는 임무 쪽이 한다 */ }, signal, `원작 카드를 바탕으로 한 세계다. 원작의 법칙·금기와 인물들의 반응 방식을 규칙으로 옮기고, 원작 줄거리의 갈등이 플레이어 행동으로 번지게 한다.\n${cut(d.plot_request ?? '', 1200)}`, src ? 8 : 5, src);
+      return { world: r.world, notes: r.notes };
+    } catch (e) {
+      if (signal?.aborted) return null;
+      return { world: null, notes: [`세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`] };
+    }
+  })() : null;
   // 5) 임무·결말 (기존 시나리오 생성기 재사용)
   if (opts.withScenario) {
     try {
@@ -494,17 +506,12 @@ export async function cardToWorld(
       notes.push(`임무·결말 생성에 실패했습니다 (편집기에서 다시 만들 수 있습니다): ${(e as Error).message}`);
     }
   }
-  // 6) 세계 규칙 (v0.83): 원작의 법칙·금기·인과 → 행동 규칙·상태 규칙 (임무·플래그·장면이 생긴 뒤라 그것들과 잇는다)
-  if (opts.withRules !== false) {
-    try {
-      const src = (d.world_rules ?? []).map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 16).map((x) => `- ${x}`).join('\n');
-      const r = await generateRules(llm, world, (st) => onStage(st, 90, 94), signal, `원작 카드를 바탕으로 한 세계다. 원작의 법칙·금기와 인물들의 반응 방식을 규칙으로 옮기고, 원작 줄거리의 갈등이 플레이어 행동으로 번지게 한다.\n${cut(d.plot_request ?? '', 1200)}`, src ? 8 : 5, src);
-      world = r.world;
-      notes.push(...r.notes);
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      notes.push(`세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`);
-    }
+  if (rulesTrack) {
+    onStage('세계 규칙을 마무리하는 중…', 90, 94);
+    const r = await rulesTrack;
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    if (r?.world) world = mergeRules(world, r.world);
+    if (r) notes.push(...r.notes);
   }
   // 이미지 쪽 결과를 합친다 (이야기 쪽이 인물 객체를 새로 만들었을 수 있으므로 ID로 붙인다)
   onStage('이미지 정리를 마무리하는 중…', 94, 95);
