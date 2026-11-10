@@ -492,7 +492,7 @@ export const everheartWorld: WorldPackage = {
         { hint: '세라피나에게 아첨 대신 정직한 의견을 말한다.', skills: ['insight'], risk: '선을 넘으면 그녀의 자존심을 건드린다.' },
       ],
       stages: [
-        { objective: '베아트리스 백작부인의 살롱에서 얼굴을 알린다.', hint: '백작부인은 새 얼굴을 좋아한다. 사람들 앞에서 인정받는 순간이 오면 salon_debut을 세운다.', complete: { flag: 'salon_debut' } },
+        { objective: '베아트리스 백작부인의 살롱에서 얼굴을 알린다.', hint: '백작부인은 새 얼굴을 좋아한다. 사람들 앞에서 인정받는 순간이 오면 salon_debut을 세운다.', complete: { flag: 'salon_debut' }, via: { scene: 'scene/salon-debate' } },
         { objective: '세라피나 로즈벨에게 인정받는다.', hint: '세라피나는 아첨을 싫어하고 정직함과 실력을 존중한다. 떨어진 장미 브로치를 돌려주면 대화의 계기가 된다.', complete: { any: [{ relationship: 'npc/seraphine', axis: 'respect', gte: 20 }, { stage: 'npc/seraphine', in: TRUSTED }] } },
       ],
       outcomes: [
@@ -556,7 +556,7 @@ export const everheartWorld: WorldPackage = {
       ],
       stages: [
         { objective: '연구소 지하 봉인실의 이상을 알아본다.', hint: '쇠문의 마법진을 살피거나(비전학 판정) 엘리안에게 묻는다.', complete: { knows: 'claim/lab-seal' } },
-        { objective: '깨어난 수호 갑옷을 잠재운다.', hint: '싸우거나(조우), 마법진을 고쳐 잠재운다(seal_restored). 엘리안이 함께면 수리가 쉽다.', complete: { any: [{ cleared: 'enc/lab-armor' }, { flag: 'seal_restored' }] } },
+        { objective: '깨어난 수호 갑옷을 잠재운다.', hint: '싸우거나(조우), 마법진을 고쳐 잠재운다(seal_restored). 엘리안이 함께면 수리가 쉽다.', complete: { any: [{ cleared: 'enc/lab-armor' }, { flag: 'seal_restored' }] }, via: { scene: 'scene/lab-containment', encounter: 'enc/lab-armor' } },
         { objective: '3년 전 사고의 진실에 다가간다.', hint: '갑옷을 잠재운 뒤 엘리안이 이 봉인실이 3년 전 사고 현장이라고 털어놓는다. 도서관 보고서도 단서다.', complete: { knows: 'claim/elian-accident-truth', min: 'partial' } },
       ],
       outcomes: [
@@ -600,7 +600,7 @@ export const everheartWorld: WorldPackage = {
         { hint: '떠나지 말라고 붙잡는다.', skills: ['persuasion'], risk: '그의 꿈을 가볍게 여기면 다툼이 된다.' },
       ],
       stages: [
-        { objective: '테오가 축제 뒤 떠난다는 것을 안다.', hint: '테오, 학장, 미렐라가 알고 있다.', complete: { knows: 'claim/teo-leaving' } },
+        { objective: '테오가 축제 뒤 떠난다는 것을 안다.', hint: '테오, 학장, 미렐라가 알고 있다.', complete: { knows: 'claim/teo-leaving' }, via: { scene: 'scene/teo-market-date' } },
         { objective: '테오가 5년 동안 하지 못한 말을 듣는다.', hint: '테오의 신뢰가 30 이상이 되면 편지 이야기를 꺼낸다. 친구 이상이면 편지를 건넨다.', complete: { knows: 'claim/teo-letter', min: 'partial' } },
         { objective: '테오에게 대답한다.', hint: '받아들이든, 친구로 남자고 하든, 분명한 대답을 하면 teo_answered를 세운다.', complete: { flag: 'teo_answered' } },
       ],
@@ -1108,7 +1108,7 @@ export const everheartWorld: WorldPackage = {
         effects: [{ setFlag: 'seal_restored' }, { relationship: 'npc/elian', delta: { trust: 8, respect: 6, intimacy: 3 } }, { reputation: 'fac/magelab', delta: 5 }, { reveal: 'claim/elian-accident-truth', state: 'rumor' }],
         rewards: { xp: 'minor' } },
       { id: 'awakened', name: '깨어난 갑옷', when: { gauge: 'armor', gte: 6 }, outcome: 'failure', text: '쇠문이 안쪽에서 튕겨 열린다. 수호 갑옷이 일어섰다 — 이제는 싸워서 멈추는 수밖에 없다.',
-        effects: [{ relationship: 'npc/elian', delta: { trust: -2 } }] },
+        effects: [{ startEncounter: 'enc/lab-armor' }, { relationship: 'npc/elian', delta: { trust: -2 } }] },
       { id: 'overload', name: '마력 폭주', when: { gauge: 'surge', gte: 6 }, outcome: 'failure', text: '회로에서 푸른 번개가 튀어 두 사람을 밀쳐 낸다. 엘리안이 당신 앞을 가로막고 선다 — 다친 데는 없지만, 마법진은 더 끊겼다.',
         effects: [{ relationship: 'npc/elian', delta: { affinity: 2, trust: -2 } }] },
       { id: 'stalled', name: '반쯤 이은 회로', when: { round: 99 }, outcome: 'neutral', text: '회로는 반쯤 이어졌다. 갑옷은 다시 고개를 숙였지만, 오래가지는 않을 것이다.',

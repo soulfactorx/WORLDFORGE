@@ -570,6 +570,9 @@ export const aetheriaWorld: WorldPackage = {
     },
     {
       id: 'enc/sanctum-cultists', name: '석실의 파수꾼', locationId: 'loc/forest-sanctum',
+      intro: '봉인석의 보랏빛 아래, 검은 초승달 문양의 두건들이 아이들 앞을 막아선다.',
+      // 이기면 살아남은 광신도를 심문하는 장면으로 이어진다 (v0.85)
+      onVictory: [{ startScene: 'scene/cultist-interrogation' }],
       enemies: [{ monsterId: 'cultist', zone: 2 }, { monsterId: 'cultist', zone: 2 }, { monsterId: 'skeleton', zone: 3 }],
       loot: { money: 30, items: [{ itemId: 'std/potion-healing' }] },
       trigger: '흑월단 광신도 둘과 그들이 일으킨 해골 병사 하나가 봉인석 앞에서 아이들을 지킨다. 플레이어가 석실 안쪽으로 들어가거나 아이들을 데려가려 하면 막아선다. 은신에 성공하면 기습할 수 있다.',
@@ -730,7 +733,7 @@ export const aetheriaWorld: WorldPackage = {
       truth: 'claim/seres-blackmoon',
       clues: ['claim/raven-cult', 'claim/blackmoon-letter'],
       stages: [
-        { objective: '흑월단 집행자 「까마귀」의 정체를 알아낸다.', hint: '등불 없는 골목의 낙서를 따라가거나(지각), 미나의 신뢰를 얻으면 라벤의 이름을 듣는다.', complete: { knows: 'claim/raven-cult', min: 'partial' } },
+        { objective: '흑월단 집행자 「까마귀」의 정체를 알아낸다.', hint: '등불 없는 골목의 낙서를 따라가거나(지각), 미나의 신뢰를 얻으면 라벤의 이름을 듣는다.', complete: { knows: 'claim/raven-cult', min: 'partial' }, via: { scene: 'scene/raven-chase' } },
         { objective: '까마귀의 둥지를 친다.', hint: '밤에 등불 없는 골목 접선지. 미나는 이 일이라면 따라나선다.', complete: { cleared: 'enc/alley-raven' } },
         { objective: '쓰러진 까마귀의 처분을 정한다.', hint: '싸움이 끝나면 골목에서 결정의 순간이 열린다.', complete: { choice: 'choice/raven-fate' } },
       ],
@@ -755,7 +758,7 @@ export const aetheriaWorld: WorldPackage = {
       stages: [
         { objective: '회색 관문으로 가 제국군의 움직임을 살핀다.', hint: '교역로 북쪽 끝. 이졸데 왕녀도 이 일에 관심이 많다.', complete: { at: 'loc/border-fort' } },
         { objective: '제국이 국경에 병력을 모은 진짜 이유를 알아낸다.', hint: '보급 천막(조사)이나 발터의 신뢰(60) 또는 두려움(50).', complete: { knows: 'claim/empire-wants-temple', min: 'partial' } },
-        { objective: '분쟁을 매듭짓는다 — 말로든, 칼로든.', hint: '발터가 휴전에 동의하면 GM이 border_truce를 세운다. 또는 관문 앞 충돌에서 이긴다.', complete: { any: [{ flag: 'border_truce' }, { cleared: 'enc/border-skirmish' }] } },
+        { objective: '분쟁을 매듭짓는다 — 말로든, 칼로든.', hint: '발터가 휴전에 동의하면 GM이 border_truce를 세운다. 또는 관문 앞 충돌에서 이긴다.', complete: { any: [{ flag: 'border_truce' }, { cleared: 'enc/border-skirmish' }] }, via: { scene: 'scene/gate-parley', encounter: 'enc/border-skirmish' } },
       ],
       rewards: { xp: 'major' },
       outcomes: [
@@ -1164,6 +1167,7 @@ export const aetheriaWorld: WorldPackage = {
   }, {
     // 협상: 회색 관문에서 발터와 담판 — 세레스와의 거래를 짚으면(약점) 더 큰 결과
     id: 'scene/gate-parley', name: '회색 관문의 담판', npcId: 'npc/valter',
+    entry: { mode: 'offer', trigger: '플레이어가 발터에게 병력을 물리라고 담판을 청하거나, 제국이 대성전을 노린다는 증거를 들이밀 때' },
     description: '제국이 대성전을 노린다는 것을 안 뒤, 회색 관문 지휘 천막에서 발터 사령관과 마주 앉는다. 발터는 짧고 분명한 말과 명예를 존중하고 위협을 경멸한다. 그가 믿는 "협회 사절"이 흑월단이라는 것을 짚으면 그의 확신이 흔들린다. 합의하면 국경의 불씨가 꺼진다.',
     start: { all: [{ knows: 'claim/empire-wants-temple', min: 'partial' }, { not: { flag: 'border_truce' } }] },
     gauges: [{ id: 'patience', name: '발터의 인내', start: 6, min: 0, max: 6 }, { id: 'accord', name: '합의', start: 0, min: 0, max: 10 }, { id: 'suspicion', name: '경계', start: 4, min: 0, max: 6 }],
@@ -1200,7 +1204,7 @@ export const aetheriaWorld: WorldPackage = {
         effects: [{ setFlag: 'border_truce' }, { var: 'tension', add: -5 }, { relationship: 'npc/valter', delta: { respect: 8, trust: 5 } }, { reputation: 'fac/vargas', delta: 5 }],
         rewards: { xp: 'minor' } },
       { id: 'walkout', name: '결렬', when: { gauge: 'patience', lte: 0 }, outcome: 'failure', text: '발터가 일어선다. "용건은 끝났소." 천막 밖에서 진군 나팔이 울린다.',
-        effects: [{ var: 'tension', add: 8 }, { relationship: 'npc/valter', delta: { respect: -5, grudge: 5 } }] },
+        effects: [{ startEncounter: 'enc/border-skirmish' }, { var: 'tension', add: 8 }, { relationship: 'npc/valter', delta: { respect: -5, grudge: 5 } }] },
       { id: 'stalemate', name: '보류', when: { round: 99 }, outcome: 'neutral', text: '발터는 대답을 미룬다. 하지만 오늘 밤 관문의 횃불은 조금 줄었다.',
         effects: [{ var: 'tension', add: -3 }] },
     ],

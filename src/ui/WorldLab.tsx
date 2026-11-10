@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { classesFor } from '../engine/classes';
 import type { EncounterSpec } from '../engine/combat/combat';
 import { DIFFICULTY_LABEL } from '../engine/combat/monsters';
-import { flowWarnings } from '../engine/package/flow';
+import { flowWarnings, linkWarnings } from '../engine/package/flow';
 import { validateWorld } from '../engine/package/validate';
 import { AXES, AXIS_NAMES } from '../engine/relationship';
 import type { Condition, RelationAxis, StoryEffect, WorldPackage } from '../engine/schema';
@@ -279,7 +279,7 @@ export function AutoPlayPanel({ w }: { w: WorldPackage }) {
   const [rep, setRep] = useState<AutoReport | null>(null);
   const abort = useRef<AbortController | null>(null);
   const issues = useMemo(() => validateWorld(w), [w]);
-  const flows = useMemo(() => flowWarnings(w), [w]);
+  const flows = useMemo(() => [...flowWarnings(w), ...linkWarnings(w)], [w]);
   const go = async () => {
     abort.current = new AbortController();
     setBusy(0.001); setRep(null);

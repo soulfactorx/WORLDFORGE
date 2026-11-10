@@ -2,7 +2,7 @@
  * 제작 도구 2.0 (R8): 이야기 보드 · 그래프 지도 · 세계 시뮬레이터.
  */
 import { useMemo, useState } from 'react';
-import { flagFlows, flowWarnings } from '../engine/package/flow';
+import { flagFlows, flowWarnings, linkWarnings } from '../engine/package/flow';
 import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import type { WorldPackage } from '../engine/schema';
 import { simulateWorld, type SimResult } from '../gm/simulate';
@@ -11,7 +11,7 @@ import { describeCondition } from './ConditionEditor';
 /** 이야기 보드: 줄기·임무·결정·시계·사건·결말과 플래그 흐름을 한눈에 */
 export function StoryBoard({ w }: { w: WorldPackage }) {
   const flows = useMemo(() => flagFlows(w), [w]);
-  const warnings = useMemo(() => flowWarnings(w), [w]);
+  const warnings = useMemo(() => [...flowWarnings(w), ...linkWarnings(w)], [w]);
   const d = (c: Parameters<typeof describeCondition>[0] | undefined) => (c ? describeCondition(c, w) : '');
   return (
     <div className="story-board">

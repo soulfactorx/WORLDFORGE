@@ -423,8 +423,8 @@ export const cheonhaWorld: WorldPackage = {
       ],
       truth: 'claim/traitor-jongri', clues: ['claim/traitor-exists', 'claim/jongri-ledger', 'claim/traitor-namgung', 'claim/blood-sect-did'],
       stages: [
-        { objective: '맹 안에 배신자가 있다는 소문을 확인한다.', hint: '홍칠, 매설영(비밀), 맹주(비밀)가 알고 있다. 회의를 지켜보며 통찰 판정을 해도 된다.', complete: { knows: 'claim/traitor-exists' } },
-        { objective: '배신자의 증거를 찾는다.', hint: '총관 집무실의 비밀 장부, 혹은 혈도문 살수의 자백. "맹주 내통설"은 거짓 단서다.', complete: { any: [{ hasItem: 'item/jongri-ledger' }, { knows: 'claim/jongri-ledger', min: 'partial' }, { knows: 'claim/blood-sect-did', min: 'partial' }] } },
+        { objective: '맹 안에 배신자가 있다는 소문을 확인한다.', hint: '홍칠, 매설영(비밀), 맹주(비밀)가 알고 있다. 회의를 지켜보며 통찰 판정을 해도 된다.', complete: { knows: 'claim/traitor-exists' }, via: { scene: 'scene/beggar-deal' } },
+        { objective: '배신자의 증거를 찾는다.', hint: '총관 집무실의 비밀 장부, 혹은 혈도문 살수의 자백. "맹주 내통설"은 거짓 단서다.', complete: { any: [{ hasItem: 'item/jongri-ledger' }, { knows: 'claim/jongri-ledger', min: 'partial' }, { knows: 'claim/blood-sect-did', min: 'partial' }] }, via: { scene: 'scene/ledger-infiltration' } },
         { objective: '배신자의 정체를 밝힌다.', hint: '장부의 귀면 도장은 혈도문주의 것이다. 장부·자백·종리휘의 실언을 엮으면 그가 배신자임이 드러난다.', complete: { knows: 'claim/traitor-jongri', min: 'partial' } },
         { objective: '증거를 누구에게 넘길지 정한다.', hint: '맹주 앞에서 종리휘를 고발하거나(플래그), 장부를 들고 있다면 결정적 선택으로 금의위나 개방에 넘길 수 있다.', complete: { any: [{ flag: 'jongri_exposed' }, { choice: 'choice/ledger' }] } },
       ],
@@ -552,7 +552,7 @@ export const cheonhaWorld: WorldPackage = {
       ],
       truth: 'claim/blood-sect-did', clues: ['claim/strange-art', 'claim/seol-brother'],
       stages: [
-        { objective: '사형을 죽인 살수의 정체를 알아낸다.', hint: '모추아의 목격담, 서호 나루의 핏방울 문양, 사로잡은 흑도 무인.', complete: { knows: 'claim/blood-sect-did', min: 'partial' } },
+        { objective: '사형을 죽인 살수의 정체를 알아낸다.', hint: '모추아의 목격담, 서호 나루의 핏방울 문양, 사로잡은 흑도 무인.', complete: { knows: 'claim/blood-sect-did', min: 'partial' }, via: { scene: 'scene/jiangnan-auction' } },
         { objective: '서호의 혈도문 거점을 친다.', hint: '불 꺼진 화방.', complete: { cleared: 'enc/blood-lair' } },
       ],
       outcomes: [

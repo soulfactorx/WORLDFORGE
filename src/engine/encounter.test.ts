@@ -3,6 +3,7 @@ import { sampleWorld } from '../data/sample-world';
 import { createCharacter, suggestedStandardArray } from './character/sheet';
 import { encounterBlocked, forcedEncounter, openEncounters, stageGates } from './encounter';
 import { validateWorld } from './package/validate';
+import { flagFlows, linkWarnings } from './package/flow';
 import { evalCondition } from './scenario';
 import { offerableScenes, sceneEntry } from './scene';
 import type { SceneDef, WorldPackage } from './schema';
@@ -118,5 +119,22 @@ describe('전환 효과 · 장면 진입 (v0.85)', () => {
     w.quests![0]!.stages[0]!.via = { encounter: 'enc/none' };
     const errs = validateWorld(w).filter((i) => i.level === 'error').map((i) => i.path);
     expect(errs).toEqual(expect.arrayContaining(['encounters[0].onDefeat[0]', 'encounters[0].retry', 'quests[0].stages[0].via.encounter']));
+  });
+});
+
+describe('연결 검사 (v0.85)', () => {
+  it('곁가지 조우·장면을 알리고, 이어 주면 사라진다', () => {
+    const w = world();
+    const lone = linkWarnings(w).filter((x) => x.includes('굶주린 늑대들'));
+    expect(lone.length).toBe(1);
+    w.encounters!.find((e) => e.id === WOLVES)!.onDefeat = [{ moveTo: w.locations[0]!.id }];
+    expect(linkWarnings(w).some((x) => x.includes('굶주린 늑대들'))).toBe(false);
+    expect(linkWarnings(w).some((x) => x.includes('고블린 매복'))).toBe(false); // 임무 단계가 읽는다
+  });
+
+  it('장면만 읽는 플래그도 읽는 곳으로 센다', () => {
+    const w: WorldPackage = { ...world(), flags: [...(sampleWorld.flags ?? []), { id: 'door_open', when: '문을 열었다' }] };
+    w.scenes = [{ id: 'scene/x', name: '문 너머', description: '', start: { flag: 'door_open' }, gauges: [{ id: 'g', name: 'g', start: 0 }], actions: [{ id: 'a', name: 'a', success: { gauges: { g: 1 } } }], ends: [{ id: 'e', name: 'e', when: { gauge: 'g', gte: 1 }, outcome: 'success' }] }];
+    expect(flagFlows(w).find((f) => f.id === 'door_open')?.readBy.length).toBe(1);
   });
 });
