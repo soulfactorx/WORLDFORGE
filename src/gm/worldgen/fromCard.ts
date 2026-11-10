@@ -474,7 +474,7 @@ export async function cardToWorld(
   // 4) 장면 (v0.51 — v0.85부터 임무보다 먼저: 임무가 장면의 결과를 조건으로 쓴다): 원작의 인물·관계로 협상·대결·데이트 같은 장면
   if (opts.withScenes !== false) {
     try {
-      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`, 3, { withSpine: true });
+      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`, 3, { withSpine: true, split: true });
       world = r.world;
       notes.push(...r.notes);
     } catch (e) {

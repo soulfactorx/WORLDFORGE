@@ -149,7 +149,7 @@ export async function generateWorld(
   // 장면 (v0.51) — v0.85부터 임무보다 먼저 만든다: 임무가 장면의 결과를 완료 조건으로 쓸 수 있게. 실패해도 세계는 살린다
   if (scenes) {
     try {
-      const r = await generateScenes(llm, world, (st) => onStage(st, worldEnd + 4, opts.withScenario ? scenesEnd - (scenEnd - worldEnd) : scenesEnd), signal, opts.prompt.slice(0, 1500), 3, { withSpine: true });
+      const r = await generateScenes(llm, world, (st) => onStage(st, worldEnd + 4, opts.withScenario ? scenesEnd - (scenEnd - worldEnd) : scenesEnd), signal, opts.prompt.slice(0, 1500), 3, { withSpine: true, split: true });
       world = r.world;
       notes = [...notes, ...r.notes];
     } catch (e) {

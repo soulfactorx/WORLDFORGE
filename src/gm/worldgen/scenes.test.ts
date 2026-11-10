@@ -103,3 +103,46 @@ describe('뼈대와 장면을 한 번에 (v0.92)', () => {
     expect(spineOf(r.world)).toContain('1장 「1장」');
   });
 });
+
+describe('뼈대 먼저, 장면은 동시에 (v0.96)', () => {
+  const spine = { conflict: '갈등', stakes: '걸린 것', player_hook: '첫 계기', chapters: [
+    { name: '1장', goal: '목표', climax_kind: 'scene', climax_key: 'haggle', climax: '담판', lead_in: '계기', on_success: '열림', on_failure: '싸움' },
+    { name: '2장', goal: '목표', climax_kind: 'encounter', climax_key: 'fight', climax: '싸움', lead_in: '계기', on_success: '열림', on_failure: '붙잡힘' },
+  ], sides: [{ name: '곁가지', ties_to: '1장' }] };
+  it('자리 나누기: 고비가 장면인 장 → 사이드 → 인물 관계 (서로 다르게)', async () => {
+    const { sceneSlots } = await import('./scenes');
+    const slots = sceneSlots(sampleWorld, spine as never, 3);
+    expect(slots).toHaveLength(3);
+    expect(slots[0]).toContain('"haggle"');
+    expect(slots[1]).toContain('곁가지');
+    expect(slots[2]).toContain('인물 관계');
+    expect(new Set(slots).size).toBe(3);
+  });
+  it('뼈대 1회 + 장면 3회를 동시에 보내고, 한 장면이 실패해도 나머지는 살린다', async () => {
+    const { spineOf } = await import('./spine');
+    let inFlight = 0, peak = 0; const labels: string[] = [];
+    const llm = { stream: async () => '', json: async <T,>(req: { label?: string; user: string }) => {
+      labels.push(req.label ?? '');
+      if (req.label === '이야기 뼈대') return spine as T;
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise((res) => setTimeout(res, 5));
+      inFlight--;
+      if (req.label === '장면 2/3') throw new Error('boom');
+      expect(req.user).toContain('## 이 호출이 맡은 장면');
+      return { scenes: [{ ...draft(), name: `장면 ${req.label}`, key: req.label === '장면 1/3' ? 'haggle' : 'other' }] } as T;
+    } };
+    const r = await generateScenes(llm as never, structuredClone(sampleWorld), () => {}, undefined, '', 3, { withSpine: true, split: true });
+    expect(labels.sort()).toEqual(['이야기 뼈대', '장면 1/3', '장면 2/3', '장면 3/3']);
+    expect(peak).toBe(3);
+    expect(r.world.scenes).toHaveLength(2);
+    expect(spineOf(r.world)).toContain('1장 「1장」');
+    expect(r.notes.join(' ')).toContain('1개는 요청이 실패');
+  });
+  it('뼈대를 못 짜면 한 번에 만드는 길로 간다', async () => {
+    let calls = 0;
+    const llm = { stream: async () => '', json: async <T,>(req: { label?: string }) => { calls++; if (req.label === '이야기 뼈대') throw new Error('x'); return { spine, scenes: [draft()] } as T; } };
+    const r = await generateScenes(llm as never, structuredClone(sampleWorld), () => {}, undefined, '', 3, { withSpine: true, split: true });
+    expect(calls).toBe(2);
+    expect(r.world.scenes).toHaveLength(1);
+  });
+});

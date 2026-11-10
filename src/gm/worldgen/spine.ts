@@ -64,13 +64,13 @@ export function spineOf(world: WorldPackage): string {
 }
 
 /** 뼈대를 만들어 GM 메모 끝에 남긴다 (이미 있으면 바꾼다) */
-export async function generateSpine(llm: LlmClient, world: WorldPackage, summary: string, request = '', signal?: AbortSignal): Promise<{ world: WorldPackage; spine: string }> {
+export async function generateSpine(llm: LlmClient, world: WorldPackage, summary: string, request = '', signal?: AbortSignal): Promise<{ world: WorldPackage; spine: string; draft?: SpineDraft }> {
   const draft = await llm.json<SpineDraft>({
     system: `${SPINE_SYSTEM}\n- ${genreGuide(world)}`,
     user: `${summary}${world.gmNotes?.trim() ? `\n\n## GM 메모 (숨은 설정)\n${world.gmNotes.split(SPINE_MARK)[0]!.trim().slice(0, 2000)}` : ''}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 4000, effort: 'medium', label: '이야기 뼈대',
   }, SPINE_SCHEMA, signal);
-  return applySpine(world, draft);
+  return { ...applySpine(world, draft), ...(draft?.chapters?.length ? { draft } : {}) };
 }
 
 /** 뼈대 초안을 GM 메모 끝에 남긴다 (이미 있으면 바꾼다) */

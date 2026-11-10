@@ -9,7 +9,7 @@ import type { SceneAction, SceneCond, SceneDef, SceneDelta, SceneEnd, StoryEffec
 import type { LlmClient } from '../../llm/types';
 import { autoSceneArt } from '../../data/sceneArt';
 import { worldSummary } from './generate';
-import { applySpine, SPINE_RULES, SPINE_SCHEMA, type SpineDraft } from './spine';
+import { applySpine, generateSpine, SPINE_RULES, SPINE_SCHEMA, type SpineDraft } from './spine';
 
 // ---------------------------------------------------------------- 초안 형식
 
@@ -198,8 +198,13 @@ export function scenesFromDraft(world: WorldPackage, drafts: SceneDraft[]): { sc
 export async function generateScenes(
   llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal, request = '', count = 3,
   /** withSpine (v0.92): 이야기 뼈대를 같은 호출에서 먼저 짜고 그 뼈대대로 장면을 쓴다 — 뼈대만을 위한 AI 호출 한 번을 줄인다 */
-  opts: { withSpine?: boolean } = {},
+  /** split (v0.96): 뼈대를 짧은 호출로 먼저 짜고, 장면을 하나씩 동시에 쓴다 — 한 호출이 길게 생각하며 차례로 쓰던 것을 나눈다. 뼈대를 못 짜면 한 번에 만드는 길로 간다 */
+  opts: { withSpine?: boolean; split?: boolean } = {},
 ): Promise<{ world: WorldPackage; notes: string[] }> {
+  if (opts.withSpine && opts.split && count >= 2) {
+    const r = await generateScenesSplit(llm, world, onStage, signal, request, count);
+    if (r) return r;
+  }
   onStage(opts.withSpine ? 'AI가 이야기 뼈대를 짜고 장면을 쓰는 중…' : 'AI가 장면을 쓰는 중 (협상·추격·대결·데이트…)…', 5, 90);
   const schema = opts.withSpine ? { ...SCENES_DRAFT_SCHEMA, required: ['spine', 'scenes'], properties: { spine: SPINE_SCHEMA, ...SCENES_DRAFT_SCHEMA.properties } } : SCENES_DRAFT_SCHEMA;
   const draft = await llm.json<{ scenes: SceneDraft[]; spine?: SpineDraft }>({
@@ -213,4 +218,56 @@ export async function generateScenes(
   const next: WorldPackage = { ...world, ...(r.flags.length ? { flags: [...(world.flags ?? []), ...r.flags] } : {}), ...(r.scenes.length ? { scenes: [...(world.scenes ?? []), ...r.scenes] } : {}) };
   onStage('완료', 100, 100);
   return { world: next, notes: [...(r.scenes.length ? [`장면 ${r.scenes.length}개를 만들었습니다: ${r.scenes.map((s) => s.name).join(', ')}. 편집기 장면 탭에서 다듬을 수 있습니다.`] : ['장면을 만들지 못했습니다. 편집기 장면 탭에서 "AI로 장면 추가"로 다시 시도할 수 있습니다.']), ...r.notes] };
+}
+
+/** 장면마다 맡을 자리: 뼈대에서 고비가 장면인 장이 먼저, 남는 자리는 사이드·인물 관계 */
+export function sceneSlots(world: WorldPackage, spine: SpineDraft, count: number): string[] {
+  const slots = spine.chapters.flatMap((c, i) => (c.climax_kind === 'scene' ? [`뼈대 ${i + 1}장 「${c.name}」의 고비 — key는 "${c.climax_key}" 그대로. ${c.climax}`] : [])).slice(0, count);
+  const sides = [...(spine.sides ?? [])];
+  // 인물 관계 장면의 중심 인물 후보: 연인 가능·동료 후보가 먼저 (자리마다 다른 인물)
+  const people = [...world.characters].sort((a, b) => Number(Boolean(b.romanceable || b.companion)) - Number(Boolean(a.romanceable || a.companion)));
+  for (let k = 0; slots.length < count; k++) {
+    const side = sides.shift();
+    const who = people[k % Math.max(1, people.length)];
+    slots.push(side ? `사이드 「${side.name}」 (${side.ties_to})의 장면` : `뼈대의 고비가 아닌 인물 관계 장면${who ? ` — 중심 인물 후보: ${who.name} (${short(who.id)})` : ''}`);
+  }
+  return slots;
+}
+
+async function generateScenesSplit(
+  llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal: AbortSignal | undefined, request: string, count: number,
+): Promise<{ world: WorldPackage; notes: string[] } | null> {
+  onStage('AI가 이야기 뼈대를 짜는 중…', 5, 30);
+  let sp: Awaited<ReturnType<typeof generateSpine>>;
+  try { sp = await generateSpine(llm, world, worldSummary(world), request, signal); } catch (e) { if (signal?.aborted) throw e; return null; }
+  if (!sp.draft) return null;
+  const base = sp.world;
+  const slots = sceneSlots(base, sp.draft, count);
+  let done = 0;
+  onStage(`AI가 장면 ${slots.length}개를 동시에 쓰는 중…`, 30, 90);
+  const summary = worldSummary(base);
+  const got = await Promise.all(slots.map(async (slot, i) => {
+    try {
+      const d = await llm.json<{ scenes: SceneDraft[] }>({
+        system: `${SCENES_SYSTEM}\n- ${genreGuide(base)}`,
+        user: `${summary}\n\n## 만들 개수\n1개\n\n## 이 호출이 맡은 장면\n${slot}\n\n## 다른 호출이 동시에 쓰는 장면 (겹치지 않게 — 종류·상대 인물을 다르게)\n${slots.filter((_, j) => j !== i).map((x) => `- ${x}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
+        maxTokens: 6000, effort: 'medium', label: `장면 ${i + 1}/${slots.length}`,
+      }, SCENES_DRAFT_SCHEMA, signal);
+      onStage(`AI가 장면을 쓰는 중… (${++done}/${slots.length})`, 30 + Math.round((done / slots.length) * 60), 90);
+      return (d?.scenes ?? []).slice(0, 1);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      return null;
+    }
+  }));
+  const failed = got.filter((g) => g === null).length;
+  if (failed === slots.length) throw new Error('장면 요청이 모두 실패했습니다');
+  // 같은 이름의 장면은 하나만
+  const seen = new Set<string>();
+  const drafts = got.flatMap((g) => g ?? []).filter((d) => { const k = String(d?.name ?? '').trim(); if (!k || seen.has(k)) return false; seen.add(k); return true; });
+  onStage('받은 장면을 정리하고 검사하는 중…', 92, 99);
+  const r = scenesFromDraft(base, drafts);
+  const next: WorldPackage = { ...base, ...(r.flags.length ? { flags: [...(base.flags ?? []), ...r.flags] } : {}), ...(r.scenes.length ? { scenes: [...(base.scenes ?? []), ...r.scenes] } : {}) };
+  onStage('완료', 100, 100);
+  return { world: next, notes: [...(r.scenes.length ? [`장면 ${r.scenes.length}개를 만들었습니다: ${r.scenes.map((x) => x.name).join(', ')}. 편집기 장면 탭에서 다듬을 수 있습니다.`] : ['장면을 만들지 못했습니다. 편집기 장면 탭에서 "AI로 장면 추가"로 다시 시도할 수 있습니다.']), ...(failed ? [`장면 ${failed}개는 요청이 실패해 빠졌습니다.`] : []), ...r.notes] };
 }
