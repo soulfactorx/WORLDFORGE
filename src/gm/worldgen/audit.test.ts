@@ -52,3 +52,23 @@ describe('세계관 점검·마무리 (v0.78)', () => {
     expect(w.characters[0]!.appearance).toBe('원문에 없음'); // 원본은 그대로
   });
 });
+
+describe('AI 채우기: 여러 묶음 (v0.86)', () => {
+  it('묶음을 동시에 보내고, 한 묶음이 실패해도 나머지 제안은 살린다', async () => {
+    const gaps = Array.from({ length: 70 }, (_, i) => ({ key: `location.description:loc/x${i}`, area: 'location' as const, level: 'warning' as const, label: `장소 ${i}`, detail: '', fill: { field: 'location.description' as const, id: `loc/x${i}` } }));
+    let live = 0, peak = 0, call = 0;
+    const llm: LlmClient = { stream: async () => '', json: async <T,>(r: { user: string }) => {
+      const n = call++;
+      live++; peak = Math.max(peak, live);
+      await new Promise((res) => setTimeout(res, 5));
+      live--;
+      if (n === 1) throw new Error('과부하');
+      const keys = [...r.user.matchAll(/- (location\.description:\S+) ·/g)].map((m) => m[1]!);
+      return { fills: keys.map((key) => ({ key, value: '돌담이 낮게 둘러선 마당.', reason: '' })), notes: n === 0 ? ['메모'] : [] } as T;
+    } };
+    const r = await aiFill(llm, { ...structuredClone(sampleWorld) }, gaps as never);
+    expect(peak).toBeGreaterThan(1);
+    expect(r.patches.length).toBe(40); // 30 + 10 (가운데 30개 묶음은 실패)
+    expect(r.notes.some((n) => n.includes('1묶음'))).toBe(true);
+  });
+});

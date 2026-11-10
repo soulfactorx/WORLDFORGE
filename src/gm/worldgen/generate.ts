@@ -130,6 +130,9 @@ export async function generateWorld(
   let { world, notes } = worldFromDraft(draft, { id, contentRating: opts.contentRating, author: opts.author });
   const gp = genreOf(opts.genre, opts.genreCustom);
   world = { ...world, genre: { id: gp.id, ...(gp.id === 'custom' && opts.genreCustom ? { custom: opts.genreCustom } : {}) } };
+  // 기본 이미지 고르기는 인물·장소만 있으면 된다 (v0.86): 뼈대·장면·임무·규칙을 만드는 동안 함께 진행하고 끝에서 합친다
+  const stockP = assignStockImages(world, llm, signal);
+  stockP.catch(() => {});
   // 이야기 뼈대 (v0.85): 임무·장면·조우를 따로 만들기 전에 서로 어떻게 이어지는지 먼저 정한다. 실패해도 계속한다
   if (opts.withScenario || scenes) {
     try {
@@ -169,8 +172,8 @@ export async function generateWorld(
       notes = [...notes, `세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`];
     }
   }
-  onStage('인물·장소에 기본 이미지 고르는 중…', opts.withRules !== false ? scenesEnd + 4 : scenesEnd, 97);
-  const st = await assignStockImages(world, llm, signal);
+  onStage('기본 이미지 고르기를 마무리하는 중…', opts.withRules !== false ? scenesEnd + 4 : scenesEnd, 97);
+  const st = await stockP;
   world = { ...world, assets: st.assets };
   if (st.added) notes = [...notes, `인물·장소 ${st.added}곳에 앱 내장 기본 이미지를 붙였습니다. 편집기 이미지 탭에서 바꿀 수 있습니다.`];
   { const nd = imageNeeds(world); if (nd.length) notes = [...notes, `진짜 이미지가 없는 인물·장소 ${nd.length}곳은 편집기 이미지 탭의 "부족한 이미지"에서 그림을 올리거나, 추천 파일 이름(예: ${nd[0]!.fileName})으로 내 기본 이미지에 올리면 자동으로 붙습니다.`]; }

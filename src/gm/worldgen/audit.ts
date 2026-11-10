@@ -152,12 +152,23 @@ export async function aiFill(llm: LlmClient, w: WorldPackage, gaps: Gap[], onPro
   if (!chunks.length) chunks.push([]);
   const patches: Patch[] = []; const notes: string[] = [];
   let done = 0; onProgress?.(0, chunks.length);
-  for (const [i, ch] of chunks.entries()) {
-    const r = await llm.json<{ fills: { key: string; value: string; reason: string }[]; notes: string[] }>({
+  // 묶음을 동시에 3개씩 (v0.86: 전에는 하나씩 차례로). 한 묶음이 실패해도 나머지 제안은 살린다
+  let failed = 0; let firstError = '';
+  const byChunk: Patch[][] = chunks.map(() => []);
+  const run = async (ch: Gap[], i: number) => {
+    let r: { fills: { key: string; value: string; reason: string }[]; notes: string[] };
+    try {
+    r = await llm.json<{ fills: { key: string; value: string; reason: string }[]; notes: string[] }>({
       system: SYSTEM,
       user: `${brief}\n\n## 채울 칸 (key · 무엇 · 지금 값)\n${ch.map((g) => `- ${g.key} · ${g.label} · ${cut(currentValue(w, g.fill!.field, g.fill!.id), 60) || '(비어 있음)'}`).join('\n') || '(없음 — notes만 써라)'}${i > 0 ? '\n\n(notes는 앞에서 이미 받았으니 비워라)' : ''}`,
       maxTokens: 12000, label: `세계관 점검 ${i + 1}/${chunks.length}`,
     }, SCHEMA, signal);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      failed++; firstError ||= (e as Error).message;
+      onProgress?.(++done, chunks.length);
+      return;
+    }
     for (const f of r.fills ?? []) {
       const g = ch.find((x) => x.key === f.key);
       if (!g?.fill) continue;
@@ -165,11 +176,16 @@ export async function aiFill(llm: LlmClient, w: WorldPackage, gaps: Gap[], onPro
       if (g.fill.field === 'character.gender') { value = value.toUpperCase(); if (value !== 'M' && value !== 'F') continue; }
       else if (g.fill.field === 'character.class') { if (!classesFor(w).some((k) => k.id === value)) continue; }
       else if (!value || isPlaceholderText(value)) continue;
-      patches.push({ key: g.key, field: g.fill.field, ...(g.fill.id ? { id: g.fill.id } : {}), label: g.label, before: currentValue(w, g.fill.field, g.fill.id), value, reason: (f.reason ?? '').trim() });
+      byChunk[i]!.push({ key: g.key, field: g.fill.field, ...(g.fill.id ? { id: g.fill.id } : {}), label: g.label, before: currentValue(w, g.fill.field, g.fill.id), value, reason: (f.reason ?? '').trim() });
     }
     if (i === 0) notes.push(...(r.notes ?? []).map((n) => n.trim()).filter(Boolean).slice(0, 8));
     onProgress?.(++done, chunks.length);
-  }
+  };
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, async () => { while (next < chunks.length) { const i = next++; await run(chunks[i]!, i); } }));
+  patches.push(...byChunk.flat());
+  if (failed === chunks.length) throw new Error(firstError || 'AI 점검 요청이 모두 실패했습니다');
+  if (failed) notes.push(`⚠ ${chunks.length}묶음 중 ${failed}묶음은 AI 응답을 받지 못했습니다 — 다시 점검하면 남은 칸을 채웁니다.`);
   return { patches, notes };
 }
 

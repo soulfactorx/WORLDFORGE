@@ -16,7 +16,7 @@ import { GENRES } from '../../data/genres';
 import { ABILITIES, CLASSES } from '../../engine/character/rules';
 import { suggestedStandardArray } from '../../engine/character/sheet';
 import { validateWorld, type Issue } from '../../engine/package/validate';
-import type { AssetMeta, NpcRelationKind, StartOption, WorldPackage } from '../../engine/schema';
+import type { AssetMeta, Character, NpcRelationKind, StartOption, WorldPackage } from '../../engine/schema';
 import { type AssetInput, classifyAssetsAI, matchAssets } from '../../importers/assetmatch';
 import type { BundleAsset, CharxBundle } from '../../importers/bundle';
 import { replaceMacros } from '../../importers/charx';
@@ -402,47 +402,53 @@ export async function cardToWorld(
     }
   }
 
-  let assets: AssetMeta[] = matchAssets(inputs, targets, locTargets, ents.characters.length === 1 ? { mainCharacterId: ents.characters[0]!.id } : {});
-  if (opts.classifyImages && assets.some((a) => a.kind === 'other')) {
-    try {
-      assets = await classifyAssetsAI(llm, assets, ents.characters.map((c, i) => ({ id: c.id, name: c.name, aliases: targets[i]!.aliases })), world.locations.map((l) => ({ id: l.id, name: l.name })),
-        (done, total, info) => onStage(`AI가 이미지 이름 분류 중… 이미지 ${done.toLocaleString()}/${total.toLocaleString()}${info ? ` · ${info}` : ''}`, 60 + Math.round((done / Math.max(1, total)) * 10), 70), signal);
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      notes.push(`이미지 AI 분류에 실패해 이름 규칙으로만 연결했습니다: ${(e as Error).message}`);
+  const matched: AssetMeta[] = matchAssets(inputs, targets, locTargets, ents.characters.length === 1 ? { mainCharacterId: ents.characters[0]!.id } : {});
+  // 이미지 정리(AI 분류 → 초상화 → 기본 이미지)는 이야기 만들기(뼈대 → 장면 → 임무 → 규칙)와 서로 기다릴 것이 없다.
+  // v0.86: 둘을 동시에 진행해 전체 시간을 줄인다. 이미지 쪽은 세계를 직접 바꾸지 않고 결과만 돌려주고, 끝에서 합친다
+  const imageWorld = world;
+  const imageTrack = (async () => {
+    const out: string[] = [];
+    let assets = matched;
+    if (opts.classifyImages && assets.some((a) => a.kind === 'other')) {
+      try {
+        assets = await classifyAssetsAI(llm, assets, ents.characters.map((c, i) => ({ id: c.id, name: c.name, aliases: targets[i]!.aliases })), imageWorld.locations.map((l) => ({ id: l.id, name: l.name })), undefined, signal);
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        out.push(`이미지 AI 분류에 실패해 이름 규칙으로만 연결했습니다: ${(e as Error).message}`);
+      }
     }
-  }
-  // 성별 이미지만 있는 인물: 첫 이미지의 성별을 쓴다
-  for (const c of world.characters) if (!c.gender) { const g = assets.find((a) => a.characterId === c.id && a.gender)?.gender; if (g) c.gender = g; }
-  world.assets = assets;
-  const byId = new Map(assets.map((a, i) => [a.id, inputs[i]!.src]));
-  const images = assets.map((a) => {
-    const src = byId.get(a.id)!;
-    return { id: a.id, read: src === 'cover' ? async () => b.cover! : () => src.read() };
-  });
-  const counts = { character: 0, scene: 0, map: 0, cover: 0, other: 0 };
-  for (const a of assets) counts[a.kind]++;
-  notes.push(`이미지 ${assets.length.toLocaleString()}장: 인물 ${counts.character} · 장면 ${counts.scene} · 지도 ${counts.map} · 표지 ${counts.cover} · 분류 안 됨 ${counts.other} (분류 안 된 이미지는 플레이 중에 쓰이지 않습니다)`);
-
-  // 초상화 (편집기·목록용 작은 이미지)
-  if (opts.makePortrait) {
-    onStage('초상화 만드는 중…', 75, 78);
-    for (const c of world.characters.slice(0, 60)) {
-      const a = assets.find((x) => x.characterId === c.id && x.tags.includes('default') && (!c.gender || !x.gender || x.gender === c.gender)) ?? assets.find((x) => x.characterId === c.id);
-      if (!a) continue;
-      try { const url = await opts.makePortrait(await images[assets.indexOf(a)]!.read()); if (url) c.portrait = url; } catch { /* 초상화 없이 */ }
+    // 성별 이미지만 있는 인물: 첫 이미지의 성별을 쓴다
+    const gender = new Map<string, 'M' | 'F'>();
+    for (const c of imageWorld.characters) if (!c.gender) { const g = assets.find((a) => a.characterId === c.id && a.gender)?.gender; if (g) gender.set(c.id, g); }
+    const genderOf = (c: Character) => c.gender ?? gender.get(c.id);
+    const byId = new Map(assets.map((a, i) => [a.id, inputs[i]!.src]));
+    const images = assets.map((a) => {
+      const src = byId.get(a.id)!;
+      return { id: a.id, read: src === 'cover' ? async () => b.cover! : () => src.read() };
+    });
+    const counts = { character: 0, scene: 0, map: 0, cover: 0, other: 0 };
+    for (const a of assets) counts[a.kind]++;
+    out.push(`이미지 ${assets.length.toLocaleString()}장: 인물 ${counts.character} · 장면 ${counts.scene} · 지도 ${counts.map} · 표지 ${counts.cover} · 분류 안 됨 ${counts.other} (분류 안 된 이미지는 플레이 중에 쓰이지 않습니다)`);
+    // 초상화 (편집기·목록용 작은 이미지)
+    const portraits = new Map<string, string>();
+    if (opts.makePortrait) {
+      for (const c of imageWorld.characters.slice(0, 60)) {
+        const g = genderOf(c);
+        const a = assets.find((x) => x.characterId === c.id && x.tags.includes('default') && (!g || !x.gender || x.gender === g)) ?? assets.find((x) => x.characterId === c.id);
+        if (!a) continue;
+        try { const url = await opts.makePortrait(await images[assets.indexOf(a)]!.read()); if (url) portraits.set(c.id, url); } catch { /* 초상화 없이 */ }
+      }
     }
-  }
-
-  // 이미지가 없는 인물·장소에는 앱 내장 기본 이미지
-  if (opts.stockImages !== false) {
-    onStage('이미지 없는 인물·장소에 기본 이미지 고르는 중…', 70, 75);
-    const st = await assignStockImages(world, llm, signal);
-    world.assets = st.assets;
-    if (st.added) notes.push(`이미지가 없는 인물·장소 ${st.added}곳에 기본 이미지를 붙였습니다${st.byAi ? ' (AI가 고름)' : ''}. 편집기 이미지 탭에서 바꿀 수 있습니다.`);
-    const nd = imageNeeds(world);
-    if (nd.length) notes.push(`진짜 이미지가 없는 인물 ${nd.filter((x) => x.kind === 'character').length}명 · 장소 ${nd.filter((x) => x.kind === 'location').length}곳은 앱 내장 그림으로 대신합니다. 편집기 이미지 탭의 "부족한 이미지"에서 그림을 올리거나, 추천 파일 이름(예: ${nd[0]!.fileName})으로 내 기본 이미지에 올리면 자동으로 붙습니다.`);
-  }
+    // 이미지가 없는 인물·장소에는 앱 내장 기본 이미지
+    if (opts.stockImages !== false) {
+      const st = await assignStockImages({ ...imageWorld, characters: imageWorld.characters.map((c) => (gender.has(c.id) ? { ...c, gender: gender.get(c.id)! } : c)), assets }, llm, signal);
+      assets = st.assets;
+      if (st.added) out.push(`이미지가 없는 인물·장소 ${st.added}곳에 기본 이미지를 붙였습니다${st.byAi ? ' (AI가 고름)' : ''}. 편집기 이미지 탭에서 바꿀 수 있습니다.`);
+    }
+    return { assets, images, gender, portraits, notes: out };
+  })();
+  // 이야기 쪽이 먼저 실패해도 이미지 쪽 오류가 처리되지 않은 채 남지 않게
+  imageTrack.catch(() => {});
 
   // 3.5) 이야기 뼈대 (v0.85): 원작 연표의 핵심 사건을 고비로 — 임무·장면·조우가 서로 이어지게
   if (opts.withScenario || opts.withScenes !== false) {
@@ -490,7 +496,20 @@ export async function cardToWorld(
       notes.push(`세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`);
     }
   }
-  onStage('검사 중…', 94, 95);
+  // 이미지 쪽 결과를 합친다 (이야기 쪽이 인물 객체를 새로 만들었을 수 있으므로 ID로 붙인다)
+  onStage('이미지 정리를 마무리하는 중…', 94, 95);
+  const img = await imageTrack;
+  const images = img.images;
+  world = {
+    ...world, assets: img.assets,
+    characters: world.characters.map((c) => ({ ...c, ...(!c.gender && img.gender.has(c.id) ? { gender: img.gender.get(c.id)! } : {}), ...(img.portraits.has(c.id) ? { portrait: img.portraits.get(c.id)! } : {}) })),
+  };
+  notes.push(...img.notes);
+  if (opts.stockImages !== false) {
+    const nd = imageNeeds(world);
+    if (nd.length) notes.push(`진짜 이미지가 없는 인물 ${nd.filter((x) => x.kind === 'character').length}명 · 장소 ${nd.filter((x) => x.kind === 'location').length}곳은 앱 내장 그림으로 대신합니다. 편집기 이미지 탭의 "부족한 이미지"에서 그림을 올리거나, 추천 파일 이름으로 내 기본 이미지에 올리면 자동으로 붙습니다.`);
+  }
+  onStage('검사 중…', 95, 96);
   return { world, notes, issues: validateWorld(world), images };
 }
 

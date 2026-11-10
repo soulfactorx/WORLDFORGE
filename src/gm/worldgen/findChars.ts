@@ -103,7 +103,8 @@ export async function findCharactersAI(
       onProgress?.(++done, chunks.length);
     }
   };
-  await Promise.all([run(), run()]);
+  // 묶음을 동시에 3개씩 (v0.86: 2 → 3, 번역과 같은 수)
+  await Promise.all([run(), run(), run()]);
   // 같은 인물 중복 제거 (이름·영문 이름)
   const seen = new Set(known.map((k) => k.toLowerCase()));
   return found.filter((c) => {

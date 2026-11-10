@@ -634,7 +634,10 @@ export async function runTurn(
   // 6) GM 안내 — 기록관과 동시에. 실패하면 기본 안내
   onStage('GM 안내와 기록을 정리하는 중');
   const guideState = s;
-  const guideP = gmGuide(llm, world, guideState, narration, signal).catch((e) => { if (signal?.aborted) throw e; return basicGuide(world, guideState); });
+  // 이 턴에 전투·장면이 시작됐으면 선택지를 만들지 않는다 (v0.86): 화면에 보이지도 않는 안내에 AI 호출을 쓰지 않는다.
+  // 전투·장면이 끝나면 그 결과에서 이어지는 안내를 새로 만든다 (PlayScreen)
+  const guideP: Promise<GameEvent | null> = guideState.combat || guideState.scene || guideState.playerDead ? Promise.resolve(null)
+    : gmGuide(llm, world, guideState, narration, signal).catch((e) => { if (signal?.aborted) throw e; return basicGuide(world, guideState); });
 
   // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략)
   try {
@@ -662,7 +665,7 @@ export async function runTurn(
   } catch (e) {
     if (signal?.aborted && !(e instanceof SkipRecorder)) throw e;
   }
-  push(await guideP);
+  { const g = await guideP; if (g) push(g); }
 
   return { events, state: s, rejected };
 }
