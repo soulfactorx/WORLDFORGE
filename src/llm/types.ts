@@ -50,6 +50,8 @@ export interface Meter {
   sentMaxTokens?: number;
   /** 진단 (v0.95): 출력 토큰 가운데 생각(추론)에 쓴 몫 — 제공자가 알려 줄 때만 */
   reasoning?: number;
+  /** 진단 (v0.99): 다시 보낸 까닭 (길이 제한 · JSON 오류 · HTTP 429 …) */
+  retryNotes?: string[];
 }
 
 /** 사용량이 없으면 글자 수로 추정 (한국어 기준 대략 2글자당 1토큰) */

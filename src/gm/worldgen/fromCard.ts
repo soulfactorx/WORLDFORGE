@@ -264,7 +264,8 @@ export async function cardToWorld(
   let translated = 0;
   const [d, tr] = await Promise.all([
     llm.json<CardWorldDraft>({
-      system: `${SYSTEM}\n- ${RATING_GUIDE[opts.contentRating]}`,
+      // v0.99: 인물이 많은 카드는 답이 길어 출력 한도(32k)에 걸리고, "짧게"를 붙여 처음부터 다시 받느라 2~3분을 더 썼다 — 처음부터 짧게 쓰게 한다
+      system: `${SYSTEM}\n- ${RATING_GUIDE[opts.contentRating]}${charInfo.length >= 40 ? `\n- (중요) 이 카드는 인물이 ${charInfo.length}명으로 많다. 출력이 길이 제한에 걸리지 않게 가장 짧게 쓴다: 장소 묘사 1문장, 연표 항목 1문장·핵심 15개 이내, 시작 방식 4개 이내·시작 장면 3문장, 인물 배치는 꼭 필요한 칸만.` : ''}`,
       user: `<card_data>\n${cardDataPrompt(b, card, analyzed, charInfo, mature)}\n</card_data>`,
       maxTokens: 32000, effort: 'medium', label: '세계 구조 (장소·연표·시작 방식)',
     }, CARD_WORLD_SCHEMA, signal),

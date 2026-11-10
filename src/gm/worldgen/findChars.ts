@@ -104,7 +104,8 @@ export async function findCharactersAI(
     }
   };
   // 묶음을 동시에 3개씩 (v0.86: 2 → 3, 번역과 같은 수)
-  await Promise.all([run(), run(), run()]);
+  // v0.99: 동시 3 → 6 (묶음 10개가 3개씩 돌아 2분 반이 걸렸다)
+  await Promise.all(Array.from({ length: Math.min(6, chunks.length) }, () => run()));
   // 같은 인물 중복 제거 (이름·영문 이름)
   const seen = new Set(known.map((k) => k.toLowerCase()));
   return found.filter((c) => {

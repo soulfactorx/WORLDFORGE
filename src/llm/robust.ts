@@ -155,6 +155,7 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
             announceResume(req.label);
             continue;
           }
+          if (req.meter) (req.meter.retryNotes ??= []).push(e instanceof LlmTruncatedError ? '길이 제한' : e instanceof LlmJsonError ? 'JSON 오류' : (e as { status?: number })?.status ? `HTTP ${(e as { status?: number }).status}` : String((e as Error)?.message ?? e).slice(0, 40));
           if (e instanceof LlmTruncatedError) {
             lastTruncated = e.text;
             r = { ...r, maxTokens: Math.min(cap, Math.round(r.maxTokens * 1.5)), system: `${req.system}\n- (중요) 앞선 응답이 길이 제한에 걸려 잘렸다. 각 설명을 짧게 줄이고 항목 수를 줄여, 같은 형식의 완전한 JSON을 출력한다.` };

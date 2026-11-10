@@ -163,7 +163,7 @@ function RunTimelineView({ name, rows }: { name: string; rows: UsageRow[] }) {
           <li key={i} className={s.ok ? '' : 'err'}>
             <div className="run-step-line">
               <span className="usage-name">{s.label}</span>
-              <span className="small muted">+{sec(s.startMs)} 시작 · <b>{sec(s.ms)}</b>{s.waitMs > 500 ? ` (대기 ${sec(s.waitMs)})` : ''} · {tok(s.input)}→{tok(s.output)}{s.reasoning ? ` (생각 ${tok(s.reasoning)})` : ''} · {s.tps}tok/s · 한도 {s.maxTokens ? tok(s.maxTokens) : '?'}{s.effort ? ` · ${s.effort}` : ''}{s.calls > 1 ? ` · 재시도 ${s.calls - 1}` : ''} · {s.model}{!s.ok ? ` · ❌ ${s.error ?? ''}` : ''}</span>
+              <span className="small muted">+{sec(s.startMs)} 시작 · <b>{sec(s.ms)}</b>{s.waitMs > 500 ? ` (대기 ${sec(s.waitMs)})` : ''} · {tok(s.input)}→{tok(s.output)}{s.reasoning ? ` (생각 ${tok(s.reasoning)})` : ''} · {s.tps}tok/s · 한도 {s.maxTokens ? tok(s.maxTokens) : '?'}{s.effort ? ` · ${s.effort}` : ''}{s.calls > 1 ? ` · 재시도 ${s.calls - 1}${s.retryWhy ? ` (${s.retryWhy})` : ''}` : ''} · {s.model}{!s.ok ? ` · ❌ ${s.error ?? ''}` : ''}</span>
             </div>
             <span className="run-bar" aria-hidden>
               <span className="run-wait" style={{ left: `${(s.startMs / span) * 100}%`, width: `${(s.waitMs / span) * 100}%` }} />
