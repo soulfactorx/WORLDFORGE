@@ -205,7 +205,7 @@ export async function generateScenes(
   const draft = await llm.json<{ scenes: SceneDraft[]; spine?: SpineDraft }>({
     system: `${SCENES_SYSTEM}${opts.withSpine ? `\n\n먼저 spine에 "이야기 뼈대"를 짠다 (그다음 scenes를 그 뼈대대로 쓴다):\n${SPINE_RULES}` : ''}\n- ${genreGuide(world)}`,
     user: `${worldSummary(world)}${world.scenes?.length ? `\n\n## 이미 있는 장면 (겹치지 않게)\n${world.scenes.map((s) => `- ${s.name}`).join('\n')}` : ''}\n\n## 만들 개수\n${count}개${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
-    maxTokens: 12000, effort: 'medium',
+    maxTokens: 12000, effort: 'medium', label: opts.withSpine ? '이야기 뼈대 + 장면' : '장면',
   }, schema, signal);
   onStage('받은 장면을 정리하고 검사하는 중…', 92, 99);
   if (opts.withSpine) world = applySpine(world, draft?.spine).world;

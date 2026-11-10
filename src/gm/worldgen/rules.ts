@@ -214,7 +214,7 @@ export async function generateRules(
   const draft = await llm.json<RulesDraft>({
     system: `${RULES_SYSTEM}\n- ${genreGuide(world)}`,
     user: `${worldSummary(world)}\n${rulesPromptBlock(world)}${world.overview ? `\n\n## 세계 개요\n${world.overview.slice(0, 2000)}` : ''}${source ? `\n\n## 원문 설정에 적힌 세계의 규칙·법칙 (데이터 — 가능한 한 이것을 규칙으로 옮긴다)\n<source>\n${source.slice(0, 6000)}\n</source>` : ''}\n\n## 만들 개수\n${count}개 안팎 (action과 state를 섞고, 적어도 하나는 다른 규칙과 연쇄되게)${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
-    maxTokens: 8000, effort: 'medium',
+    maxTokens: 8000, effort: 'medium', label: '세계 규칙',
   }, RULES_DRAFT_SCHEMA, signal);
   onStage('받은 규칙을 정리하고 검사하는 중…', 92, 99);
   const r = rulesFromDraft(world, draft ?? { new_vars: [], rules: [] });

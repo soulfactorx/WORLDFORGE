@@ -6,7 +6,7 @@
  *  - 기본은 동시에 4개까지 (v0.86 이전에 한 단계가 쓰던 최대치). 나머지는 순서대로 기다린다
  *  - 요청 한도에 걸리면 동시 수를 하나 줄이고, 한동안(90초) 한도에 걸리지 않으면 다시 하나씩 늘린다
  */
-import type { LlmClient } from './types';
+import type { LlmClient, LlmRequest } from './types';
 
 export interface Limiter {
   run<T>(job: () => Promise<T>): Promise<T>;
@@ -34,10 +34,17 @@ export function createLimiter(max = 4, recoverMs = 90_000): Limiter {
   };
 }
 
+/** 진단: 차례를 기다린 시간과 실제로 보낸 출력 한도를 계측기에 남긴다 */
+function note(req: LlmRequest, queuedAt: number) {
+  if (!req.meter) return;
+  req.meter.waitMs = (req.meter.waitMs ?? 0) + (Date.now() - queuedAt);
+  req.meter.sentMaxTokens = req.maxTokens;
+}
+
 /** 실제 요청을 보내는 구간만 제한한다 (재시도를 기다리는 동안에는 자리를 차지하지 않게 robust 안쪽에 둔다) */
 export function limited(llm: LlmClient, limiter: Limiter): LlmClient {
   return {
-    stream: (req, onText, signal) => limiter.run(() => llm.stream(req, onText, signal)),
-    json: (req, schema, signal) => limiter.run(() => llm.json(req, schema, signal)),
+    stream: (req, onText, signal) => { const t0 = Date.now(); return limiter.run(() => { note(req, t0); return llm.stream(req, onText, signal); }); },
+    json: (req, schema, signal) => { const t0 = Date.now(); return limiter.run(() => { note(req, t0); return llm.json(req, schema, signal); }); },
   };
 }

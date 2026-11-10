@@ -44,6 +44,9 @@ export interface Meter {
   calls: number;
   /** 제공자가 사용량을 주지 않아 글자 수로 추정했다 */
   estimated?: boolean;
+  /** 진단 (v0.93): 동시 요청 제한 때문에 차례를 기다린 시간(ms) · 실제로 보낸 출력 한도 (재시도 중 마지막 값) */
+  waitMs?: number;
+  sentMaxTokens?: number;
 }
 
 /** 사용량이 없으면 글자 수로 추정 (한국어 기준 대략 2글자당 1토큰) */

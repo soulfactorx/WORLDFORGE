@@ -1,3 +1,4 @@
+import { beginRun, endRun } from '../llm/usage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
 import { analyzeBundle, cardToWorld } from '../gm/worldgen/fromCard';
@@ -129,6 +130,7 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
     const signal = abort.current.signal;
     setPct({ at: 0, next: 3, since: Date.now(), start: Date.now() });
     setFailed(false);
+    const runId = beginRun(`카드로 세계 만들기 — ${bundle.card.name}`.slice(0, 60));
     try {
       if (!reuse) await clearGenCache(bundle.fingerprint);
       let hits = 0;
@@ -154,6 +156,7 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
       if (!signal.aborted) { setError((e as Error).message); setFailed(true); }
       setStored(await genCacheCount(bundle.fingerprint));
     } finally {
+      endRun(runId);
       setStage(''); setProgress(null); setImageStage(null); setPct({ at: 0, next: 0, since: 0, start: 0 });
     }
   }

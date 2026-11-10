@@ -124,7 +124,7 @@ export async function generateWorld(
   const draft = await llm.json<WorldDraft>({
     system: `${WORLD_SYSTEM}\n- ${genreGuide({ genre: { id: opts.genre ?? 'high_fantasy', ...(opts.genreCustom ? { custom: opts.genreCustom } : {}) } })}${genreOf(opts.genre, opts.genreCustom).combat === 'rare' ? '\n- 이 장르는 전투보다 관계·사교가 중심이다. 동료 후보보다 관계가 깊어질 수 있는 인물을 늘린다.' : ''}`,
     user: `## 제작자 요청\n${opts.prompt}\n\n## 장르\n${genreOf(opts.genre, opts.genreCustom).label}\n\n## 규모\n${SIZE_TEXT[opts.size]}\n\n## 콘텐츠 등급\n${RATING_TEXT[opts.contentRating]}`,
-    maxTokens: 16000, effort: 'medium',
+    maxTokens: 16000, effort: 'medium', label: '세계 구조 (장소·인물·비밀)',
   }, WORLD_DRAFT_SCHEMA, signal);
   const id = `ai.${Date.now().toString(36)}`;
   let { world, notes } = worldFromDraft(draft, { id, contentRating: opts.contentRating, author: opts.author });
@@ -198,7 +198,7 @@ export async function generateScenario(
   const draft = await llm.json<ScenarioDraft>({
     system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${focusRule}`,
     user: `${worldSummary(world)}\n\n## 쓸 수 있는 적 (이 세계의 장르)\n${monstersOfWorld(world).map((m) => `- ${m.id}: ${m.name} · ${m.role} · 경험치 ${m.xp} · ${m.look}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
-    maxTokens: 12000, effort: 'medium',
+    maxTokens: 12000, effort: 'medium', label: focus === 'encounters' ? '조우' : '임무·조우·결말',
   }, scenarioDraftSchema(Object.keys(monsterTable(world))), signal);
   onStage('받은 초안을 세계에 맞춰 정리하고 검사하는 중…', 92, 99);
   const r = addScenario(world, focus === 'encounters' ? { ...draft, quests: [], endings: [], flags: [] } : draft);

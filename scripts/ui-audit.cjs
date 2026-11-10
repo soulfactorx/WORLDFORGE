@@ -110,6 +110,21 @@ const SCREENS = [
   }],
   ['장면 시험', async (p) => { await editorTab(p, '장면'); await p.click('button:has-text("추가하고 바로 테스트")'); await p.waitForSelector('.scene-tester'); await p.click('button:has-text("자동 200회")'); }],
   ['AI 사용량', async (p) => { await home(p); await tool(p, 'AI 사용량'); }],
+  ['AI 사용량: 타임라인', async (p) => {
+    await home(p); await tool(p, 'AI 사용량'); await p.waitForTimeout(600);
+    // 기록 저장소가 열린 뒤에 작업 한 번 분량의 기록을 넣는다
+    await p.evaluate(async () => {
+      const now = Date.now();
+      const row = (label, start, ms, extra = {}) => ({ at: now - 400000 + start + ms, role: 'worldgen', model: 'm', ms, input: 9000, output: Math.round(ms / 20), calls: 1, ok: true, label, area: 'card', worldName: '점검용 카드', run: 'r1', runName: '카드로 세계 만들기 — 점검용 카드', maxTokens: 12000, effort: 'medium', ...extra });
+      const rows = [row('인물 찾기 1/2 묶음', 0, 30000), row('인물 찾기 2/2 묶음', 0, 28000), row('세계 구조 (장소·연표·시작 방식)', 30000, 95000, { maxTokens: 32000 }), row('번역 1/2 묶음', 30000, 40000), row('번역 2/2 묶음', 30000, 38000, { waitMs: 9000 }), row('이야기 뼈대 + 장면', 125000, 110000, { calls: 2 }), row('임무·조우·결말', 235000, 80000), row('세계 규칙', 315000, 50000)];
+      const dbs = await indexedDB.databases();
+      for (const { name } of dbs) await new Promise((res) => { const rq = indexedDB.open(name); rq.onsuccess = () => { const d = rq.result; if (![...d.objectStoreNames].includes('usage')) { d.close(); return res(); } const tx = d.transaction('usage', 'readwrite'); rows.forEach((r) => tx.objectStore('usage').add(r)); tx.oncomplete = () => { d.close(); res(); }; tx.onerror = () => { d.close(); res(); }; }; rq.onerror = () => res(); });
+    });
+    await p.reload(); await p.waitForTimeout(400); await tool(p, 'AI 사용량');
+    await p.waitForSelector('.usage-groups');
+    await p.click('.usage-groups button:has-text("작업별")');
+    await p.click('.run-timeline > summary');
+  }],
   ['저장소 관리', async (p) => { await home(p); await tool(p, '저장소 관리'); await p.waitForSelector('.storage-worlds, .storage h3'); await p.evaluate(() => document.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''))); }],
   ['AI 점검·마무리', async (p) => { await editorTab(p, '기본'); await p.click('[aria-label="AI 점검·마무리"]'); await p.waitForSelector('.audit-panel'); await p.evaluate(() => document.querySelectorAll('.audit-panel details').forEach((d) => d.setAttribute('open', ''))); }],
   ['만계서고', async (p) => { await editorTab(p, '주인공'); await p.click('[aria-label="만계서고에서 불러오기"]'); await p.waitForSelector('.lib-cell'); }],

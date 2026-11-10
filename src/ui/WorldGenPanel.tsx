@@ -1,3 +1,4 @@
+import { beginRun, endRun } from '../llm/usage';
 import { useEffect, useRef, useState } from 'react';
 import { generateWorld, type Size } from '../gm/worldgen/generate';
 import { createLlmClient } from '../llm';
@@ -38,12 +39,14 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
     setError('');
     abort.current = new AbortController();
     setPct({ at: 0, next: 2, since: Date.now(), start: Date.now() });
+    const runId = beginRun('AI로 세계 만들기');
     try {
       const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, withScenes, withRules, genre: genre.id, ...(genre.custom ? { genreCustom: genre.custom } : {}) }, onStage, abort.current.signal);
       onDraft(r.world, r.notes);
     } catch (e) {
       if (!abort.current.signal.aborted) setError((e as Error).message);
     } finally {
+      endRun(runId);
       setStage(''); setPct({ at: 0, next: 0, since: 0, start: 0 });
     }
   }

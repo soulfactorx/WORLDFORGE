@@ -26,6 +26,10 @@ export interface CallRecord {
   error?: string;
   /** 요청 이름 (예: "인물 찾기 2/5 묶음") */
   label?: string;
+  /** 진단 (v0.93): 차례를 기다린 시간(ms) · 보낸 출력 한도 · 추론 노력 */
+  waitMs?: number;
+  maxTokens?: number;
+  effort?: string;
 }
 
 /** 턴 감사: 엔진이 AI 제안을 거부한 일 */
@@ -78,6 +82,8 @@ export const metrics = {
   subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; },
 };
 
+const diag = (req: LlmRequest, m: Meter) => ({ ...(m.waitMs ? { waitMs: m.waitMs } : {}), maxTokens: m.sentMaxTokens ?? req.maxTokens, ...(req.effort ? { effort: req.effort } : {}) });
+
 /** 계측 래퍼: 재시도까지 포함한 한 번의 요청을 기록한다 (sink를 주면 거기에도) */
 export function metered(llm: LlmClient, model: string, sink: (r: CallRecord) => void = (r) => metrics.addCall(r)): LlmClient {
   const wrap = async <T>(req: LlmRequest, run: (r: LlmRequest) => Promise<T>, outLen: (t: T) => number): Promise<T> => {
@@ -87,10 +93,10 @@ export function metered(llm: LlmClient, model: string, sink: (r: CallRecord) => 
     try {
       const out = await run({ ...req, meter });
       if (meter.calls === 0) { meter.calls = 1; meter.estimated = true; meter.input = Math.ceil((req.system.length + req.user.length) / 2); meter.output = Math.ceil(outLen(out) / 2); }
-      sink({ at: Date.now(), role, model, ms: Math.round(performance.now() - t0), input: meter.input, output: meter.output, calls: meter.calls, ...(meter.estimated ? { estimated: true } : {}), ok: true, ...(req.label ? { label: req.label } : {}) });
+      sink({ at: Date.now(), role, model, ms: Math.round(performance.now() - t0), input: meter.input, output: meter.output, calls: meter.calls, ...(meter.estimated ? { estimated: true } : {}), ok: true, ...(req.label ? { label: req.label } : {}), ...diag(req, meter) });
       return out;
     } catch (e) {
-      if ((e as Error)?.name !== 'AbortError') sink({ at: Date.now(), role, model, ms: Math.round(performance.now() - t0), input: meter.input, output: meter.output, calls: Math.max(1, meter.calls), ok: false, error: String((e as Error)?.message ?? e).slice(0, 160), ...(req.label ? { label: req.label } : {}) });
+      if ((e as Error)?.name !== 'AbortError') sink({ at: Date.now(), role, model, ms: Math.round(performance.now() - t0), input: meter.input, output: meter.output, calls: Math.max(1, meter.calls), ok: false, error: String((e as Error)?.message ?? e).slice(0, 160), ...(req.label ? { label: req.label } : {}), ...diag(req, meter) });
       throw e;
     }
   };

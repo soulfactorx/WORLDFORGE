@@ -3,6 +3,7 @@
  * 다음 단계 쪽으로 천천히 차오른다. 걸린 시간·단계 목록·중단 버튼.
  */
 import { useEffect, useRef, useState } from 'react';
+import { beginRun, endRun } from '../llm/usage';
 
 export type OnStage = (stage: string, at?: number, next?: number) => void;
 
@@ -21,9 +22,11 @@ export function useGenProgress() {
     abort.current = new AbortController();
     setPct({ at: 0, next: 3, since: Date.now(), start: Date.now() });
     setStage(first);
+    // 이 작업의 AI 호출을 한 묶음으로 기록한다 (사용량 화면 "작업별" — 단계별 걸린 시간을 본다)
+    const runId = beginRun(first.replace(/…$/, '').slice(0, 40));
     try { return await job(onStage, abort.current.signal); }
     catch (e) { if (abort.current.signal.aborted) return null; throw e; }
-    finally { setStage(''); setPct({ at: 0, next: 0, since: 0, start: 0 }); }
+    finally { endRun(runId); setStage(''); setPct({ at: 0, next: 0, since: 0, start: 0 }); }
   }
   return { stage, busy: stage !== '', pct, run, cancel: () => abort.current?.abort() };
 }
