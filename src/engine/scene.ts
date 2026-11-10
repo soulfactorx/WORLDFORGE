@@ -35,11 +35,21 @@ export function newRun(def: SceneDef): SceneRun {
   return { sceneId: def.id, gauges, states: [], ...(def.phases?.[0] ? { phase: def.phases[0].id } : {}), round: 0, used: [], log: [], ...(image ? { image } : {}) };
 }
 
-/** 지금 시작할 수 있는 장면 (진행 중인 장면·전투가 없을 때) */
+/**
+ * 진입 방식 (v0.85). 사용자 정의(entry)가 있으면 그대로, 없으면 기본:
+ * auto가 켜져 있으면 auto · 상대 인물이 있으면 offer (버튼 + GM이 흐름에 따라 연다) · 없으면 button
+ */
+export type SceneEntryMode = 'button' | 'offer' | 'auto';
+export function sceneEntry(def: SceneDef): { mode: SceneEntryMode; trigger: string; custom: boolean } {
+  if (def.entry) return { mode: def.entry.mode, trigger: def.entry.trigger?.trim() ?? '', custom: true };
+  return { mode: def.auto ? 'auto' : def.npcId ? 'offer' : 'button', trigger: '', custom: false };
+}
+
+/** 지금 시작할 수 있는 장면 (진행 중인 장면·전투가 없을 때). auto: true = 저절로 시작하는 것만, false = 플레이어·GM이 여는 것만 */
 export function availableScenes(world: WorldPackage, state: GameState, opts: { auto?: boolean } = {}): SceneDef[] {
   if (state.scene || state.combat || state.playerDead || state.ending) return [];
   return (world.scenes ?? []).filter((d) => {
-    if (opts.auto !== undefined && !!d.auto !== opts.auto) return false;
+    if (opts.auto !== undefined && (sceneEntry(d).mode === 'auto') !== opts.auto) return false;
     if (state.sceneResults?.[d.id] && !d.repeatable) return false;
     if (d.locationId && d.locationId !== state.player.locationId) return false;
     if (d.npcId) {
@@ -48,6 +58,12 @@ export function availableScenes(world: WorldPackage, state: GameState, opts: { a
     }
     return !d.start || evalCondition(world, state, d.start);
   });
+}
+
+/** GM이 흐름에 따라 열 수 있는 장면: offer 방식 + 열린 관계 사건이 가리키는 장면 */
+export function offerableScenes(world: WorldPackage, state: GameState): SceneDef[] {
+  const beatScenes = new Set((world.relationBeats ?? []).filter((b) => b.scene && state.beats?.[b.id] && !state.beats[b.id]!.done).map((b) => b.scene!));
+  return availableScenes(world, state, { auto: false }).filter((d) => sceneEntry(d).mode === 'offer' || beatScenes.has(d.id));
 }
 
 export function parseCheck(check?: string): CheckSpec | null {

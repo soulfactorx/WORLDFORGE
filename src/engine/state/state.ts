@@ -24,6 +24,8 @@ export interface LogEntry {
   choiceSkills?: string[];
   /** 선택지 성격 (v0.58) */
   choiceKinds?: string[];
+  /** 선택지가 여는 장면 (v0.85) */
+  choiceScenes?: string[];
 }
 
 export interface SceneRun { sceneId: EntityId; gauges: Record<string, number>; states: string[]; phase?: string; round: number; used: string[]; log: string[]; /** 지금 보이는 장면 그림 (v0.50) */ image?: string }
@@ -114,6 +116,12 @@ export interface GameState {
   lastRandomTurn?: number;
   /** 얻은 칭호 (v0.41) */
   titles?: string[];
+  /** 조우의 가장 최근 결과 (v0.85): 진 뒤·달아난 뒤 쉬는 턴, 조건 encounter */
+  encounterResults?: Record<EntityId, { outcome: 'victory' | 'defeat' | 'fled'; turn: number }>;
+  /** 이야기 효과가 예약한 전환 (v0.85): 앞에서부터 하나씩 시작한다 */
+  pendingTransitions?: { kind: 'scene' | 'encounter'; id: EntityId }[];
+  /** 지금까지의 이야기 요약 (v0.85) */
+  storySummary?: { text: string; upto: number };
   log: LogEntry[];
 }
 
@@ -195,6 +203,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return {
         ...s, combat: undefined, playerDead: e.playerDead || s.playerDead,
         clearedEncounters: e.outcome === 'victory' && s.combat ? [...s.clearedEncounters, s.combat.encounterId] : s.clearedEncounters,
+        ...(s.combat ? { encounterResults: { ...(s.encounterResults ?? {}), [s.combat.encounterId]: { outcome: e.playerDead ? 'defeat' : e.outcome, turn } } } : {}),
         player: { ...s.player, sheet: { ...s.player.sheet, hp: e.hp, resources: e.resources } },
         party: Object.fromEntries(Object.entries(s.party).map(([id, sh]) => [id, e.party?.[id] ? { ...sh, ...e.party[id] } : sh])),
         log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 종료 — ${label}` }],
@@ -462,10 +471,16 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, worldMinutes: s.worldMinutes + 60, party, player: { ...s.player, sheet: { ...sheet, resources: res } },
         log: [...s.log, { turn, kind: 'check', text: '짧은 휴식 (1시간) — 짧은 휴식 능력 회복' }] };
     }
+    case 'transition_queued':
+      return (s.pendingTransitions ?? []).some((x) => x.kind === e.kind && x.id === e.id) ? s : { ...s, pendingTransitions: [...(s.pendingTransitions ?? []), { kind: e.kind, id: e.id }] };
+    case 'transition_taken':
+      return { ...s, pendingTransitions: (s.pendingTransitions ?? []).filter((x) => !(x.kind === e.kind && x.id === e.id)) };
+    case 'story_summarized':
+      return { ...s, storySummary: { text: e.text, upto: e.upto } };
     case 'time_advanced':
       return { ...s, worldMinutes: s.worldMinutes + e.minutes };
     case 'gm_guide':
-      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices, ...(e.images?.length ? { images: e.images } : {}), ...(e.choiceSkills ? { choiceSkills: e.choiceSkills } : {}), ...(e.choiceKinds ? { choiceKinds: e.choiceKinds } : {}) }] };
+      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices, ...(e.images?.length ? { images: e.images } : {}), ...(e.choiceSkills ? { choiceSkills: e.choiceSkills } : {}), ...(e.choiceKinds ? { choiceKinds: e.choiceKinds } : {}), ...(e.choiceScenes ? { choiceScenes: e.choiceScenes } : {}) }] };
   }
 }
 

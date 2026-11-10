@@ -298,6 +298,11 @@ export function validateWorld(input: unknown): Issue[] {
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('trait' in cond) { if (!traitIds.has(cond.trait)) err(path, `없는 성향 축 "${cond.trait}" (${[...traitIds].join(', ')})`); return; }
     if ('var' in cond) { if (!varIds.has(cond.var)) err(path, `선언되지 않은 세계 수치 "${cond.var}"`); return; }
+    if ('encounter' in cond) {
+      if (!encIds.has(cond.encounter)) err(path, `없는 조우 "${cond.encounter}"`);
+      if (cond.is !== undefined && !['victory', 'defeat', 'fled'].includes(cond.is)) err(path, 'is는 victory/defeat/fled입니다.');
+      return;
+    }
     if ('sceneEnd' in cond) {
       const sd = ((input as unknown as WorldPackage).scenes ?? []).find((x) => x?.id === cond.sceneEnd);
       if (!sd) err(path, `없는 장면 "${cond.sceneEnd}"`);
@@ -313,7 +318,7 @@ export function validateWorld(input: unknown): Issue[] {
       return;
     }
     if ('level' in cond) { if (typeof cond.level !== 'number') err(path, 'level은 숫자입니다.'); return; }
-    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·chapter·arcDone·clock·choice·day·hasItem·money·defeated·npcAlive·npcAt·questFailed·flag·questDone·level·var·questOutcome·npcGoal 중 하나를 쓰세요.`);
+    err(path, `알 수 없는 조건 (${keys.join(', ') || '빈 객체'}). all·any·not·knows·at·cleared·inParty·relationship·stage·reputation·chapter·arcDone·clock·choice·day·hasItem·money·defeated·npcAlive·npcAt·encounter·questFailed·flag·questDone·level·var·questOutcome·npcGoal 중 하나를 쓰세요.`);
   };
   const checkRewards = (r: Rewards | undefined, p: string) => {
     if (!r) return;
@@ -587,6 +592,7 @@ export function validateWorld(input: unknown): Issue[] {
     checkCond(t.condition, `${p}.condition`);
   });
   // ---- 이야기 엔진 (설계 v3 5장)
+  const allSceneIds = new Set(((input as unknown as WorldPackage).scenes ?? []).map((x) => x?.id));
   const checkEffects = (list: unknown, path: string) => {
     if (list === undefined) return;
     if (!Array.isArray(list)) { err(path, '효과는 목록이어야 합니다.'); return; }
@@ -611,10 +617,32 @@ export function validateWorld(input: unknown): Issue[] {
       if ('money' in fx) { if (typeof fx.money !== 'number') err(p, 'money는 숫자입니다.'); return; }
       if ('trait' in fx) { if (!traitIds.has(fx.trait as string)) err(p, `없는 성향 축 "${String(fx.trait)}"`); if (typeof fx.add !== 'number') err(p, 'add 숫자가 필요합니다.'); return; }
       if ('var' in fx) { if (!varIds.has(fx.var as string)) err(p, `선언되지 않은 세계 수치 "${String(fx.var)}"`); if (typeof (fx.add ?? fx.set) !== 'number') err(p, 'add 또는 set 숫자가 필요합니다.'); return; }
-      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money·var·npcRelation 중 하나를 쓰세요.');
+      if ('startScene' in fx) { if (!allSceneIds.has(fx.startScene as string)) err(p, `없는 장면 "${String(fx.startScene)}"`); return; }
+      if ('startEncounter' in fx) { if (!encIds.has(fx.startEncounter as string)) err(p, `없는 조우 "${String(fx.startEncounter)}"`); return; }
+      if ('moveTo' in fx) { if (!locIds.has(fx.moveTo as string)) err(p, `없는 장소 "${String(fx.moveTo)}"`); return; }
+      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money·var·trait·npcRelation·startScene·startEncounter·moveTo 중 하나를 쓰세요.');
     });
   };
   deferredEffects.forEach(([l, p]) => checkEffects(l, p));
+  // ---- 연결 (v0.85): 조우의 조건·결과, 임무 단계의 고비, 장면 진입, 관계 사건의 장면
+  encounters.forEach((e, i) => {
+    const p = `encounters[${i}]`;
+    if (e.when) checkCond(e.when, `${p}.when`);
+    if (e.force) checkCond(e.force, `${p}.force`);
+    checkEffects(e.onVictory, `${p}.onVictory`); checkEffects(e.onDefeat, `${p}.onDefeat`); checkEffects(e.onFlee, `${p}.onFlee`);
+    if (e.retry !== undefined && e.retry !== 'gone' && (typeof e.retry !== 'number' || e.retry < 0 || e.retry > 99)) err(`${p}.retry`, 'retry는 0~99의 턴 수 또는 "gone"입니다.');
+  });
+  quests.forEach((q, i) => (Array.isArray(q.stages) ? q.stages : []).forEach((st, j) => {
+    const p = `quests[${i}].stages[${j}].via`;
+    if (st?.via?.encounter && !encIds.has(st.via.encounter)) err(`${p}.encounter`, `없는 조우 "${st.via.encounter}"`);
+    if (st?.via?.scene && !allSceneIds.has(st.via.scene)) err(`${p}.scene`, `없는 장면 "${st.via.scene}"`);
+  }));
+  ((input as unknown as WorldPackage).scenes ?? []).forEach((sc, i) => {
+    if (!sc?.entry) return;
+    if (!['button', 'offer', 'auto'].includes(sc.entry.mode)) err(`scenes[${i}].entry.mode`, 'button/offer/auto 중 하나입니다.');
+    if (sc.entry.mode === 'offer' && !sc.entry.trigger?.trim()) warn(`scenes[${i}].entry.trigger`, `"${sc.name}": GM이 여는 장면인데 계기(trigger)가 비어 있습니다 — 장면 설명만으로 판단합니다.`);
+  });
+  relationBeats.forEach((b, i) => { if (b?.scene && !allSceneIds.has(b.scene)) err(`relationBeats[${i}].scene`, `없는 장면 "${b.scene}"`); });
   // ---- 세계 규칙 (v0.83)
   const worldRules = arr<NonNullable<WorldPackage['rules']>[number]>('rules', false);
   worldRules.forEach((r, i) => {

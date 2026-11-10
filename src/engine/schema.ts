@@ -175,6 +175,8 @@ export interface RelationBeat {
   approach?: 'visit' | 'message' | 'none';
   /** 전갈 내용 (플레이어에게 보임) */
   message?: string;
+  /** 이 사건이 펼쳐지는 장면 (v0.85): 사건이 열려 있고 그 인물과 마주치면 GM이 이 장면을 열 수 있다 */
+  scene?: EntityId;
 }
 
 /**
@@ -253,7 +255,15 @@ export interface SceneDef {
   locationId?: EntityId;
   /** 열리는 조건 (기본 항상) */
   start?: Condition;
-  /** 조건이 맞으면 저절로 시작 (기본: 플레이어가 버튼으로) */
+  /**
+   * 진입 방식 (v0.85). 비우면 기본: 상대 인물이 있으면 offer, 없으면 button (auto가 켜져 있으면 auto).
+   * 사용자 정의: 제작자가 방식과 계기를 정한다 — 열리는 조건은 start.
+   *  - button: 플레이어가 🎭 버튼으로
+   *  - offer: 버튼 + 플레이어의 행동이 계기(trigger)에 해당하면 GM이 연다
+   *  - auto: 조건이 맞는 순간 저절로
+   */
+  entry?: { mode: 'button' | 'offer' | 'auto'; /** GM에게: 플레이어의 어떤 행동·상황이 이 장면으로 들어가는가 */ trigger?: string };
+  /** 조건이 맞으면 저절로 시작 (v0.85부터 entry.mode 'auto'와 같다) */
   auto?: boolean;
   /** 끝난 뒤 다시 할 수 있는가 */
   repeatable?: boolean;
@@ -499,7 +509,28 @@ export interface Encounter {
   trigger: string;
   /** 이기면 얻는 것 (없으면 적 경험치에 비례한 돈) */
   loot?: { money?: number; items?: ItemStack[] };
+  /**
+   * 엔진 조건 (v0.85): 참일 때만 일어날 수 있다 (GM 목록에 나온다).
+   * 비우면 — 이 조우를 완료 조건으로 쓰는 임무 단계가 있으면 그 단계가 진행 중일 때만, 없으면 언제나.
+   * 임무 단계에 걸린 조우를 언제나 열어 두려면 { all: [] }.
+   */
+  when?: Condition;
+  /** 이 조건이 참이 되면 GM 판단 없이 그 장소에서 바로 시작한다 (매복·결전) */
+  force?: Condition;
+  /** 전투 직전 한 줄 (서술 재료, 플레이어에게 보임) */
+  intro?: string;
+  /** 결과에 따라 세계에 남는 것 (엔진이 적용) */
+  onVictory?: StoryEffect[];
+  onDefeat?: StoryEffect[];
+  onFlee?: StoryEffect[];
+  /**
+   * 지거나 달아난 뒤 (v0.85): 숫자 = 그 턴 수만큼 쉬었다가 다시 일어날 수 있다 (기본 3) ·
+   * 0 = 바로 다시 · 'gone' = 다시 일어나지 않는다
+   */
+  retry?: number | 'gone';
 }
+/** 진 뒤·달아난 뒤 같은 조우가 다시 일어나기까지의 기본 턴 수 */
+export const ENCOUNTER_RETRY_TURNS = 3;
 
 // ------------------------------------------------------------ 시나리오 (v0.8)
 
@@ -548,6 +579,8 @@ export type Condition =
   | { questOutcome: EntityId; is?: string }
   /** NPC 목표 (설계 v4 E7): 진행 중·이뤄짐·꺾임 */
   | { npcGoal: EntityId; is?: 'active' | 'done' | 'stopped' }
+  /** 조우 결과 (v0.85): 치렀다 / 이 결과로 (가장 최근 결과). cleared는 승리만 본다 */
+  | { encounter: EntityId; is?: 'victory' | 'defeat' | 'fled' }
   /** 장면 결과 (v0.47): 끝났다 / 이 끝으로 / 이 결과(success·failure·neutral)로 */
   | { sceneEnd: EntityId; is?: string; outcome?: 'success' | 'failure' | 'neutral' };
 
@@ -559,6 +592,11 @@ export interface QuestStage {
   complete: Condition;
   /** 이 단계에서 이 조건이 참이 되면 임무 실패 */
   fail?: Condition;
+  /**
+   * 이 단계가 풀리는 고비 (v0.85): 조우·장면. 비우면 완료 조건(cleared·encounter·sceneEnd)에서 찾는다.
+   * 여기 걸린 조우는 이 단계가 진행 중일 때만 일어난다 (조우의 when으로 풀 수 있다). GM·서술·안내가 이 고비 쪽으로 이야기를 이끈다.
+   */
+  via?: { encounter?: EntityId; scene?: EntityId };
 }
 
 /** 퀘스트 유형 12 (설계 v3 6.1) */
@@ -711,6 +749,10 @@ export type StoryEffect =
   | { giveItem: EntityId; n?: number }
   | { takeItem: EntityId; n?: number }
   | { money: number }
+  /** 바로 이어지는 전환 (v0.85): 장면·조우를 시작한다 (그 장면·조우의 장소·조건을 보지 않는다) / 플레이어를 옮긴다 */
+  | { startScene: EntityId }
+  | { startEncounter: EntityId }
+  | { moveTo: EntityId }
   /** 두 인물의 관계가 바뀐다 (설계 v4 E7). kind none = 관계가 끊긴다 */
   | { npcRelation: EntityId; with: EntityId; kind: NpcRelationKind | 'none'; note?: string };
 

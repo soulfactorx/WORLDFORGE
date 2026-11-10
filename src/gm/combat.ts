@@ -24,16 +24,17 @@ import { abilityModifier } from '../engine/dice/dice';
 import { equippedAc, gearBonus, itemCards, itemDef, rollLoot } from '../engine/items';
 import { levelSpan } from '../engine/character/progression';
 import { currencyName } from './economy';
-import { jobEncounters } from '../engine/jobs';
+import { allEncounters, openEncounters } from '../engine/encounter';
+import { effectEvents } from './story';
 
 /**
  * 전투 진행 — 엔진 결과를 이벤트로 만든다. 전투 중에는 LLM을 호출하지 않는다 (비용·속도·결정성).
  * 전투가 끝나면 narrateCombat으로 한 번만 서술한다.
  */
 
-/** 이 장소에서 아직 끝나지 않은 조우 */
+/** 이 장소에서 지금 일어날 수 있는 조우 (이긴 것·쉬는 중인 것·조건이 안 맞는 것·임무 단계에 잠긴 것은 빠진다) */
 export function availableEncounters(world: WorldPackage, state: GameState) {
-  return [...(world.encounters ?? []), ...jobEncounters(world, state)].filter((e) => e.locationId === state.player.locationId && !state.clearedEncounters.includes(e.id));
+  return openEncounters(world, state);
 }
 
 class Builder {
@@ -103,6 +104,12 @@ function finishIfOver(b: Builder) {
       : [];
     evs.forEach((e) => b.push(e));
   }
+  // 조우 결과에 따라 세계에 남는 것 (v0.85): 승리·패배·도주 — 그 효과로 임무·장면이 이어진다
+  {
+    const def = b.world.encounters?.find((x) => x.id === cs.encounterId);
+    const fx = cs.outcome === 'victory' ? def?.onVictory : cs.outcome === 'fled' ? def?.onFlee : def?.onDefeat;
+    if (def && fx?.length) effectEvents(b.world, b.state, fx, `${def.name}: ${OUTCOME_LABEL[cs.outcome]}`).forEach((e) => b.push(e));
+  }
   // 조우 결과로 퀘스트가 진행될 수 있다
   scenarioEvents(b.world, b.state).events.forEach((e) => b.push(e));
   if (cs.outcome === 'defeat') b.push({ type: 'time_advanced', minutes: 60 });
@@ -149,6 +156,15 @@ export function beginEncounter(world: WorldPackage, state: GameState, encounterI
   if (!enc) throw new Error('이 장소에서 시작할 수 없는 조우');
   return startEncounterSpec(world, state, enc, turn, opts);
 }
+
+/** 이야기 효과(startEncounter)·강제 조우가 여는 전투 (v0.85): 장소·조건을 보지 않는다. 이미 이긴 조우는 열지 않는다 */
+export function beginEncounterAnywhere(world: WorldPackage, state: GameState, encounterId: string, turn: number, opts: EncounterOptions = {}): GameEvent[] {
+  const enc = allEncounters(world, state).find((e) => e.id === encounterId);
+  if (!enc || state.clearedEncounters.includes(enc.id) || state.combat) return [];
+  return startEncounterSpec(world, state, enc, turn, opts);
+}
+
+export const OUTCOME_LABEL = { victory: '승리', defeat: '패배', fled: '도주' } as const;
 
 /** 정해진 조우가 아닌 즉석 조우 (돌발 사건 기습) */
 export function beginAdhocEncounter(world: WorldPackage, state: GameState, spec: EncounterSpec, turn: number, opts: EncounterOptions = {}): GameEvent[] {

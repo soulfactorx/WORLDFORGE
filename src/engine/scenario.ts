@@ -70,6 +70,12 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('level' in c) return state.player.sheet.level >= c.level;
   if ('trait' in c) { const v = traitValue(world as WorldPackage, state.player.sheet, c.trait); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('var' in c) { const v = varValue(world, state, c.var); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
+  if ('encounter' in c) {
+    const r = state.encounterResults?.[c.encounter];
+    // 예전 세이브: 결과 기록이 없어도 이긴 조우는 승리로 본다
+    const outcome = r?.outcome ?? (state.clearedEncounters.includes(c.encounter) ? 'victory' : undefined);
+    return !!outcome && (c.is === undefined || outcome === c.is);
+  }
   if ('sceneEnd' in c) {
     const r = state.sceneResults?.[c.sceneEnd];
     return !!r && r.outcome !== 'abandoned' && (c.is === undefined || r.endId === c.is) && (c.outcome === undefined || r.outcome === c.outcome);

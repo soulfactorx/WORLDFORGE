@@ -119,8 +119,13 @@ export type GameEvent =
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number }
+  /** 이어지는 전환 (v0.85): 이야기 효과가 예약한 장면·조우. taken = 시작했거나(또는 시작할 수 없어) 대기에서 뺀다 */
+  | { type: 'transition_queued'; kind: 'scene' | 'encounter'; id: EntityId }
+  | { type: 'transition_taken'; kind: 'scene' | 'encounter'; id: EntityId }
+  /** 지금까지의 이야기 요약 (v0.85): 오래된 턴이 줄거리에서 빠져도 기억하게 */
+  | { type: 'story_summarized'; text: string; upto: number }
   /** GM 안내 (v0.14): 이번 턴 상황 요약 + 진행 제안 + 선택지 */
-  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[]; images?: { id: string; caption: string }[]; choiceSkills?: string[]; /** 선택지 성격 (v0.58): advance·bond·bold·wild */ choiceKinds?: string[] };
+  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[]; images?: { id: string; caption: string }[]; choiceSkills?: string[]; /** 선택지 성격 (v0.58): advance·bond·bold·wild */ choiceKinds?: string[]; /** 선택지가 여는 장면 ID ('' = 없음) (v0.85) */ choiceScenes?: string[] };
 
 export interface StoredEvent {
   saveId: string;

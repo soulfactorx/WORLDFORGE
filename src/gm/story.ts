@@ -45,6 +45,10 @@ export function effectEvents(world: WorldPackage, state: GameState, effects: Sto
     if ('giveItem' in fx) { push(gainEvent(world, { itemId: fx.giveItem, n: fx.n }, reason)); continue; }
     if ('takeItem' in fx) { push(loseEvent(world, s, { itemId: fx.takeItem, n: fx.n }, reason)); continue; }
     if ('money' in fx) { push(moneyEvent(world, s, fx.money, reason)); continue; }
+    // 전환 (v0.85): 예약만 한다 — 시나리오 평가가 전투·장면이 없을 때 앞에서부터 하나씩 시작한다
+    if ('startScene' in fx) { if (world.scenes?.some((x) => x.id === fx.startScene)) push({ type: 'transition_queued', kind: 'scene', id: fx.startScene }); continue; }
+    if ('startEncounter' in fx) { if (world.encounters?.some((x) => x.id === fx.startEncounter) && !s.clearedEncounters.includes(fx.startEncounter)) push({ type: 'transition_queued', kind: 'encounter', id: fx.startEncounter }); continue; }
+    if ('moveTo' in fx) { if (world.locations.some((l) => l.id === fx.moveTo) && s.player.locationId !== fx.moveTo) push({ type: 'moved', to: fx.moveTo }); continue; }
     if ('npcRelation' in fx) {
       const a = world.characters.find((c) => c.id === fx.npcRelation);
       const b = world.characters.find((c) => c.id === fx.with);

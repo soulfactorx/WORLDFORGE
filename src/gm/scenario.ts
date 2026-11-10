@@ -1,7 +1,9 @@
 import { levelCapOf } from '../engine/genre';
 import { rewardXp } from '../engine/character/progression';
 import { newTitles } from '../engine/renown';
-import { availableScenes, newRun } from '../engine/scene';
+import { availableScenes, newRun, sceneDef } from '../engine/scene';
+import { forcedEncounter } from '../engine/encounter';
+import { beginEncounterAnywhere, type EncounterOptions } from './combat';
 import { evalCondition, questTransitions, reachedEnding } from '../engine/scenario';
 import type { Rewards, WorldPackage } from '../engine/schema';
 import { jobRewards, jobTransitions } from '../engine/jobs';
@@ -47,7 +49,7 @@ export function rewardEvents(world: WorldPackage, state: GameState, r: Rewards |
   return out;
 }
 
-export function scenarioEvents(world: WorldPackage, state: GameState): { events: GameEvent[]; ending: string | null } {
+export function scenarioEvents(world: WorldPackage, state: GameState, opts: EncounterOptions = {}): { events: GameEvent[]; ending: string | null } {
   const events: GameEvent[] = [];
   let s = state;
   const push = (e: GameEvent) => { events.push(e); s = applyEvent(s, e, state.turn); };
@@ -162,10 +164,26 @@ export function scenarioEvents(world: WorldPackage, state: GameState): { events:
   }
   // 임무·관계·목표가 바꾼 상태로 다시 한 번 (장면·결말 전에)
   stateRuleEvents(world, s).events.forEach(push);
+  // 전환 (v0.85): 이야기 효과가 예약한 것 → 강제 조우 → 저절로 시작하는 장면. 한 번에 하나만 시작한다
+  const idle = () => !s.scene && !s.combat && !s.playerDead;
+  if (idle()) {
+    const next = s.pendingTransitions?.[0];
+    if (next) {
+      push({ type: 'transition_taken', kind: next.kind, id: next.id });
+      if (next.kind === 'scene') {
+        const d = sceneDef(world, next.id);
+        if (d) push({ type: 'scene_started', sceneId: d.id, name: d.name, run: newRun(d), ...(d.intro ? { intro: d.intro } : {}) });
+      } else beginEncounterAnywhere(world, s, next.id, s.turn, opts).forEach(push);
+    }
+  }
+  if (idle()) {
+    const forced = forcedEncounter(world, s);
+    if (forced) beginEncounterAnywhere(world, s, forced.id, s.turn, opts).forEach(push);
+  }
   // 장면 (v0.47): 저절로 시작하는 장면
-  if (!s.scene && !s.combat) {
+  if (idle()) {
     const auto = availableScenes(world, s, { auto: true })[0];
-    if (auto) push({ type: 'scene_started', sceneId: auto.id, name: auto.name, run: newRun(auto) });
+    if (auto) push({ type: 'scene_started', sceneId: auto.id, name: auto.name, run: newRun(auto), ...(auto.intro ? { intro: auto.intro } : {}) });
   }
   // 칭호 (설계 v4 E4): 기록에서 엔진이 준다
   for (const t of newTitles(world, s)) push({ type: 'title_earned', titleId: t.id, name: t.name, desc: t.desc });
