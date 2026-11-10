@@ -21,10 +21,10 @@ export function modelFor(s: LlmSettings, system: string): string {
 }
 
 /** 재시도·잘린 응답 처리·계측이 들어간 클라이언트. 역할별 모델이 있으면 요청마다 골라 쓴다 */
-export function createLlmClient(s: LlmSettings, opts?: RobustOptions & { sink?: (r: CallRecord) => void; /** 동시에 보내는 요청 수 (기본 4) */ maxConcurrent?: number }): LlmClient {
+export function createLlmClient(s: LlmSettings, opts?: RobustOptions & { sink?: (r: CallRecord) => void; /** 동시에 보내는 요청 수 (기본 6) */ maxConcurrent?: number }): LlmClient {
   const cache = new Map<string, LlmClient>();
   // 동시 요청 제한 (v0.92): 모델이 달라도 같은 제공자·키이므로 함께 센다
-  const limiter = createLimiter(opts?.maxConcurrent ?? 4);
+  const limiter = createLimiter(opts?.maxConcurrent ?? 6);
   // 계측은 바깥에서: 재시도까지 포함한 걸린 시간·토큰을 한 번의 요청으로 센다
   const forModel = (model: string) => {
     let c = cache.get(model);

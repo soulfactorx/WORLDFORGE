@@ -38,7 +38,7 @@ export function translateBudget(text: string): number {
 
 export async function translateToKorean(
   llm: LlmClient, items: { id: string; text: string }[], names: { latin: string; korean: string }[],
-  onProgress?: (done: number, total: number) => void, signal?: AbortSignal, chunkChars = 3000, concurrency = 4, // v0.94: 묶음을 절반으로 — 한 번이 짧아지고 길이 제한에 덜 걸린다 (한도는 글자×1.5+3000이라 작은 묶음일수록 여유가 크다)
+  onProgress?: (done: number, total: number) => void, signal?: AbortSignal, chunkChars = 3000, concurrency = 6, // v0.94: 묶음을 절반으로 — 한 번이 짧아지고 길이 제한에 덜 걸린다 (한도는 글자×1.5+3000이라 작은 묶음일수록 여유가 크다)
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const todo = items.filter((x) => needsKorean(x.text));
@@ -58,6 +58,7 @@ export async function translateToKorean(
       system: SYSTEM,
       user: `## 이름 표기\n${nameLine || '(없음)'}\n\n## 번역할 글 (JSON)\n${JSON.stringify(chunk.map((c) => ({ id: c.id, text: c.text })))}`,
       maxTokens: translateBudget(chunk.map((c) => c.text).join('')),
+      effort: 'minimal', // v0.97: 번역은 생각이 필요 없다 — 출력의 70~80%가 생각 토큰이었다
       label: `번역 ${index + 1}/${chunks.length} 묶음`,
     }, SCHEMA, signal);
     for (const it of r.items ?? []) if (chunk.some((c) => c.id === it.id) && it.text?.trim()) out.set(it.id, it.text.trim());

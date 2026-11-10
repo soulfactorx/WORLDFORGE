@@ -28,7 +28,8 @@ export interface LlmRequest {
   user: string;
   maxTokens: number;
   /** 추론 노력 (지원하는 제공자만). 기본: 구조화 응답은 low */
-  effort?: 'low' | 'medium' | 'high';
+  /** minimal (v0.97): 번역·분류처럼 생각이 필요 없는 일 — 생각을 가장 짧게. 받지 못하는 제공자에서는 low로 보낸다 */
+  effort?: 'minimal' | 'low' | 'medium' | 'high';
   /** 진행 표시용 이름 (예: "번역 3/8") — 재시도 안내에 어느 단계인지 보여 준다 */
   label?: string;
   /** 사용량 기록 (계측 래퍼가 넣고, 어댑터가 채운다. 재시도한 호출도 모두 더한다) */

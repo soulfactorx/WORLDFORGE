@@ -42,7 +42,7 @@ export function createAnthropicClient(s: LlmSettings): LlmClient {
       return msg.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
     },
     async json<T>(req: LlmRequest, schema: Record<string, unknown>, signal?: AbortSignal) {
-      const body = { ...base(req), output_config: { effort: req.effort ?? 'low', format: { type: 'json_schema' as const, schema } } };
+      const body = { ...base(req), output_config: { effort: !req.effort || req.effort === 'minimal' ? 'low' as const : req.effort, format: { type: 'json_schema' as const, schema } } };
       const at = traceAttempt(req.trace, 'Anthropic Messages API — beta.messages.create', body);
       let msg;
       try { msg = await client.beta.messages.create(body, { signal }); } catch (e) { finishAttempt(at, { error: String((e as Error)?.message ?? e) }); throw e; }

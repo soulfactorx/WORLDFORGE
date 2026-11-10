@@ -3,7 +3,7 @@
  *
  * v0.86에서 카드 변환의 이미지 정리와 이야기 만들기를 동시에 돌리면서, 번역(3) + 이미지 분류(4) + 세계 구조 + 이야기 단계가
  * 한꺼번에 나가 제공자의 요청 한도(429)에 걸리기 쉬워졌다. 한도에 걸리면 1~3분짜리 요청을 처음부터 다시 보내므로 오히려 느려진다.
- *  - 기본은 동시에 4개까지 (v0.86 이전에 한 단계가 쓰던 최대치). 나머지는 순서대로 기다린다
+ *  - 기본은 동시에 6개까지 (v0.97: 4 → 6. 번역·이미지 분류 수십 건이 4자리에서 줄을 서 전체 시간을 정했다). 나머지는 순서대로 기다린다
  *  - 요청 한도에 걸리면 동시 수를 하나 줄이고, 한동안(90초) 한도에 걸리지 않으면 다시 하나씩 늘린다
  */
 import type { LlmClient, LlmRequest } from './types';
@@ -16,7 +16,7 @@ export interface Limiter {
   readonly limit: number;
 }
 
-export function createLimiter(max = 4, recoverMs = 90_000): Limiter {
+export function createLimiter(max = 6, recoverMs = 90_000): Limiter {
   let limit = max, active = 0, lastPenalty = 0;
   const queue: (() => void)[] = [];
   const pump = () => {

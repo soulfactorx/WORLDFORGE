@@ -29,4 +29,16 @@ describe('OpenAI 호환: 생각 깊이', () => {
     await createOpenAiCompatibleClient({ provider: 'openai-compatible', baseUrl: 'https://notopenrouter.ai.example.com/v1', model: 'm', apiKey: '' }).json({ system: 's', user: 'u', maxTokens: 100 }, {});
     expect(bodies.every((b) => !('reasoning' in b))).toBe(true);
   });
+  it('minimal을 거절(400)하면 low로 다시 보내고, 그 뒤로는 low로 보낸다', async () => {
+    const efforts: string[] = [];
+    vi.stubGlobal('fetch', async (_u: string, init: { body: string }) => {
+      const e = JSON.parse(init.body).reasoning.effort as string; efforts.push(e);
+      if (e === 'minimal') return { ok: false, status: 400, text: async () => 'bad effort' };
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"a":1}' }, finish_reason: 'stop' }] }) };
+    });
+    const llm = createOpenAiCompatibleClient({ provider: 'openai-compatible', baseUrl: 'https://openrouter.ai/api/v1', model: 'm', apiKey: 'k' });
+    expect(await llm.json({ system: 's', user: 'u', maxTokens: 100, effort: 'minimal' }, {})).toEqual({ a: 1 });
+    await llm.json({ system: 's', user: 'u', maxTokens: 100, effort: 'minimal' }, {});
+    expect(efforts).toEqual(['minimal', 'low', 'low']);
+  });
 });
