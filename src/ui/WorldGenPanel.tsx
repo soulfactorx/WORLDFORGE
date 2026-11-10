@@ -91,7 +91,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
           <div className="gen-progress" role="status" aria-live="polite">
             <div className="row"><span className="spinner" /> <b>{shown}%</b> <span className="small">{stage}</span><span className="spacer" /><span className="small muted">{Math.floor(sec / 60)}분 {sec % 60}초</span></div>
             <div className="progress-bar"><span style={{ width: `${shown}%` }} /></div>
-            <span className="small muted">{['세계', ...(withScenario ? ['임무·결말'] : []), ...(withScenes ? ['장면'] : []), ...(withRules ? ['세계 규칙'] : []), '기본 이미지', '검사'].map((x, i) => `${i + 1}) ${x}`).join(' → ')} · 큰 응답이라 몇 분 걸릴 수 있습니다. 화면을 떠나지 마세요.</span>
+            <span className="small muted">{['세계', ...(withScenario || withScenes ? ['이야기 뼈대'] : []), ...(withScenes ? ['장면'] : []), ...(withScenario ? ['임무·결말'] : []), ...(withRules ? ['세계 규칙'] : []), '기본 이미지', '검사'].map((x, i) => `${i + 1}) ${x}`).join(' → ')} · 큰 응답이라 몇 분 걸릴 수 있습니다. 화면을 떠나지 마세요.</span>
           </div>
         );
       })()}

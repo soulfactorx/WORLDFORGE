@@ -25,7 +25,8 @@ import type { LlmClient } from '../../llm/types';
 import { PRIVATE_NOTE } from '../../storage/packages';
 import { RATING_GUIDE } from '../../engine/rating';
 import { worldFromDraft, type WorldDraft } from './draft';
-import { generateScenario } from './generate';
+import { generateScenario, worldSummary } from './generate';
+import { generateSpine } from './spine';
 import { generateScenes } from './scenes';
 import { generateRules } from './rules';
 import { assignStockImages } from './stock';
@@ -443,7 +444,29 @@ export async function cardToWorld(
     if (nd.length) notes.push(`진짜 이미지가 없는 인물 ${nd.filter((x) => x.kind === 'character').length}명 · 장소 ${nd.filter((x) => x.kind === 'location').length}곳은 앱 내장 그림으로 대신합니다. 편집기 이미지 탭의 "부족한 이미지"에서 그림을 올리거나, 추천 파일 이름(예: ${nd[0]!.fileName})으로 내 기본 이미지에 올리면 자동으로 붙습니다.`);
   }
 
-  // 4) 임무·결말 (기존 시나리오 생성기 재사용)
+  // 3.5) 이야기 뼈대 (v0.85): 원작 연표의 핵심 사건을 고비로 — 임무·장면·조우가 서로 이어지게
+  if (opts.withScenario || opts.withScenes !== false) {
+    try {
+      onStage('이야기 뼈대 짜는 중…', 76, 78);
+      const sp = await generateSpine(llm, world, worldSummary(world), `원작 카드를 바탕으로 한 세계다. 원작의 줄거리와 연표의 핵심 사건을 장의 고비로 삼는다.\n${cut(d.plot_request ?? '', 2000)}`, signal);
+      world = sp.world;
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      notes.push(`이야기 뼈대를 만들지 못해 뼈대 없이 진행합니다: ${(e as Error).message}`);
+    }
+  }
+  // 4) 장면 (v0.51 — v0.85부터 임무보다 먼저: 임무가 장면의 결과를 조건으로 쓴다): 원작의 인물·관계로 협상·대결·데이트 같은 장면
+  if (opts.withScenes !== false) {
+    try {
+      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`);
+      world = r.world;
+      notes.push(...r.notes);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      notes.push(`장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`);
+    }
+  }
+  // 5) 임무·결말 (기존 시나리오 생성기 재사용)
   if (opts.withScenario) {
     try {
       const request = `원작 카드를 바탕으로 한 세계다. 원작의 줄거리와 연표를 따라가는 메인 임무와 결말을 만든다.\n${cut(d.plot_request ?? '', 3000)}\n\n## 연표\n${timeline.slice(0, 40).map((t) => `- [${t.when}] ${t.title} (${claimByKey(t.key)?.replace(/^claim\//, '') ?? ''})`).join('\n')}`;
@@ -453,17 +476,6 @@ export async function cardToWorld(
     } catch (e) {
       if (signal?.aborted) throw e;
       notes.push(`임무·결말 생성에 실패했습니다 (편집기에서 다시 만들 수 있습니다): ${(e as Error).message}`);
-    }
-  }
-  // 5) 장면 (v0.51): 원작의 인물·관계로 협상·대결·데이트 같은 장면
-  if (opts.withScenes !== false) {
-    try {
-      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`);
-      world = r.world;
-      notes.push(...r.notes);
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      notes.push(`장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`);
     }
   }
   // 6) 세계 규칙 (v0.83): 원작의 법칙·금기·인과 → 행동 규칙·상태 규칙 (임무·플래그·장면이 생긴 뒤라 그것들과 잇는다)

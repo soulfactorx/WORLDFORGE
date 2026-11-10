@@ -16,6 +16,8 @@ export interface SceneDraftChange { gauge: string; by: number }
 export interface SceneDraftEffect { type: 'set_flag' | 'reveal' | 'relationship' | 'reputation' | 'none'; ref: string; axis: '' | 'affinity' | 'trust' | 'respect' | 'fear' | 'intimacy' | 'grudge'; value: number }
 export interface SceneDraft {
   key: string; name: string; kind: string; description: string; npc: string; location: string; start_knows: string;
+  /** v0.85: GM이 이 장면을 여는 계기 */
+  entry_trigger?: string;
   gauges: { key: string; name: string; start: number; min: number; max: number }[];
   states: { key: string; name: string; edge: number }[];
   likes: string[]; dislikes: string[];
@@ -46,6 +48,7 @@ export const SCENES_DRAFT_SCHEMA = obj({
     description: { type: 'string', description: 'GM용: 어떤 장면인가, 언제 권하나' },
     npc: { type: 'string', description: '상대 인물 key 또는 ""' }, location: { type: 'string', description: '장소 key 또는 ""' },
     start_knows: { type: 'string', description: '플레이어가 이 명제를 알면 열린다 (명제 key) 또는 "" (항상)' },
+    entry_trigger: { type: 'string', description: '상대 인물이 있는 장면: 플레이어의 어떤 행동·상황이 이 장면으로 들어가는가 (GM용 한 문장, 예: "촌장에게 아이들 일을 따져 묻는다"). 없으면 ""' },
     gauges: arr(obj({ key: str, name: str, start: int, min: int, max: int })),
     states: arr(obj({ key: str, name: str, edge: { type: 'integer', enum: [-1, 0, 1] } })),
     likes: arr(str), dislikes: arr(str),
@@ -76,6 +79,9 @@ const SCENES_SYSTEM = `너는 TRPG 세계관 제작 도우미다. 주어진 세�
 - 반작용: 플레이어가 행동할 때마다 상대·상황이 수치를 움직인다 (when_gauge/when_state 조건, chance 0~1).
 - 끝: gauge가 value 이상(gte)·이하(lte)가 되면 끝난다. effects로 세계에 남는 결과(플래그·명제 공개·관계·세력 평판). 실패로 끝나는 길을 반드시 하나 둔다. max_rounds 6~12.
 - 이 세계의 인물·장소·명제 key만 쓴다 (목록에 있는 것). 상대 인물은 그 인물이 있는 장소와 맞춘다.
+- "이야기 뼈대"가 있으면 고비가 장면(scene)인 장을 먼저 장면으로 만든다 — key는 뼈대의 climax_key를 그대로 쓴다. 남는 개수는 사이드·인물 관계의 장면으로.
+- 장면의 끝은 이야기에 남아야 한다: 성공의 effects는 다음으로 가는 열쇠(플래그·명제 공개), 실패의 effects는 이야기가 이어지게 하는 대가(관계·평판·다른 단서의 소문). 효과 없는 끝을 두지 않는다. 이 뒤에 임무가 이 장면의 결과를 조건으로 쓴다.
+- 상대 인물이 있는 장면은 entry_trigger에 "플레이어가 무엇을 하면 이 장면이 되는가"를 적는다 (플레이어의 그 행동을 보고 GM이 장면을 연다).
 - 장면마다 종류를 다르게 하고, 세계의 갈등·비밀·관계에 이어지게 한다. 판정 숫자는 엔진이 정한다.
 - 성인용이 아닌 세계에서는 수위를 지킨다.`;
 
@@ -171,6 +177,7 @@ export function scenesFromDraft(world: WorldPackage, drafts: SceneDraft[]): { sc
     out.push(autoSceneArt({
       id, name: d.name, description: d.description || d.name,
       ...(npc ? { npcId: npc.id } : {}), ...(loc ? { locationId: loc.id } : {}), ...(knows ? { start: { knows: knows.id } } : {}),
+      ...(npc && d.entry_trigger?.trim() ? { entry: { mode: 'offer' as const, trigger: d.entry_trigger.trim().slice(0, 200) } } : {}),
       gauges, ...(states.length ? { states } : {}),
       ...(d.likes?.length ? { likes: d.likes.filter(Boolean).slice(0, 4) } : {}), ...(d.dislikes?.length ? { dislikes: d.dislikes.filter(Boolean).slice(0, 4) } : {}),
       actions, ...(reactions.length ? { reactions } : {}), ends,

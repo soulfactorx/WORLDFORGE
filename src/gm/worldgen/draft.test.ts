@@ -147,3 +147,33 @@ describe('AI 응답에서 목록이 빠져도 (v0.46.3)', () => {
     expect(empty.notes.some((n) => n.includes('비어 있었습니다'))).toBe(true);
   });
 });
+
+describe('이야기 연결 초안 (v0.85)', () => {
+  it('장면 결과 조건 · 단계의 고비 · 장면 실패 → 전투 · 지면 서는 플래그', async () => {
+    const { addScenario } = await import('./draft');
+    const { sampleWorld } = await import('../../data/sample-world');
+    const { validateWorld } = await import('../../engine/package/validate');
+    const base = structuredClone(sampleWorld);
+    base.scenes = [{ id: 'scene/parley', name: '담판', description: '담판', gauges: [{ id: 'g', name: 'g', start: 0, max: 3 }, { id: 'p', name: 'p', start: 2 }],
+      actions: [{ id: 'a', name: 'a', success: { gauges: { g: 1 } } }],
+      ends: [{ id: 'ok', name: '합의', when: { gauge: 'g', gte: 3 }, outcome: 'success' }, { id: 'no', name: '결렬', when: { gauge: 'p', lte: 0 }, outcome: 'failure' }] }];
+    const always = { op: 'all' as const, items: [] };
+    const atom = (type: string, ref: string) => ({ op: 'any' as const, items: [{ type, ref, min: '', axis: '', value: 0 }] });
+    const r = addScenario(base, {
+      encounters: [{ key: 'brawl', name: '난투', location: base.locations[0]!.id, enemies: [{ monster: 'wolf', zone: 2 }], trigger: '담판이 깨지면', intro: '칼이 뽑힌다.', after_scene_failure: 'parley', on_defeat_flag: 'beaten', after_defeat: 'gone' }],
+      flags: [{ key: 'beaten', when: '(엔진) 난투에서 졌다', location: '', requires: always }],
+      quests: [{ key: 'deal', name: '담판 짓기', kind: 'side', start: always, reward_xp: 0,
+        stages: [{ objective: '담판을 짓는다', hint: '', via_scene: 'parley', complete: { op: 'any', items: [...atom('scene_success', 'parley').items, ...atom('cleared', 'brawl').items] } }] }],
+      endings: [],
+    } as never);
+    const w = r.world;
+    const enc = w.encounters!.find((e) => e.name === '난투')!;
+    if (!enc) throw new Error(r.notes.join(' | '));
+    expect(enc).toMatchObject({ intro: '칼이 뽑힌다.', retry: 'gone', onDefeat: [{ setFlag: 'beaten' }] });
+    expect(w.scenes![0]!.ends.find((e) => e.id === 'no')!.effects).toEqual([{ startEncounter: enc.id }]);
+    const st = w.quests!.find((q) => q.name === '담판 짓기')!.stages[0]!;
+    expect(st.via).toEqual({ scene: 'scene/parley' });
+    expect(st.complete).toEqual({ any: [{ sceneEnd: 'scene/parley', outcome: 'success' }, { cleared: enc.id }] });
+    expect(validateWorld(w).filter((i) => i.level === 'error')).toEqual([]);
+  });
+});

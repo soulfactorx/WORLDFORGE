@@ -12,7 +12,7 @@ import { worldSummary } from './generate';
 
 const AXES = ['affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge'] as const;
 const COND_TYPES = ['none', 'flag', 'not_flag', 'at', 'var', 'trait', 'quest_done', 'relationship', 'knows', 'day', 'has_item', 'npc_dead'] as const;
-const FX_TYPES = ['set_flag', 'reveal', 'relationship', 'reputation', 'var', 'trait', 'money', 'give_item', 'take_item', 'move_npc', 'kill_npc', 'clock'] as const;
+const FX_TYPES = ['set_flag', 'reveal', 'relationship', 'reputation', 'var', 'trait', 'money', 'give_item', 'take_item', 'move_npc', 'kill_npc', 'clock', 'start_scene', 'start_encounter'] as const;
 
 export interface RuleDraftCond { type: (typeof COND_TYPES)[number]; ref: string; axis: string; op: 'gte' | 'lte'; value: number }
 export interface RuleDraftEffect { type: (typeof FX_TYPES)[number]; ref: string; axis: string; value: number; to: string }
@@ -70,6 +70,7 @@ const RULES_SYSTEM = `너는 TRPG 세계관 제작 도우미다. 주어진 세�
 - state 규칙: 세계 상태(플래그·수치·성향·관계·임무 결과·날짜)가 조건을 채우는 순간 일어나는 후속 변화 — 연쇄 반응을 만든다. 예: 의심도 70 이상 → 경비가 강화되고 플래그가 선다 → 다른 규칙이 그 플래그로 이어진다.
 - 결과(effects)는 세계에 남는 변화: 플래그(이후 임무·결말·장면 조건에 쓰인다), 세계 수치, 관계, 세력 평판, 명제 공개, 인물 이동·죽음, 물건·돈, 시계.
 - reactions: 그 자리의 인물이나 특정 인물이 어떻게 반응하는가 (관계 축 변화를 함께 줄 수 있다).
+- 금기를 깨거나 선을 넘은 결과가 싸움·대결로 번지는 규칙은 effects에 start_encounter(이미 있는 조우 key)·start_scene(이미 있는 장면 key)을 쓴다 — 말로만 "경비가 달려든다"로 끝내지 않는다.
 - 규칙끼리, 그리고 이미 있는 임무·플래그·결말·장면과 이어지게 만든다. 새 플래그를 만들면 그 플래그가 다른 규칙이나 기존 조건에 쓰이게 한다.
 - 세계 수치가 필요하면 new_vars에 만든다 (예: 의심도 0~100, 마을 평온 0~100).
 - 이 세계의 인물·장소·명제·세력·임무 key만 쓴다. 판정 숫자는 엔진이 정한다.
@@ -144,6 +145,8 @@ export function rulesFromDraft(world: WorldPackage, draft: RulesDraft): { rules:
       case 'move_npc': { const n = findBy(world.characters, e.ref); const l = findBy(world.locations, e.to); return n && l ? [{ moveNpc: n.id, to: l.id }] : []; }
       case 'kill_npc': { const n = findBy(world.characters, e.ref); return n ? [{ killNpc: n.id }] : []; }
       case 'clock': { const c = findBy(world.clocks, e.ref); return c ? [{ clock: c.id, by: clamp(e.value || 1, -12, 12) }] : []; }
+      case 'start_scene': { const s = findBy(world.scenes, e.ref); return s ? [{ startScene: s.id }] : []; }
+      case 'start_encounter': { const en = findBy(world.encounters, e.ref); return en ? [{ startEncounter: en.id }] : []; }
     }
     return [];
   });

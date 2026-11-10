@@ -10,6 +10,9 @@ import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
 import { generateScenes } from './scenes';
 import { generateRules } from './rules';
+import { generateSpine, spineOf } from './spine';
+import { linkWarnings } from '../../engine/package/flow';
+import { sceneEntry } from '../../engine/scene';
 import { addScenario, scenarioDraftSchema, type ScenarioDraft, WORLD_DRAFT_SCHEMA, type WorldDraft, worldFromDraft } from './draft';
 
 /**
@@ -45,8 +48,12 @@ const WORLD_SYSTEM = `너는 1인칭 AI TRPG의 세계관 설계자다. 제작�
 
 const SCENARIO_SYSTEM = `너는 1인칭 AI TRPG의 시나리오 설계자다. 주어진 세계관 위에 임무·조우·이야기 플래그·결말을 설계한다.
 설계 원칙:
-- 메인 임무 1개(3~5단계)와 사이드 임무 1~2개. 각 단계의 objective는 플레이어용 목표, hint는 진행을 돕는 GM용 힌트다.
-- 단계 완료 조건(complete)은 엔진이 판정할 수 있는 것만 쓴다: knows(명제 key), at(장소 key), cleared(조우 key), in_party, relationship, flag, quest_done, level.
+- "이야기 뼈대"가 있으면 그것을 그대로 따른다: 장마다 그 고비에 필요한 장치를 만든다 (고비가 전투면 조우를, 장면이면 "이미 있는 장면"을, 결정이면 결정적 선택을, 발견이면 knows 조건을 그 단계의 완료 조건으로). 뼈대의 계기(lead_in)는 단계의 hint에, 실패하면 이어지는 길(on_failure)은 조우의 after_scene_failure·on_defeat_flag나 다른 완료 조건(any)으로 옮긴다.
+- 메인 임무 1개(3~5단계)와 사이드 임무 1~2개. 각 단계의 objective는 플레이어용 목표, hint는 진행을 돕는 GM용 힌트다 (누가·어디서·무엇을 계기로 이 단계에 이르는가).
+- 단계 완료 조건(complete)은 엔진이 판정할 수 있는 것만 쓴다: knows(명제 key), at(장소 key), cleared(조우 key), scene_done·scene_success(장면 key), in_party, relationship, flag, quest_done, level.
+- 모든 조우는 이야기에 걸려 있어야 한다: 어느 임무 단계의 완료 조건(cleared)이거나, 어느 장면이 실패했을 때 번지는 싸움(after_scene_failure)이거나, 지면 서는 플래그(on_defeat_flag)가 있다. 임무 단계의 완료 조건이 된 조우는 그 단계가 진행 중일 때만 일어난다 (엔진이 잠근다).
+- "이미 있는 장면"이 있으면 임무에 엮는다: 그 장면으로 풀리는 단계는 via_scene에 장면 key를 적고 완료 조건을 scene_success(또는 그 장면이 성공하면 세우는 플래그·알려 주는 명제)로 한다. 장면이 실패해도 이야기가 이어지게 any로 다른 길(전투 cleared·다른 단서)을 함께 둔다.
+- 의뢰인(giver)이 있는 임무는 그 인물이 부탁하는 장면이 그려지게 한다: 시작 조건은 보통 그 인물이 있는 장소(at)나 그 인물이 알려 주는 명제(knows).
 - 단서를 안다(knows)는 조건은 그 명제를 누군가 알거나 발견할 수 있어야 한다.
 - 엔진이 알 수 없는 플레이어의 결정(예: 남겠다고 선언)은 flags로 선언하고 조건에 flag로 쓴다.
 - 결말 1~2개. 결말 조건에는 보통 메인 임무 완료(quest_done)와 결정 플래그를 넣는다. 조건이 비면 즉시 결말이 나므로 절대 비우지 않는다.
@@ -95,7 +102,12 @@ export function worldSummary(w: WorldPackage): string {
     ...(w.relations?.length ? ['## 인물 사이 관계', ...w.relations.map((r) => `- ${short(r.a)} ↔ ${short(r.b)}: ${r.kind}${r.note ? ` (${r.note})` : ''}`)] : []),
     '## 진실', ...w.facts.map((f) => `- ${short(f.id)} (비밀 ${f.secrecy}): ${f.statement}`),
     '## 명제', ...w.claims.map((c) => `- ${short(c.id)} (${c.truth}): ${c.statement} — 아는 사람: ${w.beliefs.filter((b) => b.claim === c.id).map((b) => `${short(b.holder)}(${b.state})`).join(', ') || '없음'}`),
-    ...(w.quests?.length ? ['## 이미 있는 임무', ...w.quests.map((q) => `- ${short(q.id)}: ${q.name}`)] : []),
+    // v0.85: 뒤 단계가 앞 단계와 이을 수 있게 내용까지 준다 (지금까지는 임무 이름만 갔다)
+    ...(spineOf(w) ? ['## 이야기 뼈대 (이것을 따른다)', spineOf(w)] : []),
+    ...(w.scenes?.length ? ['## 이미 있는 장면', ...w.scenes.map((s) => `- ${short(s.id)}: ${s.name}${s.npcId ? ` (상대 ${short(s.npcId)})` : ''}${s.locationId ? ` @${short(s.locationId)}` : ''} — ${s.description.slice(0, 70)} [진입: ${sceneEntry(s).mode}] [끝: ${s.ends.map((e) => `${e.name}(${e.outcome}${(e.effects ?? []).flatMap((x) => ('setFlag' in x ? [` → 플래그 ${x.setFlag}`] : 'reveal' in x ? [` → 명제 ${short(x.reveal)}`] : 'startEncounter' in x ? [` → 전투 ${short(x.startEncounter)}`] : [])).join('')})`).join(', ')}]`)] : []),
+    ...(w.encounters?.length ? ['## 이미 있는 조우', ...w.encounters.map((e) => `- ${short(e.id)}: ${e.name} @${short(e.locationId)} — ${e.trigger.slice(0, 60)}`)] : []),
+    ...(w.flags?.length ? ['## 이미 있는 플래그', ...w.flags.map((f) => `- ${f.id}: ${f.when.slice(0, 60)}`)] : []),
+    ...(w.quests?.length ? ['## 이미 있는 임무', ...w.quests.map((q) => `- ${short(q.id)}: ${q.name}${q.giver ? ` (의뢰인 ${short(q.giver)})` : ''} — ${q.stages.map((st, i) => `${i + 1}) ${st.objective.slice(0, 40)}`).join(' ')}`)] : []),
     ...(w.arcs?.length ? ['## 이미 있는 이야기 줄기 (새 줄기는 이 뒤에 이어진다 — 이전 이야기의 결말 이후를 다룬다)', ...w.arcs.map((a) => `- ${short(a.id)}: ${a.name} (${a.chapters.map((c) => c.name).join(' → ')})`)] : []),
     ...(w.clocks?.length ? ['## 이미 있는 진행 시계', ...w.clocks.map((c) => `- ${short(c.id)}: ${c.name} (${c.segments}칸)`)] : []),
   ].join('\n');
@@ -118,21 +130,33 @@ export async function generateWorld(
   let { world, notes } = worldFromDraft(draft, { id, contentRating: opts.contentRating, author: opts.author });
   const gp = genreOf(opts.genre, opts.genreCustom);
   world = { ...world, genre: { id: gp.id, ...(gp.id === 'custom' && opts.genreCustom ? { custom: opts.genreCustom } : {}) } };
-  if (opts.withScenario) {
-    const r = await generateScenario(llm, world, (st) => onStage(st, worldEnd, scenEnd), signal);
-    world = r.world;
-    notes = [...notes, ...r.notes];
+  // 이야기 뼈대 (v0.85): 임무·장면·조우를 따로 만들기 전에 서로 어떻게 이어지는지 먼저 정한다. 실패해도 계속한다
+  if (opts.withScenario || scenes) {
+    try {
+      onStage('이야기 뼈대 짜는 중 (장·고비·실패하면 이어지는 길)…', worldEnd, worldEnd + 4);
+      const sp = await generateSpine(llm, world, worldSummary(world), opts.prompt.slice(0, 1500), signal);
+      world = sp.world;
+      if (sp.spine) notes = [...notes, '이야기 뼈대를 GM 메모에 남겼습니다 (장·고비·실패하면 이어지는 길). 기본 탭의 GM 메모에서 고칠 수 있습니다.'];
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      notes = [...notes, `이야기 뼈대를 만들지 못해 뼈대 없이 진행합니다: ${(e as Error).message}`];
+    }
   }
-  // 장면 (v0.51): 실패해도 세계는 살린다
+  // 장면 (v0.51) — v0.85부터 임무보다 먼저 만든다: 임무가 장면의 결과를 완료 조건으로 쓸 수 있게. 실패해도 세계는 살린다
   if (scenes) {
     try {
-      const r = await generateScenes(llm, world, (st) => onStage(st, scenEnd, scenesEnd), signal, opts.prompt.slice(0, 1500));
+      const r = await generateScenes(llm, world, (st) => onStage(st, worldEnd + 4, opts.withScenario ? scenesEnd - (scenEnd - worldEnd) : scenesEnd), signal, opts.prompt.slice(0, 1500));
       world = r.world;
       notes = [...notes, ...r.notes];
     } catch (e) {
       if (signal?.aborted) throw e;
       notes = [...notes, `장면 생성에 실패했습니다 (편집기 장면 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`];
     }
+  }
+  if (opts.withScenario) {
+    const r = await generateScenario(llm, world, (st) => onStage(st, scenes ? scenesEnd - (scenEnd - worldEnd) : worldEnd + 4, scenesEnd), signal);
+    world = r.world;
+    notes = [...notes, ...r.notes];
   }
   // 세계 규칙 (v0.83): 임무·플래그·장면이 생긴 뒤에 만들어 그것들과 잇는다
   if (opts.withRules !== false) {
@@ -151,6 +175,8 @@ export async function generateWorld(
   if (st.added) notes = [...notes, `인물·장소 ${st.added}곳에 앱 내장 기본 이미지를 붙였습니다. 편집기 이미지 탭에서 바꿀 수 있습니다.`];
   { const nd = imageNeeds(world); if (nd.length) notes = [...notes, `진짜 이미지가 없는 인물·장소 ${nd.length}곳은 편집기 이미지 탭의 "부족한 이미지"에서 그림을 올리거나, 추천 파일 이름(예: ${nd[0]!.fileName})으로 내 기본 이미지에 올리면 자동으로 붙습니다.`]; }
   onStage('검사 중…', 98, 100);
+  // 연결 검사 (v0.85): 곁가지·막다른 고비를 메모로 알린다 (편집기 "이야기 흐름"·"전체 점검"에서도 보인다)
+  { const lw = linkWarnings(world); if (lw.length) notes = [...notes, `이야기 연결 점검 ${lw.length}건 — ${lw.slice(0, 4).join(' / ')}${lw.length > 4 ? ' …' : ''}`]; }
   return { world, notes, issues: validateWorld(world) };
 }
 

@@ -7,6 +7,7 @@
  */
 import { epithetOf, isPlaceholderText, usesFallbackEpithet } from '../../engine/names';
 import { validateWorld } from '../../engine/package/validate';
+import { linkWarnings } from '../../engine/package/flow';
 import { RATING_GUIDE } from '../../engine/rating';
 import { genreGuide } from '../../engine/genre';
 import type { WorldPackage } from '../../engine/schema';
@@ -79,6 +80,8 @@ export function scanWorld(w: WorldPackage): Gap[] {
     if (/\.(appearance|personality|speech)$/.test(i.path) && i.message.includes("'없음'")) continue;
     add({ key: `check:${i.path}:${i.message}`, area: 'check', level: i.level, label: i.path, detail: i.message, path: i.path, action: 'goto' });
   }
+  // 이야기 연결 (v0.85): 곁가지 조우·장면, 실패하면 막다른 고비 — 임무·장면·조우 탭에서 잇는다
+  linkWarnings(w).forEach((m, i) => add({ key: `link:${i}:${m.slice(0, 40)}`, area: 'structure', level: 'suggest', label: '이야기 연결', detail: m }));
   const order = { error: 0, warning: 1, suggest: 2 };
   return gaps.sort((a, b) => order[a.level] - order[b.level]);
 }

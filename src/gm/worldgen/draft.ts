@@ -15,7 +15,7 @@ import type { Clock, Condition, DecisiveChoice, Encounter, Ending, KnowledgeStat
 // ---------------------------------------------------------------- 초안 타입 (LLM 출력)
 
 export interface DraftAtom {
-  type: 'always' | 'knows' | 'at' | 'cleared' | 'in_party' | 'relationship' | 'stage' | 'reputation' | 'flag' | 'quest_done' | 'level';
+  type: 'always' | 'knows' | 'at' | 'cleared' | 'in_party' | 'relationship' | 'stage' | 'reputation' | 'flag' | 'quest_done' | 'level' | 'scene_done' | 'scene_success';
   ref: string;
   min: '' | 'rumor' | 'partial' | 'confirmed';
   axis: '' | 'affinity' | 'trust' | 'respect' | 'fear' | 'intimacy' | 'grudge';
@@ -51,9 +51,11 @@ export interface WorldDraft {
 }
 
 export interface ScenarioDraft {
-  encounters: { key: string; name: string; location: string; enemies: { monster: string; zone: number }[]; trigger: string }[];
+  encounters: { key: string; name: string; location: string; enemies: { monster: string; zone: number }[]; trigger: string;
+    /** v0.85: 전투 직전 한 줄 · 이 장면이 실패로 끝나면 이 전투로 번진다 · 지면 서는 플래그 · 진 뒤 */
+    intro?: string; after_scene_failure?: string; on_defeat_flag?: string; after_defeat?: 'retry' | 'gone' }[];
   flags: { key: string; when: string; location: string; requires: DraftCond }[];
-  quests: { key: string; name: string; kind: 'main' | 'side'; start: DraftCond; stages: { objective: string; hint: string; complete: DraftCond }[]; reward_xp: number; reward_money?: number;
+  quests: { key: string; name: string; kind: 'main' | 'side'; start: DraftCond; stages: { objective: string; hint: string; complete: DraftCond; via_scene?: string }[]; reward_xp: number; reward_money?: number;
     type?: QuestType | ''; giver?: string; target?: string; time_limit_days?: number }[];
   /** 의뢰판 (설계 v3 6.3) */
   board?: { location: string; name: string; jobs: { key: string; name: string; type: QuestType; description: string; location: string; enemies: { monster: string; zone: number }[]; reward_money: number; repeatable: boolean }[] };
@@ -83,8 +85,8 @@ const IMPROV = { type: 'string', enum: ['none', 'minor', 'free'] };
 const COND_SCHEMA = obj({
   op: { type: 'string', enum: ['all', 'any'] },
   items: arr(obj({
-    type: { type: 'string', enum: ['always', 'knows', 'at', 'cleared', 'in_party', 'relationship', 'stage', 'reputation', 'flag', 'quest_done', 'level'] },
-    ref: { type: 'string', description: 'knows=명제 key, at=장소 key, cleared=조우 key, in_party/relationship/stage=인물 key, reputation=세력 key, flag=플래그 key, quest_done=임무 key. always/level은 ""' },
+    type: { type: 'string', enum: ['always', 'knows', 'at', 'cleared', 'in_party', 'relationship', 'stage', 'reputation', 'flag', 'quest_done', 'level', 'scene_done', 'scene_success'] },
+    ref: { type: 'string', description: 'scene_done=장면이 어떻게든 끝남·scene_success=장면이 성공으로 끝남 ("이미 있는 장면"의 key), knows=명제 key, at=장소 key, cleared=조우 key, in_party/relationship/stage=인물 key, reputation=세력 key, flag=플래그 key, quest_done=임무 key. always/level은 ""' },
     min: { type: 'string', enum: ['', 'rumor', 'partial', 'confirmed'] },
     axis: { type: 'string', enum: ['', 'affinity', 'trust', 'respect', 'fear', 'intimacy', 'grudge'] },
     stage: { type: 'string', enum: ['', '아는 사이', '믿는 사이', '친구', '절친', '연인', '경계', '적대', '숙적'], description: 'stage: 이 단계 이상 (가까운 쪽은 더 가까운 단계 포함, 적대 쪽은 더 나쁜 단계 포함). 그 외 ""' },
@@ -125,11 +127,16 @@ export const WORLD_DRAFT_SCHEMA = obj({
 
 /** 이야기 초안 스키마. 적 목록은 기본 적 + 세계만의 적 */
 export const scenarioDraftSchema = (monsterIds: string[] = Object.keys(MONSTERS)) => obj({
-  encounters: arr(obj({ key: str, name: str, location: str, enemies: arr(obj({ monster: { type: 'string', enum: monsterIds }, zone: { type: 'integer', enum: [2, 3] } })), trigger: str })),
+  encounters: arr(obj({ key: str, name: str, location: str, enemies: arr(obj({ monster: { type: 'string', enum: monsterIds }, zone: { type: 'integer', enum: [2, 3] } })), trigger: str,
+    intro: { type: 'string', description: '전투 직전 한 줄 (플레이어에게 보이는 장면 묘사)' },
+    after_scene_failure: { type: 'string', description: '"이미 있는 장면"이 실패로 끝나면 이 전투로 번지는 경우 그 장면 key (협상 결렬 → 싸움). 아니면 ""' },
+    on_defeat_flag: { type: 'string', description: '이 전투에서 지면 서는 플래그 key (flags에 선언 — 임무의 다른 길·실패 조건이 읽는다). 없으면 ""' },
+    after_defeat: { type: 'string', enum: ['retry', 'gone'], description: 'retry=몇 턴 뒤 다시 일어날 수 있다, gone=지면 기회가 사라진다 (도망친 적, 한 번뿐인 결투)' },
+  })),
   flags: arr(obj({ key: { type: 'string', description: '영문 소문자와 _' }, when: str, location: { type: 'string', description: '장소 key 또는 ""' }, requires: COND_SCHEMA })),
   quests: arr(obj({
     key: str, name: str, kind: { type: 'string', enum: ['main', 'side'] }, start: COND_SCHEMA,
-    stages: arr(obj({ objective: str, hint: str, complete: COND_SCHEMA })), reward_xp: int,
+    stages: arr(obj({ objective: str, hint: str, complete: COND_SCHEMA, via_scene: { type: 'string', description: '이 단계가 "이미 있는 장면"으로 풀리면 그 장면 key (GM이 그 장면으로 이끈다). 아니면 ""' } })), reward_xp: int,
     reward_money: { type: 'integer', description: '보상 돈 (사이드 20~100, 메인 100~300)' },
     type: { type: 'string', enum: ['', ...QUEST_TYPES], description: '임무 유형' },
     giver: { type: 'string', description: '의뢰인 인물 key 또는 ""' },
@@ -211,6 +218,7 @@ export interface Refs {
   quest: (k: string) => string | undefined;
   flag: (k: string) => string | undefined;
   faction?: (k: string) => string | undefined;
+  scene?: (k: string) => string | undefined;
 }
 
 const CLOSE = ['아는 사이', '믿는 사이', '친구', '절친', '연인'];
@@ -241,6 +249,7 @@ export function convertCond(c: DraftCond | undefined, refs: Refs, where: string,
       case 'flag': { const id = refs.flag(a.ref); if (id) items.push({ flag: id }); else miss('플래그'); break; }
       case 'quest_done': { const id = refs.quest(a.ref); if (id) items.push({ questDone: id }); else miss('임무'); break; }
       case 'level': items.push({ level: clamp(a.value, 1, 5) }); break;
+      case 'scene_done': case 'scene_success': { const id = refs.scene?.(a.ref); if (id) items.push(a.type === 'scene_success' ? { sceneEnd: id, outcome: 'success' } : { sceneEnd: id }); else miss('장면'); break; }
     }
   }
   if (items.length === 1) return items[0]!;
@@ -462,14 +471,24 @@ export function addScenario(world: WorldPackage, raw: ScenarioDraft): { world: W
     quest: (k) => resolver(questMap)(k) ?? byExisting('quest', w.quests ?? [])(k),
     flag: (k) => flagMap.get(k) ?? ((w.flags ?? []).some((f) => f.id === k) ? k : undefined),
     faction: byExisting('fac', w.factions ?? []),
+    scene: byExisting('scene', w.scenes ?? []),
   };
 
   const encounters: Encounter[] = [];
+  const sceneFights: { sceneId: string; encounterId: string }[] = [];
   for (const e of d.encounters) {
     const locationId = refs.loc(e.location);
     const enemies = e.enemies.filter((x) => MT[x.monster]).map((x) => ({ monsterId: x.monster, zone: (x.zone === 3 ? 3 : 2) as 2 | 3 }));
     if (!locationId || !enemies.length) { notes.push(`조우 "${e.name}": 장소나 적이 올바르지 않아 뺐습니다.`); continue; }
-    encounters.push({ id: encMap.get(e.key)!, name: e.name, locationId, enemies: enemies.slice(0, 4), trigger: e.trigger });
+    const id = encMap.get(e.key)!;
+    const lostFlag = e.on_defeat_flag ? refs.flag(e.on_defeat_flag) : undefined;
+    encounters.push({ id, name: e.name, locationId, enemies: enemies.slice(0, 4), trigger: e.trigger,
+      ...(e.intro?.trim() ? { intro: e.intro.trim() } : {}),
+      ...(lostFlag ? { onDefeat: [{ setFlag: lostFlag }] } : {}),
+      ...(e.after_defeat === 'gone' ? { retry: 'gone' as const } : {}) });
+    // 장면이 실패로 끝나면 이 전투로 번진다 (v0.85)
+    const from = e.after_scene_failure ? refs.scene?.(e.after_scene_failure) : undefined;
+    if (from) sceneFights.push({ sceneId: from, encounterId: id });
   }
   const flags: StoryFlag[] = d.flags.map((f) => ({
     id: flagMap.get(f.key)!, when: f.when,
@@ -481,7 +500,8 @@ export function addScenario(world: WorldPackage, raw: ScenarioDraft): { world: W
     const stages = q.stages.map((st, i) => {
       const complete = convertCond(st.complete, refs, `임무 "${q.name}" ${i + 1}단계`, notes);
       if ('all' in complete && complete.all.length === 0) notes.push(`임무 "${q.name}" ${i + 1}단계: 완료 조건이 비어 바로 완료됩니다. 조건을 넣어 주세요.`);
-      return { objective: st.objective, hint: st.hint, complete };
+      const via = st.via_scene ? refs.scene?.(st.via_scene) : undefined;
+      return { objective: st.objective, hint: st.hint, complete, ...(via ? { via: { scene: via } } : {}) };
     });
     if (!stages.length) { notes.push(`임무 "${q.name}": 단계가 없어 뺐습니다.`); continue; }
     quests.push({
@@ -572,6 +592,13 @@ export function addScenario(world: WorldPackage, raw: ScenarioDraft): { world: W
     if (boardLoc && jobs.length) boardLoc.board = { name: d.board.name || '의뢰판', jobs: [...(boardLoc.board?.jobs ?? []), ...jobs] };
   }
   w.encounters = [...(w.encounters ?? []), ...encounters];
+  if (sceneFights.length) {
+    w.scenes = (w.scenes ?? []).map((sc) => {
+      const fight = sceneFights.find((x) => x.sceneId === sc.id);
+      if (!fight) return sc;
+      return { ...sc, ends: sc.ends.map((e) => (e.outcome === 'failure' && !(e.effects ?? []).some((x) => 'startEncounter' in x) ? { ...e, effects: [...(e.effects ?? []), { startEncounter: fight.encounterId }] } : e)) };
+    });
+  }
   w.flags = [...(w.flags ?? []), ...flags];
   w.quests = [...(w.quests ?? []), ...quests];
   w.endings = [...(w.endings ?? []), ...endings];
