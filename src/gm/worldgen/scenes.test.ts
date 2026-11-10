@@ -87,3 +87,19 @@ describe('AI 장면 생성 (v0.51)', () => {
     expect(stages[0]).toContain('장면');
   });
 });
+
+describe('뼈대와 장면을 한 번에 (v0.92)', () => {
+  it('withSpine이면 같은 호출에서 뼈대를 받아 GM 메모에 남긴다 (AI 호출 1회)', async () => {
+    const { spineOf } = await import('./spine');
+    let calls = 0; let system = ''; let hasSpineSchema = false;
+    const llm = { stream: async () => '', json: async <T,>(req: { system: string }, schema: Record<string, unknown>) => {
+      calls++; system = req.system; hasSpineSchema = 'spine' in ((schema as { properties: object }).properties);
+      return { spine: { conflict: '갈등', stakes: '걸린 것', player_hook: '첫 계기', chapters: [{ name: '1장', goal: '목표', climax_kind: 'scene', climax_key: 'a', climax: '담판', lead_in: '계기', on_success: '열림', on_failure: '싸움' }], sides: [] }, scenes: [] } as T;
+    } };
+    const r = await generateScenes(llm as never, structuredClone(sampleWorld), () => {}, undefined, '', 3, { withSpine: true });
+    expect(calls).toBe(1);
+    expect(hasSpineSchema).toBe(true);
+    expect(system).toContain('이야기 뼈대');
+    expect(spineOf(r.world)).toContain('1장 「1장」');
+  });
+});

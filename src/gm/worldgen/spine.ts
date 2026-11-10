@@ -33,7 +33,7 @@ export const SPINE_SCHEMA = obj({
   sides: arr(obj({ name: str, ties_to: { type: 'string', description: '메인의 어느 장·인물과 엮이는가' } })),
 });
 
-const SPINE_SYSTEM = `너는 1인칭 AI TRPG의 이야기 설계자다. 주어진 세계 위에 "이야기 뼈대"를 짠다. 이 뼈대를 보고 다른 설계자들이 임무·장면·조우·세계 규칙을 따로 만들기 때문에, 서로 어떻게 이어지는지를 여기서 정한다.
+export const SPINE_SYSTEM = `너는 1인칭 AI TRPG의 이야기 설계자다. 주어진 세계 위에 "이야기 뼈대"를 짠다. 이 뼈대를 보고 다른 설계자들이 임무·장면·조우·세계 규칙을 따로 만들기 때문에, 서로 어떻게 이어지는지를 여기서 정한다.
 - 메인 줄기를 장 3~5개로 나눈다. 장마다 고비는 하나.
 - 고비의 종류를 섞는다: 전투만 이어지지 않게, 장면(협상·추격·잠입·심문·의식·대결·데이트)과 결정적 선택을 사이에 둔다. 전투가 드문 장르면 전투는 많아야 하나.
 - 모든 고비에는 들어가는 계기(lead_in)가 있다: 앞 장의 결과, 인물의 부탁, 발견한 단서. 뜬금없이 시작하지 않는다.
@@ -70,6 +70,11 @@ export async function generateSpine(llm: LlmClient, world: WorldPackage, summary
     user: `${summary}${world.gmNotes?.trim() ? `\n\n## GM 메모 (숨은 설정)\n${world.gmNotes.split(SPINE_MARK)[0]!.trim().slice(0, 2000)}` : ''}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 4000, effort: 'medium',
   }, SPINE_SCHEMA, signal);
+  return applySpine(world, draft);
+}
+
+/** 뼈대 초안을 GM 메모 끝에 남긴다 (이미 있으면 바꾼다) */
+export function applySpine(world: WorldPackage, draft: SpineDraft | undefined): { world: WorldPackage; spine: string } {
   if (!draft?.chapters?.length) return { world, spine: '' };
   const spine = spineText(draft);
   const base = (world.gmNotes ?? '').split(SPINE_MARK)[0]!.trim();
@@ -77,3 +82,6 @@ export async function generateSpine(llm: LlmClient, world: WorldPackage, summary
   const room = Math.max(400, 2400 - Math.min(base.length, 1200));
   return { world: { ...world, gmNotes: `${base.slice(0, 1200)}${base ? '\n\n' : ''}${SPINE_MARK}\n${spine.slice(0, room)}` }, spine };
 }
+
+/** 뼈대 규칙 (장면과 한 번에 만들 때 장면 프롬프트에 붙인다) */
+export const SPINE_RULES = SPINE_SYSTEM.split('\n').slice(1).join('\n');

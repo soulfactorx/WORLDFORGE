@@ -460,7 +460,8 @@ export async function cardToWorld(
   imageTrack.catch(() => { try { opts.onImageStage?.(null); } catch { /* 무시 */ } });
 
   // 3.5) 이야기 뼈대 (v0.85): 원작 연표의 핵심 사건을 고비로 — 임무·장면·조우가 서로 이어지게
-  if (opts.withScenario || opts.withScenes !== false) {
+  // v0.92: 장면을 만들 때는 뼈대를 장면과 같은 호출에서 짠다 (AI 호출 한 번을 줄인다)
+  if (opts.withScenario && opts.withScenes === false) {
     try {
       onStage('이야기 뼈대 짜는 중…', 76, 78);
       const sp = await generateSpine(llm, world, worldSummary(world), `원작 카드를 바탕으로 한 세계다. 원작의 줄거리와 연표의 핵심 사건을 장의 고비로 삼는다.\n${cut(d.plot_request ?? '', 2000)}`, signal);
@@ -473,7 +474,7 @@ export async function cardToWorld(
   // 4) 장면 (v0.51 — v0.85부터 임무보다 먼저: 임무가 장면의 결과를 조건으로 쓴다): 원작의 인물·관계로 협상·대결·데이트 같은 장면
   if (opts.withScenes !== false) {
     try {
-      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`);
+      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`, 3, { withSpine: true });
       world = r.world;
       notes.push(...r.notes);
     } catch (e) {

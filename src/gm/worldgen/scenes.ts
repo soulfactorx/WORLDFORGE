@@ -9,6 +9,7 @@ import type { SceneAction, SceneCond, SceneDef, SceneDelta, SceneEnd, StoryEffec
 import type { LlmClient } from '../../llm/types';
 import { autoSceneArt } from '../../data/sceneArt';
 import { worldSummary } from './generate';
+import { applySpine, SPINE_RULES, SPINE_SCHEMA, type SpineDraft } from './spine';
 
 // ---------------------------------------------------------------- 초안 형식
 
@@ -196,14 +197,18 @@ export function scenesFromDraft(world: WorldPackage, drafts: SceneDraft[]): { sc
 /** AI로 장면 만들기 → 세계에 더한다 */
 export async function generateScenes(
   llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal, request = '', count = 3,
+  /** withSpine (v0.92): 이야기 뼈대를 같은 호출에서 먼저 짜고 그 뼈대대로 장면을 쓴다 — 뼈대만을 위한 AI 호출 한 번을 줄인다 */
+  opts: { withSpine?: boolean } = {},
 ): Promise<{ world: WorldPackage; notes: string[] }> {
-  onStage('AI가 장면을 쓰는 중 (협상·추격·대결·데이트…)…', 5, 90);
-  const draft = await llm.json<{ scenes: SceneDraft[] }>({
-    system: `${SCENES_SYSTEM}\n- ${genreGuide(world)}`,
+  onStage(opts.withSpine ? 'AI가 이야기 뼈대를 짜고 장면을 쓰는 중…' : 'AI가 장면을 쓰는 중 (협상·추격·대결·데이트…)…', 5, 90);
+  const schema = opts.withSpine ? { ...SCENES_DRAFT_SCHEMA, required: ['spine', 'scenes'], properties: { spine: SPINE_SCHEMA, ...SCENES_DRAFT_SCHEMA.properties } } : SCENES_DRAFT_SCHEMA;
+  const draft = await llm.json<{ scenes: SceneDraft[]; spine?: SpineDraft }>({
+    system: `${SCENES_SYSTEM}${opts.withSpine ? `\n\n먼저 spine에 "이야기 뼈대"를 짠다 (그다음 scenes를 그 뼈대대로 쓴다):\n${SPINE_RULES}` : ''}\n- ${genreGuide(world)}`,
     user: `${worldSummary(world)}${world.scenes?.length ? `\n\n## 이미 있는 장면 (겹치지 않게)\n${world.scenes.map((s) => `- ${s.name}`).join('\n')}` : ''}\n\n## 만들 개수\n${count}개${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 12000, effort: 'medium',
-  }, SCENES_DRAFT_SCHEMA, signal);
+  }, schema, signal);
   onStage('받은 장면을 정리하고 검사하는 중…', 92, 99);
+  if (opts.withSpine) world = applySpine(world, draft?.spine).world;
   const r = scenesFromDraft(world, draft?.scenes ?? []);
   const next: WorldPackage = { ...world, ...(r.flags.length ? { flags: [...(world.flags ?? []), ...r.flags] } : {}), ...(r.scenes.length ? { scenes: [...(world.scenes ?? []), ...r.scenes] } : {}) };
   onStage('완료', 100, 100);

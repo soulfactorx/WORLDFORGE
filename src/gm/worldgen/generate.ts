@@ -134,7 +134,8 @@ export async function generateWorld(
   const stockP = assignStockImages(world, llm, signal);
   stockP.catch(() => {});
   // 이야기 뼈대 (v0.85): 임무·장면·조우를 따로 만들기 전에 서로 어떻게 이어지는지 먼저 정한다. 실패해도 계속한다
-  if (opts.withScenario || scenes) {
+  // v0.92: 장면을 만들 때는 뼈대를 장면과 같은 호출에서 짠다 (AI 호출 한 번을 줄인다). 장면 없이 임무만 만들 때만 따로 부른다
+  if (opts.withScenario && !scenes) {
     try {
       onStage('이야기 뼈대 짜는 중 (장·고비·실패하면 이어지는 길)…', worldEnd, worldEnd + 4);
       const sp = await generateSpine(llm, world, worldSummary(world), opts.prompt.slice(0, 1500), signal);
@@ -148,7 +149,7 @@ export async function generateWorld(
   // 장면 (v0.51) — v0.85부터 임무보다 먼저 만든다: 임무가 장면의 결과를 완료 조건으로 쓸 수 있게. 실패해도 세계는 살린다
   if (scenes) {
     try {
-      const r = await generateScenes(llm, world, (st) => onStage(st, worldEnd + 4, opts.withScenario ? scenesEnd - (scenEnd - worldEnd) : scenesEnd), signal, opts.prompt.slice(0, 1500));
+      const r = await generateScenes(llm, world, (st) => onStage(st, worldEnd + 4, opts.withScenario ? scenesEnd - (scenEnd - worldEnd) : scenesEnd), signal, opts.prompt.slice(0, 1500), 3, { withSpine: true });
       world = r.world;
       notes = [...notes, ...r.notes];
     } catch (e) {

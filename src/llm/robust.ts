@@ -39,8 +39,35 @@ export function repairJson(text: string): unknown {
 const retryable = (e: unknown) => e instanceof LlmJsonError || e instanceof LlmTruncatedError || (e instanceof LlmHttpError && (e.status === 0 || e.status === 408 || e.status === 429 || e.status >= 500))
   || (e instanceof TypeError) /* fetch 네트워크 오류 */ || /overloaded|rate.?limit|timeout|network|ECONN|529|503|502/i.test(String((e as Error)?.message ?? ''));
 
+/** 요청 한도·과부하 (429·529·overloaded): 잠깐이 아니라 넉넉히 기다려야 풀린다 */
+export const rateLimited = (e: unknown) => { const st = (e as { status?: number })?.status; return st === 429 || st === 529 || /rate.?limit|overloaded|too many requests/i.test(String((e as Error)?.message ?? '')); };
+/** 서버가 알려 준 대기 시간 (초) — 없으면 undefined */
+function retryAfterSec(e: unknown): number | undefined {
+  const h = (e as { headers?: unknown })?.headers as { get?: (k: string) => string | null } | Record<string, string> | undefined;
+  const v = typeof h?.get === 'function' ? h.get('retry-after') : (h as Record<string, string> | undefined)?.['retry-after'];
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.min(120, n) : undefined;
+}
+/**
+ * 연결이 끊긴 오류인가 (서버가 답한 오류가 아니다). 앱을 벗어나 끊긴 것은 이런 오류로만 나타난다.
+ * v0.92: 전에는 요청 중에 화면이 한 번이라도 가려졌으면 서버 오류(429 등)까지 "앱을 벗어나 끊겼다"로 보고 바로 다시 보냈다.
+ */
+export const connectionDropped = (e: unknown) => {
+  const st = (e as { status?: number })?.status;
+  if (typeof st === 'number' && st > 0) return false;
+  return e instanceof TypeError || (e as Error)?.name === 'AbortError' || (e instanceof LlmHttpError && e.status === 0) || /network|failed to fetch|load failed|connection|ECONN|socket|terminated/i.test(String((e as Error)?.message ?? ''));
+};
+/** 다시 보내기 전에 기다릴 시간 */
+function backoffMs(e: unknown, attempt: number, base: number): number {
+  if (!rateLimited(e)) return base * attempt;
+  // 한도 초과: 서버가 알려 준 시간, 없으면 15초·30초·45초 (짧게 기다리면 또 걸려 요청만 낭비한다). 테스트처럼 base가 작으면 그에 맞춘다
+  return Math.round((retryAfterSec(e) ?? 15 * attempt) * 1000 * Math.min(1, base / 2000));
+}
+
 export interface RobustOptions {
   attempts?: number; baseDelayMs?: number; maxTokensCap?: number; onRetry?: (attempt: number, reason: string, label?: string) => void;
+  /** 요청 한도에 걸렸을 때 알린다 (동시 요청 수를 줄이는 데 쓴다) */
+  onRateLimit?: () => void;
   /** 늘린 한도를 기억할 이름 (보통 모델 이름). 같은 이름이면 클라이언트를 새로 만들어도 이어서 쓴다 */
   learnKey?: string;
 }
@@ -84,7 +111,7 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
         try { return await llm.stream(req, (d) => { sent = true; if (!quiet) onText(d); }, signal); } catch (e) {
           if (signal?.aborted || e instanceof LlmRefusalError) throw e;
           // 모바일에서 앱을 벗어나 연결이 끊김 → 돌아온 뒤 다시 (재시도 횟수와 따로, 최대 3번)
-          if (hiddenSince(mark) && resumes < 3 && (retryable(e) || (e as Error)?.name === 'AbortError')) {
+          if (hiddenSince(mark) && resumes < 3 && connectionDropped(e)) {
             resumes++; i--;
             o.onRetry?.(resumes, '앱을 벗어나 연결이 끊겨 돌아온 뒤 다시 요청합니다', req.label);
             await whenVisible(signal);
@@ -94,8 +121,9 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
           }
           // 글이 이미 나가기 시작했으면 다시 하지 않는다 (화면에 중복이 생긴다)
           if (sent || i >= attempts || !retryable(e)) throw e;
-          o.onRetry?.(i, (e as Error).message, req.label);
-          await sleep(base * i, signal);
+          if (rateLimited(e)) o.onRateLimit?.();
+          o.onRetry?.(i, rateLimited(e) ? `요청 한도에 걸려 ${Math.round(backoffMs(e, i, base) / 1000)}초 기다렸다가 다시 보냅니다` : (e as Error).message, req.label);
+          await sleep(backoffMs(e, i, base), signal);
         }
       }
     },
@@ -120,7 +148,7 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
             continue;
           }
           // 모바일에서 앱을 벗어나 연결이 끊김 → 돌아온 뒤 다시 (재시도 횟수와 따로)
-          if (hiddenSince(mark) && resumes < 3 && (retryable(e) || (e as Error)?.name === 'AbortError')) {
+          if (hiddenSince(mark) && resumes < 3 && connectionDropped(e)) {
             resumes++; i--;
             o.onRetry?.(resumes, '앱을 벗어나 연결이 끊겨 돌아온 뒤 다시 요청합니다', req.label);
             await whenVisible(signal);
@@ -137,9 +165,10 @@ export function robust(llm: LlmClient, o: RobustOptions = {}): LlmClient {
             if (partial) { try { return repairJson(partial) as T; } catch { /* 원래 오류를 알린다 */ } }
             throw e;
           }
-          o.onRetry?.(i, (e as Error).message, req.label);
+          if (rateLimited(e)) o.onRateLimit?.();
+          o.onRetry?.(i, rateLimited(e) ? `요청 한도에 걸려 ${Math.round(backoffMs(e, i, base) / 1000)}초 기다렸다가 다시 보냅니다` : (e as Error).message, req.label);
           // 길이 제한으로 잘린 것은 서버 문제가 아니므로 기다리지 않고 바로 다시 요청한다
-          if (!(e instanceof LlmTruncatedError)) await sleep(base * i, signal);
+          if (!(e instanceof LlmTruncatedError)) await sleep(backoffMs(e, i, base), signal);
         }
       }
     },
