@@ -1,3 +1,4 @@
+import { combatScaleNote } from '../difficulty';
 import type { Belief, EntityId } from '../schema';
 import type { GameEvent, StoredEvent } from './events';
 import { type CharacterSheet, legacyCharacter } from '../character/sheet';
@@ -193,7 +194,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const names = Object.values(e.combat.combatants).filter((c) => c.side === 'enemy').map((c) => `${c.name}(${ZONE_NAMES[c.zone]})`).join(', ');
       const order = e.combat.order.map((id) => `${e.combat.combatants[id]!.name} ${e.combat.combatants[id]!.initiative}`).join(' → ');
       return { ...s, combat: e.combat, rngState: e.rngState,
-        log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 시작 — ${names}\n우선권: ${order}${e.combat.overmatched ? '\n적들이 당신의 기세에 움찔한다 — 상대가 되지 않는다는 것을 아는 눈치다.' : e.combat.adaptive === 'harder' ? '\n이번 적은 만만치 않아 보인다 — 정예다.' : ''}` }] };
+        log: [...s.log, { turn, kind: 'combat', text: `⚔ 전투 시작 — ${names}\n우선권: ${order}${e.combat.overmatched ? '\n적들이 당신의 기세에 움찔한다 — 상대가 되지 않는다는 것을 아는 눈치다.' : e.combat.adaptive === 'harder' ? '\n이번 적은 만만치 않아 보인다 — 정예다.' : ''}${combatScaleNote(e.combat.difficulty) ? `\n${combatScaleNote(e.combat.difficulty)}` : ''}` }] };
     }
     case 'combat_action': {
       if (!s.combat) return s;

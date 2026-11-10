@@ -257,7 +257,7 @@ export function autoFinishCombat(world: WorldPackage, state: GameState): { state
 /** 조우 하나를 자동으로 싸운다 (장소 무시) */
 export function labFight(world: WorldPackage, state: GameState, spec: EncounterSpec): LabResult {
   return run(world, state, (s) => {
-    const evs = beginAdhocEncounter(world, s, spec, s.turn, { adaptive: false });
+    const evs = beginAdhocEncounter(world, s, spec, s.turn);
     const s2 = evs.reduce((x, e) => applyEvent(x, e, x.turn), s);
     return [...evs, ...autoFinishCombat(world, s2).events];
   }, false);
@@ -276,7 +276,7 @@ export function fightStats(world: WorldPackage, state: GameState, spec: Encounte
     let s: GameState = { ...state, rngState: (state.rngState + Math.imul(i + 1, 2654435761)) >>> 0 };
     let maxRound = 0;
     const apply = (e: GameEvent) => { s = applyEvent(s, e, s.turn); maxRound = Math.max(maxRound, s.combat?.round ?? 0); };
-    const evs = beginAdhocEncounter(world, s, spec, s.turn, { adaptive: false });
+    const evs = beginAdhocEncounter(world, s, spec, s.turn);
     evs.forEach(apply);
     const fin = autoFinishCombat(world, s);
     fin.events.forEach(apply);

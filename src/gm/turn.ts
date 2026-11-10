@@ -350,8 +350,8 @@ export async function runTurn(
   use?: string,
   /** 결정적 선택 (D4): 기다리던 선택에서 고른 것 */
   decision?: { choiceId: string; optionId: string },
-  /** 플레이 설정 (설계 v4 E5): 적응 난이도 (기본 켬) · onImages: 서술이 흘러나오는 동안 그림을 놓는 함수를 받는다 (v0.88) */
-  play: { adaptive?: boolean; /** 실마리 굴림 (v0.89, 기본 켬) */ leads?: boolean; onImages?: (place: ImagePlacer) => void; /** 서술(에필로그 포함)이 다 나왔다 — 기록·안내를 기다리는 동안 남은 그림을 놓는다 */ onNarrated?: () => void;
+  /** 플레이 설정 · onImages: 서술이 흘러나오는 동안 그림을 놓는 함수를 받는다 (v0.88) */
+  play: { /** 실마리 굴림 (v0.89, 기본 켬) */ leads?: boolean; onImages?: (place: ImagePlacer) => void; /** 서술(에필로그 포함)이 다 나왔다 — 기록·안내를 기다리는 동안 남은 그림을 놓는다 */ onNarrated?: () => void;
     /** 서술 전에 엔진이 확정한 것(판정·실마리·전투 시작…)을 화면이 먼저 보여 줄 수 있게, 그때의 상태를 알린다 (v0.90) */
     onState?: (s: GameState) => void } = {},
 ): Promise<TurnResult> {
@@ -593,7 +593,7 @@ export async function runTurn(
     if (rev.kind === 'ambush') {
       const enemies = rev.enemies?.length ? rev.enemies : ambushEnemies(world, s, rrng);
       if (enemies.length) {
-        beginAdhocEncounter(world, s, { id: `${rev.id}#${turn}`, enemies }, turn, play).forEach(push);
+        beginAdhocEncounter(world, s, { id: `${rev.id}#${turn}`, enemies }, turn).forEach(push);
         ambushed = true;
         outcomes.push(`돌발 사건 — 기습 (엔진 확정): ${rev.text} 전투가 시작된다. 서술은 적이 나타나는 순간에서 멈춘다 (결과를 서술하지 않는다).`);
       }
@@ -622,13 +622,13 @@ export async function runTurn(
       rejected.push(`핵심 인물과의 즉석 전투는 막힘: ${foe.name}`);
       outcomes.push(`${josa(displayName(s, foe), '과/와')}의 싸움은 벌어지지 않는다 — 공격은 닿기 전에 막히거나 빗나가고, 상대와 주변이 그 적의에 반응한다 (다치게 하지 않는다).`);
     } else {
-      beginAdhocEncounter(world, s, { id: `adhoc/${foe.id}#${turn}`, enemies: [{ monsterId: `npc:${foe.id}`, zone: 2 }] }, turn, play).forEach(push);
+      beginAdhocEncounter(world, s, { id: `adhoc/${foe.id}#${turn}`, enemies: [{ monsterId: `npc:${foe.id}`, zone: 2 }] }, turn).forEach(push);
       brawl = !!s.combat || s.log.some((l) => l.turn === turn && l.text.startsWith('⚔ 전투 종료'));
       if (brawl) outcomes.push(`전투 시작 (엔진 확정): 플레이어가 ${josa(displayName(s, foe), '을/를')} 공격했다. 서술은 싸움이 붙는 순간에서 멈춘다 (결과를 서술하지 않는다).`);
     }
   }
   if (enc) {
-    beginEncounter(world, s, enc.id, turn, play).forEach(push);
+    beginEncounter(world, s, enc.id, turn).forEach(push);
     const foes = Object.values(s.combat?.combatants ?? {}).filter((c) => c.side === 'enemy').map((c) => c.name);
     outcomes.push(`전투 시작: ${enc.name} — ${foes.join(', ')}.${enc.intro ? ` ${enc.intro}` : ''} 서술은 적이 나타나 전투가 시작되는 순간에서 멈춘다 (결과를 서술하지 않는다).`);
     if (s.log.some((l) => l.turn === turn && l.kind === 'combat' && l.text.includes('→') && !l.text.startsWith('⚔'))) {
@@ -657,7 +657,7 @@ export async function runTurn(
   reveals.forEach(queue);
   if (discoveries) progressEvents(ahead, [{ who: 'player', amount: discoveryXp(ahead.player.sheet.level) * discoveries }], `새로운 사실 ${discoveries}개`, levelCapOf(world)).forEach(queue);
   // 시나리오: 퀘스트 진행·보상·결말 (엔진 판정)
-  const sc = scenarioEvents(world, ahead, play);
+  const sc = scenarioEvents(world, ahead);
   sc.events.forEach(queue);
   const transitions = transitionLines(world, sc.events);
   const beatBlock = beat ? `\n\n## 이번 장면의 연출 지시 (GM — ${BEAT_KINDS[beat.kind]}. 엔진 확정 결과 안에서만)\n${beat.direction}${beat.ending_hook ? `\n마지막에 걸어 둘 것: ${beat.ending_hook}` : ''}` : '';

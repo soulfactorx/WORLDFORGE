@@ -3,7 +3,7 @@ import { sampleWorld } from '../data/sample-world';
 import { createCharacter, suggestedStandardArray } from './character/sheet';
 import { applyEvent, type GameState, replay } from './state/state';
 import { runTurn, startEvents } from '../gm/turn';
-import { adaptiveMode, ambushEnemies, eligibleEvents, monotonous, rollRandomEvent } from './randomEvents';
+import { ambushEnemies, eligibleEvents, monotonous, rollRandomEvent } from './randomEvents';
 import { createRng } from './dice/rng';
 import { beginEncounter } from '../gm/combat';
 import type { WorldPackage } from './schema';
@@ -41,17 +41,19 @@ describe('돌발 사건 · 템포 · 적응 난이도 (설계 v4 E5)', () => {
     const e = ambushEnemies(sampleWorld, s, createRng(1));
     expect(e.length).toBeGreaterThan(0);
   });
-  it('적응 난이도: 연달아 지면 적 HP가 줄고, 연달아 이기면 정예', () => {
+  it('게임 난이도 (v0.91): DC 보정이 전투에서 적의 방어도·체력에 적용된다 (적응 난이도는 없다)', () => {
     const base = at(start(), 'loc/forest-clearing');
-    const withEnds = (xs: string[]) => ({ ...base, log: [...base.log, ...xs.map((x) => ({ turn: 1, kind: 'combat' as const, text: `⚔ 전투 종료 — ${x}` }))] });
-    expect(adaptiveMode(withEnds(['승리', '쓰러짐', '도주']))).toBe('easier');
-    expect(adaptiveMode(withEnds(['승리', '승리', '승리']))).toBe('harder');
-    expect(adaptiveMode(withEnds(['쓰러짐', '승리']))).toBe(null);
-    const hp = (s: GameState, adaptive = true) => { const ev = beginEncounter(sampleWorld, s, 'enc/clearing-wolves', 1, { adaptive }).find((e) => e.type === 'combat_started'); return ev && ev.type === 'combat_started' ? Object.values(ev.combat.combatants).filter((c) => c.side === 'enemy').map((c) => c.maxHp) : []; };
-    const normal = hp(base);
-    expect(hp(withEnds(['쓰러짐', '쓰러짐']))[0]).toBeLessThan(normal[0]!);
-    expect(hp(withEnds(['승리', '승리', '승리']))[0]).toBeGreaterThan(normal[0]!);
-    expect(hp(withEnds(['승리', '승리', '승리']), false)).toEqual(normal); // 설정에서 끄면 그대로
+    const foes = (s: GameState) => { const ev = beginEncounter(sampleWorld, s, 'enc/clearing-wolves', 1).find((e) => e.type === 'combat_started'); return ev && ev.type === 'combat_started' ? Object.values(ev.combat.combatants).filter((c) => c.side === 'enemy').map((c) => ({ hp: c.maxHp, ac: c.ac })) : []; };
+    const normal = foes(base);
+    const easy = foes({ ...base, dcMod: -4 });
+    const hard = foes({ ...base, dcMod: 4 });
+    expect(easy[0]!.hp).toBeLessThan(normal[0]!.hp);
+    expect(easy[0]!.ac).toBe(normal[0]!.ac - 2);
+    expect(hard[0]!.hp).toBeGreaterThan(normal[0]!.hp);
+    expect(hard[0]!.ac).toBe(normal[0]!.ac + 2);
+    // 연달아 지거나 이겨도 저절로 바뀌지 않는다
+    const lost = { ...base, log: [...base.log, ...['쓰러짐', '쓰러짐'].map((x) => ({ turn: 1, kind: 'combat' as const, text: `⚔ 전투 종료 — ${x}` }))] };
+    expect(foes(lost)).toEqual(normal);
   });
   it('턴: 이동하면 돌발 사건이 일어날 수 있고, 기습이면 전투가 시작된다', async () => {
     const w: WorldPackage = { ...structuredClone(sampleWorld), randomEvents: [{ id: 'rand/wolf', name: '늑대', kind: 'ambush', text: '늑대가 튀어나온다!', where: ['loc/village-gate'], enemies: [{ monsterId: 'wolf', zone: 2 }] }] };

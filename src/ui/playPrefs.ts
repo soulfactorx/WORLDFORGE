@@ -1,4 +1,4 @@
-/** 플레이 설정 (이 브라우저에 기억): 적응 난이도 (설계 v4 E5, 기본 켬) · 표시 수준 (설계 v4 E8, 기본 "기본") */
+/** 플레이 설정 (이 브라우저에 기억): 표시 수준 (설계 v4 E8, 기본 "기본") 등. 난이도는 세이브마다 따로 기억한다 (engine/difficulty) */
 const KEY = 'worldforge.play';
 /** immersive = 숫자·알림 최소 (기록에만), standard = 지금처럼, game = 경험치 막대까지 */
 export type DisplayLevel = 'immersive' | 'standard' | 'game';
@@ -10,8 +10,8 @@ export type SceneNarration = 'scene' | 'fixed' | 'end' | 'ai';
 export const SCENE_NARRATIONS: [SceneNarration, string][] = [['scene', '장면 설정을 따름'], ['fixed', '정해진 글만 (AI 없이 빠르게)'], ['end', '끝날 때만 AI 서술'], ['ai', '매 차례 AI가 장면 서술']];
 /** 배경 이미지 (v0.59): every = 매 턴 서술 맨 앞, change = 장소·장면이 바뀔 때만 */
 export type BackgroundMode = 'every' | 'change';
-export interface PlayPrefs { adaptive: boolean; display: DisplayLevel; images: ImageSize; sceneNarration: SceneNarration; background: BackgroundMode; /** GM 스타일 덮어쓰기 ('world' = 세계 설정 따름, v0.80) */ gmStyle: string }
-const DEFAULTS: PlayPrefs = { adaptive: true, display: 'standard', images: 'large', sceneNarration: 'scene', background: 'every', gmStyle: 'world' };
+export interface PlayPrefs { display: DisplayLevel; images: ImageSize; sceneNarration: SceneNarration; background: BackgroundMode; /** GM 스타일 덮어쓰기 ('world' = 세계 설정 따름, v0.80) */ gmStyle: string }
+const DEFAULTS: PlayPrefs = { display: 'standard', images: 'large', sceneNarration: 'scene', background: 'every', gmStyle: 'world' };
 export function loadPlayPrefs(): PlayPrefs {
   try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<PlayPrefs>) }; } catch { return { ...DEFAULTS }; }
 }

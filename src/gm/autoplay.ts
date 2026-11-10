@@ -129,7 +129,7 @@ function candidates(world: WorldPackage, s: GameState, rng: Rng): Cand[] {
   }
   for (const e of availableEncounters(world, s)) {
     out.push({ kind: 'fight', label: `전투: ${e.name}`, run: (st) => {
-      const evs = beginEncounter(world, st, e.id, st.turn, { adaptive: false });
+      const evs = beginEncounter(world, st, e.id, st.turn);
       const s2 = evs.reduce((x, ev) => applyEvent(x, ev, x.turn), st);
       return [...evs, ...autoFinishCombat(world, s2).events];
     } });

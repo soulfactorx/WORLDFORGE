@@ -84,14 +84,13 @@ export function AvControls({ onChange, dcMod, onDcMod }: { onChange: () => void;
             </select>
           </label>
           {onDcMod && (
-            <label className="small av-vol">난이도 (이 세이브 — 모든 판정 DC 보정)
+            <label className="small av-vol">난이도 (이 세이브 — 판정 DC · 전투의 적 방어도·체력)
               <select value={String(dcMod ?? 0)} onChange={(e) => onDcMod(Number(e.target.value) || 0)}>
                 {!DIFFICULTIES.some((d) => d.dc === (dcMod ?? 0)) && <option value={String(dcMod ?? 0)}>{difficultyLabel(dcMod ?? 0)}</option>}
                 {DIFFICULTIES.map((d) => <option key={d.id} value={d.dc}>{difficultyLabel(d.dc)} — {d.desc}</option>)}
               </select>
             </label>
           )}
-          <label className="check small"><input type="checkbox" checked={play.adaptive} onChange={(e) => { const p = { ...play, adaptive: e.target.checked }; setPlay(p); savePlayPrefs(p); }} /> 적응 난이도 (연달아 지면 조금 쉽게, 연달아 압승하면 정예)</label>
           <DebugToggle />
           <p className="small muted">소리는 이 기기에서 바로 만들어 냅니다 (파일·인터넷 필요 없음). 음성은 브라우저에 설치된 한국어 목소리를 씁니다.</p>
         </div>

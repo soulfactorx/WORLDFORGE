@@ -1,8 +1,7 @@
 /**
- * 돌발 사건 · 템포 · 적응 난이도 (설계 v4 E5) — "지루해지지 않는다".
+ * 돌발 사건 · 템포 (설계 v4 E5) — "지루해지지 않는다".
  * - 돌발 사건 표: 이동·휴식 때 엔진이 굴린다. 세계가 표를 정하지 않으면(randomEvents 없음) 기본 표를 쓴다 ([]면 끔).
  * - 단조로움: 한동안 아무 일도 없으면 돌발 사건 확률이 오른다.
- * - 적응 난이도: 연달아 지면 다음 전투가 조금 쉬워지고, 연달아 압승하면 정예가 나온다 (설정에서 끔).
  * 모든 굴림은 상태에서 씨앗을 얻는다 — 같은 상태면 같은 결과.
  */
 import { encounterDifficulty, monstersOfWorld, monsterTable } from './combat/monsters';
@@ -71,16 +70,6 @@ export function ambushEnemies(world: WorldPackage, state: GameState, rng: Rng): 
     }
   }
   return [];
-}
-
-export type Adaptive = 'easier' | 'harder' | null;
-
-/** 적응 난이도: 최근 전투 결과 (연달아 2번 지거나 도망 → 쉽게, 연달아 3번 이기면 정예) */
-export function adaptiveMode(state: GameState): Adaptive {
-  const ends = state.log.filter((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 종료')).slice(-3).map((l) => l.text.replace('⚔ 전투 종료 — ', ''));
-  if (ends.length >= 2 && ends.slice(-2).every((x) => x !== '승리')) return 'easier';
-  if (ends.length >= 3 && ends.every((x) => x === '승리')) return 'harder';
-  return null;
 }
 
 export const isRandomEncounter = (id: EntityId) => id.startsWith('rand/');

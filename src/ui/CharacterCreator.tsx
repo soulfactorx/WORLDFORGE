@@ -180,13 +180,13 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
 
       <fieldset>
         <legend>난이도</legend>
-        <label>모든 판정의 난이도(DC) 보정
+        <label>판정과 전투의 난이도
           <select value={DIFFICULTIES.some((d) => d.dc === dcMod) ? String(dcMod) : 'custom'} onChange={(e) => setDcMod(Number(e.target.value) || 0)}>
             {DIFFICULTIES.map((d) => <option key={d.id} value={d.dc}>{difficultyLabel(d.dc)} — {d.desc}</option>)}
             {!DIFFICULTIES.some((d) => d.dc === dcMod) && <option value="custom">{difficultyLabel(dcMod)}</option>}
           </select>
         </label>
-        <p className="small muted">행동 판정·장면 판정·실마리 굴림에 적용됩니다. 플레이 중에도 "소리·화면" 설정에서 바꿀 수 있습니다.</p>
+        <p className="small muted">행동 판정·장면 판정·실마리 굴림의 DC와, 전투에서 적의 방어도·체력에 적용됩니다. 플레이 중에도 "소리·화면" 설정에서 바꿀 수 있습니다.</p>
       </fieldset>
 
       {errors.length > 0 && <ul className="errors">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}

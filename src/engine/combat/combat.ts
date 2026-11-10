@@ -122,8 +122,10 @@ export interface Economy {
 export interface CombatState {
   /** 파티가 압도적으로 강한 조우 (설계 v4 E4) — 적이 일찍 달아나고, 서술이 주인공의 기세를 그린다 */
   overmatched?: boolean;
-  /** 적응 난이도로 조정된 조우 (설계 v4 E5) */
+  /** (v0.91부터 쓰지 않는다 — 예전 세이브의 기록용) 적응 난이도로 조정된 조우 */
   adaptive?: 'easier' | 'harder';
+  /** 게임 난이도 (v0.91): 이 전투에 적용된 DC 보정 */
+  difficulty?: number;
   encounterId: string;
   round: number;
   order: string[];

@@ -252,7 +252,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       const t0 = performance.now();
       const { events, rejected, state: after } = await runTurn(createLlmClient(settings), world, state, text,
         (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision,
-        { adaptive: loadPlayPrefs().adaptive, onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true),
+        { onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true),
           onState: (st) => setPendingLog(st.log.slice(state.log.length).filter((l) => l.kind !== 'narration' && l.kind !== 'guide')) });
       metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected });
       await endDebug(dbg, { events, before: state, after, rejected });

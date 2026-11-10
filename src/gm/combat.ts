@@ -19,7 +19,7 @@ import { appearanceOf, displayName } from '../engine/names';
 import type { CharacterSheet } from '../engine/character/sheet';
 import { CLASS_KITS } from '../engine/combat/cards';
 import type { EncounterSpec, Gear } from '../engine/combat/combat';
-import { adaptiveMode } from '../engine/randomEvents';
+import { combatScale } from '../engine/difficulty';
 import { abilityModifier } from '../engine/dice/dice';
 import { equippedAc, gearBonus, itemCards, itemDef, rollLoot } from '../engine/items';
 import { levelSpan } from '../engine/character/progression';
@@ -154,11 +154,8 @@ export function playerGear(world: WorldPackage, state: GameState): Gear {
   };
 }
 
-/** 조우 시작 + (적이 우선권이 빠르면) 플레이어 차례까지 적 행동 진행 */
-export interface EncounterOptions {
-  /** 적응 난이도 (설계 v4 E5, 기본 켬): 연달아 지면 적이 약해지고, 연달아 압승하면 정예가 나온다 */
-  adaptive?: boolean;
-}
+/** 조우를 여는 선택 사항 (v0.91: 적응 난이도는 없앴다 — 난이도는 세이브의 DC 보정 하나로 관리한다) */
+export type EncounterOptions = Record<string, never>;
 
 export function beginEncounter(world: WorldPackage, state: GameState, encounterId: string, turn: number, opts: EncounterOptions = {}): GameEvent[] {
   const enc = availableEncounters(world, state).find((e) => e.id === encounterId);
@@ -198,15 +195,17 @@ function startEncounterSpec(world: WorldPackage, state: GameState, enc: Encounte
   if (diff.xp <= diff.budget[0] / 2) {
     for (const c of Object.values(combat.combatants)) if (c.side === 'enemy' && c.role !== 'boss') c.fleeAt = Math.max(c.fleeAt ?? 0, 0.6);
     combat.overmatched = true;
-  } else if (opts.adaptive !== false) {
-    // 적응 난이도 (설계 v4 E5)
-    const mode = adaptiveMode(state);
+  }
+  // 게임 난이도 (v0.91): 세이브의 DC 보정을 적의 방어도·체력에 적용한다 (예전의 적응 난이도를 대신한다)
+  const dcMod = state.dcMod ?? 0;
+  if (dcMod) {
+    const sc = combatScale(dcMod);
     for (const c of Object.values(combat.combatants)) {
       if (c.side !== 'enemy') continue;
-      if (mode === 'easier') { c.maxHp = Math.max(1, Math.round(c.maxHp * 0.75)); c.hp = c.maxHp; }
-      if (mode === 'harder' && c.role !== 'boss') { c.maxHp = Math.round(c.maxHp * 1.25); c.hp = c.maxHp; c.ac += 1; c.xp = Math.round((c.xp ?? 0) * 1.25); c.name = `${c.name} (정예)`; }
+      c.maxHp = Math.max(1, Math.round(c.maxHp * sc.hp)); c.hp = c.maxHp;
+      c.ac = Math.max(5, c.ac + sc.ac);
     }
-    if (mode) combat.adaptive = mode;
+    combat.difficulty = dcMod;
   }
   const b = new Builder(world, state, turn);
   b.push({ type: 'combat_started', combat, rngState: rng.state() });
