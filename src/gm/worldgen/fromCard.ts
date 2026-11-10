@@ -146,6 +146,8 @@ export interface CardWorldOptions {
   translate?: boolean;
   /** 이미지 없는 인물·장소에 내장 기본 이미지 (기본 켬) */
   stockImages?: boolean;
+  /** 이미지 정리의 진행 (v0.86.1): 이야기 만들기와 동시에 돌므로 따로 알린다. null = 끝남 */
+  onImageStage?: (text: string | null) => void;
   /** 분석 결과를 바꾸고 싶을 때 (기본: 자동 분류) */
   choices?: EntryChoice[];
 }
@@ -409,9 +411,11 @@ export async function cardToWorld(
   const imageTrack = (async () => {
     const out: string[] = [];
     let assets = matched;
+    const say = (text: string | null) => { try { opts.onImageStage?.(text); } catch { /* 표시 실패는 무시 */ } };
     if (opts.classifyImages && assets.some((a) => a.kind === 'other')) {
       try {
-        assets = await classifyAssetsAI(llm, assets, ents.characters.map((c, i) => ({ id: c.id, name: c.name, aliases: targets[i]!.aliases })), imageWorld.locations.map((l) => ({ id: l.id, name: l.name })), undefined, signal);
+        assets = await classifyAssetsAI(llm, assets, ents.characters.map((c, i) => ({ id: c.id, name: c.name, aliases: targets[i]!.aliases })), imageWorld.locations.map((l) => ({ id: l.id, name: l.name })),
+          (done, total, info) => say(`AI가 이미지 이름 분류 중 — ${done.toLocaleString()} / ${total.toLocaleString()}장${info ? ` · ${info}` : ''}`), signal);
       } catch (e) {
         if (signal?.aborted) throw e;
         out.push(`이미지 AI 분류에 실패해 이름 규칙으로만 연결했습니다: ${(e as Error).message}`);
@@ -432,7 +436,10 @@ export async function cardToWorld(
     // 초상화 (편집기·목록용 작은 이미지)
     const portraits = new Map<string, string>();
     if (opts.makePortrait) {
-      for (const c of imageWorld.characters.slice(0, 60)) {
+      const who = imageWorld.characters.slice(0, 60);
+      let n = 0;
+      for (const c of who) {
+        say(`초상화 만드는 중 — ${++n} / ${who.length}명`);
         const g = genderOf(c);
         const a = assets.find((x) => x.characterId === c.id && x.tags.includes('default') && (!g || !x.gender || x.gender === g)) ?? assets.find((x) => x.characterId === c.id);
         if (!a) continue;
@@ -441,14 +448,16 @@ export async function cardToWorld(
     }
     // 이미지가 없는 인물·장소에는 앱 내장 기본 이미지
     if (opts.stockImages !== false) {
+      say('이미지 없는 인물·장소에 기본 이미지 고르는 중');
       const st = await assignStockImages({ ...imageWorld, characters: imageWorld.characters.map((c) => (gender.has(c.id) ? { ...c, gender: gender.get(c.id)! } : c)), assets }, llm, signal);
       assets = st.assets;
       if (st.added) out.push(`이미지가 없는 인물·장소 ${st.added}곳에 기본 이미지를 붙였습니다${st.byAi ? ' (AI가 고름)' : ''}. 편집기 이미지 탭에서 바꿀 수 있습니다.`);
     }
+    say(null);
     return { assets, images, gender, portraits, notes: out };
   })();
   // 이야기 쪽이 먼저 실패해도 이미지 쪽 오류가 처리되지 않은 채 남지 않게
-  imageTrack.catch(() => {});
+  imageTrack.catch(() => { try { opts.onImageStage?.(null); } catch { /* 무시 */ } });
 
   // 3.5) 이야기 뼈대 (v0.85): 원작 연표의 핵심 사건을 고비로 — 임무·장면·조우가 서로 이어지게
   if (opts.withScenario || opts.withScenes !== false) {

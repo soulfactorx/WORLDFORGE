@@ -46,6 +46,8 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
   const [agree, setAgree] = useState(false);
   const [stage, setStage] = useState('');
   const [progress, setProgress] = useState<[number, number] | null>(null);
+  // 이미지 정리는 이야기 만들기와 동시에 돈다 — 진행을 따로 보여 준다 (v0.86.1)
+  const [imageStage, setImageStage] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<{ name: string; url: string }[]>([]);
   const abort = useRef<AbortController | null>(null);
   const [translate, setTranslate] = useState(true);
@@ -135,6 +137,7 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
       const r = await cardToWorld(llm, bundle, {
         contentRating: rating, classifyImages: classify, withScenario, withScenes, withRules, choices, translate, aiFindCharacters: findChars,
         makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),
+        onImageStage: setImageStage,
       }, onStage, signal);
       onStage('이미지 저장 중…', 91, 91);
       const saved = await storeAssets(r.world.manifest.id, r.images, (d, t) => { setProgress([d, t]); onStage('이미지 저장 중…', 91 + Math.round((d / Math.max(1, t)) * 8), 99); }, signal);
@@ -151,7 +154,7 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
       if (!signal.aborted) { setError((e as Error).message); setFailed(true); }
       setStored(await genCacheCount(bundle.fingerprint));
     } finally {
-      setStage(''); setProgress(null); setPct({ at: 0, next: 0, since: 0, start: 0 });
+      setStage(''); setProgress(null); setImageStage(null); setPct({ at: 0, next: 0, since: 0, start: 0 });
     }
   }
 
@@ -253,6 +256,7 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
               <div className="gen-progress" role="status" aria-live="polite">
                 <div className="row"><span className="spinner" /> <b>{shown}%</b> <span className="small">{stage}</span><span className="spacer" /><span className="small muted">{Math.floor(sec / 60)}분 {sec % 60}초</span></div>
                 <div className="progress-bar"><span style={{ width: `${shown}%` }} /></div>
+                {imageStage && <span className="small muted gen-side">🖼 이미지 (동시에 진행): {imageStage}</span>}
                 {progress && <span className="small muted">이미지 {progress[0].toLocaleString()} / {progress[1].toLocaleString()}장</span>}
               </div>
             );

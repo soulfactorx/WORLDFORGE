@@ -66,9 +66,13 @@ describe('cardToWorld', () => {
   it('카드 전체 → 개인용 세계 (인물·장소·연표·시작 방식·문체·이미지·임무)', async () => {
     const b = await readCharxBundle(makeCharx(100, images.length, { lore, images }), 'w.charx');
     const seen: string[] = [];
-    const r = await cardToWorld(mockLlm(seen), b, { contentRating: 'teen', classifyImages: true, withScenario: true }, () => {});
+    const imageStages: (string | null)[] = [];
+    const r = await cardToWorld(mockLlm(seen), b, { contentRating: 'teen', classifyImages: true, withScenario: true, onImageStage: (x) => imageStages.push(x) }, () => {});
     const w = r.world;
     expect(hasErrors(r.issues)).toBe(false);
+    // 이미지 정리의 진행은 따로 알리고, 끝나면 null로 지운다 (v0.86.1)
+    expect(imageStages.at(-1)).toBeNull();
+    expect(imageStages.some((x) => x?.includes('기본 이미지') || x?.includes('분류'))).toBe(true);
     expect(w.manifest.private?.source).toContain('세계');
     expect(() => exportWpk(w)).toThrow('개인용');
     // 인물은 원문 프로필을 그대로 쓴다
