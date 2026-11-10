@@ -6,12 +6,16 @@ import { CARD_LIST } from '../engine/combat/combat';
 import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { type Ending, type Quest, QUEST_TYPES, type StoryFlag, type WorldPackage } from '../engine/schema';
 import { ConditionField } from './ConditionEditor';
+import { stageGates } from '../engine/encounter';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
 
 type Set = (patch: Partial<WorldPackage>) => void;
 
 export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
   const chars = [['', '(없음)'], ...w.characters.map((c) => [c.id, c.name] as const)] as const;
+  const encs = [['', '(없음)'], ...(w.encounters ?? []).map((e) => [e.id, e.name] as const)] as const;
+  const scns = [['', '(없음)'], ...(w.scenes ?? []).map((d) => [d.id, d.name] as const)] as const;
+  const viaOf = (v: { encounter?: string; scene?: string }) => (v.encounter || v.scene ? { ...(v.encounter ? { encounter: v.encounter } : {}), ...(v.scene ? { scene: v.scene } : {}) } : undefined);
   const claims = [['', '(없음)'], ...w.claims.map((c) => [c.id, c.statement.slice(0, 40)] as const)] as const;
   return (
     <ItemList<Quest> title="임무" testKind="quest" items={w.quests ?? []} onChange={(quests) => set({ quests })}
@@ -45,6 +49,15 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
                 <Area label="GM 힌트" value={st.hint} onChange={(hint) => upSt({ hint })} rows={2} />
                 <ConditionField label="완료 조건" value={st.complete} world={w} completion onChange={(complete) => upSt({ complete: complete ?? UNSET_CONDITION })} />
                 <ConditionField label="실패 조건 (이 단계에서만)" value={st.fail} world={w} optional onChange={(fail) => upSt({ fail })} />
+                <fieldset className="cond-field">
+                  <legend>이 단계의 고비 (선택 — GM·서술·안내가 이쪽으로 이야기를 이끈다)</legend>
+                  <div className="ability-grid">
+                    <Select label="전투 (이 단계에서만 일어난다)" value={st.via?.encounter ?? ''} options={encs} onChange={(v) => upSt({ via: viaOf({ ...st.via, encounter: v || undefined }) })} />
+                    <Select label="장면" value={st.via?.scene ?? ''} options={scns} onChange={(v) => upSt({ via: viaOf({ ...st.via, scene: v || undefined }) })} />
+                  </div>
+                  {(() => { const g = stageGates(st); const names = [...g.encounters.map((id) => `전투 「${w.encounters?.find((x) => x.id === id)?.name ?? id}」`), ...g.scenes.map((id) => `장면 「${w.scenes?.find((x) => x.id === id)?.name ?? id}」`)];
+                    return <p className="small muted enc-note">{names.length ? `지금 이 단계에 걸린 것: ${names.join(', ')} (완료 조건의 "조우를 이겼다"·"장면의 결과"도 함께 센다). 걸린 전투는 이 단계가 진행 중일 때만 일어난다 — 조우 탭의 "일어날 수 있는 조건"으로 풀 수 있다.` : '걸린 것이 없다. 완료 조건에 조우·장면을 쓰면 자동으로 걸린다.'}</p>; })()}
+                </fieldset>
                 <div className="row">
                   {i > 0 && <button type="button" className="small" onClick={() => { const s2 = [...q.stages]; [s2[i - 1], s2[i]] = [s2[i]!, s2[i - 1]!]; up({ stages: s2 }); }}>▲ 위로</button>}
                   {q.stages.length > 1 && <button type="button" className="small" onClick={() => up({ stages: q.stages.filter((_, j) => j !== i) })}>단계 삭제</button>}

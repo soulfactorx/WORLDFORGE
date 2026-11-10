@@ -20,10 +20,11 @@ const opts = (list: { id: string; name?: string; statement?: string }[] | undefi
 
 // ---------------------------------------------------------------- 효과
 
-type FxKind = 'setFlag' | 'moveNpc' | 'killNpc' | 'reveal' | 'relationship' | 'reputation' | 'clock' | 'giveItem' | 'takeItem' | 'money' | 'var' | 'npcRelation' | 'trait';
+type FxKind = 'setFlag' | 'moveNpc' | 'killNpc' | 'reveal' | 'relationship' | 'reputation' | 'clock' | 'giveItem' | 'takeItem' | 'money' | 'var' | 'npcRelation' | 'trait' | 'startScene' | 'startEncounter' | 'moveTo';
 const FX_LABEL: Record<FxKind, string> = {
   setFlag: '플래그 세우기', moveNpc: '인물 옮기기', killNpc: '인물 죽음', reveal: '플레이어가 알게 됨', relationship: '관계 변화', reputation: '세력 평판',
   clock: '시계 칸 바꾸기', giveItem: '아이템 주기', takeItem: '아이템 빼앗기', money: '돈', var: '세계 수치 바꾸기', npcRelation: '인물끼리 관계 바꾸기', trait: '주인공 성향 움직이기',
+  startScene: '장면으로 이어진다', startEncounter: '전투로 이어진다', moveTo: '플레이어를 옮긴다',
 };
 const fxKind = (e: StoryEffect): FxKind => (Object.keys(FX_LABEL) as FxKind[]).find((k) => k in e)!;
 function blankFx(k: FxKind, w: WorldPackage): StoryEffect {
@@ -42,6 +43,9 @@ function blankFx(k: FxKind, w: WorldPackage): StoryEffect {
     case 'var': return { var: f(w.vars), add: -10 };
     case 'trait': return { trait: traitsFor(w)[0]?.id ?? '', add: 5 };
     case 'npcRelation': return { npcRelation: f(w.characters), with: w.characters[1]?.id ?? f(w.characters), kind: 'rival' };
+    case 'startScene': return { startScene: f(w.scenes) };
+    case 'startEncounter': return { startEncounter: f(w.encounters) };
+    case 'moveTo': return { moveTo: f(w.locations) };
   }
 }
 
@@ -80,6 +84,9 @@ export function EffectsEditor({ label, value, w, onChange }: { label: string; va
               {k === 'clock' && <><S value={x.clock as string} options={opts(w.clocks)} onChange={(v) => up(i, { ...x, clock: v } as StoryEffect)} /> 칸 <N value={x.by as number} onChange={(v) => up(i, { ...x, by: v } as StoryEffect)} /></>}
               {(k === 'giveItem' || k === 'takeItem') && <><S value={x[k] as string} options={items} onChange={(v) => up(i, { ...x, [k]: v } as StoryEffect)} /> × <N value={(x.n as number) ?? 1} onChange={(v) => up(i, { ...x, n: v } as StoryEffect)} /></>}
               {k === 'money' && <N value={x.money as number} onChange={(v) => up(i, { money: v })} />}
+              {k === 'startScene' && <S value={x.startScene as string} options={opts(w.scenes)} onChange={(v) => up(i, { startScene: v })} />}
+              {k === 'startEncounter' && <S value={x.startEncounter as string} options={opts(w.encounters)} onChange={(v) => up(i, { startEncounter: v })} />}
+              {k === 'moveTo' && <S value={x.moveTo as string} options={opts(w.locations)} onChange={(v) => up(i, { moveTo: v })} />}
               {k === 'trait' && <><S value={x.trait as string} options={traitsFor(w).map((t) => [t.id, `${t.name} (${t.low}↔${t.high})`] as const)} onChange={(v) => up(i, { ...x, trait: v } as StoryEffect)} /> <N value={x.add as number} onChange={(v) => up(i, { trait: x.trait, add: v ?? 0 } as StoryEffect)} /> <span className="small muted">(+면 {traitsFor(w).find((t) => t.id === x.trait)?.high ?? '높은 쪽'}, -면 {traitsFor(w).find((t) => t.id === x.trait)?.low ?? '낮은 쪽'})</span></>}
               {k === 'var' && <><S value={x.var as string} options={opts(w.vars)} onChange={(v) => up(i, { ...x, var: v } as StoryEffect)} /><S value={x.set !== undefined ? 'set' : 'add'} options={[['add', '더하기'], ['set', '정하기']]} onChange={(v) => up(i, (v === 'set' ? { var: x.var, set: (x.add as number) ?? 50 } : { var: x.var, add: (x.set as number) ?? 10 }) as StoryEffect)} /><N value={(x.set ?? x.add) as number} onChange={(v) => up(i, (x.set !== undefined ? { var: x.var, set: v ?? 0 } : { var: x.var, add: v ?? 0 }) as StoryEffect)} /></>}
               {k === 'npcRelation' && <><S value={x.npcRelation as string} options={opts(w.characters)} onChange={(v) => up(i, { ...x, npcRelation: v } as StoryEffect)} /> ↔ <S value={x.with as string} options={opts(w.characters)} onChange={(v) => up(i, { ...x, with: v } as StoryEffect)} /><S value={x.kind as string} options={[...Object.entries(RELATION_KIND_LABEL), ['none', '관계 끊김']] as [string, string][]} onChange={(v) => up(i, { ...x, kind: v } as StoryEffect)} /></>}

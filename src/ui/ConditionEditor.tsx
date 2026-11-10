@@ -12,14 +12,14 @@ import type { Condition, WorldPackage } from '../engine/schema';
 
 type Kind =
   | 'all' | 'any' | 'not' | 'knows' | 'at' | 'cleared' | 'inParty' | 'relationship' | 'stage' | 'reputation' | 'flag' | 'questDone' | 'questFailed'
-  | 'level' | 'chapter' | 'arcDone' | 'clock' | 'choice' | 'day' | 'hasItem' | 'money' | 'defeated' | 'npcAlive' | 'npcAt' | 'var' | 'questOutcome' | 'npcGoal' | 'sceneEnd' | 'trait';
+  | 'level' | 'chapter' | 'arcDone' | 'clock' | 'choice' | 'day' | 'hasItem' | 'money' | 'defeated' | 'npcAlive' | 'npcAt' | 'var' | 'questOutcome' | 'npcGoal' | 'sceneEnd' | 'trait' | 'encounter';
 
 export const KIND_LABEL: Record<Kind, string> = {
   all: '모두 참 (그리고)', any: '하나라도 참 (또는)', not: '아니다', knows: '플레이어가 안다', at: '플레이어가 그 장소에', cleared: '조우를 이겼다',
   inParty: '동료로 함께', relationship: '관계 수치', stage: '관계 단계', reputation: '세력 평판', flag: '플래그가 섰다', questDone: '임무 성공',
   questFailed: '임무 실패', level: '레벨 이상', chapter: '줄기의 장 진행', arcDone: '줄기가 끝남', clock: '시계 칸', choice: '결정적 선택',
   day: '며칠이 지남', hasItem: '아이템을 가짐', money: '돈 이상', defeated: '적을 쓰러뜨린 수', npcAlive: '인물이 살아 있다', npcAt: '인물이 그 장소에',
-  var: '세계 수치', questOutcome: '임무의 결과', npcGoal: '인물의 목표', sceneEnd: '장면의 결과', trait: '주인공 성향',
+  var: '세계 수치', questOutcome: '임무의 결과', npcGoal: '인물의 목표', sceneEnd: '장면의 결과', trait: '주인공 성향', encounter: '조우의 결과 (승리·패배·도주)',
 };
 
 const goals = (w: WorldPackage) => w.characters.flatMap((c) => (c.goals ?? []).map((g) => [g.id, `${c.name}: ${g.text.slice(0, 30)}`] as const));
@@ -62,6 +62,7 @@ function blank(kind: Kind, w: WorldPackage): Condition {
     case 'questOutcome': return { questOutcome: first(w.quests) };
     case 'npcGoal': return { npcGoal: goals(w)[0]?.[0] ?? '' };
     case 'sceneEnd': return { sceneEnd: first(w.scenes) };
+    case 'encounter': return { encounter: first(w.encounters), is: 'defeat' };
   }
 }
 
@@ -80,6 +81,7 @@ export function describeCondition(c: Condition, w: WorldPackage): string {
     case 'knows': return `안다: ${name(w.claims, x.knows as string)}`;
     case 'at': return `${name(w.locations, x.at as string)}에 있다`;
     case 'cleared': return `${name(w.encounters, x.cleared as string)} 승리`;
+    case 'encounter': return `${name(w.encounters, x.encounter as string)} ${x.is ? ({ victory: '승리', defeat: '패배', fled: '도주' } as Record<string, string>)[x.is as string] ?? x.is : '치름'}`;
     case 'inParty': return `${name(w.characters, x.inParty as string)} 동행`;
     case 'relationship': return `${name(w.characters, x.relationship as string)} ${AXIS_NAMES[x.axis as keyof typeof AXIS_NAMES]}${x.gte !== undefined ? ` ≥ ${x.gte}` : ''}${x.lte !== undefined ? ` ≤ ${x.lte}` : ''}`;
     case 'stage': return `${name(w.characters, x.stage as string)}와 ${(x.in as string[]).join('/')}`;
@@ -145,6 +147,7 @@ export function ConditionEditor({ value, world: w, onChange, depth = 0 }: { valu
       case 'knows': return <><Sel value={x.knows as string} options={opts(w.claims)} onChange={(v) => set({ knows: v })} /><Sel value={(x.min as string) ?? ''} options={[['', '소문이라도'], ['partial', '들은 이야기 이상'], ['confirmed', '확인함']]} onChange={(v) => onChange(v ? { ...x, min: v } as Condition : (({ min: _m, ...r }) => r)(x) as Condition)} /></>;
       case 'at': return <Sel value={x.at as string} options={opts(w.locations)} onChange={(v) => set({ at: v })} />;
       case 'cleared': return <Sel value={x.cleared as string} options={opts(w.encounters)} onChange={(v) => set({ cleared: v })} />;
+      case 'encounter': return <><Sel value={x.encounter as string} options={opts(w.encounters)} onChange={(v) => set({ encounter: v })} /><Sel value={(x.is as string) ?? ''} options={[['', '(어떻게든 치렀다)'], ['victory', '이겼다'], ['defeat', '졌다'], ['fled', '달아났다']]} onChange={(v) => onChange((v ? { encounter: x.encounter, is: v } : { encounter: x.encounter }) as Condition)} /></>;
       case 'inParty': return <Sel value={x.inParty as string} options={opts(w.characters)} onChange={(v) => set({ inParty: v })} />;
       case 'npcAlive': return <Sel value={x.npcAlive as string} options={opts(w.characters)} onChange={(v) => set({ npcAlive: v })} />;
       case 'npcAt': return <><Sel value={x.npcAt as string} options={opts(w.characters)} onChange={(v) => set({ npcAt: v })} /><Sel value={x.at as string} options={opts(w.locations)} onChange={(v) => set({ at: v })} /></>;

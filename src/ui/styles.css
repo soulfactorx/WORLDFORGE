@@ -960,3 +960,11 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
   .lab-table td:nth-child(2) { width: 25%; }
 }
 .lab-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 3px 6px; border-bottom: 1px solid var(--border); }
+
+/* 조우 편집 (v0.85) */
+.enc-enemy { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; min-width: 0; padding: 4px 0; }
+.enc-enemy > label { flex: 1 1 140px; min-width: 0; }
+.enc-enemy > button { min-height: 36px; min-width: 36px; }
+.enc-retry { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; min-width: 0; }
+.enc-retry > label { flex: 1 1 180px; min-width: 0; }
+.enc-note { margin: 4px 0; word-break: keep-all; overflow-wrap: anywhere; }

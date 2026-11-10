@@ -64,6 +64,21 @@ const SCREENS = [
     await p.click('.scene-preset button:has-text("＋ 추가")');
     await p.evaluate(() => document.querySelectorAll('details').forEach((d) => d.setAttribute('open', '')));
   }],
+  ['편집: 조우 (펼침)', async (p) => {
+    await editorTab(p, '조우');
+    await p.click('button:has-text("＋ 조우 추가")');
+    await p.locator('.enc-retry select').selectOption('turns');
+    await p.click('button:has-text("＋ 적 추가")');
+    await p.locator('fieldset:has(> legend:has-text("졌을 때")) button:has-text("＋ 효과 추가")').click();
+    await p.locator('fieldset:has(> legend:has-text("졌을 때")) .cond select').first().selectOption('startScene');
+  }],
+  ['편집: 장면 진입 (사용자 정의)', async (p) => {
+    await editorTab(p, '장면');
+    await p.selectOption('.scene-preset select', 'date');
+    await p.click('.scene-preset button:has-text("＋ 추가")');
+    await p.locator('fieldset:has(> legend:has-text("진입 방식")) select').first().selectOption('custom');
+    await p.locator('fieldset:has(> legend:has-text("진입 방식")) select').nth(1).selectOption('offer');
+  }],
   ['편집: 세계 규칙 (펼침)', async (p) => {
     await editorTab(p, '⚖ 세계 규칙');
     await p.click('button:has-text("＋ 세계 규칙 추가")');

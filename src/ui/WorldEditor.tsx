@@ -9,6 +9,7 @@ import { addSource, removeSource, sourcesOf } from '../engine/sources';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
+import { EncounterForms } from './EncounterForms';
 import { ArcForms, BoardForms, ChoiceForms, ClockForms, EventForms, ItemForms, MonsterForms } from './WorldForms';
 import { DIFFICULTY_LABEL, encounterDifficulty, monsterTable, monstersOfWorld } from '../engine/combat/monsters';
 import { CLASSES } from '../engine/character/rules';
@@ -554,7 +555,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           </table>
           {w.characters.length >= 2 && <button type="button" onClick={() => set({ relations: [...(w.relations ?? []), { a: w.characters[0]!.id, b: w.characters[1]!.id, kind: 'ally' }] })}>＋ 관계 추가</button>}
           <JsonField label="관계 사건 (조건이 맞으면 열리는 인물의 결정적 장면)" value={w.relationBeats ?? []} onChange={(relationBeats) => set({ relationBeats })} rows={10}
-            help={`예: { "id": "beat/…", "npcId": "npc/…", "name": "비밀 고백", "condition": { "stage": "npc/…", "in": ["친구", "절친", "연인"] }, "hint": "그가 과거를 털어놓는다", "resolveFlag": "…" } · 단계: ${STAGES.join(', ')} · resolveFlag는 임무 탭의 플래그에 선언해야 한다 (없으면 4턴 뒤 닫힘) · 그 인물이 다른 곳에 있으면 "approach": "visit"(기본 — 찾아온다) / "message"(전갈, "message": "…") / "none"(기다린다)`} />
+            help={`"scene": "scene/…" 을 넣으면 사건이 열려 있을 때 GM이 그 장면을 연다 · 예: { "id": "beat/…", "npcId": "npc/…", "name": "비밀 고백", "condition": { "stage": "npc/…", "in": ["친구", "절친", "연인"] }, "hint": "그가 과거를 털어놓는다", "resolveFlag": "…" } · 단계: ${STAGES.join(', ')} · resolveFlag는 임무 탭의 플래그에 선언해야 한다 (없으면 4턴 뒤 닫힘) · 그 인물이 다른 곳에 있으면 "approach": "visit"(기본 — 찾아온다) / "message"(전갈, "message": "…") / "none"(기다린다)`} />
           <JsonField label="이 세계만의 칭호 (조건을 채우면 엔진이 준다 — 명성이 오르고 NPC가 소문으로 안다)" value={w.titles ?? []} onChange={(titles) => set({ titles: Array.isArray(titles) && titles.length ? titles : undefined })} rows={5}
             help='예: [{ "id": "title/mist-hero", "name": "안개 골짜기의 영웅", "desc": "마을을 구했다", "renown": 15, "condition": { "flag": "village_saved" } }] · 기본 칭호(첫 승리·해결사·좋은 벗·이야기의 주인공 등)는 엔진이 알아서 준다' />
         </>
@@ -654,9 +655,10 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <GenProgress stage={scenarioGen.stage} pct={scenarioGen.pct} onCancel={scenarioGen.cancel} steps={['세계 요약 보내기', 'AI가 조우 쓰기', '정리·검사']} />
         </>
       )}
-      {tab === 'encounters' && (
+      {tab === 'encounters' && questView === 'form' && (<><h4>조우</h4><EncounterForms w={w} set={set} /></>)}
+      {tab === 'encounters' && questView !== 'form' && (
         <JsonField label="조우" value={w.encounters ?? []} onChange={(encounters) => set({ encounters })} rows={18}
-          help={`이 세계의 적: ${monstersOfWorld(w).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건`} />
+          help={`이 세계의 적: ${monstersOfWorld(w).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건 · when(엔진 조건)·force(바로 시작)·intro·onVictory/onDefeat/onFlee(효과)·retry(진 뒤 쉬는 턴 수, 기본 3 · "gone")`} />
       )}
       {tab === 'encounters' && (
         <JsonField label="돌발 사건 표 (이동·휴식 때 엔진이 굴린다 — 비워 두면 기본 표: 기습·뜻밖의 발견·길손·수군거림. 끄려면 [])" value={w.randomEvents ?? null} rows={6}

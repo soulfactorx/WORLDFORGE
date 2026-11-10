@@ -1,3 +1,4 @@
+import { sceneEntry } from '../engine/scene';
 /**
  * 장면 폼 편집기 (v0.48): 수치·상태·단계·행동·반작용·끝을 입력 칸으로 만든다. 프리셋에서 시작할 수 있다.
  */
@@ -15,6 +16,7 @@ import { SceneTester } from './SceneTester';
 type Set = (patch: Partial<WorldPackage>) => void;
 
 const CHECKS: [string, string][] = [['', '판정 없음 (항상 성공)'], ...SKILL_IDS.map((k) => [`skill:${k}`, `기술: ${SKILLS[k].name}`] as [string, string]), ...ABILITIES.map((a) => [`ability:${a}`, `능력치: ${ABILITY_NAMES[a]}`] as [string, string])];
+const ENTRY_MODES = [['button', '버튼 — 플레이어가 🎭 버튼으로 연다'], ['offer', 'GM 제안 — 버튼 + 플레이어의 행동이 계기에 해당하면 GM이 연다'], ['auto', '자동 — 조건이 맞는 순간 저절로 시작한다']] as const;
 const csv = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
 const uniq = (base: string, taken: string[]) => { let id = base; for (let n = 2; taken.includes(id); n++) id = `${base}-${n}`; return id; };
 
@@ -201,7 +203,24 @@ export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
             <Area label="시작할 때 기록에 남는 글 (선택)" value={d.intro} onChange={(intro) => up({ intro: intro || undefined })} rows={2} />
             <Select label="장면 서술 (플레이 설정이 우선)" value={d.narration ?? 'end'} options={[['fixed', '정해진 글만 (AI 없음)'], ['end', '끝날 때만 AI 서술 (기본)'], ['ai', '매 차례 AI가 장면 서술']] as const} onChange={(narration) => up({ narration: narration === 'end' ? undefined : narration })} />
             <div className="row"><button type="button" className="small" onClick={() => up(autoSceneArt(d))}>🖼 빈 그림 자리 자동 채우기</button><span className="small muted">이름·설명·꼬리표의 낱말로 내장 장면 그림을 고른다 (이미 고른 것은 그대로)</span></div>
-            <label className="check"><input type="checkbox" checked={!!d.auto} onChange={(e) => up({ auto: e.target.checked || undefined })} /> 조건이 맞으면 저절로 시작</label>
+            <fieldset className="cond-field">
+              <legend>진입 방식 — 이 장면이 어떻게 열리나</legend>
+              <Select label="설정" value={d.entry ? 'custom' : 'default'} options={[['default', '기본 (상대 인물이 있으면 GM이 흐름에 따라 연다 · 없으면 버튼)'], ['custom', '사용자 정의 (방식과 계기를 직접 정한다)']] as const}
+                onChange={(v) => up(v === 'custom' ? { entry: { mode: sceneEntry(d).mode }, auto: undefined } : { entry: undefined })} />
+              {d.entry ? (
+                <>
+                  <Select label="방식" value={d.entry.mode} options={ENTRY_MODES} onChange={(mode) => up({ entry: { ...d.entry!, mode } })} />
+                  {d.entry.mode === 'offer' && <Area label="계기 (GM용 — 플레이어의 어떤 행동·상황이 이 장면으로 들어가는가)" value={d.entry.trigger ?? ''} rows={2}
+                    onChange={(trigger) => up({ entry: { ...d.entry!, trigger: trigger || undefined } })} />}
+                  <p className="small muted enc-note">열리는 조건은 위의 "열리는 조건"·상대 인물·장소를 그대로 따른다. {d.entry.mode === 'auto' ? '조건이 맞는 순간 저절로 시작한다.' : d.entry.mode === 'offer' ? '🎭 버튼으로도 열 수 있고, 플레이어의 행동이 계기에 해당하면 GM이 연다.' : '플레이어가 🎭 버튼을 눌러야만 열린다.'}</p>
+                </>
+              ) : (
+                <>
+                  <p className="small muted enc-note">지금 방식: <b>{ENTRY_MODES.find((m) => m[0] === sceneEntry(d).mode)?.[1]}</b></p>
+                  <label className="check"><input type="checkbox" checked={!!d.auto} onChange={(e) => up({ auto: e.target.checked || undefined })} /> 조건이 맞으면 저절로 시작</label>
+                </>
+              )}
+            </fieldset>
             <label className="check"><input type="checkbox" checked={!!d.repeatable} onChange={(e) => up({ repeatable: e.target.checked || undefined })} /> 끝난 뒤 다시 할 수 있음</label>
             <Text label="상대가 좋아하는 꼬리표 (쉼표 — 판정 이점)" value={(d.likes ?? []).join(', ')} onChange={(v) => up({ likes: csv(v).length ? csv(v) : undefined })} />
             <Text label="상대가 싫어하는 꼬리표 (쉼표 — 판정 불리)" value={(d.dislikes ?? []).join(', ')} onChange={(v) => up({ dislikes: csv(v).length ? csv(v) : undefined })} />
