@@ -90,7 +90,8 @@ describe('AI 이미지 분류 속도 (v0.65)', () => {
       inFlight--;
       const lines = r.user.split('## 이미지 이름 패턴')[1]!.split('\n').filter((l) => /^\d+: /.test(l));
       const items = lines.map((l) => { const [i, rest] = l.split(': '); const key = rest!.split(' — ')[0]!; const m = /^hero(\d+)/.exec(key); const p = /place(\d+)/.exec(key);
-        return m ? { index: Number(i), kind: 'character', character: `npc/h${m[1]}`, location: '', tags: [] } : p ? { index: Number(i), kind: 'scene', character: '', location: `loc/p${p[1]}`, tags: ['inside'] } : null; }).filter(Boolean);
+        return m ? `${i}|c|npc/h${m[1]}||` // v0.94 한 줄 꼴 (장면은 예전 객체 꼴로도 받는지 함께 본다)
+           : p ? { index: Number(i), kind: 'scene', character: '', location: `loc/p${p[1]}`, tags: ['inside'] } : null; }).filter(Boolean);
       return { items } as T;
     } };
     const chars = Array.from({ length: 40 }, (_, c) => ({ id: `npc/h${c}`, name: `Hero${c}`, aliases: [] }));
@@ -107,7 +108,7 @@ describe('AI 이미지 분류 속도 (v0.65)', () => {
     const many = Array.from({ length: 1000 }, (_, i) => ({ id: `b${i}`, name: `unique_name_${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26) % 26)}x${Math.floor(i / 676)}y.png`, kind: 'other' as const, tags: [], mime: 'image/png', size: 1 }));
     calls = 0; peak = 0;
     await classifyAssetsAI(llm, many, chars, locs);
-    expect(calls).toBe(5);
+    expect(calls).toBe(10);
     expect(peak).toBe(4);
   });
 });

@@ -38,7 +38,7 @@ export function translateBudget(text: string): number {
 
 export async function translateToKorean(
   llm: LlmClient, items: { id: string; text: string }[], names: { latin: string; korean: string }[],
-  onProgress?: (done: number, total: number) => void, signal?: AbortSignal, chunkChars = 6000, concurrency = 3,
+  onProgress?: (done: number, total: number) => void, signal?: AbortSignal, chunkChars = 3000, concurrency = 4, // v0.94: 묶음을 절반으로 — 한 번이 짧아지고 길이 제한에 덜 걸린다 (한도는 글자×1.5+3000이라 작은 묶음일수록 여유가 크다)
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const todo = items.filter((x) => needsKorean(x.text));
