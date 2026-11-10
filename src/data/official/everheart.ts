@@ -436,7 +436,11 @@ export const everheartWorld: WorldPackage = {
   encounters: [
     { id: 'enc/alley-mugging', name: '뒷골목의 불한당', locationId: 'loc/back-alley', enemies: [{ monsterId: 'tough', zone: 2 }, { monsterId: 'bandit', zone: 3 }],
       trigger: '밤(20시 이후)에 플레이어가 운하 뒷골목을 혼자 또는 일행과 지나가면, 불한당 둘이 길을 막고 지갑을 요구한다. 순순히 돈을 내주거나(10골드), 말로 겁을 주거나(위협 판정), 테오나 카엘을 부르면 싸우지 않고 끝날 수 있다. 플레이어가 맞서면 싸움이 된다.',
-      loot: { money: 15 } },
+      loot: { money: 15 },
+      // 뒷골목 소동은 다음 날 소문이 된다 — 「소문의 폭풍」으로 이어진다 (v0.86)
+      intro: '운하 물비린내 속에서 두 그림자가 골목 양쪽을 막아선다.',
+      onVictory: [{ var: 'var/gossip', add: 5 }, { reveal: 'claim/player-rumor', state: 'rumor' }],
+      onDefeat: [{ money: -10 }, { var: 'var/gossip', add: 3 }] },
     { id: 'enc/lab-armor', name: '깨어난 수호 갑옷', locationId: 'loc/mage-lab', enemies: [{ monsterId: 'animated_armor', zone: 2 }],
       trigger: '봉인실의 이상을 안 플레이어가 지하 봉인실 쇠문을 열면, 끊긴 마법진 때문에 깨어난 수호 갑옷이 침입자로 여기고 덤빈다. 마법진을 먼저 고치면(비전학 판정, 엘리안과 함께면 유리) 싸우지 않고 잠재울 수 있다.',
       loot: { items: [{ itemId: 'std/potion-healing' }] } },
@@ -493,7 +497,7 @@ export const everheartWorld: WorldPackage = {
       ],
       stages: [
         { objective: '베아트리스 백작부인의 살롱에서 얼굴을 알린다.', hint: '백작부인은 새 얼굴을 좋아한다. 사람들 앞에서 인정받는 순간이 오면 salon_debut을 세운다.', complete: { flag: 'salon_debut' }, via: { scene: 'scene/salon-debate' } },
-        { objective: '세라피나 로즈벨에게 인정받는다.', hint: '세라피나는 아첨을 싫어하고 정직함과 실력을 존중한다. 떨어진 장미 브로치를 돌려주면 대화의 계기가 된다.', complete: { any: [{ relationship: 'npc/seraphine', axis: 'respect', gte: 20 }, { stage: 'npc/seraphine', in: TRUSTED }] } },
+        { objective: '세라피나 로즈벨에게 인정받는다.', hint: '세라피나는 아첨을 싫어하고 정직함과 실력을 존중한다. 떨어진 장미 브로치를 돌려주면 대화의 계기가 된다.', complete: { any: [{ relationship: 'npc/seraphine', axis: 'respect', gte: 20 }, { stage: 'npc/seraphine', in: TRUSTED }, { sceneEnd: 'scene/first-waltz', outcome: 'success' }] }, via: { scene: 'scene/first-waltz' } },
       ],
       outcomes: [
         { id: 'admired', name: '사교계의 새 별', when: { reputation: 'fac/society', gte: 15 }, text: '다음 날 아침, 세 군데 살롱에서 당신의 이름이 오르내린다.', effects: [{ var: 'var/gossip', add: 5 }] },
@@ -532,7 +536,7 @@ export const everheartWorld: WorldPackage = {
         { hint: '"사기꾼"이라는 소문을 믿고 몰아붙인다.', skills: ['intimidation'], risk: '소문은 거짓이다. 미렐라는 상처받고 거래를 서두른다.' },
       ],
       stages: [
-        { objective: '로즈벨가 채권을 누가 쥐고 있는지 알아낸다.', hint: '크로스 상회 장부(조사 판정)나 미렐라 자신(신뢰 40)에게서 알 수 있다.', complete: { knows: 'claim/mirela-holds-bonds', min: 'partial' } },
+        { objective: '로즈벨가 채권을 누가 쥐고 있는지 알아낸다.', hint: '크로스 상회 장부(조사 판정)나 미렐라 자신(신뢰 40)에게서 알 수 있다.', complete: { knows: 'claim/mirela-holds-bonds', min: 'partial' }, via: { scene: 'scene/charity-auction' } },
         { objective: '미렐라의 거래를 지켜보거나 마음을 돌린다.', hint: '미렐라가 진심으로 흔들려 채권을 팔지 않기로 하면 mirela_kept_bonds를 세운다. 6일이 지나면 거래는 성사된다.', complete: { any: [{ flag: 'mirela_kept_bonds' }, { npcGoal: 'goal/mirela-deal', is: 'done' }] } },
       ],
       outcomes: [

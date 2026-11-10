@@ -548,17 +548,24 @@ export const aetheriaWorld: WorldPackage = {
   encounters: [
     {
       id: 'enc/hill-wolves', name: '빛에 끌린 늑대들', locationId: 'loc/star-hill',
+      // 늑대가 마법진의 잔광에 끌려왔다는 것 — 메인 임무의 첫 실마리 (v0.86)
+      intro: '선돌 사이에서 누런 눈 두 쌍이 마법진의 희미한 빛을 따라 돈다.',
+      onVictory: [{ reveal: 'claim/summoned-outsider', state: 'partial' }],
       enemies: [{ monsterId: 'wolf', zone: 2 }, { monsterId: 'wolf', zone: 3 }],
       trigger: '소환진의 잔광에 끌려온 굶주린 늑대 두 마리가 선돌 사이를 맴돈다. 플레이어가 언덕에서 두 턴 넘게 머물거나 마법진을 건드리면 덤빈다. 서둘러 남쪽 성문으로 내려가면 피할 수 있다.',
     },
     {
       id: 'enc/road-goblins', name: '교역로 매복', locationId: 'loc/trade-road',
+      // 길드의 첫 일감(quest/guild-roads)의 고비 — 그 전에도 길에서 마주칠 수 있게 조건을 열어 둔다 (v0.86)
+      when: { all: [] },
+      onVictory: [{ var: 'vellos_order', add: 3 }],
       enemies: [{ monsterId: 'goblin_warrior', zone: 2 }, { monsterId: 'goblin_warrior', zone: 3 }],
       loot: { money: 15, items: [{ itemId: 'std/shortbow' }] },
       trigger: '뒤집힌 짐수레 뒤에 고블린 둘이 숨어 있다. 플레이어가 수레를 살피거나 교역로를 따라 무심코 걸으면 화살이 날아온다. 지각에 성공하면 먼저 알아챈다.',
     },
     {
       id: 'enc/forest-spider', name: '빛나는 거미줄', locationId: 'loc/beast-forest',
+      when: { all: [] },
       enemies: [{ monsterId: 'giant_spider', zone: 2 }],
       trigger: '고목 사이에 이끼빛으로 반짝이는 거미줄이 쳐져 있다. 플레이어가 줄을 건드리거나 숲 깊은 곳으로 서둘러 들어가면 위에서 거대 거미가 내려온다.',
     },
@@ -590,6 +597,8 @@ export const aetheriaWorld: WorldPackage = {
     },
     {
       id: 'enc/temple-guardian', name: '깨어난 수호 갑옷', locationId: 'loc/grand-temple',
+      // 시험을 거절하고 힘으로 길을 열면 벽화에 닿는다 — 「감춰진 역사」의 다른 길 (v0.86)
+      onVictory: [{ reveal: 'claim/hidden-history', state: 'partial' }, { reputation: 'fac/church', delta: -5 }],
       enemies: [{ monsterId: 'animated_armor', zone: 2 }],
       trigger: '제단을 지키던 텅 빈 신전 갑옷이 일어선다. 플레이어가 수문장 모르그의 시험을 거절하거나, 허락 없이 제단 아래 벽화로 내려가려 하면 움직인다.',
     },
@@ -603,6 +612,30 @@ export const aetheriaWorld: WorldPackage = {
 
   // ------------------------------------------------------------ 임무
   quests: [
+    // v0.86: 떠돌던 조우·장면을 임무로 묶는다
+    {
+      id: 'quest/guild-roads', name: '길드의 첫 일감', kind: 'side', type: 'hunt', giver: 'npc/brom',
+      motive: '길드에 이름을 올린 신참에게 브롬이 내미는 첫 일감. 교역로와 숲 어귀가 조용해져야 벨로스에 물건이 들어온다.',
+      start: { flag: 'guild_registered' },
+      stages: [
+        { objective: '교역로의 매복을 걷어 낸다.', hint: '뒤집힌 짐수레 뒤에 고블린 둘이 숨어 있다. 이미 치웠다면 브롬이 "벌써?" 하고 장부에 적는다.', complete: { cleared: 'enc/road-goblins' } },
+        { objective: '마수의 숲 어귀의 거미줄을 치운다.', hint: '고목 사이의 이끼빛 거미줄. 줄을 건드리면 거대 거미가 내려온다.', complete: { cleared: 'enc/forest-spider' } },
+        { objective: '브롬의 화덕에서 룬 단검을 함께 벼린다.', hint: '일감을 마치고 돌아오면 브롬이 길드 뒤뜰 화덕으로 부른다. 결과와 상관없이 함께 망치를 들면 된다.', complete: { sceneEnd: 'scene/brom-rune-forge' }, via: { scene: 'scene/brom-rune-forge' } },
+      ],
+      rewards: { xp: 'minor', money: 40, reputation: [{ factionId: 'fac/guild', delta: 5 }], relationship: [{ npcId: 'npc/brom', trust: 5 }] },
+    },
+    {
+      id: 'quest/mending-seal', name: '흔들리는 봉인', kind: 'side', type: 'defend',
+      motive: '누구도 죽지 않고 봉인을 다시 엮는 길을 알았다. 숲속 석실의 문양은 지금도 조금씩 풀리고 있다.',
+      start: { knows: 'claim/seal-reweave' },
+      stages: [
+        { objective: '숲속 봉인 석실에서 약해진 문양을 다시 엮어 본다.', hint: '석실에서 의식(장면)을 치른다. 성공하면 봉인이 안정되고, 무리하면 마나가 역류한다. 어떤 결과든 봉인이 어떻게 반응하는지 알게 된다.', complete: { sceneEnd: 'scene/seal-ritual' }, via: { scene: 'scene/seal-ritual' } },
+      ],
+      outcomes: [
+        { id: 'held', name: '다시 묶인 문양', when: { sceneEnd: 'scene/seal-ritual', outcome: 'success' }, text: '석실의 보랏빛이 가라앉는다. 균열 쪽에서 불어오던 바람이 한결 잦아들었다.', rewards: { xp: 'minor' } },
+        { id: 'strained', name: '버틴 흔적', when: { all: [] }, text: '문양은 완전히 잡히지 않았다. 그래도 손끝이 봉인의 결을 기억한다.' },
+      ],
+    },
     {
       id: 'quest/strange-world', name: '낯선 세계', kind: 'main', type: 'investigate',
       motive: '눈을 떠 보니 낯선 하늘, 낯선 별자리. 여기가 어디인지, 왜 여기 있는지부터 알아야 한다.',

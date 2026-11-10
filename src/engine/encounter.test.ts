@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { sampleWorld } from '../data/sample-world';
+import { aetheriaWorld } from '../data/official/aetheria';
+import { cheonhaWorld } from '../data/official/cheonha';
+import { everheartWorld } from '../data/official/everheart';
 import { createCharacter, suggestedStandardArray } from './character/sheet';
 import { encounterBlocked, forcedEncounter, openEncounters, stageGates } from './encounter';
 import { validateWorld } from './package/validate';
@@ -136,5 +139,11 @@ describe('연결 검사 (v0.85)', () => {
     const w: WorldPackage = { ...world(), flags: [...(sampleWorld.flags ?? []), { id: 'door_open', when: '문을 열었다' }] };
     w.scenes = [{ id: 'scene/x', name: '문 너머', description: '', start: { flag: 'door_open' }, gauges: [{ id: 'g', name: 'g', start: 0 }], actions: [{ id: 'a', name: 'a', success: { gauges: { g: 1 } } }], ends: [{ id: 'e', name: 'e', when: { gauge: 'g', gte: 1 }, outcome: 'success' }] }];
     expect(flagFlows(w).find((f) => f.id === 'door_open')?.readBy.length).toBe(1);
+  });
+});
+
+describe('공식 세계의 연결 (v0.86)', () => {
+  it('곁가지 조우·장면과 막다른 고비가 없다', () => {
+    for (const w of [aetheriaWorld, cheonhaWorld, everheartWorld]) expect({ world: w.manifest.name, warnings: linkWarnings(w) }).toEqual({ world: w.manifest.name, warnings: [] });
   });
 });

@@ -192,7 +192,7 @@ export async function generateScenario(
   onStage(focus === 'encounters' ? 'AI가 조우를 쓰는 중…' : 'AI가 임무·조우·결말을 쓰는 중…', 5, 90);
   const rare = genreOf(world.genre?.id, world.genre?.custom).combat === 'rare';
   const focusRule = focus === 'encounters'
-    ? `\n- 이번 요청은 조우만이다: 조우를 2~3개 반드시 만든다. 장소(location)는 아래 장소 목록의 key를 그대로, 적(monster)은 "쓸 수 있는 적" 목록의 ID만. 임무·결말·플래그는 빈 배열로 둔다.${rare ? '\n- 전투가 드문 장르이므로 이 세계에 어울리는 현실적인 위기(불량배·소매치기·사나운 짐승 등)로 만든다.' : ''}`
+    ? `\n- 이번 요청은 조우만이다: 조우를 2~3개 반드시 만든다. 장소(location)는 아래 장소 목록의 key를 그대로, 적(monster)은 "쓸 수 있는 적" 목록의 ID만. 임무·결말·플래그는 빈 배열로 둔다. "이미 있는 임무"의 단계나 "이미 있는 장면"과 이어지는 조우를 먼저 만든다 (장면이 실패하면 번지는 싸움은 after_scene_failure). on_defeat_flag는 ""로 둔다.${rare ? '\n- 전투가 드문 장르이므로 이 세계에 어울리는 현실적인 위기(불량배·소매치기·사나운 짐승 등)로 만든다.' : ''}`
     : rare ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : '';
   const draft = await llm.json<ScenarioDraft>({
     system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${focusRule}`,

@@ -350,7 +350,9 @@ export const cheonhaWorld: WorldPackage = {
   // ------------------------------------------------------------ 전투
   encounters: [
     { id: 'enc/alley-killer', name: '골목의 흑도 무인', locationId: 'loc/beggar-den', enemies: [{ monsterId: 'wx_black_path', zone: 2 }],
-      trigger: '플레이어가 객잔 살인을 캐묻고 다닌 뒤 밤에 성황묘 골목을 지나면, 입막음을 의뢰받은 흑도 무인이 덮친다. 쓰러뜨리면 품에서 혈도문 표식이 찍힌 쪽지가 나온다.', loot: { money: 20 } },
+      trigger: '플레이어가 객잔 살인을 캐묻고 다닌 뒤 밤에 성황묘 골목을 지나면, 입막음을 의뢰받은 흑도 무인이 덮친다. 쓰러뜨리면 품에서 혈도문 표식이 찍힌 쪽지가 나온다.', loot: { money: 20 },
+      // 쪽지가 살수의 배후를 가리킨다 — 「매화는 지지 않는다」·「맹 안의 쥐」의 실마리 (v0.86)
+      intro: '성황묘 담장 그늘에서 칼집 끄는 소리가 난다.', onVictory: [{ reveal: 'claim/blood-sect-did', state: 'partial' }] },
     { id: 'enc/ruin-ghost', name: '폐허의 원귀', locationId: 'loc/ruined-sect', enemies: [{ monsterId: 'wx_vengeful_ghost', zone: 2 }],
       trigger: '해가 진 뒤 폐허의 연무장에 들어서거나 무너진 사당에 향을 올리면, 멸문의 밤에 죽은 제자의 원귀가 곡성을 지르며 나타난다.', loot: { items: [{ itemId: 'std/potion-healing' }] } },
     { id: 'enc/canal-bandits', name: '운하의 수적', locationId: 'loc/jiangnan', enemies: [{ monsterId: 'wx_bandit', zone: 2 }, { monsterId: 'wx_bandit', zone: 3 }, { monsterId: 'wx_ronin', zone: 2 }],
@@ -423,7 +425,7 @@ export const cheonhaWorld: WorldPackage = {
       ],
       truth: 'claim/traitor-jongri', clues: ['claim/traitor-exists', 'claim/jongri-ledger', 'claim/traitor-namgung', 'claim/blood-sect-did'],
       stages: [
-        { objective: '맹 안에 배신자가 있다는 소문을 확인한다.', hint: '홍칠, 매설영(비밀), 맹주(비밀)가 알고 있다. 회의를 지켜보며 통찰 판정을 해도 된다.', complete: { knows: 'claim/traitor-exists' }, via: { scene: 'scene/beggar-deal' } },
+        { objective: '맹 안에 배신자가 있다는 소문을 확인한다.', hint: '홍칠, 매설영(비밀), 맹주(비밀)가 알고 있다. 회의를 지켜보며 통찰 판정을 해도 된다.', complete: { any: [{ knows: 'claim/traitor-exists' }, { sceneEnd: 'scene/plum-duel', outcome: 'success' }] }, via: { scene: 'scene/beggar-deal' } },
         { objective: '배신자의 증거를 찾는다.', hint: '총관 집무실의 비밀 장부, 혹은 혈도문 살수의 자백. "맹주 내통설"은 거짓 단서다.', complete: { any: [{ hasItem: 'item/jongri-ledger' }, { knows: 'claim/jongri-ledger', min: 'partial' }, { knows: 'claim/blood-sect-did', min: 'partial' }] }, via: { scene: 'scene/ledger-infiltration' } },
         { objective: '배신자의 정체를 밝힌다.', hint: '장부의 귀면 도장은 혈도문주의 것이다. 장부·자백·종리휘의 실언을 엮으면 그가 배신자임이 드러난다.', complete: { knows: 'claim/traitor-jongri', min: 'partial' } },
         { objective: '증거를 누구에게 넘길지 정한다.', hint: '맹주 앞에서 종리휘를 고발하거나(플래그), 장부를 들고 있다면 결정적 선택으로 금의위나 개방에 넘길 수 있다.', complete: { any: [{ flag: 'jongri_exposed' }, { choice: 'choice/ledger' }] } },
@@ -513,7 +515,7 @@ export const cheonhaWorld: WorldPackage = {
       ],
       clues: ['claim/cult-march', 'claim/traitor-exists'],
       stages: [
-        { objective: '강남 나루에서 끊긴 전서를 찾는다.', hint: '갈대밭의 수적을 물리치거나 흥정하면 전서를 얻는다.', complete: { hasItem: 'item/beggar-letter' } },
+        { objective: '강남 나루에서 끊긴 전서를 찾는다.', hint: '갈대밭의 수적을 물리치거나 흥정하면 전서를 얻는다.', complete: { hasItem: 'item/beggar-letter' }, via: { encounter: 'enc/canal-bandits' } },
         { objective: '전서를 홍칠에게 전한다.', hint: '낙양분타로 돌아간다.', complete: { all: [{ at: 'loc/beggar-den' }, { hasItem: 'item/beggar-letter' }] } },
       ],
       outcomes: [
@@ -574,7 +576,7 @@ export const cheonhaWorld: WorldPackage = {
       truth: 'claim/qingha-truth', clues: ['claim/qingha-massacre', 'claim/manual-key'],
       stages: [
         { objective: '멸문의 밤에 무슨 일이 있었는지 듣는다.', hint: '하청산은 신뢰 30 이상이면 종리휘의 검법을 보았다고 털어놓는다. 사로잡은 살수나 사도명도 알고 있다.', complete: { knows: 'claim/qingha-truth', min: 'partial' } },
-        { objective: '사부의 마음을 돌린다.', hint: '하청산이 다시 검을 들고 산을 내려가겠다고 하면 플래그 master_reunited.', complete: { flag: 'master_reunited' } },
+        { objective: '사부의 마음을 돌린다.', hint: '하청산이 다시 검을 들고 산을 내려가겠다고 하면 플래그 master_reunited.', complete: { flag: 'master_reunited' }, via: { scene: 'scene/hermit-qi-healing' } },
       ],
       outcomes: [
         { id: 'reunited', name: '사부와 제자', when: { all: [] }, text: '하청산이 녹슨 검집을 허리에 찬다. "가세. 이번엔 내가 뒤를 지키지."',
