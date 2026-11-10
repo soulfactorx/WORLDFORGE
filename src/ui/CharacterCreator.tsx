@@ -1,4 +1,6 @@
 import { useRs } from './reskin';
+import { clearNewGameMemory, loadNewGameMemory, saveNewGameMemory } from './newGameMemory';
+import { DIFFICULTIES, difficultyLabel } from '../engine/difficulty';
 import { useMemo, useState } from 'react';
 import { recommendedSkills, skillOptionsOf } from '../engine/classes';
 import type { PlayerProfile, TraitAxis, WorldClass } from '../engine/schema';
@@ -15,20 +17,55 @@ const POINT_VALUES = Object.keys(POINT_BUY_COST).map(Number);
 
 const DEFAULT_CLASSES: WorldClass[] = Object.values(CLASSES).map((c) => ({ id: c.id, name: c.name, base: c.id, blurb: c.blurb }));
 
-export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES, profile: form = { fields: [] }, traits: axes = [] }: { onCreate: (c: CharacterSheet) => void; onCancel: () => void; classes?: WorldClass[]; /** 주인공 정보 양식 (v0.68) */ profile?: PlayerProfile; /** 성향 축 (v0.69) */ traits?: TraitAxis[] }) {
+export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES, profile: form = { fields: [] }, traits: axes = [] }: { onCreate: (c: CharacterSheet, opts: { dcMod: number }) => void; onCancel: () => void; classes?: WorldClass[]; /** 주인공 정보 양식 (v0.68) */ profile?: PlayerProfile; /** 성향 축 (v0.69) */ traits?: TraitAxis[] }) {
   const list = classes.filter((c) => CLASSES[c.base]);
-  const [name, setName] = useState('');
+  // 지난번에 적은 값 (v0.90): 같은 항목은 미리 채운다 — 이 세계의 양식에 맞는 것만
+  const [mem] = useState(loadNewGameMemory);
+  const [prefilled, setPrefilled] = useState(() => Object.keys(mem).length > 0);
+  const [name, setName] = useState(mem.name ?? '');
   const genders = gendersOf(form);
-  const [gender, setGender] = useState('');
-  const [lean, setLean] = useState<Record<string, number>>(() => Object.fromEntries(axes.map((t) => [t.id, t.initial ?? 0])));
-  const [info, setInfo] = useState<Record<string, string>>(() => Object.fromEntries((form.fields ?? []).filter((f) => f.kind === 'select' && f.required && f.options?.length).map((f) => [f.id, f.options![0]!])));
+  const [gender, setGender] = useState(mem.gender && genders.includes(mem.gender) ? mem.gender : '');
+  const [lean, setLean] = useState<Record<string, number>>(() => Object.fromEntries(axes.map((t) => [t.id, t.choose !== false && mem.lean?.[t.id] !== undefined && TRAIT_START.some(([v]) => v === mem.lean![t.id]) ? mem.lean[t.id]! : t.initial ?? 0])));
+  const [info, setInfo] = useState<Record<string, string>>(() => {
+    const base = Object.fromEntries((form.fields ?? []).filter((f) => f.kind === 'select' && f.required && f.options?.length).map((f) => [f.id, f.options![0]!]));
+    for (const f of form.fields ?? []) {
+      const v = mem.info?.[f.id] ?? mem.infoByLabel?.[f.label];
+      if (v && (f.kind !== 'select' || f.options?.includes(v))) base[f.id] = v;
+    }
+    return base;
+  });
   const rs = useRs();
-  const [roleId, setRoleId] = useState(list[0]?.id ?? 'fighter');
+  // 직업: 같은 ID → 같은 규칙 직업 → 첫 직업
+  const startRole = list.find((c) => c.id === mem.roleId) ?? list.find((c) => c.base === mem.classId) ?? list[0];
+  const [roleId, setRoleId] = useState(startRole?.id ?? 'fighter');
   const role = list.find((c) => c.id === roleId) ?? list[0] ?? DEFAULT_CLASSES[0]!;
   const classId = role.base;
-  const [method, setMethod] = useState<AbilityMethod>('standard');
-  const [abilities, setAbilities] = useState<Abilities>(() => suggestedStandardArray(role.base));
-  const [skills, setSkills] = useState<SkillId[]>(() => recommendedSkills(role));
+  // 능력치·기술은 규칙 직업이 같을 때만 그대로 가져온다 (다르면 그 직업의 추천값)
+  const sameBase = !!startRole && startRole.base === mem.classId;
+  const [method, setMethod] = useState<AbilityMethod>(sameBase && mem.method ? mem.method : 'standard');
+  const [abilities, setAbilities] = useState<Abilities>(() => (sameBase && mem.abilities ? mem.abilities : suggestedStandardArray(role.base)));
+  const [skills, setSkills] = useState<SkillId[]>(() => {
+    const opts = skillOptionsOf(role);
+    const kept = sameBase ? (mem.skills ?? []).filter((s): s is SkillId => opts.includes(s as SkillId)) : [];
+    return kept.length === CLASSES[role.base]!.skillChoices ? kept : recommendedSkills(role);
+  });
+  const [dcMod, setDcMod] = useState(mem.dcMod ?? 0);
+  /** 미리 채운 것을 지우고 이 세계의 기본값으로 */
+  function resetForm() {
+    clearNewGameMemory(); setPrefilled(false);
+    setName(''); setGender(''); setDcMod(0);
+    setLean(Object.fromEntries(axes.map((t) => [t.id, t.initial ?? 0])));
+    setInfo(Object.fromEntries((form.fields ?? []).filter((f) => f.kind === 'select' && f.required && f.options?.length).map((f) => [f.id, f.options![0]!])));
+    const first = list[0] ?? DEFAULT_CLASSES[0]!;
+    setRoleId(first.id); setMethod('standard'); setAbilities(suggestedStandardArray(first.base)); setSkills(recommendedSkills(first));
+  }
+  function create() {
+    saveNewGameMemory({
+      name: name.trim(), ...(gender ? { gender } : {}), info, infoByLabel: Object.fromEntries((form.fields ?? []).filter((f) => info[f.id]).map((f) => [f.label, info[f.id]!])),
+      lean: Object.fromEntries(axes.filter((t) => t.choose !== false).map((t) => [t.id, lean[t.id] ?? 0])), roleId: role.id, classId, method, abilities, skills, dcMod,
+    });
+    onCreate(createCharacter(input), { dcMod });
+  }
   const cls = CLASSES[classId]!;
   const options = skillOptionsOf(role);
   // 기본 8직업이 아니면 시트에 역할 이름을 남긴다
@@ -62,6 +99,9 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
     <section className="panel">
       <h2>주인공 만들기</h2>
       <p className="muted small">당신은 이 세계에 소환된 이방인입니다. 몸과 기술은 기억하지만, 이 세계에 대해서는 아무것도 모릅니다.</p>
+      {prefilled && (
+        <p className="small prefill-note">지난번에 적은 값으로 미리 채웠습니다. <button type="button" className="small" onClick={resetForm}>기억 지우고 처음부터</button></p>
+      )}
       <label>이름<input value={name} placeholder="이방인" onChange={(e) => setName(e.target.value)} /></label>
       {(genders.length > 0 || (form.fields ?? []).length > 0 || axes.length > 0) && (
         <fieldset className="profile-form">
@@ -138,10 +178,21 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
         </div>
       </fieldset>
 
+      <fieldset>
+        <legend>난이도</legend>
+        <label>모든 판정의 난이도(DC) 보정
+          <select value={DIFFICULTIES.some((d) => d.dc === dcMod) ? String(dcMod) : 'custom'} onChange={(e) => setDcMod(Number(e.target.value) || 0)}>
+            {DIFFICULTIES.map((d) => <option key={d.id} value={d.dc}>{difficultyLabel(d.dc)} — {d.desc}</option>)}
+            {!DIFFICULTIES.some((d) => d.dc === dcMod) && <option value="custom">{difficultyLabel(dcMod)}</option>}
+          </select>
+        </label>
+        <p className="small muted">행동 판정·장면 판정·실마리 굴림에 적용됩니다. 플레이 중에도 "소리·화면" 설정에서 바꿀 수 있습니다.</p>
+      </fieldset>
+
       {errors.length > 0 && <ul className="errors">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
       <div className="row">
         <button type="button" onClick={onCancel}>취소</button>
-        <button type="button" className="primary" disabled={errors.length > 0} onClick={() => onCreate(createCharacter(input))}>이 캐릭터로 시작</button>
+        <button type="button" className="primary" disabled={errors.length > 0} onClick={create}>이 캐릭터로 시작</button>
       </div>
     </section>
   );

@@ -10,6 +10,7 @@ import type { CharacterSheet } from '../engine/character/sheet';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import type { WorldPackage } from '../engine/schema';
 import { startEvents } from '../gm/turn';
+import { clampDcMod, difficultyLabel } from '../engine/difficulty';
 import { appendEvents, db, deleteSave, exportSave, importSave } from '../storage/db';
 import { deletePackage, exportWpk, listPackages, MAX_FILE_BYTES, packageKey, parsePackageFile, PRIVATE_NOTE, savePackage } from '../storage/packages';
 import { BlobZip } from '../importers/blobzip';
@@ -76,13 +77,16 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
   const worldIssues = world ? validateWorld(world) : [];
   const playable = !!world && !hasErrors(worldIssues);
 
-  async function newGame(character: CharacterSheet) {
+  async function newGame(character: CharacterSheet, opts: { dcMod: number } = { dcMod: 0 }) {
     if (!world) return;
     const id = crypto.randomUUID();
     const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
     await db.saves.add({ id, name: `${character.name} · ${world.manifest.name} — ${new Date().toLocaleString()}`, packageId: world.manifest.id, packageVersion: world.manifest.version, createdAt: Date.now(), updatedAt: Date.now() });
     const start = world.starts?.find((x) => x.id === startId) ? startId : world.starts?.[0]?.id;
-    await appendEvents(id, startEvents(world, character, seed, start).map((event, seq) => ({ saveId: id, seq, turn: 0, event })));
+    const events = startEvents(world, character, seed, start);
+    // 게임 난이도 (v0.90): 보통이 아니면 시작할 때 기록한다 (플레이 중에도 바꿀 수 있다)
+    if (opts.dcMod) events.push({ type: 'difficulty_set', dcMod: clampDcMod(opts.dcMod), label: difficultyLabel(clampDcMod(opts.dcMod)) });
+    await appendEvents(id, events.map((event, seq) => ({ saveId: id, seq, turn: 0, event })));
     onOpen(id);
   }
 

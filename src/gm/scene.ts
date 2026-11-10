@@ -55,7 +55,7 @@ export function sceneActionEvents(world: WorldPackage, state: GameState, actionI
   const run = state.scene;
   const def = run && sceneDef(world, run.sceneId);
   if (!run || !def) throw new Error('진행 중인 장면이 없다');
-  const opt = sceneActions(def, run, state.player.sheet, sceneOpponent(world, state, def)).find((a) => a.action.id === actionId);
+  const opt = sceneActions(def, run, state.player.sheet, sceneOpponent(world, state, def), state.dcMod ?? 0).find((a) => a.action.id === actionId);
   if (!opt) throw new Error('없는 행동이다');
   if (!opt.ok) throw new Error(opt.why);
   const a = opt.action;

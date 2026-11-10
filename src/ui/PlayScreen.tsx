@@ -42,6 +42,7 @@ import type { NarrationImage } from '../engine/state/events';
 import { levelUpInfo, recap, type RewardLine, rewardDiff } from '../engine/digest';
 import { type BackgroundMode, type ImageSize, loadPlayPrefs } from './playPrefs';
 import { ScenePanel } from './ScenePanel';
+import { clampDcMod, difficultyLabel } from '../engine/difficulty';
 import { availableScenes, sceneDef } from '../engine/scene';
 import { abandonSceneEvents, narrateScene, narrateSceneTurn, narrationMode, sceneActionEvents, startSceneEvents, sceneOpponent } from '../gm/scene';
 import { CodexPanel } from './CodexPanel';
@@ -106,6 +107,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const placedParas = useRef(-1);
   const [streamImages, setStreamImages] = useState<NarrationImage[]>([]);
   const [narrated, setNarrated] = useState(false);
+  // 서술 전에 엔진이 확정한 기록 (v0.90): 판정 결과·실마리·전투 시작을 서술보다 먼저 보여 준다
+  const [pendingLog, setPendingLog] = useState<LogEntry[]>([]);
   /** 이미 놓인 그림은 그대로 두고 새 그림만 더한다 (배경 하나 · 인물은 이름마다 하나) */
   const addStreamImages = (found: NarrationImage[], all: boolean) => setStreamImages((cur) => {
     const key = (im: NarrationImage) => (im.bg ? 'bg' : `c:${im.caption}`);
@@ -114,7 +117,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     return fresh.length ? [...cur, ...fresh] : cur;
   });
   useEffect(() => {
-    if (streaming === null) { placer.current = null; placedParas.current = -1; setStreamImages((c) => (c.length ? [] : c)); setNarrated(false); return; }
+    if (streaming === null) { placer.current = null; placedParas.current = -1; setStreamImages((c) => (c.length ? [] : c)); setNarrated(false); setPendingLog((c) => (c.length ? [] : c)); return; }
     const place = placer.current;
     if (!place) return;
     // 끝난 문단만 본다 (쓰는 중인 마지막 문단은 아직 누구의 것인지 모른다)
@@ -249,7 +252,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       const t0 = performance.now();
       const { events, rejected, state: after } = await runTurn(createLlmClient(settings), world, state, text,
         (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision,
-        { adaptive: loadPlayPrefs().adaptive, onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true) });
+        { adaptive: loadPlayPrefs().adaptive, onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true),
+          onState: (st) => setPendingLog(st.log.slice(state.log.length).filter((l) => l.kind !== 'narration' && l.kind !== 'guide')) });
       metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected });
       await endDebug(dbg, { events, before: state, after, rejected });
       const turn = state.turn + 1;
@@ -415,7 +419,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
             ...(board && !state.combat ? [tab('board', `📜 ${rs(board.name)}`)] : []),
           ];
         })()}
-        <AvControls onChange={() => setAvTick((n) => n + 1)} />
+        <AvControls onChange={() => setAvTick((n) => n + 1)} dcMod={state.dcMod ?? 0}
+          onDcMod={(v) => { if (clampDcMod(v) !== (state.dcMod ?? 0)) void commitEvents(() => [{ type: 'difficulty_set', dcMod: clampDcMod(v), label: difficultyLabel(clampDcMod(v)) }]); }} />
         {debug && <button onClick={() => setShowDebug(true)} title="디버그: 턴마다 AI 요청·응답과 엔진 처리">🐞 디버그</button>}
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null} title="턴 되돌리기">↶ 되돌리기</button>
         <button onClick={onExit}>나가기</button>
@@ -491,6 +496,9 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
             <p className="small muted">아직 정하지 않았다면 평소처럼 행동해도 됩니다. 이 선택은 고를 때까지 남아 있습니다.</p>
           </div>
         )}
+        {streaming !== null && pendingLog.map((e, i) => (
+          <div key={`p${i}`} className={`entry-wrap k-${e.kind}`}><p className={`entry ${e.kind}`}>{rs(e.text)}</p></div>
+        ))}
         {streaming !== null && (streaming && streamImages.length > 0 && imgSize !== 'hidden'
           ? <PlacedNarration text={streaming} images={streamImages} pkg={world.manifest.id} size={imgSize} bgMode={loadPlayPrefs().background} />
           : <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>)}
@@ -512,7 +520,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}
           onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
       ) : state.scene && sceneNow ? (
-        <ScenePanel def={sceneNow} run={state.scene} sheet={state.player.sheet} opp={sceneOpponent(world, state, sceneNow)} busy={streaming !== null} pkg={world.manifest.id}
+        <ScenePanel dcMod={state.dcMod ?? 0} def={sceneNow} run={state.scene} sheet={state.player.sheet} opp={sceneOpponent(world, state, sceneNow)} busy={streaming !== null} pkg={world.manifest.id}
           npcName={sceneNow.npcId ? world.characters.find((c) => c.id === sceneNow.npcId)?.name : undefined}
           onAct={(id) => commitScene((s) => sceneActionEvents(world, s, id))}
           onQuit={() => commitScene((s) => abandonSceneEvents(world, s))} />

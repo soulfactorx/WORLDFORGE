@@ -118,7 +118,7 @@ export function opposeMod(action: SceneAction, opp?: GameState['player']['sheet'
 }
 
 /** 행동마다 쓸 수 있는가와 판정 이점 · 실제 DC (상대 보정 포함) */
-export function sceneActions(def: SceneDef, run: SceneRun, sheet?: GameState['player']['sheet'], opp?: GameState['player']['sheet']) {
+export function sceneActions(def: SceneDef, run: SceneRun, sheet?: GameState['player']['sheet'], opp?: GameState['player']['sheet'], /** 게임 난이도 보정 (v0.90) */ dcMod = 0) {
   return def.actions.map((action) => {
     const why = action.phases?.length && (!run.phase || !action.phases.includes(run.phase)) ? '지금 단계에서는 못 한다'
       : action.once && run.used.includes(action.id) ? '이미 했다'
@@ -127,7 +127,7 @@ export function sceneActions(def: SceneDef, run: SceneRun, sheet?: GameState['pl
     const gm = gaugeMods(def, run, action).reduce((a, m) => a + m.value, 0);
     const om = def.oppose === false ? null : opposeMod(action, opp);
     return { action, ok: !why, why, spec, mode: edgeOf(def, run, action), mod: spec && sheet ? checkModifier(sheet, spec).total + gm : undefined, gaugeMod: gm,
-      dc: (action.dc ?? 12) + (om?.value ?? 0), ...(om ? { oppose: om } : {}) };
+      dc: Math.max(2, (action.dc ?? 12) + (om?.value ?? 0) + dcMod), ...(om ? { oppose: om } : {}) };
   });
 }
 

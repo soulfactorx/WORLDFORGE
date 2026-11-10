@@ -120,6 +120,8 @@ export interface GameState {
   encounterResults?: Record<EntityId, { outcome: 'victory' | 'defeat' | 'fled'; turn: number }>;
   /** 이야기 효과가 예약한 전환 (v0.85): 앞에서부터 하나씩 시작한다 */
   pendingTransitions?: { kind: 'scene' | 'encounter'; id: EntityId }[];
+  /** 게임 난이도 (v0.90): 모든 판정 DC에 더하는 보정 (없으면 0) */
+  dcMod?: number;
   /** 이미 나온 실마리 (v0.89): 같은 낌새·눈썰미가 되풀이되지 않게 */
   leadKeys?: string[];
   /** 지금까지의 이야기 요약 (v0.85) */
@@ -473,6 +475,8 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, worldMinutes: s.worldMinutes + 60, party, player: { ...s.player, sheet: { ...sheet, resources: res } },
         log: [...s.log, { turn, kind: 'check', text: '짧은 휴식 (1시간) — 짧은 휴식 능력 회복' }] };
     }
+    case 'difficulty_set':
+      return { ...s, dcMod: e.dcMod, log: [...s.log, { turn, kind: 'progress', text: `⚖ 난이도: ${e.label}` }] };
     case 'lead':
       return { ...s, ...(e.key ? { leadKeys: [...(s.leadKeys ?? []), e.key] } : {}), log: [...s.log, { turn, kind: 'check', text: e.text }] };
     case 'transition_queued':

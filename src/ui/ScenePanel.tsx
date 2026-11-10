@@ -9,13 +9,14 @@ import { AssetImage } from './AssetImage';
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
 /** 장면 패널 (v0.47): 수치 막대 · 상태 · 단계 · 행동 카드 · 기록 */
-export function ScenePanel({ def, run, sheet, opp, busy, npcName, pkg, onAct, onQuit }: {
+export function ScenePanel({ def, run, sheet, opp, busy, npcName, pkg, onAct, onQuit, dcMod = 0 }: {
+  /** 게임 난이도 보정 (v0.90) */ dcMod?: number;
   def: SceneDef; run: SceneRun; sheet: GameState['player']['sheet']; opp?: GameState['player']['sheet']; busy: boolean; npcName?: string; pkg: string;
   onAct: (actionId: string) => void; onQuit: () => void;
 }) {
   const rs = useRs();
   const phase = def.phases?.find((p) => p.id === run.phase);
-  const acts = sceneActions(def, run, sheet, opp).filter((a) => !a.action.phases?.length || a.ok || a.why !== '지금 단계에서는 못 한다');
+  const acts = sceneActions(def, run, sheet, opp, dcMod).filter((a) => !a.action.phases?.length || a.ok || a.why !== '지금 단계에서는 못 한다');
   const checkName = (c?: string) => {
     const [k, id] = (c ?? '').split(':');
     return k === 'skill' ? SKILLS[id as keyof typeof SKILLS]?.name : k === 'ability' ? ABILITY_NAMES[id as keyof typeof ABILITY_NAMES] : undefined;

@@ -119,6 +119,8 @@ export type GameEvent =
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number }
+  /** 게임 난이도 (v0.90): 모든 판정 DC에 더하는 보정 */
+  | { type: 'difficulty_set'; dcMod: number; label: string }
   /** 실마리 (v0.89): 엔진이 d20으로 굴린 말문·낌새·눈썰미. key = 다시 나오지 않게 기억할 열쇠 */
   | { type: 'lead'; kind: 'tell' | 'hint' | 'notice' | 'found'; text: string; key?: string }
   /** 이어지는 전환 (v0.85): 이야기 효과가 예약한 장면·조우. taken = 시작했거나(또는 시작할 수 없어) 대기에서 뺀다 */

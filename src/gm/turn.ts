@@ -40,6 +40,7 @@ import { currentDay } from '../engine/world';
 import { contextExpression, expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
 import { basicGuide, gmGuide, pacing } from './guide';
 import { type Lead, rollLeads } from '../engine/leads';
+import { withDcMod } from '../engine/difficulty';
 import { activeGoals, buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects, storyThread } from './context';
 import { displayName, epithetOf, knowsName, namesIn } from '../engine/names';
 
@@ -350,7 +351,9 @@ export async function runTurn(
   /** 결정적 선택 (D4): 기다리던 선택에서 고른 것 */
   decision?: { choiceId: string; optionId: string },
   /** 플레이 설정 (설계 v4 E5): 적응 난이도 (기본 켬) · onImages: 서술이 흘러나오는 동안 그림을 놓는 함수를 받는다 (v0.88) */
-  play: { adaptive?: boolean; /** 실마리 굴림 (v0.89, 기본 켬) */ leads?: boolean; onImages?: (place: ImagePlacer) => void; /** 서술(에필로그 포함)이 다 나왔다 — 기록·안내를 기다리는 동안 남은 그림을 놓는다 */ onNarrated?: () => void } = {},
+  play: { adaptive?: boolean; /** 실마리 굴림 (v0.89, 기본 켬) */ leads?: boolean; onImages?: (place: ImagePlacer) => void; /** 서술(에필로그 포함)이 다 나왔다 — 기록·안내를 기다리는 동안 남은 그림을 놓는다 */ onNarrated?: () => void;
+    /** 서술 전에 엔진이 확정한 것(판정·실마리·전투 시작…)을 화면이 먼저 보여 줄 수 있게, 그때의 상태를 알린다 (v0.90) */
+    onState?: (s: GameState) => void } = {},
 ): Promise<TurnResult> {
   if (state.combat) throw new Error('전투 중에는 카드로 행동한다');
   if (state.playerDead) throw new Error('당신은 죽었다. 턴 되돌리기로 이전으로 돌아갈 수 있다.');
@@ -394,7 +397,8 @@ export async function runTurn(
     const rng = createRng(s.rngState);
     const breakdown = checkModifier(s.player.sheet, spec);
     const mode: RollMode = ['advantage', 'disadvantage'].includes(d.check_mode) ? d.check_mode : 'normal';
-    const result = d20Test(rng, breakdown.total, DC_TIERS[d.check_dc_tier], mode);
+    // 게임 난이도 (v0.90): GM이 고른 난이도 등급에 세이브의 DC 보정을 더한다
+    const result = d20Test(rng, breakdown.total, withDcMod(DC_TIERS[d.check_dc_tier], s.dcMod), mode);
     push({ type: 'check_rolled', skill: breakdown.label, reason: d.check_reason, result, rngState: rng.state(), breakdown, mode });
     // 어려운 판정 성공은 작은 경험치 (설계 v4 P1 — 잘한 플레이에 보상)
     const hard = result.success ? hardCheckXp(s.player.sheet.level, result.dc) : 0;
@@ -447,6 +451,9 @@ export async function runTurn(
   for (const n of ruleNotes) outcomes.push(`세계 규칙 발동: ${n.name}${n.outcome ? ` — ${n.outcome}` : ''}`);
   for (const id of (Array.isArray(d.rules) ? d.rules : [])) if (!(world.rules ?? []).some((r) => r.id === id)) rejected.push(`없는 세계 규칙: ${id}`);
 
+  // 판정 결과는 굴린 즉시 화면에 보인다 (v0.90: 서술이 끝난 뒤에야 보이던 것을 앞으로)
+  const report = () => { try { play.onState?.(s); } catch { /* 표시 실패는 무시 */ } };
+  report();
   const here = world.locations.find((l) => l.id === s.player.locationId);
   const moving = !!d.move_to && !!here?.connections.includes(d.move_to);
   if (d.move_to && !moving) { outcomes.push('요청된 이동은 불가능함 (연결되지 않은 장소)'); rejected.push(`연결되지 않은 장소로 이동: ${d.move_to}`); }
@@ -479,6 +486,7 @@ export async function runTurn(
       else if (l.kind === 'notice') outcomes.push(`실마리 — 눈썰미 (엔진 확정): 이 장소에서 무언가가 플레이어의 눈에 걸린다. 무엇이 이상한지 감각으로 구체적으로 보여 주되(자국·냄새·어긋난 물건), 그것이 무엇을 뜻하는지는 쓰지 않는다 — 자세히 살펴보고 싶어지게. GM 참고(답을 쓰지 않는다): ${l.detail}`);
     }
   }
+  report();
   const outcomeText = outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음';
   const actorState = s;
   if (speakers.length) onStage(`${speakers.map((sp) => present.find((c) => c.id === sp.npc_id)!.name).join(', ')} 반응하는 중`);
@@ -655,6 +663,7 @@ export async function runTurn(
   const beatBlock = beat ? `\n\n## 이번 장면의 연출 지시 (GM — ${BEAT_KINDS[beat.kind]}. 엔진 확정 결과 안에서만)\n${beat.direction}${beat.ending_hook ? `\n마지막에 걸어 둘 것: ${beat.ending_hook}` : ''}` : '';
 
   // 4) Narrator (확정 결과 + 확정 대사만 전달)
+  report();
   onStage('장면을 서술하는 중');
   // 그림 고르기에 필요한 것(배경·말한 인물의 표정)은 이미 정해졌다 — 화면이 글과 함께 그림을 놓을 수 있게 넘긴다 (v0.88)
   const imageSpeakers = actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '', dialogue: r.out.dialogue ?? '' }));

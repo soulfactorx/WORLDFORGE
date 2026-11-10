@@ -971,3 +971,7 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 
 /* 동시에 도는 작업의 진행 한 줄 (v0.86.1) */
 .gen-side { min-width: 0; overflow-wrap: anywhere; }
+
+/* 주인공 만들기: 지난 입력으로 채웠다는 안내 (v0.90) */
+.prefill-note { border: 1px dashed var(--border); border-radius: 6px; padding: 6px 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.prefill-note > button { min-height: 36px; }

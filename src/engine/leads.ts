@@ -21,6 +21,7 @@ import { SKILLS, type SkillId } from './character/rules';
 import { type D20Test, d20Test } from './dice/dice';
 import type { Rng } from './dice/rng';
 import { relationshipOf } from './relationship';
+import { withDcMod } from './difficulty';
 import { pendingDiscoveries, playerKnows } from './scenario';
 import type { Character, EntityId, KnowledgeState, WorldPackage } from './schema';
 import type { GameState } from './state/state';
@@ -96,7 +97,7 @@ export function rollLeads(world: WorldPackage, state: GameState, rng: Rng, o: Le
   if (!speakers.length && o.present.length) {
     const who = [...o.present].sort((a, b) => Number(o.focusNpcs?.includes(b.id) ?? false) - Number(o.focusNpcs?.includes(a.id) ?? false) || rapport(world, state, b) - rapport(world, state, a))[0]!;
     const cha = checkModifier(state.player.sheet, { kind: 'ability', ability: 'cha' }).total;
-    const t = d20Test(rng, cha + rapport(world, state, who), Math.max(6, LEAD_DC.approach - o.quiet * 2), mode);
+    const t = d20Test(rng, cha + rapport(world, state, who), withDcMod(Math.max(6, LEAD_DC.approach - o.quiet * 2), state.dcMod), mode);
     if (t.success) { approach = who.id; speakers = [who.id]; }
   }
 
@@ -109,7 +110,7 @@ export function rollLeads(world: WorldPackage, state: GameState, rng: Rng, o: Le
     const open = list.filter((x) => x.npcState !== 'secret').sort((a, b) => Number(focus.has(b.claim.id)) - Number(focus.has(a.claim.id)));
     if (!told && open.length) {
       const pick = open[0]!;
-      const t = d20Test(rng, talk.total + rapport(world, state, npc) + (focus.has(pick.claim.id) ? 2 : 0), LEAD_DC.tell, mode);
+      const t = d20Test(rng, talk.total + rapport(world, state, npc) + (focus.has(pick.claim.id) ? 2 : 0), withDcMod(LEAD_DC.tell, state.dcMod), mode);
       if (t.success) {
         told = true;
         leads.push({ kind: 'tell', npcId: npc.id, claimId: pick.claim.id, state: pick.give, detail: pick.claim.statement,
@@ -122,7 +123,7 @@ export function rollLeads(world: WorldPackage, state: GameState, rng: Rng, o: Le
         return f?.protectedTopic && !given.has(`hint:${npc.id}:${f.id}`) ? [{ factId: f.id, topic: f.protectedTopic }] : [];
       })[0];
       if (secret) {
-        const t = d20Test(rng, talk.total + rapport(world, state, npc), LEAD_DC.hint, mode);
+        const t = d20Test(rng, talk.total + rapport(world, state, npc), withDcMod(LEAD_DC.hint, state.dcMod), mode);
         if (t.success) {
           hinted = true;
           leads.push({ kind: 'hint', key: `hint:${npc.id}:${secret.factId}`, npcId: npc.id, detail: secret.topic,
@@ -138,7 +139,7 @@ export function rollLeads(world: WorldPackage, state: GameState, rng: Rng, o: Le
     .sort((a, b) => Number(focus.has(b.claim)) - Number(focus.has(a.claim)))[0];
   if (disc) {
     const claim = world.claims.find((c) => c.id === disc.claim);
-    const t = d20Test(rng, eye.total + (focus.has(disc.claim) ? 2 : 0), LEAD_DC.notice, mode);
+    const t = d20Test(rng, eye.total + (focus.has(disc.claim) ? 2 : 0), withDcMod(LEAD_DC.notice, state.dcMod), mode);
     if (t.success && claim) {
       // 판정이 필요 없는 것은 눈에 띄는 순간 알게 된다. 판정이 필요한 것은 "살펴볼 만하다"까지만
       if (!disc.check && !playerKnows(state, disc.claim, disc.state ?? 'confirmed')) {
