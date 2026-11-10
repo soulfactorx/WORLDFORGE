@@ -92,16 +92,52 @@ export interface GenerateResult {
 }
 
 /** 세계 요약: 시나리오 단계에 넘길 key 목록 */
-export function worldSummary(w: WorldPackage): string {
+/**
+ * 이야기 단계(뼈대·장면·임무·규칙)에 보내는 세계 요약을 얼마나 줄일지 (v0.100 — 카드 변환의 선택 사항).
+ *  - full: 줄이지 않는다
+ *  - holders: 명제마다 붙는 "아는 사람" 목록만 줄인다 (대부분이 알면 "대부분", 많으면 앞의 몇 명 + 외 N명)
+ *  - short: holders + 명제·진실 문장을 120자로 자른다
+ *  - focus: short + 이야기 뼈대와 이어진 인물·명제만 남긴다 (뼈대가 아직 없으면 short와 같다)
+ */
+export type SummaryLevel = 'full' | 'holders' | 'short' | 'focus';
+export interface SummaryOptions { level?: SummaryLevel; /** 문장을 자르지 않는다 (세계 규칙 단계: 원작 설정의 세부가 필요하다) */ fullText?: boolean }
+const HOLDERS_SHOWN = 6, SHORT_TEXT = 120;
+
+export function worldSummary(w: WorldPackage, o: SummaryOptions = {}): string {
   const short = (id: string) => id.replace(/^[a-z]+\//, '');
+  const level = o.level ?? 'full';
+  const clip = (t: string) => (level !== 'full' && level !== 'holders' && !o.fullText && t.length > SHORT_TEXT ? `${t.slice(0, SHORT_TEXT - 1)}…` : t);
+  // focus: 뼈대에 나온 인물(+ 연인·동료 후보, 시작 장소의 인물)과, 그들·뼈대와 이어진 명제(+ 비밀, 연표 사건)만
+  const spine = level === 'focus' ? spineOf(w).toLowerCase() : '';
+  const named = new Set(spine ? w.characters.filter((c) => spine.includes(short(c.id).toLowerCase()) || (c.name.length >= 2 && spine.includes(c.name.toLowerCase()))).map((c) => c.id) : []);
+  const keepChar = (c: WorldPackage['characters'][number]) => !spine || named.has(c.id) || Boolean(c.romanceable || c.companion) || c.locationId === w.start.locationId;
+  const chars = w.characters.filter(keepChar);
+  const kept = new Set(chars.map((c) => c.id));
+  const namedNames = w.characters.filter((c) => named.has(c.id) && c.name.length >= 2).map((c) => c.name);
+  const secretClaims = new Set(w.beliefs.filter((b) => b.state === 'secret').map((b) => b.claim));
+  const keepClaim = (c: WorldPackage['claims'][number]) => !spine || Boolean(c.relatesTo) || secretClaims.has(c.id) || c.statement.startsWith('[') || spine.includes(short(c.id).toLowerCase()) || namedNames.some((n) => c.statement.includes(n));
+  const claims = w.claims.filter(keepClaim);
+  const holders = (claimId: string) => {
+    const hs = w.beliefs.filter((b) => b.claim === claimId && (!spine || kept.has(b.holder) || b.holder === 'player'));
+    if (!hs.length) return '없음';
+    const line = (list: typeof hs) => list.map((b) => `${short(b.holder)}(${b.state})`).join(', ');
+    if (level === 'full' || hs.length <= HOLDERS_SHOWN) return line(hs);
+    // 비밀로 쥔 사람은 이야기에 중요하므로 빼지 않고, 나머지를 줄인다
+    const secret = hs.filter((b) => b.state === 'secret'), rest = hs.filter((b) => b.state !== 'secret');
+    if (rest.length >= Math.max(8, w.characters.length * 0.6)) return `${secret.length ? `${line(secret)}, ` : ''}대부분의 인물이 안다`;
+    const shown = [...secret, ...rest.slice(0, Math.max(0, HOLDERS_SHOWN - secret.length))];
+    return `${line(shown)}${hs.length > shown.length ? ` 외 ${hs.length - shown.length}명` : ''}`;
+  };
   return [
     `# ${w.manifest.name}`,
     '## 장소', ...w.locations.map((l) => `- ${short(l.id)}: ${l.name} — ${l.description.slice(0, 80)} (연결: ${l.connections.map(short).join(', ')})${l.discoveries?.length ? ` [발견 가능: ${l.discoveries.map((d) => short(d.claim)).join(', ')}]` : ''}`),
-    '## 인물', ...w.characters.map((c) => `- ${short(c.id)}: ${c.name} @${short(c.locationId)} — ${c.personality.slice(0, 60)}${c.companion ? ` [동료 후보: ${companionClass(w, c.companion).role?.name ?? CLASSES[c.companion.classId]?.name}]` : ''}${c.romanceable ? ' [연인 가능]' : ''}${c.faction ? ` [소속: ${short(c.faction)}]` : ''}`),
+    '## 인물', ...chars.map((c) => `- ${short(c.id)}: ${c.name} @${short(c.locationId)} — ${c.personality.slice(0, 60)}${c.companion ? ` [동료 후보: ${companionClass(w, c.companion).role?.name ?? CLASSES[c.companion.classId]?.name}]` : ''}${c.romanceable ? ' [연인 가능]' : ''}${c.faction ? ` [소속: ${short(c.faction)}]` : ''}`),
+    ...(chars.length < w.characters.length ? [`(이야기 뼈대와 먼 인물 ${w.characters.length - chars.length}명은 줄였다 — 위 목록의 인물만 쓴다)`] : []),
     ...(w.factions?.length ? ['## 세력', ...w.factions.map((f) => `- ${short(f.id)}: ${f.name} — ${f.description.slice(0, 60)}`)] : []),
-    ...(w.relations?.length ? ['## 인물 사이 관계', ...w.relations.map((r) => `- ${short(r.a)} ↔ ${short(r.b)}: ${r.kind}${r.note ? ` (${r.note})` : ''}`)] : []),
-    '## 진실', ...w.facts.map((f) => `- ${short(f.id)} (비밀 ${f.secrecy}): ${f.statement}`),
-    '## 명제', ...w.claims.map((c) => `- ${short(c.id)} (${c.truth}): ${c.statement} — 아는 사람: ${w.beliefs.filter((b) => b.claim === c.id).map((b) => `${short(b.holder)}(${b.state})`).join(', ') || '없음'}`),
+    ...(w.relations?.length ? ['## 인물 사이 관계', ...w.relations.filter((r) => !spine || (kept.has(r.a) && kept.has(r.b))).map((r) => `- ${short(r.a)} ↔ ${short(r.b)}: ${r.kind}${r.note ? ` (${r.note})` : ''}`)] : []),
+    '## 진실', ...w.facts.map((f) => `- ${short(f.id)} (비밀 ${f.secrecy}): ${clip(f.statement)}`),
+    '## 명제', ...claims.map((c) => `- ${short(c.id)} (${c.truth}): ${clip(c.statement)} — 아는 사람: ${holders(c.id)}`),
+    ...(claims.length < w.claims.length ? [`(이야기 뼈대와 먼 명제 ${w.claims.length - claims.length}개는 줄였다 — 위 목록의 명제만 쓴다)`] : []),
     // v0.85: 뒤 단계가 앞 단계와 이을 수 있게 내용까지 준다 (지금까지는 임무 이름만 갔다)
     ...(spineOf(w) ? ['## 이야기 뼈대 (이것을 따른다)', spineOf(w)] : []),
     ...(w.scenes?.length ? ['## 이미 있는 장면', ...w.scenes.map((s) => `- ${short(s.id)}: ${s.name}${s.npcId ? ` (상대 ${short(s.npcId)})` : ''}${s.locationId ? ` @${short(s.locationId)}` : ''} — ${s.description.slice(0, 70)} [진입: ${sceneEntry(s).mode}] [끝: ${s.ends.map((e) => `${e.name}(${e.outcome}${(e.effects ?? []).flatMap((x) => ('setFlag' in x ? [` → 플래그 ${x.setFlag}`] : 'reveal' in x ? [` → 명제 ${short(x.reveal)}`] : 'startEncounter' in x ? [` → 전투 ${short(x.startEncounter)}`] : [])).join('')})`).join(', ')}]`)] : []),
@@ -188,6 +224,7 @@ export async function generateScenario(
   llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal, request = '',
   /** encounters: 조우만 만든다 (v0.79.4 — 점검에서 "조우 없음"을 고칠 때) */
   focus: 'all' | 'encounters' = 'all',
+  sum: SummaryOptions = {},
 ): Promise<{ world: WorldPackage; notes: string[] }> {
   onStage('세계 요약을 보내는 중…', 2, 5);
   onStage(focus === 'encounters' ? 'AI가 조우를 쓰는 중…' : 'AI가 임무·조우·결말을 쓰는 중…', 5, 90);
@@ -197,7 +234,7 @@ export async function generateScenario(
     : rare ? '\n- 이 장르는 전투가 드물다: 조우는 0~1개, 임무는 관계·사교·조사 중심으로.' : '';
   const draft = await llm.json<ScenarioDraft>({
     system: `${SCENARIO_SYSTEM}\n- ${genreGuide(world)}${focusRule}`,
-    user: `${worldSummary(world)}\n\n## 쓸 수 있는 적 (이 세계의 장르)\n${monstersOfWorld(world).map((m) => `- ${m.id}: ${m.name} · ${m.role} · 경험치 ${m.xp} · ${m.look}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
+    user: `${worldSummary(world, sum)}\n\n## 쓸 수 있는 적 (이 세계의 장르)\n${monstersOfWorld(world).map((m) => `- ${m.id}: ${m.name} · ${m.role} · 경험치 ${m.xp} · ${m.look}`).join('\n')}${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 12000, effort: 'medium', label: focus === 'encounters' ? '조우' : '임무·조우·결말',
   }, scenarioDraftSchema(Object.keys(monsterTable(world))), signal);
   onStage('받은 초안을 세계에 맞춰 정리하고 검사하는 중…', 92, 99);

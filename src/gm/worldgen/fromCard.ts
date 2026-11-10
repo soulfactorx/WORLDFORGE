@@ -25,7 +25,7 @@ import type { LlmClient } from '../../llm/types';
 import { PRIVATE_NOTE } from '../../storage/packages';
 import { RATING_GUIDE } from '../../engine/rating';
 import { worldFromDraft, type WorldDraft } from './draft';
-import { generateScenario, worldSummary } from './generate';
+import { generateScenario, type SummaryLevel, worldSummary } from './generate';
 import { generateSpine } from './spine';
 import { generateScenes } from './scenes';
 import { generateRules, mergeRules } from './rules';
@@ -138,6 +138,8 @@ export interface CardWorldOptions {
   withScenes?: boolean;
   /** 인물 대표 이미지 → 작은 초상화 data URL (브라우저에서만) */
   makePortrait?: (blob: Blob) => Promise<string | undefined>;
+  /** 이야기 단계(뼈대·장면·임무·규칙)에 보내는 세계 요약을 얼마나 줄일지 (v0.100, 기본 full = 줄이지 않음) */
+  summaryLevel?: SummaryLevel;
   /** 세계 규칙까지 만들기 (v0.83, 기본 예) — 원작의 법칙·금기를 규칙으로 옮긴다 */
   withRules?: boolean;
   /** 규칙이 놓친 인물을 AI가 로어북에서 찾기 (기본 켬) */
@@ -460,12 +462,14 @@ export async function cardToWorld(
   // 이야기 쪽이 먼저 실패해도 이미지 쪽 오류가 처리되지 않은 채 남지 않게
   imageTrack.catch(() => { try { opts.onImageStage?.(null); } catch { /* 무시 */ } });
 
+  // 세계 요약 줄이기 (v0.100): 이야기 단계 호출마다 들어가는 요약의 크기를 제작자가 고른다
+  const sum = { level: opts.summaryLevel ?? 'full' } as const;
   // 3.5) 이야기 뼈대 (v0.85): 원작 연표의 핵심 사건을 고비로 — 임무·장면·조우가 서로 이어지게
   // v0.92: 장면을 만들 때는 뼈대를 장면과 같은 호출에서 짠다 (AI 호출 한 번을 줄인다)
   if (opts.withScenario && opts.withScenes === false) {
     try {
       onStage('이야기 뼈대 짜는 중…', 76, 78);
-      const sp = await generateSpine(llm, world, worldSummary(world), `원작 카드를 바탕으로 한 세계다. 원작의 줄거리와 연표의 핵심 사건을 장의 고비로 삼는다.\n${cut(d.plot_request ?? '', 2000)}`, signal);
+      const sp = await generateSpine(llm, world, worldSummary(world, opts.summaryLevel === 'focus' ? { level: 'holders' } : sum), `원작 카드를 바탕으로 한 세계다. 원작의 줄거리와 연표의 핵심 사건을 장의 고비로 삼는다.\n${cut(d.plot_request ?? '', 2000)}`, signal);
       world = sp.world;
     } catch (e) {
       if (signal?.aborted) throw e;
@@ -475,7 +479,7 @@ export async function cardToWorld(
   // 4) 장면 (v0.51 — v0.85부터 임무보다 먼저: 임무가 장면의 결과를 조건으로 쓴다): 원작의 인물·관계로 협상·대결·데이트 같은 장면
   if (opts.withScenes !== false) {
     try {
-      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`, 3, { withSpine: true, split: true });
+      const r = await generateScenes(llm, world, (st) => onStage(st, opts.withScenario ? 85 : 78, 90), signal, `원작 카드를 바탕으로 한 세계다. 원작 인물들의 관계·갈등이 드러나는 장면을 만든다.\n${cut(d.plot_request ?? '', 1500)}`, 3, { withSpine: true, split: true, sum });
       world = r.world;
       notes.push(...r.notes);
     } catch (e) {
@@ -488,7 +492,7 @@ export async function cardToWorld(
   const rulesTrack = opts.withRules !== false ? (async () => {
     try {
       const src = (d.world_rules ?? []).map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 16).map((x) => `- ${x}`).join('\n');
-      const r = await generateRules(llm, world, () => { /* 진행 표시는 임무 쪽이 한다 */ }, signal, `원작 카드를 바탕으로 한 세계다. 원작의 법칙·금기와 인물들의 반응 방식을 규칙으로 옮기고, 원작 줄거리의 갈등이 플레이어 행동으로 번지게 한다.\n${cut(d.plot_request ?? '', 1200)}`, src ? 8 : 5, src);
+      const r = await generateRules(llm, world, () => { /* 진행 표시는 임무 쪽이 한다 */ }, signal, `원작 카드를 바탕으로 한 세계다. 원작의 법칙·금기와 인물들의 반응 방식을 규칙으로 옮기고, 원작 줄거리의 갈등이 플레이어 행동으로 번지게 한다.\n${cut(d.plot_request ?? '', 1200)}`, src ? 8 : 5, src, { ...sum, fullText: true });
       return { world: r.world, notes: r.notes };
     } catch (e) {
       if (signal?.aborted) return null;
@@ -499,7 +503,7 @@ export async function cardToWorld(
   if (opts.withScenario) {
     try {
       const request = `원작 카드를 바탕으로 한 세계다. 원작의 줄거리와 연표를 따라가는 메인 임무와 결말을 만든다.\n${cut(d.plot_request ?? '', 3000)}\n\n## 연표\n${timeline.slice(0, 40).map((t) => `- [${t.when}] ${t.title} (${claimByKey(t.key)?.replace(/^claim\//, '') ?? ''})`).join('\n')}`;
-      const r = await generateScenario(llm, world, (st) => onStage(st, 78, opts.withScenes !== false ? 85 : 90), signal, request);
+      const r = await generateScenario(llm, world, (st) => onStage(st, 78, opts.withScenes !== false ? 85 : 90), signal, request, 'all', sum);
       world = r.world;
       notes.push(...r.notes);
     } catch (e) {

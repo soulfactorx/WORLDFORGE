@@ -109,6 +109,15 @@ const SCREENS = [
     await p.locator('.img-pick-cell').first().click();
   }],
   ['장면 시험', async (p) => { await editorTab(p, '장면'); await p.click('button:has-text("추가하고 바로 테스트")'); await p.waitForSelector('.scene-tester'); await p.click('button:has-text("자동 200회")'); }],
+  ['카드로 세계 만들기 (요약 줄이기 설명 펼침)', async (p) => {
+    await home(p); await p.click('.home-tabs button:has-text("세계관")');
+    const card = { spec: 'chara_card_v2', spec_version: '2.0', data: { name: '점검용 카드', description: '점검용 인물이다.', personality: '차분하다', scenario: '', first_mes: '안녕.', mes_example: '', character_book: { entries: [{ keys: ['마을'], content: '마을은 조용하다.', enabled: true, name: '마을' }] } } };
+    await p.click('button:has-text("＋ 만들기")');
+    await p.locator('input[type=file][multiple]').setInputFiles({ name: 'card.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(card)) });
+    await p.waitForSelector('.card-summary');
+    await p.selectOption('.card-summary select', 'focus');
+    await p.click('.card-summary details > summary');
+  }],
   ['AI 사용량', async (p) => { await home(p); await tool(p, 'AI 사용량'); }],
   ['AI 사용량: 타임라인', async (p) => {
     await home(p); await tool(p, 'AI 사용량'); await p.waitForTimeout(600);

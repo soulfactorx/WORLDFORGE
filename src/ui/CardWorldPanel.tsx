@@ -2,6 +2,7 @@ import { beginRun, endRun } from '../llm/usage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
 import { analyzeBundle, cardToWorld } from '../gm/worldgen/fromCard';
+import type { SummaryLevel } from '../gm/worldgen/generate';
 import { type CharxBundle, mergeBundles, parseToggles, readCharxBundle } from '../importers/bundle';
 import { portraitDataUrl } from '../importers/portrait';
 import type { EntryChoice } from '../importers/worldcard';
@@ -22,6 +23,30 @@ const mb = (n: number) => `${(n / 1048576).toFixed(1)}MB`;
  * 카드·모듈(risum)·Lua 데이터·모든 이미지를 읽고 → AI가 세계 구조를 만들고 → 이미지를 저장한다.
  * 결과는 개인용 세계(내보내기·공유 불가).
  */
+/** 세계 요약 줄이기 (v0.100): 선택지 이름 · 한 줄 요약 · 자세한 설명 */
+const SUMMARY_LEVELS: Record<SummaryLevel, { name: string; effect: string; detail: string }> = {
+  full: {
+    name: '줄이지 않음 (지금까지의 방식)',
+    effect: '모든 인물·명제를 그대로 보냅니다. 이야기가 세계 전체를 보고 만들어지지만, 큰 카드에서는 입력 토큰이 가장 많이 듭니다.',
+    detail: '요약을 그대로 보냅니다. 이야기에 쓸 수 있는 재료가 가장 많고 결과가 가장 풍부합니다. 인물이 수십 명을 넘거나 로어북이 큰 카드에서는 비용이 가장 크고, 모델의 입력 한도에 걸릴 수 있습니다. 작은 카드(인물 20명 안팎 이하)라면 이것으로 충분합니다.',
+  },
+  holders: {
+    name: '아는 사람 목록만 줄이기 (권장)',
+    effect: '명제마다 붙는 "아는 사람" 목록만 줄입니다. 내용은 그대로라 이야기에 미치는 영향이 거의 없습니다.',
+    detail: '명제(로어북 설정·사건)마다 "그것을 아는 인물"을 전부 적던 것을 줄입니다: 대부분의 인물이 아는 것은 "대부분의 인물이 안다", 많으면 앞의 6명과 "외 N명". 비밀로 쥐고 있는 인물은 빼지 않습니다. 명제의 문장과 인물 목록은 그대로입니다. 달라질 수 있는 것: 임무가 "이 일을 아는 사람에게 묻는다" 같은 단계를 만들 때, 목록에서 생략된 인물을 고르지 못합니다. 세상이 다 아는 설정이 많은 카드일수록 많이 줄어듭니다.',
+  },
+  short: {
+    name: '+ 설정 문장을 짧게 (120자)',
+    effect: '위에 더해 명제·진실의 문장을 120자로 자릅니다. 설정의 세부(수치·조건·예외)가 장면·임무에 덜 반영될 수 있습니다.',
+    detail: '위에 더해, 명제와 진실의 문장을 120자에서 자릅니다 (원래는 400자까지). 무슨 일·무슨 설정인지는 전해지지만 뒤쪽의 세부(수치, 조건, 예외, 배경 사정)는 AI가 보지 못합니다. 달라질 수 있는 것: 장면과 임무가 원작 설정을 덜 정확하게 따르고, 긴 설정의 뒷부분에만 있던 단서가 쓰이지 않습니다. 세계 규칙을 만들 때는 문장을 자르지 않습니다 — 원작의 법칙을 옮기는 단계라 세부가 필요해서입니다.',
+  },
+  focus: {
+    name: '+ 이야기 뼈대와 이어진 것만',
+    effect: '위에 더해 뼈대와 이어진 인물·명제만 보냅니다. 가장 많이 줄지만, 빠진 인물·설정은 임무·장면·규칙에 나오지 않습니다.',
+    detail: '위에 더해, 뼈대를 짠 뒤에는 뼈대와 이어진 것만 보냅니다. 남는 인물: 뼈대에 나온 인물, 연인·동료 후보, 시작 장소에 있는 인물. 남는 명제: 비밀, 연표의 사건, 뼈대에 나온 것, 뼈대 인물의 이름이 들어간 것. 뼈대 자체는 전체를 보고 짭니다 (아는 사람 목록만 줄인 요약). 달라질 수 있는 것: 빠진 인물과 설정은 임무·장면·규칙에 전혀 나오지 않아 곁가지 이야기가 주요 인물 주변으로 몰립니다. 무엇이 "이어졌는지"는 이름이 겹치는지로 가리므로, 별명으로만 불리는 인물이나 이름 없이 서술된 설정은 빠질 수 있습니다. 세계가 넓고 여러 갈래의 이야기를 원하면 권하지 않습니다.',
+  },
+};
+
 export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, onCharactersOnly }: {
   file: File; settings: LlmSettings | null;
   /** 홈에서 함께 고른 추가 파일 (v0.62) */
@@ -43,6 +68,9 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
   const [withScenario, setWithScenario] = useState(true);
   const [withScenes, setWithScenes] = useState(true);
   const [withRules, setWithRules] = useState(true);
+  // 세계 요약 줄이기 (v0.100): 고른 값을 기억한다
+  const [summary, setSummaryState] = useState<SummaryLevel>(() => { try { const v = localStorage.getItem('worldforge.card.summary'); return v && v in SUMMARY_LEVELS ? v as SummaryLevel : 'full'; } catch { return 'full'; } });
+  const setSummary = (v: SummaryLevel) => { setSummaryState(v); try { localStorage.setItem('worldforge.card.summary', v); } catch { /* 기억하지 못해도 된다 */ } };
 
   const [agree, setAgree] = useState(false);
   const [stage, setStage] = useState('');
@@ -137,7 +165,7 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
       // 재시도·잘린 응답 처리 + 단계별 결과 저장(같은 카드로 다시 하면 끝난 단계는 건너뜀)
       const llm = cached(createLlmClient(settings, { onRetry: (n, why, label) => setStage(`${label ? `${label}: ` : ''}${why.includes('앱을 벗어나') ? `${why} (${n}번째)` : why.includes('요청 한도') ? `${why} (${n}번째)` : `다시 시도하는 중 (${n}번째)… ${why.includes('길이 제한') ? '응답이 길어 잘림 — 한도를 늘려 다시 요청' : why.slice(0, 80)}`}`) }), genCache(bundle.fingerprint), () => { hits++; setStage(`저장된 결과를 다시 쓰는 중… (${hits}개)`); });
       const r = await cardToWorld(llm, bundle, {
-        contentRating: rating, classifyImages: classify, withScenario, withScenes, withRules, choices, translate, aiFindCharacters: findChars,
+        contentRating: rating, classifyImages: classify, withScenario, withScenes, withRules, summaryLevel: summary, choices, translate, aiFindCharacters: findChars,
         makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),
         onImageStage: setImageStage,
       }, onStage, signal);
@@ -244,6 +272,24 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
             <label className="check"><input type="checkbox" checked={findChars} disabled={busy} onChange={(e) => setFindChars(e.target.checked)} /> 규칙으로 못 찾은 인물을 AI가 로어북에서 더 찾기</label>
             <label className="check"><input type="checkbox" checked={translate} disabled={busy} onChange={(e) => setTranslate(e.target.checked)} /> 외국어(영어 등) 인물·설정 글을 한국어로 번역</label>
           </div>
+          {(withScenario || withScenes || withRules) && (
+            <div className="card-summary">
+              <label>이야기 단계에 보내는 세계 요약
+                <select value={summary} disabled={busy} onChange={(e) => setSummary(e.target.value as SummaryLevel)}>
+                  {(Object.keys(SUMMARY_LEVELS) as SummaryLevel[]).map((k) => <option key={k} value={k}>{SUMMARY_LEVELS[k].name}</option>)}
+                </select>
+              </label>
+              <p className="small muted">{SUMMARY_LEVELS[summary].effect}</p>
+              <details className="small">
+                <summary>이 선택이 무엇을 바꾸나요?</summary>
+                <p>뼈대 · 장면(3번) · 임무 · 세계 규칙을 만들 때마다 AI에게 세계의 장소·인물·진실·명제 요약을 통째로 보냅니다. 인물과 로어북이 많은 카드는 이 요약이 호출 한 번에 8만 토큰을 넘고, 여섯 번 보내면 변환 한 번에 50만 입력 토큰이 됩니다. 줄이면 <b>비용</b>이 줄고 조금 빨라지지만, AI가 보지 못한 것은 이야기에 쓰지 못합니다. 만들어진 세계의 데이터와 플레이에는 영향이 없습니다 — 줄어드는 것은 만드는 동안 AI가 보는 요약뿐입니다.</p>
+                <ul>
+                  {(Object.keys(SUMMARY_LEVELS) as SummaryLevel[]).map((k) => <li key={k}><b>{SUMMARY_LEVELS[k].name}</b><br />{SUMMARY_LEVELS[k].detail}</li>)}
+                </ul>
+                <p className="muted">처음이면 "아는 사람 목록만 줄이기"를 권합니다. 📊 AI 사용량 → 작업별 (타임라인)에서 단계별 입력 토큰이 얼마나 줄었는지 볼 수 있습니다.</p>
+              </details>
+            </div>
+          )}
           <div className="private-banner">
             🔒 이 카드는 다른 사람의 작품입니다. 만든 세계는 <b>개인용</b>으로 표시되어 <b>이 브라우저에서 혼자 플레이할 수만 있고</b>, 패키지·세이브 내보내기와 공유가 막힙니다.
             <label className="check"><input type="checkbox" checked={agree} disabled={busy} onChange={(e) => setAgree(e.target.checked)} /> 이해했습니다. 개인적으로만 사용합니다.</label>

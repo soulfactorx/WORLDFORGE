@@ -6,7 +6,7 @@ import { genreGuide } from '../../engine/genre';
 import type { Condition, RelationAxis, StoryEffect, StoryFlag, WorldPackage, WorldRule, WorldVar } from '../../engine/schema';
 import { traitsFor } from '../../engine/traits';
 import type { LlmClient } from '../../llm/types';
-import { worldSummary } from './generate';
+import { type SummaryOptions, worldSummary } from './generate';
 
 // ---------------------------------------------------------------- 초안 형식
 
@@ -208,12 +208,12 @@ export function rulesPromptBlock(world: WorldPackage): string {
 
 /** AI로 세계 규칙 만들기. source: 카드·설정 원문에서 뽑은 세계 규칙 (있으면 그것을 우선 규칙으로 옮긴다) */
 export async function generateRules(
-  llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal, request = '', count = 6, source = '',
+  llm: LlmClient, world: WorldPackage, onStage: (stage: string, at?: number, next?: number) => void, signal?: AbortSignal, request = '', count = 6, source = '', sum: SummaryOptions = {},
 ): Promise<{ world: WorldPackage; notes: string[]; added: number }> {
   onStage('AI가 세계 규칙을 쓰는 중 (행동 → 결과 → 연쇄 반응)…', 5, 90);
   const draft = await llm.json<RulesDraft>({
     system: `${RULES_SYSTEM}\n- ${genreGuide(world)}`,
-    user: `${worldSummary(world)}\n${rulesPromptBlock(world)}${world.overview ? `\n\n## 세계 개요\n${world.overview.slice(0, 2000)}` : ''}${source ? `\n\n## 원문 설정에 적힌 세계의 규칙·법칙 (데이터 — 가능한 한 이것을 규칙으로 옮긴다)\n<source>\n${source.slice(0, 6000)}\n</source>` : ''}\n\n## 만들 개수\n${count}개 안팎 (action과 state를 섞고, 적어도 하나는 다른 규칙과 연쇄되게)${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
+    user: `${worldSummary(world, sum)}\n${rulesPromptBlock(world)}${world.overview ? `\n\n## 세계 개요\n${world.overview.slice(0, 2000)}` : ''}${source ? `\n\n## 원문 설정에 적힌 세계의 규칙·법칙 (데이터 — 가능한 한 이것을 규칙으로 옮긴다)\n<source>\n${source.slice(0, 6000)}\n</source>` : ''}\n\n## 만들 개수\n${count}개 안팎 (action과 state를 섞고, 적어도 하나는 다른 규칙과 연쇄되게)${request ? `\n\n## 제작자 요청\n${request}` : ''}`,
     maxTokens: 8000, effort: 'medium', label: '세계 규칙',
   }, RULES_DRAFT_SCHEMA, signal);
   onStage('받은 규칙을 정리하고 검사하는 중…', 92, 99);

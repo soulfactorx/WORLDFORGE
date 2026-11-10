@@ -986,3 +986,11 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .run-bar > span { position: absolute; top: 0; bottom: 0; }
 .run-wait { background: color-mix(in srgb, var(--accent) 30%, transparent); }
 .run-work { background: var(--accent); }
+
+/* 카드 변환: 세계 요약 줄이기 (v0.100) */
+.card-summary { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+.card-summary > label { display: block; }
+.card-summary select { display: block; width: 100%; min-width: 0; margin-top: 4px; }
+.card-summary p { margin: 6px 0; }
+.card-summary details > summary { padding: 9px 0; cursor: pointer; }
+.card-summary li { margin: 6px 0; }
