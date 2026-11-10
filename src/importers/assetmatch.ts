@@ -91,7 +91,7 @@ export function parseClassifyItem(it: string | ClassifyItem): ClassifyItem | nul
 
 /** 한 번에 보내는 이름 묶음 수 · 동시에 보내는 AI 호출 수 (v0.65) */
 const CHUNK = 100;
-const PARALLEL = 4;
+const PARALLEL = 6;
 
 /** 표정·상황 낱말 (이미지마다 이름에서 직접 태그로 쓴다) */
 const MOOD_WORDS = new Set(['smile', 'smiling', 'happy', 'joy', 'laugh', 'grin', 'angry', 'anger', 'mad', 'rage', 'annoyed', 'sad', 'cry', 'crying', 'tears', 'surprised', 'surprise', 'shock', 'shocked',

@@ -109,6 +109,6 @@ describe('AI 이미지 분류 속도 (v0.65)', () => {
     calls = 0; peak = 0;
     await classifyAssetsAI(llm, many, chars, locs);
     expect(calls).toBe(10);
-    expect(peak).toBe(4);
+    expect(peak).toBe(6);
   });
 });

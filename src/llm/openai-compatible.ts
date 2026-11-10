@@ -15,7 +15,9 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
   const openRouter = /(^|\/\/|\.)openrouter\.ai(\/|:|$)/i.test(s.baseUrl ?? '');
   // minimal을 거절(400)하는 모델이면 그 뒤로는 low로 보낸다
   let minimalOk = true;
-  const reasoning = (req: LlmRequest) => (openRouter ? { reasoning: { effort: req.effort === 'minimal' && !minimalOk ? 'low' : req.effort ?? 'low' } } : {});
+  // v0.98: minimal은 생각을 끈다 (enabled: false). effort 'minimal'은 받기는 해도 생각이 줄지 않았다 (번역 한 묶음에 여전히 생각 4~5k) —
+  // 생각을 켜고 끄는 것만 되는 모델이 있어서다. 끄기를 거절(400)하는 모델이면 그 뒤로는 low로 보낸다
+  const reasoning = (req: LlmRequest) => (openRouter ? { reasoning: req.effort === 'minimal' ? (minimalOk ? { enabled: false } : { effort: 'low' }) : { effort: req.effort ?? 'low' } } : {});
   const messages = (req: LlmRequest) => [
     { role: 'system', content: req.system },
     { role: 'user', content: req.user },
@@ -67,7 +69,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
       try { res = await fetch(url, { method: 'POST', headers, signal, body: JSON.stringify(reqBody) }); } catch (e) { finishAttempt(at, { error: String((e as Error)?.message ?? e) }); throw e; }
       // minimal을 받지 못하는 모델(400): 그 뒤로는 low로 보내고, 이번 요청도 low로 한 번 다시 보낸다
       if (res.status === 400 && openRouter && req.effort === 'minimal' && minimalOk) {
-        finishAttempt(at, { status: 400, raw: (await res.text()).slice(0, 2000), error: 'HTTP 400 (생각 깊이 minimal → low로 다시)' });
+        finishAttempt(at, { status: 400, raw: (await res.text()).slice(0, 2000), error: 'HTTP 400 (생각 끄기 거절 → low로 다시)' });
         minimalOk = false;
         reqBody = build();
         at = traceAttempt(req.trace, `POST ${url}`, reqBody);
