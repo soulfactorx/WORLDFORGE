@@ -301,6 +301,12 @@ const NARRATOR_SYSTEM = `너는 1인칭 TRPG의 서술자이자 NPC 연기자다
 - 마지막 문단은 플레이어가 바로 반응하고 싶어지는 구체적인 순간으로 끝낸다 (누군가 대답을 기다린다, 문이 열린다, 그릇이 미끄러진다). 막연한 여운("어느 쪽이 진짜인지는 알 수 없다")으로 끝내지 않는다.
 - 2~4문단, 문단마다 2~4문장. 길게 늘이지 않는다. 마지막에 플레이어의 행동을 직접 결정하지 않는다.`;
 
+/**
+ * 지금까지 나온 서술 글 → 그 글에 놓을 그림 (v0.88). 턴이 끝났을 때 저장되는 배치와 같은 규칙이라,
+ * 글이 흘러나오는 동안 문단마다 불러도 이미 놓인 그림의 자리가 바뀌지 않는다.
+ */
+export type ImagePlacer = (narrationSoFar: string) => NarrationImage[];
+
 export interface TurnResult {
   events: GameEvent[];
   state: GameState;
@@ -321,8 +327,8 @@ export async function runTurn(
   use?: string,
   /** 결정적 선택 (D4): 기다리던 선택에서 고른 것 */
   decision?: { choiceId: string; optionId: string },
-  /** 플레이 설정 (설계 v4 E5): 적응 난이도 (기본 켬) */
-  play: { adaptive?: boolean } = {},
+  /** 플레이 설정 (설계 v4 E5): 적응 난이도 (기본 켬) · onImages: 서술이 흘러나오는 동안 그림을 놓는 함수를 받는다 (v0.88) */
+  play: { adaptive?: boolean; onImages?: (place: ImagePlacer) => void; /** 서술(에필로그 포함)이 다 나왔다 — 기록·안내를 기다리는 동안 남은 그림을 놓는다 */ onNarrated?: () => void } = {},
 ): Promise<TurnResult> {
   if (state.combat) throw new Error('전투 중에는 카드로 행동한다');
   if (state.playerDead) throw new Error('당신은 죽었다. 턴 되돌리기로 이전으로 돌아갈 수 있다.');
@@ -607,6 +613,9 @@ export async function runTurn(
 
   // 4) Narrator (확정 결과 + 확정 대사만 전달)
   onStage('장면을 서술하는 중');
+  // 그림 고르기에 필요한 것(배경·말한 인물의 표정)은 이미 정해졌다 — 화면이 글과 함께 그림을 놓을 수 있게 넘긴다 (v0.88)
+  const imageSpeakers = actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '', dialogue: r.out.dialogue ?? '' }));
+  try { play.onImages?.((text) => turnImages(world, s, d.scene_image ?? '', imageSpeakers, moving, turn, text)); } catch { /* 미리 보기 실패는 무시 — 끝나면 저장된 그림이 나온다 */ }
   const narration = await llm.stream(
     {
       system: narratorSystem(world),
@@ -616,7 +625,7 @@ export async function runTurn(
     onNarration, signal,
   );
   const imgWhy: string[] = [];
-  const { result: images, picks: imgPicks } = traceImages(() => turnImages(world, s, d.scene_image ?? '', actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '', dialogue: r.out.dialogue ?? '' })), moving, turn, narration, imgWhy));
+  const { result: images, picks: imgPicks } = traceImages(() => turnImages(world, s, d.scene_image ?? '', imageSpeakers, moving, turn, narration, imgWhy));
   debugNote('이미지 선택 — 서술', imageNote(images, imgWhy, imgPicks, { 'GM 판단 장면 태그(scene_image)': d.scene_image ?? '', '말한 인물 표정(Actor expression)': actorResults.map((r) => `${r.npc.name}: ${r.out.expression || '(없음)'}`).join(', ') || '(말한 인물 없음)', '장소 이동': moving ? '예' : '아니오' }));
   debugNote('연출 지시 · 이야기 전환', { '연출 지시(beat)': beat ?? '(없음)', '서술 앞에 확정된 전환': transitions.length ? transitions : '(없음)' });
   push({ type: 'narration', text: narration, ...(images.length ? { images } : {}) });
@@ -631,6 +640,7 @@ export async function runTurn(
     push({ type: 'narration', text: epilogue });
   }
 
+  try { play.onNarrated?.(); } catch { /* 표시 실패는 무시 */ }
   // 6) GM 안내 — 기록관과 동시에. 실패하면 기본 안내
   onStage('GM 안내와 기록을 정리하는 중');
   const guideState = s;

@@ -4,7 +4,7 @@ import type { WorldPackage } from '../engine/schema';
 import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
 import { applyEvent, replay, type GameState, type LogEntry } from '../engine/state/state';
-import { runTurn, CONTINUE_INPUT } from '../gm/turn';
+import { runTurn, CONTINUE_INPUT, type ImagePlacer } from '../gm/turn';
 import { metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
 import { DebugPanel, useDebugOn } from './DebugPanel';
@@ -101,6 +101,33 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const [nextSeq, setNextSeq] = useState(0);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState<string | null>(null);
+  // 글이 흘러나오는 동안의 그림 (v0.88): 문단이 끝날 때마다 그 문단에 나온 인물의 그림을 그 앞에 놓는다
+  const placer = useRef<ImagePlacer | null>(null);
+  const placedParas = useRef(-1);
+  const [streamImages, setStreamImages] = useState<NarrationImage[]>([]);
+  const [narrated, setNarrated] = useState(false);
+  /** 이미 놓인 그림은 그대로 두고 새 그림만 더한다 (배경 하나 · 인물은 이름마다 하나) */
+  const addStreamImages = (found: NarrationImage[], all: boolean) => setStreamImages((cur) => {
+    const key = (im: NarrationImage) => (im.bg ? 'bg' : `c:${im.caption}`);
+    const have = new Set(cur.map(key));
+    const fresh = found.filter((im) => !have.has(key(im)) && !cur.some((x) => x.id === im.id) && (all || im.bg || im.para !== undefined));
+    return fresh.length ? [...cur, ...fresh] : cur;
+  });
+  useEffect(() => {
+    if (streaming === null) { placer.current = null; placedParas.current = -1; setStreamImages((c) => (c.length ? [] : c)); setNarrated(false); return; }
+    const place = placer.current;
+    if (!place) return;
+    // 끝난 문단만 본다 (쓰는 중인 마지막 문단은 아직 누구의 것인지 모른다)
+    const cut = streaming.lastIndexOf('\n\n');
+    const done = cut > 0 ? streaming.slice(0, cut) : '';
+    const n = done ? paragraphsOf(done).length : 0;
+    if (n !== placedParas.current) {
+      placedParas.current = n;
+      try { addStreamImages(place(done), false); } catch { /* 미리 보기 실패는 무시 */ }
+    }
+    // 서술이 다 나왔으면(기록·안내를 기다리는 중) 마지막 문단까지 놓고, 자리 없는 그림도 보여 준다
+    if (narrated) { try { addStreamImages(place(streaming), true); } catch { /* 무시 */ } }
+  }, [streaming, narrated]);
   const [error, setError] = useState('');
   const [stage, setStage] = useState('');
   // GM 스타일: 플레이 설정이 세계 설정보다 우선 (v0.80). 화면을 떠나면 원래대로
@@ -221,7 +248,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     try {
       const t0 = performance.now();
       const { events, rejected, state: after } = await runTurn(createLlmClient(settings), world, state, text,
-        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision, { adaptive: loadPlayPrefs().adaptive });
+        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision,
+        { adaptive: loadPlayPrefs().adaptive, onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true) });
       metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected });
       await endDebug(dbg, { events, before: state, after, rejected });
       const turn = state.turn + 1;
@@ -463,7 +491,9 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
             <p className="small muted">아직 정하지 않았다면 평소처럼 행동해도 됩니다. 이 선택은 고를 때까지 남아 있습니다.</p>
           </div>
         )}
-        {streaming !== null && <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>}
+        {streaming !== null && (streaming && streamImages.length > 0 && imgSize !== 'hidden'
+          ? <PlacedNarration text={streaming} images={streamImages} pkg={world.manifest.id} size={imgSize} bgMode={loadPlayPrefs().background} />
+          : <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>)}
         <div ref={bottom} />
       </div>
       {behind && <button type="button" className="jump-new" onClick={followNow}>↓ 새 글{streaming !== null ? ' (쓰는 중)' : ''}</button>}
