@@ -202,7 +202,8 @@ export async function runEval(
     const t0 = performance.now();
     try {
       let narration = '';
-      const r = await runTurn(llm, world, before, p.input, (d) => { narration += d; }, signal);
+      // 실마리 굴림은 끈다: 시험마다 한 가지 규칙만 보려는 것이고, 주사위에 따라 인물이 끼어들면 판정이 흔들린다
+      const r = await runTurn(llm, world, before, p.input, (d) => { narration += d; }, signal, undefined, undefined, undefined, { leads: false });
       const narr = r.events.filter((e) => e.type === 'narration').map((e) => (e as { text: string }).text).join('\n') || narration;
       let j = p.judge({ events: r.events, state: r.state, narration: narr, before });
       const common = j.pass ? commonIssue(r.events, narr, world, r.state) : null;

@@ -224,3 +224,15 @@ export const NARRATION_CORE = `- 한국어 2인칭("당신은 …")으로 쓴다
 - 엔진이 확정한 결과를 그대로 따른다. 결과를 바꾸거나 새 판정·새 사건·새 보상을 만들지 않는다.
 - 숫자(주사위·수치·피해량·AC)는 쓰지 않는다. 높고 낮음은 몸짓과 분위기로 보여 준다.
 - 직전 이야기에서 바로 이어 쓴다. 이미 소개한 장소·인물을 처음 보는 것처럼 다시 소개하지 않고, 지난 일을 다시 요약하지 않는다.`;
+
+/** 지금 목표와 이어지는 명제·인물 (v0.89): 실마리가 이쪽부터 흘러나온다 */
+export function focusTargets(world: WorldPackage, state: GameState, b: StoryBrief): { claims: string[]; npcs: string[] } {
+  const claims = new Set<string>(); const npcs = new Set<string>();
+  for (const q of b.quests) {
+    walkPositive(q.stage.complete, (c) => { if ('knows' in c) claims.add(c.knows); if ('relationship' in c) npcs.add(c.relationship); if ('stage' in c) npcs.add(c.stage); if ('inParty' in c) npcs.add(c.inParty); });
+    for (const id of [q.quest.truth, ...(q.quest.clues ?? [])]) if (id) claims.add(id);
+    if (q.quest.giver) npcs.add(q.quest.giver);
+    for (const v of q.via) if (v.kind === 'talk') npcs.add(v.id);
+  }
+  return { claims: [...claims], npcs: [...npcs] };
+}

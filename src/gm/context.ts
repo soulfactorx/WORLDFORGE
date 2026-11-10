@@ -192,10 +192,21 @@ export function playerLines(world: WorldPackage, state: GameState): string[] {
   return ['## 주인공의 성향 (행동이 쌓여 바뀐다 — 이야기 갈림길이 이것을 읽는다)', ...traitLines(world, sh), '', '## 주인공', `${sh.name} — ${classLabel(world, sh, reskinner(world))}${sh.subclass ? `·${subclassLabel(world, sh, reskinner(world))}` : ''} ${sh.level}레벨${desc ? ` (${desc})` : ''}`, ...(pl ? [pl, '서술할 때 주인공의 성별·외모를 이 정보에 맞춘다 (플레이어가 정한 것이다).'] : []), ''];
 }
 
+/**
+ * GM만 아는 진실 (v0.89): GM 판단 AI는 세계를 알아야 플레이어를 이끌 수 있다.
+ * 서술·NPC 연기 AI에게는 주지 않는다 — GM은 이것을 연출 지시(징조·인물의 행동)로만 흘린다.
+ */
+function gmTruth(world: WorldPackage, state: GameState): string[] {
+  const known = (factId: string) => world.claims.some((c) => c.relatesTo === factId && c.truth === 'true' && state.beliefs.some((b) => b.holder === 'player' && b.claim === c.id && (b.state === 'confirmed' || b.state === 'partial')));
+  const facts = world.facts.slice(0, 14).map((f) => `- ${clip(f.statement, 220)}${f.protectedTopic ? ` [주제: ${f.protectedTopic}]` : ''}${known(f.id) ? ' (플레이어가 이미 알아냈다)' : ''}`);
+  return facts.length ? ['## GM만 아는 세계의 진실 (플레이어는 모른다 — 답을 말하지 않되, 플레이어가 이쪽으로 다가가도록 징조·인물의 행동·궁금증으로 이끈다)', ...facts, ''] : [];
+}
+
 export function buildDirectorContext(world: WorldPackage, state: GameState): string {
   const npcs = presentCharacters(world, state).map((c) => `- ${c.id}: ${appearanceOf(c)} [능력: ${npcStatLine(world, state, c)}]`);
   return [
     ...worldBrief(world, true),
+    ...gmTruth(world, state),
     ...sceneHeader(world, state), '',
     ...stayLines(state),
     ...playerLines(world, state),

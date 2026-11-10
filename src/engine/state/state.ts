@@ -120,6 +120,8 @@ export interface GameState {
   encounterResults?: Record<EntityId, { outcome: 'victory' | 'defeat' | 'fled'; turn: number }>;
   /** 이야기 효과가 예약한 전환 (v0.85): 앞에서부터 하나씩 시작한다 */
   pendingTransitions?: { kind: 'scene' | 'encounter'; id: EntityId }[];
+  /** 이미 나온 실마리 (v0.89): 같은 낌새·눈썰미가 되풀이되지 않게 */
+  leadKeys?: string[];
   /** 지금까지의 이야기 요약 (v0.85) */
   storySummary?: { text: string; upto: number };
   log: LogEntry[];
@@ -471,6 +473,8 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, worldMinutes: s.worldMinutes + 60, party, player: { ...s.player, sheet: { ...sheet, resources: res } },
         log: [...s.log, { turn, kind: 'check', text: '짧은 휴식 (1시간) — 짧은 휴식 능력 회복' }] };
     }
+    case 'lead':
+      return { ...s, ...(e.key ? { leadKeys: [...(s.leadKeys ?? []), e.key] } : {}), log: [...s.log, { turn, kind: 'check', text: e.text }] };
     case 'transition_queued':
       return (s.pendingTransitions ?? []).some((x) => x.kind === e.kind && x.id === e.id) ? s : { ...s, pendingTransitions: [...(s.pendingTransitions ?? []), { kind: e.kind, id: e.id }] };
     case 'transition_taken':
