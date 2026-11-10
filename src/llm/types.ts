@@ -10,17 +10,81 @@ export interface LlmSettings {
   model: string;
   /** openai-compatible 전용: OpenAI, OpenRouter, Ollama(http://localhost:11434/v1), LM Studio 등 */
   baseUrl?: string;
-  /** 역할별 모델 (설계 v3 R9): 비우면 model. 같은 제공자·키를 쓴다 */
+  /** 역할별 모델 (설계 v3 R9): 비우면 model. 같은 제공자·키를 쓴다 — v0.101부터는 roles를 쓰고, 이 칸은 예전 설정을 읽을 때만 */
   roleModels?: Partial<Record<RoleGroup, string>>;
+  /**
+   * 여러 제공자 (v0.101). 있으면 위의 provider·apiKey·model·baseUrl은 "기본 제공자"의 사본이다
+   * (이 칸을 모르는 코드가 그대로 돌게). 없으면 위의 것 하나가 유일한 제공자다.
+   */
+  providers?: LlmProvider[];
+  /** 기본 제공자의 id (providers가 있을 때) */
+  defaultProvider?: string;
+  /** 역할 묶음별로 쓸 제공자와 모델. 제공자를 비우면 기본 제공자, 모델을 비우면 그 제공자의 기본 모델 */
+  roles?: Partial<Record<RoleGroup, RoleRoute>>;
 }
 
-/** 모델을 따로 고를 수 있는 역할 묶음 */
-export type RoleGroup = 'judge' | 'actor' | 'narrator' | 'build';
+/** 등록한 제공자 하나: 연결 정보와 그 제공자의 기본 모델 */
+export interface LlmProvider {
+  id: string;
+  /** 목록에 보이는 이름 (예: "OpenRouter", "집 Ollama") */
+  name: string;
+  provider: ProviderKind;
+  apiKey: string;
+  baseUrl?: string;
+  model: string;
+}
+export interface RoleRoute { provider?: string; model?: string }
+
+/**
+ * 모델을 따로 고를 수 있는 역할 묶음.
+ * v0.101: 세계 만들기를 셋으로 나눴다 — 설계(build) · 인물 찾기(extract) · 번역·이미지(bulk).
+ * extract·bulk를 정하지 않으면 build의 설정을 따른다 (예전 설정이 그대로 돌게).
+ */
+export type RoleGroup = 'judge' | 'actor' | 'narrator' | 'build' | 'extract' | 'bulk';
+export const ROLE_GROUPS: RoleGroup[] = ['judge', 'actor', 'narrator', 'build', 'extract', 'bulk'];
 export const ROLE_GROUP_LABEL: Record<RoleGroup, string> = {
   judge: 'GM 판단·안내·기록 (구조화 응답, 매 턴 3번)',
   actor: 'NPC 연기 (말하는 인물마다)',
   narrator: '서술·전투 서술 (플레이어가 읽는 글)',
-  build: '세계·카드 만들기·번역·이미지 고르기',
+  build: '세계 설계 (세계 구조·뼈대·장면·임무·규칙·점검)',
+  extract: '인물 찾기 (카드 로어북에서 인물 뽑기)',
+  bulk: '번역·이미지 분류 (단순하고 양이 많은 일)',
+};
+/**
+ * 묶음마다 어떤 모델이 어울리는지 (설정 화면 안내). 특정 모델의 성능·가격은 자주 바뀌므로 급으로 적는다.
+ * work: 이 묶음이 하는 일과 양 · fit: 어울리는 모델 · caution: 조심할 점
+ */
+export const ROLE_GROUP_HINT: Record<RoleGroup, { work: string; fit: string; caution: string }> = {
+  judge: {
+    work: '플레이어의 행동을 읽고 판정·이동·장면 전환을 정하고(GM 판단), 턴이 끝나면 일어난 일을 기록하고 다음 선택지를 낸다. 매 턴 3번, 짧은 구조화 응답(JSON).',
+    fit: '빠르고 지시를 정확히 따르는 중간급~작은 모델. Claude라면 Sonnet이나 Haiku. 다른 제공자라면 mini·flash급 중 JSON을 잘 지키는 것.',
+    caution: '너무 작은 모델은 규칙을 어긴 제안(없는 인물·장소, 과한 판정)을 자주 내 엔진이 거부한다. 바꾼 뒤 아래 "품질 점검"에서 거부 횟수를 본다. 매 턴 기다리는 시간에 바로 드러나므로 생각(추론)이 긴 모델은 맞지 않는다.',
+  },
+  actor: {
+    work: '그 턴에 말하는 인물마다 한 번씩, 인물의 성격·말투·아는 것 안에서 대사와 반응을 정한다. 짧은 응답.',
+    fit: '중간급 모델이면 충분한 경우가 많다. Claude라면 Sonnet이나 Haiku. 인물이 많은 세계에서는 호출 수가 늘어 빠른 모델이 유리하다.',
+    caution: '작은 모델은 인물마다 말투가 비슷해지거나, 인물이 모르는 것을 말하게 될 수 있다.',
+  },
+  narrator: {
+    work: '플레이어가 실제로 읽는 글(서술·전투 서술)을 쓴다. 턴마다 한 번, 글이 길고 스트리밍으로 나온다.',
+    fit: '가장 글을 잘 쓰는 모델을 여기에. Claude라면 Opus나 Sonnet. 비용을 한 곳에만 쓴다면 이 묶음이다.',
+    caution: '생각(추론)이 긴 모델은 첫 글자가 나오기까지 오래 걸린다. 한국어 문장이 어색한 모델은 여기서 가장 티가 난다.',
+  },
+  build: {
+    work: '세계 구조·이야기 뼈대·장면·임무·세계 규칙·점검을 만든다. 세계 하나에 6~8번, 한 번의 출력이 길고 서로 맞물려야 한다.',
+    fit: '가장 똑똑한 모델을 권한다. 생각(추론)하는 모델이 잘 맞는다. Claude라면 Opus나 Sonnet. 호출 수가 적어 좋은 모델을 써도 전체 비용에서 차지하는 몫이 작다.',
+    caution: '작은 모델은 임무·장면·조우가 서로 이어지지 않거나, 없는 인물·장소를 가리켜 검사에서 버려지는 것이 늘어난다. 출력 한도가 작은 모델(8k 이하)은 응답이 잘린다.',
+  },
+  extract: {
+    work: '카드의 긴 로어북을 읽고 이름 있는 인물의 외형·성격·말투를 뽑아 정리한다. 큰 카드는 10번 안팎, 출력이 길다.',
+    fit: '긴 글을 빠르게 읽고 정리하는 중간급 모델. Claude라면 Sonnet이나 Haiku. 출력 속도(초당 토큰)가 빠른 것이 체감에 크다.',
+    caution: '작은 모델은 인물을 빠뜨리거나 조직·장소를 인물로 잘못 뽑는다. 비우면 세계 설계의 설정을 따른다.',
+  },
+  bulk: {
+    work: '설정 글 번역, 이미지 파일 이름 분류, 기본 이미지 고르기. 큰 카드는 100번을 넘는다. 하나하나는 단순하다.',
+    fit: '가장 작고 싸고 빠른 모델. Claude라면 Haiku. 다른 제공자라면 mini·flash급이나 로컬 모델도 된다. OpenRouter에서는 이 묶음을 생각(추론)을 끄고 요청한다.',
+    caution: '번역 품질은 모델의 한국어 실력을 그대로 따른다 — 한국어가 약한 모델이면 번역만 어색해진다. 비우면 세계 설계의 설정을 따른다.',
+  },
 };
 
 export interface LlmRequest {

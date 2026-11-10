@@ -994,3 +994,22 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .card-summary p { margin: 6px 0; }
 .card-summary details > summary { padding: 9px 0; cursor: pointer; }
 .card-summary li { margin: 6px 0; }
+
+/* AI 설정: 여러 제공자 · 역할별 연결 (v0.101) */
+.ai-settings h3 { margin: 18px 0 4px; }
+.provider-card, .role-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px 10px; margin: 10px 0; min-width: 0; }
+.provider-card legend, .role-card legend { padding: 0 6px; font-weight: 600; overflow-wrap: anywhere; }
+.provider-head { display: flex; align-items: center; gap: 8px; }
+.provider-head .check { flex: 1 1 auto; min-width: 0; }
+.provider-head .icon { min-width: 40px; min-height: 36px; }
+.provider-presets { flex-wrap: wrap; }
+.role-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.role-pick > label { min-width: 0; }
+.role-pick select, .role-pick input { width: 100%; min-width: 0; }
+.role-now { margin: 6px 0 0; overflow-wrap: anywhere; }
+.role-now code { word-break: break-all; }
+.role-now .link { min-height: 36px; }
+.role-hint > summary { padding: 9px 0; cursor: pointer; }
+.role-hint p { margin: 4px 0 8px; }
+.ai-settings .status { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .role-pick { grid-template-columns: 1fr; } }

@@ -5,11 +5,11 @@
 import type { LlmClient, LlmRequest, Meter } from './types';
 import { recordUsage } from './usage';
 
-export type Role = 'director' | 'actor' | 'narrator' | 'recorder' | 'guide' | 'combat' | 'worldgen' | 'card' | 'translate' | 'image' | 'other';
+export type Role = 'director' | 'actor' | 'narrator' | 'recorder' | 'guide' | 'combat' | 'worldgen' | 'card' | 'extract' | 'translate' | 'image' | 'other';
 
 export const ROLE_LABEL: Record<Role, string> = {
   director: 'GM 판단', actor: 'NPC 연기', narrator: '서술', recorder: '기록관', guide: 'GM 안내', combat: '전투 서술',
-  worldgen: '세계 생성', card: '카드 세계', translate: '번역', image: '이미지 고르기', other: '기타',
+  worldgen: '세계 생성', card: '카드 세계', extract: '인물 찾기', translate: '번역', image: '이미지 고르기', other: '기타',
 };
 
 export interface CallRecord {
@@ -53,6 +53,7 @@ export function roleOf(fullSystem: string): Role {
   if (system.includes('안내자')) return 'guide';
   if (system.includes('방금 끝난 전투')) return 'combat';
   if (system.includes('서술자')) return 'narrator';
+  if (system.includes('세계관 정리 담당')) return 'extract'; // 인물 찾기 (v0.101: 모델을 따로 고를 수 있게 카드 세계와 가른다)
   if (system.includes('캐릭터 카드') || system.includes('로어북')) return 'card';
   if (system.includes('번역') || system.includes('한국어로 옮')) return 'translate';
   if (system.includes('이미지')) return 'image';

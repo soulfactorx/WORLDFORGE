@@ -118,6 +118,16 @@ const SCREENS = [
     await p.selectOption('.card-summary select', 'focus');
     await p.click('.card-summary details > summary');
   }],
+  ['AI 설정 (제공자 2개 · 역할 안내 펼침)', async (p) => {
+    await home(p);
+    await p.evaluate(() => localStorage.setItem('worldforge.llm', JSON.stringify({ provider: 'anthropic', apiKey: 'k', model: 'claude-sonnet-5-5', defaultProvider: 'a',
+      providers: [{ id: 'a', name: 'Claude', provider: 'anthropic', apiKey: 'k', model: 'claude-sonnet-5-5' }, { id: 'b', name: '', provider: 'openai-compatible', apiKey: 'k', model: 'deepseek/deepseek-v4.1-flash-1017:nitro', baseUrl: 'https://openrouter.ai/api/v1' }],
+      roles: { bulk: { provider: 'b' }, narrator: { model: 'claude-opus-5-5' } } })));
+    await p.reload(); await p.waitForTimeout(300);
+    await p.click('.topbar-settings');
+    await p.waitForSelector('.role-card');
+    await p.evaluate(() => document.querySelectorAll('.role-hint').forEach((d, i) => { if (i === 0 || i === 5) d.setAttribute('open', ''); }));
+  }],
   ['AI 사용량', async (p) => { await home(p); await tool(p, 'AI 사용량'); }],
   ['AI 사용량: 타임라인', async (p) => {
     await home(p); await tool(p, 'AI 사용량'); await p.waitForTimeout(600);

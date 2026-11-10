@@ -2,6 +2,7 @@
  * AI 사용량·품질 (설계 v3 R9): 역할별 속도·토큰·비용, 엔진이 거부한 AI 제안, 품질 점검 실행.
  */
 import { useEffect, useRef, useState } from 'react';
+import { modelsInUse, routeSummary } from '../llm/providers';
 import { type EvalReport, PROBES, runEval } from '../gm/eval';
 import { createLlmClient } from '../llm';
 import { costOf, metrics, ROLE_LABEL, summarize } from '../llm/metrics';
@@ -29,7 +30,7 @@ export function QualityPanel({ settings }: { settings: LlmSettings | null }) {
   useEffect(() => metrics.subscribe(() => tick((n) => n + 1)), []);
   const { calls, turns } = metrics.get();
   const model = settings?.model ?? '';
-  const models = [...new Set([model, ...Object.values(settings?.roleModels ?? {}).filter((m): m is string => !!m)])].filter(Boolean);
+  const models = settings ? modelsInUse(settings) : [];
   const [prices, setPrices] = useState<Record<string, Price | null>>(() => Object.fromEntries(models.map((m) => [m, loadPrice(m)])));
   const priceOf = (m: string) => prices[m] ?? loadPrice(m);
   const setPriceOf = (m: string, p: Price) => { setPrices((x) => ({ ...x, [m]: p })); savePrice(m, p); };
@@ -53,12 +54,11 @@ export function QualityPanel({ settings }: { settings: LlmSettings | null }) {
 
   async function evaluate() {
     if (!settings) return;
-    if (!confirm(`품질 점검은 지금 AI 설정(${settings.model})으로 ${PROBES.length}턴을 실제로 진행합니다 (AI 호출 약 ${PROBES.length * 5}번, 비용이 듭니다). 진행할까요?`)) return;
+    if (!confirm(`품질 점검은 지금 AI 설정(${routeSummary(settings)})으로 ${PROBES.length}턴을 실제로 진행합니다 (AI 호출 약 ${PROBES.length * 5}번, 비용이 듭니다). 진행할까요?`)) return;
     setError(''); setReport(null);
     abort.current = new AbortController();
     try {
-      const label = settings.roleModels && Object.values(settings.roleModels).some(Boolean)
-        ? `${settings.model} (+${Object.entries(settings.roleModels).filter(([, m]) => m).map(([g, m]) => `${g}:${m}`).join(', ')})` : settings.model;
+      const label = routeSummary(settings);
       const r = await runEval((sink) => createLlmClient(settings, { sink: (rec) => { sink(rec); metrics.addCall(rec); } }), label,
         (done, total, name) => setRunning(name ? `${done + 1}/${total} ${name} 점검 중…` : ''), abort.current.signal);
       setReport(r);

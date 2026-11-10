@@ -9,6 +9,6 @@ describe('역할별 모델 (R9)', () => {
     expect(modelFor(s, '너는 1인칭 TRPG의 서술자이자 NPC 연기자다.')).toBe('big');
     expect(modelFor(s, '너는 1인칭 TRPG 속 한 명의 NPC다.')).toBe('big');
     expect(modelFor({ ...s, roleModels: undefined }, '판단 모듈')).toBe('big');
-    expect([groupOf('combat'), groupOf('guide'), groupOf('translate')]).toEqual(['narrator', 'judge', 'build']);
+    expect([groupOf('combat'), groupOf('guide'), groupOf('translate')]).toEqual(['narrator', 'judge', 'bulk']);
   });
 });
