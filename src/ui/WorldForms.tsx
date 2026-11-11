@@ -13,6 +13,7 @@ import {
 } from '../engine/schema';
 import { ConditionField } from './ConditionEditor';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { SPEC, StructField } from './Struct';
 import { ALL_CARDS } from '../engine/combat/combat';
 
 type Set = (patch: Partial<WorldPackage>) => void;
@@ -291,7 +292,7 @@ export function ItemForms({ w, set }: { w: WorldPackage; set: Set }) {
           )}
           {['weapon', 'armor', 'shield', 'trinket'].includes(it.kind) && <Select label="장비하면 얻는 카드" value={it.cards?.[0] ?? ''} options={[['', '(없음)'], ...PLAYER_CARDS.map((c) => [c.id, `${c.name} (${c.id})`] as const)] as const} onChange={(c) => up({ cards: c ? [c] : undefined })} />}
           {it.kind === 'scroll' && <Select label="익히면 얻는 카드" value={it.teaches ?? ''} options={[['', '(없음)'], ...PLAYER_CARDS.map((c) => [c.id, `${c.name} (${c.id})`] as const)] as const} onChange={(teaches) => up({ teaches: teaches || undefined })} />}
-          <JsonField label="유물 각성 (조건이 맞을 때마다 한 단계씩 — 비우면 일반 물건)" value={it.awaken ?? []} rows={4}
+          <StructField w={w} spec={{ list: SPEC.awaken }} label="유물 각성 (조건이 맞을 때마다 한 단계씩 — 비우면 일반 물건)" value={it.awaken ?? []} rows={4}
             help='예: [{ "condition": { "questDone": "quest/x" }, "name": "깨어난 검", "text": "칼날에 빛이 돈다", "bonus": { "attack": 1, "damage": 1 } }, { "condition": { "level": 5 }, "name": "이름을 되찾은 검", "cards": ["weapon/storm_strike"] }]'
             onChange={(a) => up({ awaken: Array.isArray(a) && a.length ? a : undefined })} />
         </div>

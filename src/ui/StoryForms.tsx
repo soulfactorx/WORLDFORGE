@@ -8,6 +8,7 @@ import { type Ending, type Quest, QUEST_TYPES, type StoryFlag, type WorldPackage
 import { ConditionField } from './ConditionEditor';
 import { stageGates } from '../engine/encounter';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { REWARD_FIELDS, SPEC, StructField } from './Struct';
 
 type Set = (patch: Partial<WorldPackage>) => void;
 
@@ -31,11 +32,11 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
           <Num label="기한 (일, 비우면 없음)" value={q.timeLimit?.days} onChange={(days) => up({ timeLimit: days ? { days } : undefined })} />
           <Area label="동기 (왜 해야 하는가 — 수첩·GM)" value={q.motive ?? ''} onChange={(motive) => up({ motive: motive || undefined })} rows={2} />
           <Select label="숨은 진실 (이 주장을 알게 되면 수첩에 표시)" value={q.truth ?? ''} options={claims} onChange={(truth) => up({ truth: truth || undefined })} />
-          <JsonField label="단서 (주장 ID 목록 — 수첩에 '단서 n/m')" value={q.clues ?? []} rows={2} onChange={(clues) => up({ clues: Array.isArray(clues) && clues.length ? clues : undefined })}
+          <StructField w={w} spec={{ refs: 'claims' }} label="단서 (주장 ID 목록 — 수첩에 '단서 n/m')" value={q.clues ?? []} rows={2} onChange={(clues) => up({ clues: Array.isArray(clues) && clues.length ? clues : undefined })}
             help={`예: ["claim/…", "claim/…"] · 주장: ${w.claims.slice(0, 6).map((c) => c.id).join(', ')}${w.claims.length > 6 ? ' …' : ''}`} />
-          <JsonField label="접근법 (여러 길 — GM 힌트)" value={q.approaches ?? []} rows={4} onChange={(approaches) => up({ approaches: Array.isArray(approaches) && approaches.length ? approaches : undefined })}
+          <StructField w={w} spec={{ list: SPEC.approaches }} label="접근법 (여러 길 — GM 힌트)" value={q.approaches ?? []} rows={4} onChange={(approaches) => up({ approaches: Array.isArray(approaches) && approaches.length ? approaches : undefined })}
             help='예: [{ "hint": "몰래 숨어든다", "skills": ["stealth"], "risk": "들키면 경비가 몰려온다" }, { "hint": "경비대장을 설득한다", "skills": ["persuasion"] }]' />
-          <JsonField label="여러 결과 (임무를 끝낼 때 위에서부터 처음 맞는 것 하나)" value={q.outcomes ?? []} rows={6} onChange={(outcomes) => up({ outcomes: Array.isArray(outcomes) && outcomes.length ? outcomes : undefined })}
+          <StructField w={w} spec={{ list: SPEC.outcomes }} label="여러 결과 (임무를 끝낼 때 위에서부터 처음 맞는 것 하나)" value={q.outcomes ?? []} rows={6} onChange={(outcomes) => up({ outcomes: Array.isArray(outcomes) && outcomes.length ? outcomes : undefined })}
             help='예: [{ "id": "peace", "name": "평화로운 해결", "when": { "flag": "talked_down" }, "text": "피 한 방울 흘리지 않았다.", "effects": [{ "var": "var/safety", "add": 10 }], "rewards": { "xp": "minor" } }, { "id": "force", "name": "힘으로", "when": { "all": [] } }] · 후속 임무는 시작 조건에 { "questOutcome": "quest/…", "is": "peace" }' />
           <ConditionField label="시작 조건" value={q.start} world={w} onChange={(start) => up({ start: start ?? { all: [] } })} />
           <ConditionField label="실패 조건 (언제든)" value={q.fail} world={w} optional onChange={(fail) => up({ fail })} />
@@ -74,8 +75,9 @@ export function QuestForms({ w, set }: { w: WorldPackage; set: Set }) {
               {typeof q.rewards?.xp === 'number' && <Num label="경험치 (고정 — 레벨이 높으면 최소 10%)" value={q.rewards.xp} onChange={(xp) => up({ rewards: { ...q.rewards, xp } })} />}
               <Num label="돈" value={q.rewards?.money} onChange={(money) => up({ rewards: { ...q.rewards, money } })} />
             </div>
-            <JsonField label="그 밖의 보상 (아이템·관계·평판·카드)" value={{ items: q.rewards?.items ?? [], relationship: q.rewards?.relationship ?? [], reputation: q.rewards?.reputation ?? [], cards: q.rewards?.cards ?? [] }}
-              onChange={(r) => r && typeof r === 'object' && up({ rewards: { ...q.rewards, ...Object.fromEntries(Object.entries(r).filter(([, v]) => Array.isArray(v) && v.length)), ...Object.fromEntries(Object.entries(r).filter(([, v]) => Array.isArray(v) && !v.length).map(([k]) => [k, undefined])) } })} rows={5}
+            <StructField w={w} spec={{ fields: REWARD_FIELDS.filter((f) => ['items', 'relationship', 'reputation', 'cards'].includes(f.k)) }} label="그 밖의 보상 (아이템·관계·평판·카드)" value={{ items: q.rewards?.items ?? [], relationship: q.rewards?.relationship ?? [], reputation: q.rewards?.reputation ?? [], cards: q.rewards?.cards ?? [] }}
+              onChange={(r) => { if (!r || typeof r !== 'object') return; const pick = (k: 'items' | 'relationship' | 'reputation' | 'cards') => { const v = (r as Record<string, unknown>)[k]; return Array.isArray(v) && v.length ? v : undefined; };
+                up({ rewards: { ...q.rewards, items: pick('items'), relationship: pick('relationship'), reputation: pick('reputation'), cards: pick('cards') } as typeof q.rewards }); }} rows={5}
               help={`예: "items": [{ "itemId": "std/potion-healing" }], "relationship": [{ "npcId": "npc/…", "trust": 10 }], "reputation": [{ "factionId": "fac/…", "delta": 5 }], "cards": [{ "who": "player", "cardId": "rogue/steady_aim" }] · 카드: ${CARD_LIST.slice(0, 12).join(', ')} …`} />
           </fieldset>
         </div>

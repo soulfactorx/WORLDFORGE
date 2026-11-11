@@ -7,6 +7,7 @@ import { encounterStages } from '../engine/encounter';
 import { type Encounter, ENCOUNTER_RETRY_TURNS, type WorldPackage } from '../engine/schema';
 import { ConditionField } from './ConditionEditor';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { SPEC, StructField } from './Struct';
 import { EffectsEditor } from './WorldForms';
 
 type Set = (patch: Partial<WorldPackage>) => void;
@@ -67,7 +68,7 @@ export function EncounterForms({ w, set }: { w: WorldPackage; set: Set }) {
             {fx('onVictory', '이겼을 때 세계에 남는 것')}
             {fx('onDefeat', '졌을 때 (예: 붙잡힘 — 플래그 + 플레이어 옮기기 + 장면으로 이어진다)')}
             {fx('onFlee', '달아났을 때')}
-            <JsonField label="전리품 (비우면 적 경험치에 비례한 돈과 굴린 아이템)" value={e.loot ?? null} rows={3} onChange={(loot) => up({ loot: loot && typeof loot === 'object' ? loot : undefined })}
+            <StructField w={w} spec={{ fields: SPEC.loot }} label="전리품 (비우면 적 경험치에 비례한 돈과 굴린 아이템)" value={e.loot ?? null} rows={3} onChange={(loot) => up({ loot: loot && typeof loot === 'object' ? loot : undefined })}
               help='예: { "money": 30, "items": [{ "itemId": "std/potion-healing", "n": 2 }] }' />
           </div>
         );

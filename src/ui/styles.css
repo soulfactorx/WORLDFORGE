@@ -1052,3 +1052,47 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .diagnosis-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .diagnosis-quick button { min-height: 36px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .av-vol input[type='range'] { min-height: 36px; }
+
+/* 선택형 편집기 (v0.107): JSON으로만 고치던 데이터를 칸·목록으로 */
+.struct-field { margin: 10px 0; min-width: 0; }
+.struct-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 4px; }
+.struct-label { flex: 1 1 200px; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.struct-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
+.struct-toggle button { border: 0; border-radius: 0; min-height: 36px; padding: 4px 12px; background: var(--surface); color: var(--muted); }
+.struct-toggle button.on { background: var(--accent); color: var(--bg); font-weight: 600; }
+.struct-list { display: grid; gap: 6px; }
+.struct-item { border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; min-width: 0; }
+.struct-item-head { display: flex; align-items: center; gap: 4px; }
+.struct-item-title { flex: 1 1 auto; min-width: 0; text-align: left; border: 0; background: none; min-height: 36px; overflow-wrap: anywhere; white-space: normal; color: var(--text); }
+.struct-item-head .icon { min-width: 36px; min-height: 36px; flex: 0 0 auto; }
+.struct-fields { display: grid; gap: 6px; padding: 6px 0; min-width: 0; }
+.struct-fields > label, .struct-refs { min-width: 0; }
+.struct-hint { display: block; }
+.struct-obj { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-width: 0; }
+.struct-refs select { display: block; width: 100%; min-width: 0; margin-top: 4px; }
+.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 4px 0; }
+.chips li { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 999px; padding: 0 2px 0 10px; max-width: 100%; }
+.chips li span { overflow-wrap: anywhere; min-width: 0; font-size: .85rem; }
+.chip-x { border: 0; background: none; min-width: 36px; min-height: 36px; color: var(--muted); }
+
+/* 장면 조건: 묶음까지 선택 칸으로 (v0.107) */
+.scond { min-width: 0; }
+.scond-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.scond-row select { min-width: 0; max-width: 100%; flex: 0 1 auto; }
+.scond-row .num { width: 5em; }
+.scond-del { min-width: 36px; min-height: 36px; margin-left: auto; }
+.scond-group { border-left: 3px solid var(--accent); padding-left: 8px; }
+.scond-group.depth-1 { border-left-color: var(--muted); }
+.scond-group.depth-2 { border-left-color: var(--border); }
+.scond-children { display: grid; gap: 6px; margin: 6px 0 2px; }
+.scond-child { min-width: 0; }
+.scond-join { display: block; color: var(--muted); margin: 0 0 4px; }
+.scond-add { flex-wrap: wrap; }
+/* 모바일: 종류는 한 줄, 그 아래 한 줄에 수치 · 값 · 이상/이하 · 빼기 */
+@media (max-width: 600px) {
+  .scond-row select[aria-label="조건 종류"] { flex: 1 1 100%; }
+  .scond-row select { flex: 1 1 3em; width: auto; }
+  .scond-row select[aria-label="이상·이하"] { flex: 0 0 5em; }
+  .scond-row .num { flex: 0 0 4em; width: 4em; }
+  .scond-row .scond-del { margin-left: 0; }
+}

@@ -9,6 +9,7 @@ import { SCENE_PRESETS } from '../data/scenePresets';
 import { ConditionField } from './ConditionEditor';
 import { EffectsEditor } from './WorldForms';
 import { Area, ItemList, JsonField, Num, Select, Text } from './form';
+import { REWARD_FIELDS, StructField } from './Struct';
 import { ImagePicker } from './ImagePicker';
 import { autoSceneArt, SCENE_FX } from '../data/sceneArt';
 import { SceneTester } from './SceneTester';
@@ -38,34 +39,94 @@ function Rows<T>({ title, items, make, onChange, render }: { title: string; item
   );
 }
 
-/** 장면 조건: 흔한 꼴(수치·상태·단계·차례)은 입력 칸, 묶음(all·any)은 JSON */
-function SceneCondField({ label, value, def, onChange, optional }: { label: string; value: SceneCond | undefined; def: SceneDef; onChange: (c: SceneCond | undefined) => void; optional?: boolean }) {
-  const kind = !value ? 'none' : 'gauge' in value ? 'gauge' : 'state' in value ? 'state' : 'phase' in value ? 'phase' : 'round' in value ? 'round' : 'json';
-  const g = value && 'gauge' in value ? value : undefined;
+type CondKind = 'gauge' | 'state' | 'phase' | 'round' | 'all' | 'any' | 'not';
+const condKind = (c: SceneCond): CondKind => ('gauge' in c ? 'gauge' : 'state' in c ? 'state' : 'phase' in c ? 'phase' : 'round' in c ? 'round' : 'all' in c ? 'all' : 'any' in c ? 'any' : 'not');
+const blankCond = (k: CondKind, def: SceneDef, keep?: SceneCond): SceneCond => (k === 'gauge' ? { gauge: def.gauges[0]?.id ?? '', gte: 5 } : k === 'state' ? { state: def.states?.[0]?.id ?? '' }
+  : k === 'phase' ? { phase: def.phases?.[0]?.id ?? '' } : k === 'round' ? { round: 3 }
+  // 묶음으로 바꿀 때는 지금 조건을 그 안에 넣는다 (다시 만들지 않게)
+  : k === 'all' ? { all: keep && 'any' in keep ? keep.any : keep && !('all' in keep) ? [keep] : keep && 'all' in keep ? keep.all : [] }
+  : k === 'any' ? { any: keep && 'all' in keep ? keep.all : keep && !('any' in keep) ? [keep] : keep && 'any' in keep ? keep.any : [] }
+  : { not: keep && !('not' in keep) ? keep : { gauge: def.gauges[0]?.id ?? '', gte: 5 } });
+
+/** 조건을 한 문장으로 (접힌 줄·확인용) */
+export function describeSceneCond(c: SceneCond | undefined, def: SceneDef): string {
+  if (!c) return '항상';
+  const g = (id: string) => def.gauges.find((x) => x.id === id)?.name ?? id;
+  if ('gauge' in c) return `${g(c.gauge)} ${c.gte !== undefined ? `${c.gte} 이상` : `${c.lte ?? 0} 이하`}`;
+  if ('state' in c) return `상태 「${def.states?.find((x) => x.id === c.state)?.name ?? c.state}」`;
+  if ('phase' in c) return `단계 「${def.phases?.find((x) => x.id === c.phase)?.name ?? c.phase}」`;
+  if ('round' in c) return `${c.round}차례 이상`;
+  if ('not' in c) return `(${describeSceneCond(c.not, def)})이 아님`;
+  const list = 'all' in c ? c.all : c.any;
+  if (!list.length) return 'all' in c ? '항상 (조건 없음)' : '절대 아님 (조건 없음)';
+  return list.map((x) => ('all' in x || 'any' in x ? `(${describeSceneCond(x, def)})` : describeSceneCond(x, def))).join('all' in c ? ' 그리고 ' : ' 또는 ');
+}
+
+/** 조건 하나 (묶음이면 안쪽 조건들까지) — 전부 선택 칸으로 */
+function SceneCondNode({ value, def, onChange, onRemove, depth = 0 }: { value: SceneCond; def: SceneDef; onChange: (c: SceneCond) => void; onRemove?: () => void; depth?: number }) {
+  const kind = condKind(value);
+  const group = 'all' in value ? value.all : 'any' in value ? value.any : null;
+  const setGroup = (list: SceneCond[]) => onChange('all' in value ? { all: list } : { any: list });
   return (
-    <fieldset className="cond-field"><legend>{label}</legend>
-      <div className="row">
-        <select value={kind} onChange={(e) => {
-          const k = e.target.value;
-          onChange(k === 'none' ? undefined : k === 'gauge' ? { gauge: def.gauges[0]?.id ?? '', gte: 5 } : k === 'state' ? { state: def.states?.[0]?.id ?? '' }
-            : k === 'phase' ? { phase: def.phases?.[0]?.id ?? '' } : k === 'round' ? { round: 3 } : { all: value ? [value] : [] });
-        }}>
-          {optional && <option value="none">(없음 — 항상)</option>}
-          <option value="gauge">수치가</option><option value="state">상태가 있으면</option><option value="phase">단계가</option><option value="round">차례가 이상이면</option><option value="json">여러 조건 (JSON)</option>
+    <div className={`scond depth-${depth % 3}${group || kind === 'not' ? ' scond-group' : ''}`}>
+      <div className="scond-row">
+        <select value={kind} aria-label="조건 종류" onChange={(e) => onChange(blankCond(e.target.value as CondKind, def, value))}>
+          <option value="gauge">수치가</option><option value="state">상태가 있으면</option><option value="phase">단계가</option><option value="round">차례가 지났으면</option>
+          <option value="all">아래가 모두 맞으면 (그리고)</option><option value="any">아래 중 하나라도 맞으면 (또는)</option><option value="not">아래가 아니면</option>
         </select>
-        {g && <>
-          <select value={g.gauge} onChange={(e) => onChange({ ...g, gauge: e.target.value })}>{def.gauges.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
-          <select value={g.gte !== undefined ? 'gte' : 'lte'} onChange={(e) => onChange(e.target.value === 'gte' ? { gauge: g.gauge, gte: g.lte ?? g.gte ?? 0 } : { gauge: g.gauge, lte: g.gte ?? g.lte ?? 0 })}>
+        {'gauge' in value && <>
+          <select value={value.gauge} aria-label="수치" onChange={(e) => onChange(value.gte !== undefined ? { gauge: e.target.value, gte: value.gte } : { gauge: e.target.value, lte: value.lte ?? 0 })}>{def.gauges.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+          <input type="number" className="num" aria-label="기준값" value={value.gte ?? value.lte ?? 0} onChange={(e) => onChange(value.gte !== undefined ? { gauge: value.gauge, gte: Number(e.target.value) } : { gauge: value.gauge, lte: Number(e.target.value) })} />
+          <select value={value.gte !== undefined ? 'gte' : 'lte'} aria-label="이상·이하" onChange={(e) => onChange(e.target.value === 'gte' ? { gauge: value.gauge, gte: value.lte ?? value.gte ?? 0 } : { gauge: value.gauge, lte: value.gte ?? value.lte ?? 0 })}>
             <option value="gte">이상</option><option value="lte">이하</option>
           </select>
-          <input type="number" className="num" value={g.gte ?? g.lte ?? 0} onChange={(e) => onChange(g.gte !== undefined ? { gauge: g.gauge, gte: Number(e.target.value) } : { gauge: g.gauge, lte: Number(e.target.value) })} />
         </>}
-        {value && 'state' in value && <select value={value.state} onChange={(e) => onChange({ state: e.target.value })}>{(def.states ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
-        {value && 'phase' in value && <select value={value.phase} onChange={(e) => onChange({ phase: e.target.value })}>{(def.phases ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
-        {value && 'round' in value && <input type="number" className="num" value={value.round} onChange={(e) => onChange({ round: Number(e.target.value) || 1 })} />}
+        {'state' in value && ((def.states ?? []).length ? <select value={value.state} aria-label="상태" onChange={(e) => onChange({ state: e.target.value })}>{(def.states ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select> : <span className="small warn">이 장면에 상태가 없습니다 — 위의 "상태"에서 먼저 만드세요</span>)}
+        {'phase' in value && ((def.phases ?? []).length ? <select value={value.phase} aria-label="단계" onChange={(e) => onChange({ phase: e.target.value })}>{(def.phases ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select> : <span className="small warn">이 장면에 단계가 없습니다 — 위의 "단계"에서 먼저 만드세요</span>)}
+        {'round' in value && <><input type="number" className="num" aria-label="차례" value={value.round} onChange={(e) => onChange({ round: Number(e.target.value) || 1 })} /><span className="small">차례 이상</span></>}
+        {onRemove && <button type="button" className="icon scond-del" aria-label="이 조건 빼기" title="이 조건 빼기" onClick={onRemove}>✕</button>}
       </div>
-      {kind === 'json' && <JsonField label="" value={value} rows={4} onChange={(v) => onChange(v as SceneCond)}
-        help='예: { "all": [{ "gauge": "deal", "gte": 8 }, { "state": "warm" }] } · { "any": [ … ] }' />}
+      {group && (
+        <div className="scond-children">
+          {group.length === 0 && <p className="small muted">{'all' in value ? '안에 조건이 없으면 항상 맞습니다.' : '안에 조건이 없으면 절대 맞지 않습니다.'} 아래에서 조건을 넣으세요.</p>}
+          {group.map((c, i) => (
+            <div key={i} className="scond-child">
+              {i > 0 && <span className="scond-join small">{'all' in value ? '그리고' : '또는'}</span>}
+              <SceneCondNode value={c} def={def} depth={depth + 1} onChange={(n) => setGroup(group.map((x, j) => (j === i ? n : x)))} onRemove={() => setGroup(group.filter((_, j) => j !== i))} />
+            </div>
+          ))}
+          <div className="row scond-add">
+            <button type="button" className="small" onClick={() => setGroup([...group, blankCond('gauge', def)])}>＋ 조건</button>
+            <button type="button" className="small" onClick={() => setGroup([...group, 'all' in value ? { any: [] } : { all: [] }])} title="조건 여러 개를 괄호로 묶는다">＋ 묶음 ({'all' in value ? '또는' : '그리고'})</button>
+          </div>
+        </div>
+      )}
+      {'not' in value && <div className="scond-children"><SceneCondNode value={value.not} def={def} depth={depth + 1} onChange={(n) => onChange({ not: n })} /></div>}
+    </div>
+  );
+}
+
+/** 장면 조건 (v0.107): 묶음(그리고·또는·아니면)까지 선택 칸으로 만들고, 언제든 JSON으로 바꿔 고칠 수 있다 */
+function SceneCondField({ label, value, def, onChange, optional }: { label: string; value: SceneCond | undefined; def: SceneDef; onChange: (c: SceneCond | undefined) => void; optional?: boolean }) {
+  const [json, setJson] = useState(false);
+  return (
+    <fieldset className="cond-field"><legend>{label}</legend>
+      {value === undefined ? (
+        <div className="row"><span className="small muted">조건 없음 — 항상</span><button type="button" className="small" onClick={() => onChange(blankCond('gauge', def))}>＋ 조건 넣기</button></div>
+      ) : (
+        <>
+          <p className="small muted cond-summary">{describeSceneCond(value, def)}</p>
+          {json ? <JsonField label="" value={value} rows={5} onChange={(v) => onChange(v as SceneCond)} help='예: { "all": [{ "gauge": "deal", "gte": 8 }, { "any": [{ "state": "warm" }, { "round": 5 }] }] }' />
+            : <SceneCondNode value={value} def={def} onChange={onChange} />}
+          <div className="row">
+            <span className="struct-toggle" role="tablist" aria-label="편집 방식">
+              <button type="button" role="tab" aria-selected={!json} className={!json ? 'on' : ''} onClick={() => setJson(false)}>선택 화면</button>
+              <button type="button" role="tab" aria-selected={json} className={json ? 'on' : ''} onClick={() => setJson(true)}>JSON</button>
+            </span>
+            {optional && <button type="button" className="small" onClick={() => onChange(undefined)}>조건 지우기</button>}
+          </div>
+        </>
+      )}
     </fieldset>
   );
 }
@@ -158,7 +219,7 @@ function EndForm({ e, def, w, up }: { e: SceneEnd; def: SceneDef; w: WorldPackag
       <ImagePick label="끝 그림" value={e.image} w={w} onChange={(image) => up({ image })} />
       <SceneCondField label="이렇게 되면 끝" value={e.when} def={def} onChange={(when) => up({ when: when ?? { round: 99 } })} />
       <EffectsEditor label="끝나면 일어나는 일" value={e.effects} w={w} onChange={(effects) => up({ effects: effects.length ? effects : undefined })} />
-      <JsonField label="보상 (선택)" value={e.rewards ?? {}} rows={2} onChange={(r) => up({ rewards: r && typeof r === 'object' && Object.keys(r).length ? r : undefined })}
+      <StructField w={w} spec={{ fields: REWARD_FIELDS }} label="보상 (선택)" value={e.rewards ?? {}} rows={2} onChange={(r) => up({ rewards: r && typeof r === 'object' && Object.keys(r).length ? r : undefined })}
         help='예: { "xp": "minor", "money": 20, "items": [{ "itemId": "std/potion-healing" }] }' />
     </div>
   );

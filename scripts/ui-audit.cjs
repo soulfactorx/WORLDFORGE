@@ -119,6 +119,24 @@ const SCREENS = [
     await p.selectOption('.card-summary select', 'focus');
     await p.click('.card-summary details > summary');
   }],
+  ['편집: 장면 복합 조건 (선택형)', async (p) => {
+    await editorTab(p, '장면');
+    await p.selectOption('.scene-preset select', 'date');
+    await p.click('.scene-preset button:has-text("＋ 추가") >> nth=0');
+    const end = p.locator('fieldset:has(> legend:has-text("끝 (위에서부터")) details').first();
+    await end.locator('summary').first().click();
+    await end.locator('.scond select[aria-label="조건 종류"]').first().selectOption('all');
+    await end.locator('.scond-add button:has-text("＋ 조건")').first().click();
+    await end.locator('.scond-add button:has-text("＋ 묶음")').first().click();
+    await end.locator('.scond-add button:has-text("＋ 조건")').last().click();
+  }],
+  ['편집: 선택형 목록 (인물의 목표·일정)', async (p) => {
+    await editorTab(p, '인물');
+    const f = p.locator('.struct-field', { hasText: '목표 (이 인물이' }).first();
+    await f.locator('button:has-text("＋ 목표 추가")').click();
+    const g = p.locator('.struct-field', { hasText: '일정 (시각에' }).first();
+    await g.locator('button:has-text("＋ 일정 추가")').click();
+  }],
   ['장면 시험: 결과 비율 맞추기', async (p) => {
     await editorTab(p, '장면'); await p.click('button:has-text("추가하고 바로 테스트")'); await p.waitForSelector('.scene-tester');
     await p.click('.scene-balance > summary');
