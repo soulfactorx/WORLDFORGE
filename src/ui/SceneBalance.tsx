@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { CharacterSheet } from '../engine/character/sheet';
 import type { SceneDef, WorldPackage } from '../engine/schema';
 import { BALANCE_KNOBS, type BalanceKnob, type BalanceResult, balanceScene, normalizeTargets } from '../gm/sceneBalance';
 import { type SimPolicy, type SimResult, simulateScene } from '../gm/sceneTest';
+import { SceneDiagnosis } from './SceneDiagnosis';
 
 const OUTCOME = { success: '성공', failure: '실패', neutral: '중립' } as const;
 const pctOf = (sim: SimResult, id: string) => Math.round(((sim.ends[id] ?? 0) / sim.runs) * 100);
@@ -20,6 +21,8 @@ export function SceneBalance({ w, def, sheet, onApply }: { w: WorldPackage; def:
   const [result, setResult] = useState<BalanceResult | null>(null);
   const [err, setErr] = useState('');
   const stop = useRef(false);
+  // 맞춘 설정을 넣은 세계 (안 나오는 끝 안내용) — 결과가 바뀔 때만 다시 만든다
+  const tuned = useMemo(() => (result ? { ...w, scenes: (w.scenes ?? []).map((x) => (x.id === def.id ? result.scene : x)) } : w), [w, def.id, result]);
   const sum = def.ends.reduce((s, e) => s + (Number(targets[e.id]) || 0), 0);
   const norm = normalizeTargets(def, targets);
 
@@ -99,6 +102,8 @@ export function SceneBalance({ w, def, sheet, onApply }: { w: WorldPackage; def:
             <li><span className="balance-name muted">평균 차례</span><span>{result.before.avgRounds} → {result.after.avgRounds}</span></li>
           </ul>
           {result.note && <p className="small warn">⚠ {result.note}</p>}
+          {/* 맞춘 뒤에도 안 나오는 끝: 숫자로는 안 되는 까닭을 짚어 준다 (맞춘 설정 기준) */}
+          {def.ends.some((e) => !(result.after.ends[e.id] ?? 0)) && <SceneDiagnosis w={tuned} sceneId={def.id} sheet={sheet} policy={policy} />}
           {result.changes.length > 0 && (
             <>
               <p className="small"><b>바뀌는 숫자 {result.changes.length}개</b></p>

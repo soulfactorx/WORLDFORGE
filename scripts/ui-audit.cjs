@@ -124,6 +124,19 @@ const SCREENS = [
     await p.click('.scene-balance button:has-text("맞추기")');
     await p.waitForSelector('.balance-result', { timeout: 60000 });
   }],
+  ['장면 시험: 안 나오는 끝 안내', async (p) => {
+    await editorTab(p, '장면');
+    await p.selectOption('.scene-preset select', 'date');
+    await p.click('.scene-preset button:has-text("＋ 추가") >> nth=0');
+    // 보이는 장면의 첫 끝 기준을 수치 범위 밖으로 — 절대 안 나오는 끝을 만든다
+    const end = p.locator('fieldset:has(> legend:has-text("끝 (위에서부터")) details').first();
+    await end.locator('summary').first().click();
+    await end.locator('input[type=number]').first().fill('99');
+    await p.click('button:has-text("▶ 바로 테스트")');
+    await p.waitForSelector('.scene-tester');
+    await p.click('button:has-text("자동 200회")');
+    await p.waitForSelector('.scene-diagnosis');
+  }],
   ['AI 설정 (제공자 2개 · 역할 안내 펼침)', async (p) => {
     await home(p);
     await p.evaluate(() => localStorage.setItem('worldforge.llm', JSON.stringify({ provider: 'anthropic', apiKey: 'k', model: 'claude-sonnet-5-5', defaultProvider: 'a',

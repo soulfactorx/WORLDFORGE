@@ -10,6 +10,7 @@ import { applyEvent } from '../engine/state/state';
 import { AssetImage } from './AssetImage';
 import { ScenePanel } from './ScenePanel';
 import { SceneBalance } from './SceneBalance';
+import { SceneDiagnosis } from './SceneDiagnosis';
 import type { SceneDef } from '../engine/schema';
 
 /** 장면 시험 플레이 (v0.71): 편집 중인 장면을 저장 없이 바로 */
@@ -77,6 +78,7 @@ export function SceneTester({ w, sceneId, onClose, onApply }: { w: WorldPackage;
               {sim.unreached.length > 0 && <li className="warn">⚠ 한 번도 안 나온 끝: {sim.unreached.map(endName).join(', ')}</li>}
               {sim.unusedActions.length > 0 && <li className="warn">⚠ 한 번도 못 쓴 행동: {sim.unusedActions.map((id) => def.actions.find((a) => a.id === id)?.name ?? id).join(', ')}</li>}
             </ul>
+            {sim.unreached.length > 0 && <SceneDiagnosis w={w} sceneId={sceneId} sheet={sheet} />}
           </section>
         )}
         <SceneBalance key={sceneId} w={w} def={def} sheet={sheet} {...(onApply ? { onApply: (d: SceneDef) => { onApply(d); setSim(null); } } : {})} />
