@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.103.0] - 2026-11-11
+
+**Claude로 카드 변환: "Streaming is required…"로 세계 구조가 실패하던 것 고침**
+
+- Claude 연결의 구조화 응답(JSON)을 스트리밍으로 받는다. 출력 한도가 큰 요청(카드 변환의 세계 구조 32k 등)은 Anthropic SDK가 스트리밍 없이는 보내지 않고 바로 오류를 냈다 ("Streaming is required for operations that may take longer than 10 minutes"). 결과는 전과 같이 다 받은 뒤 한 번에 쓴다.
+
 ## [0.102.0] - 2026-11-11
 
 **Claude로 세계 만들기: 장면·임무가 "compiled grammar is too large"로 실패하던 것 고침**

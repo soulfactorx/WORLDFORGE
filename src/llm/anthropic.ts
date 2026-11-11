@@ -51,9 +51,11 @@ export function createAnthropicClient(s: LlmSettings): LlmClient {
         const body = loose
           ? { ...base(req), system: `${req.system}\n\n반드시 다음 JSON 스키마에 맞는 JSON 객체 하나만 출력한다 (설명·코드 울타리 없이 { 로 시작해 } 로 끝낸다):\n${JSON.stringify(schema)}`, output_config: { effort } }
           : { ...base(req), output_config: { effort, format: { type: 'json_schema' as const, schema } } };
-        const at = traceAttempt(req.trace, `Anthropic Messages API — beta.messages.create${loose ? ' (스키마를 프롬프트로)' : ''}`, body);
+        const at = traceAttempt(req.trace, `Anthropic Messages API — beta.messages.stream${loose ? ' (스키마를 프롬프트로)' : ''}`, body);
         let msg;
-        try { msg = await client.beta.messages.create(body, { signal }); } catch (e) { finishAttempt(at, { error: String((e as Error)?.message ?? e) }); throw e; }
+        // 스트리밍으로 받는다 (v0.103): 출력 한도가 큰 요청(세계 구조 32k 등)은 SDK가 스트리밍 없이는 보내지 않는다
+        // ("Streaming is required for operations that may take longer than 10 minutes")
+        try { msg = await client.beta.messages.stream(body, { signal }).finalMessage(); } catch (e) { finishAttempt(at, { error: String((e as Error)?.message ?? e) }); throw e; }
         const text = msg.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
         finishAttempt(at, { status: 'ok', meta: { id: msg.id, model: msg.model, stop_reason: msg.stop_reason, usage: msg.usage }, raw: text });
         addUsage(req.meter, usageIn(msg.usage), msg.usage?.output_tokens, { inChars: req.system.length + req.user.length, outChars: 0 });

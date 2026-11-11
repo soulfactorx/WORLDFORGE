@@ -6,12 +6,13 @@ vi.mock('@anthropic-ai/sdk', () => {
   class BadRequestError extends Error { status = 400; }
   class Anthropic {
     static BadRequestError = BadRequestError;
-    beta = { messages: { create: async (body: { system: string; output_config: { format?: unknown } }) => {
+    beta = { messages: { stream: (body: { system: string; output_config: { format?: unknown } }) => ({ finalMessage: () => this.create(body) }) } };
+    create = async (body: { system: string; output_config: { format?: unknown } }) => {
       calls.push({ format: !!body.output_config.format, system: body.system });
       if (body.output_config.format && body.system.includes('큰 스키마')) throw new BadRequestError('400 {"type":"error","error":{"type":"invalid_request_error","message":"The compiled grammar is too large, which would cause performance issues."}}');
       if (body.system.includes('다른 오류')) throw new BadRequestError('400 max_tokens: too large');
       return { id: 'm', model: 'x', stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: 'text', text: body.output_config.format ? '{"a":1}' : '```json\n{"a":2}\n```' }] };
-    } } };
+    };
   }
   return { default: Anthropic };
 });
