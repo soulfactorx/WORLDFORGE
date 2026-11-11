@@ -662,9 +662,15 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           help={`이 세계의 적: ${monstersOfWorld(w).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건 · when(엔진 조건)·force(바로 시작)·intro·onVictory/onDefeat/onFlee(효과)·retry(진 뒤 쉬는 턴 수, 기본 3 · "gone")`} />
       )}
       {tab === 'encounters' && (
-        <JsonField label="돌발 사건 표 (이동·휴식 때 엔진이 굴린다 — 비워 두면 기본 표: 기습·뜻밖의 발견·길손·수군거림. 끄려면 [])" value={w.randomEvents ?? null} rows={6}
-          onChange={(randomEvents) => set({ randomEvents: Array.isArray(randomEvents) ? randomEvents : undefined })}
-          help='예: [{ "id": "rand/merchant", "name": "떠돌이 상인", "kind": "meeting", "text": "짐을 잔뜩 진 상인이 손을 흔든다", "where": ["loc/old-road"], "weight": 2, "cooldownDays": 3 }, { "id": "rand/wolves", "name": "늑대 떼", "kind": "ambush", "text": "덤불 속에서 늑대가 튀어나온다!", "where": ["loc/forest-clearing"], "enemies": [{ "monsterId": "wolf", "zone": 2 }] }] · 인물을 적으로: "monsterId": "npc:인물ID" (그 인물의 직업·레벨·능력치로 싸움) · kind: ambush(기습)·meeting(만남)·news(소문)·opportunity(기회) · effects로 플래그·아이템·돈 등을 줄 수 있다' />
+        (w.randomEvents === undefined
+          ? <div className="struct-field"><div className="struct-head"><span className="struct-label">돌발 사건 표 (이동·휴식 때 엔진이 굴린다)</span></div>
+              <p className="small muted">지금은 기본 표를 씁니다: 기습 · 뜻밖의 발견 · 길손 · 수군거림.</p>
+              <div className="row"><button type="button" className="small" onClick={() => set({ randomEvents: [] })}>이 세계만의 표를 직접 정하기</button></div></div>
+          : <>
+              <StructField w={w} spec={{ list: SPEC.randomEvents }} label="돌발 사건 표 (이동·휴식 때 엔진이 굴린다 — 목록이 비어 있으면 돌발 사건이 일어나지 않는다)" value={w.randomEvents} rows={6}
+                onChange={(randomEvents) => set({ randomEvents: Array.isArray(randomEvents) ? randomEvents : undefined })} />
+              <div className="row"><button type="button" className="small" onClick={() => { if (!w.randomEvents?.length || confirm('직접 정한 돌발 사건을 지우고 기본 표로 되돌릴까요?')) set({ randomEvents: undefined }); }}>기본 표로 되돌리기</button></div>
+            </>)
       )}
       {tab === 'encounters' && (w.encounters ?? []).length > 0 && (
         <ul className="small">
@@ -750,11 +756,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             <JsonField label="이 세계만의 아이템" value={w.items ?? []} onChange={(items) => set({ items })} rows={10}
               help='예: { "id": "item/silver-key", "name": "은 열쇠", "description": "…", "kind": "key" } · 종류: consumable(heal: "2d4+2", cures: ["poisoned"]) · weapon(card: "weapon/longsword") · armor(armor: { "base": 14, "dexMax": 2 }) · shield(acBonus: 2) · key · treasure · misc' />
             )}
-            <JsonField label="상점 (장소 ID → 상점)" value={byId(w.locations, (l: Location) => l.shop)} onChange={(m) => applyMap('locations', 'shop', m)} rows={8}
+            <StructField w={w} spec={{ map: SPEC.shops }} label="상점 (장소 ID → 상점)" value={byId(w.locations, (l: Location) => l.shop)} onChange={(m) => applyMap('locations', 'shop', m)} rows={8}
               help='예: { "loc/market": { "name": "잡화점", "items": ["std/potion-healing", "std/rope"], "factionId": "fac/…" } }' />
-            <JsonField label="주울 수 있는 것 (장소 ID → 목록, hint는 GM에게만)" value={byId(w.locations, (l: Location) => l.pickups)} onChange={(m) => applyMap('locations', 'pickups', m)} rows={6}
+            <StructField w={w} spec={{ map: SPEC.pickups }} label="주울 수 있는 것 (장소 ID → 목록, hint는 GM에게만)" value={byId(w.locations, (l: Location) => l.pickups)} onChange={(m) => applyMap('locations', 'pickups', m)} rows={6}
               help='예: { "loc/cellar": [{ "itemId": "std/potion-healing", "hint": "선반 뒤에 먼지 쌓인 물약병" }] }' />
-            <JsonField label="인물이 건넬 수 있는 것 (인물 ID → 목록, 조건이 맞을 때 한 번씩)" value={byId(w.characters, (c: Character) => c.gives)} onChange={(m) => applyMap('characters', 'gives', m)} rows={6}
+            <StructField w={w} spec={{ map: SPEC.gives }} label="인물이 건넬 수 있는 것 (인물 ID → 목록, 조건이 맞을 때 한 번씩)" value={byId(w.characters, (c: Character) => c.gives)} onChange={(m) => applyMap('characters', 'gives', m)} rows={6}
               help='예: { "npc/elder": [{ "itemId": "item/silver-key", "condition": { "relationship": "npc/elder", "axis": "trust", "gte": 30 } }] }' />
           </>
         );
@@ -789,6 +795,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <h4>결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지)</h4><ChoiceForms w={w} set={set} />
               <h4>진행 시계 (시간·사건으로 차오르고, 정해진 칸에서 일이 벌어진다)</h4><ClockForms w={w} set={set} />
               <h4>연표 사건 (날짜·날 수·조건에 일어나고, 막을 수 있다)</h4><EventForms w={w} set={set} />
+              <StructField w={w} spec={{ list: SPEC.vars }} label="세계 수치 (지역 치안·숲의 위험도 같은 숫자 — 효과로 바뀌고 조건으로 읽힌다)" value={w.vars ?? []} rows={6} onChange={(vars) => set({ vars: Array.isArray(vars) && vars.length ? vars : undefined })}
+                help='예: { "id": "var/safety", "name": "마을 치안", "initial": 50, "min": 0, "max": 100, "labels": [[0, "무법"], [40, "불안"], [70, "평온"]], "visible": true }' />
             </>
           ) : (
             <>
@@ -802,11 +810,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             help='예: { "id": "arc/main", "name": "숲의 그림자", "kind": "main", "start": { "all": [] }, "chapters": [{ "name": "낯선 땅", "goal": "GM용 목표", "summary": "수첩에 보이는 한 줄", "complete": { "at": "loc/…" }, "fail": { "flag": "…" } }] } · 2부는 start에 { "arcDone": "arc/main" }' />
           <JsonField label="결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지가 뜬다)" value={w.choices ?? []} onChange={(choices) => set({ choices })} rows={12}
             help='예: { "id": "choice/side", "name": "누구 편인가", "prompt": "누구의 말을 믿을 것인가?", "when": { "knows": "claim/…" }, "locationId": "loc/… (선택)", "options": [{ "id": "a", "text": "장로를 믿는다", "effects": [{ "setFlag": "…" }] }, { "id": "b", "text": "…", "effects": [] }] }' />
-          <StructField w={w} spec={{ list: SPEC.vars }} label="세계 수치 (지역 치안·숲의 위험도 같은 숫자 — 효과 var로 바뀌고 조건 var로 읽힌다)" value={w.vars ?? []} rows={6} onChange={(vars) => set({ vars: Array.isArray(vars) && vars.length ? vars : undefined })}
+          <JsonField label="세계 수치 (지역 치안·숲의 위험도 같은 숫자 — 효과 var로 바뀌고 조건 var로 읽힌다)" value={w.vars ?? []} rows={6} onChange={(vars) => set({ vars: Array.isArray(vars) && vars.length ? vars : undefined })}
             help='예: { "id": "var/safety", "name": "마을 치안", "initial": 50, "min": 0, "max": 100, "labels": [[0, "무법"], [40, "불안"], [70, "평온"]], "visible": true } · 효과 { "var": "var/safety", "add": -10 } · 조건 { "var": "var/safety", "gte": 70 }' />
           <JsonField label="진행 시계 (시간·사건으로 차오르고, 정해진 칸에서 일이 벌어진다)" value={w.clocks ?? []} onChange={(clocks) => set({ clocks })} rows={12}
             help='예: { "id": "clock/raid", "name": "도적의 습격 준비", "segments": 6, "tick": [{ "every": "day", "by": 1 }, { "on": { "flag": "warned" }, "by": -2 }], "at": [{ "segment": 3, "omen": "플레이어에게 보이는 징조" }, { "segment": 6, "effects": [{ "setFlag": "raid" }] }] }' />
-          <StructField w={w} spec={{ list: SPEC.events }} label="연표 사건 (날짜·날 수·조건에 일어난다. unless가 참이면 막힌다)" value={w.events ?? []} onChange={(events) => set({ events })} rows={12}
+          <JsonField label="연표 사건 (날짜·날 수·조건에 일어난다. unless가 참이면 막힌다)" value={w.events ?? []} onChange={(events) => set({ events })} rows={12}
             help={`예: { "id": "event/coup", "name": "반역", "when": { "date": { "year": 429, "month": 9, "day": 21 } }, "unless": { "flag": "warned_guard" }, "effects": [{ "killNpc": "npc/…" }], "announce": "플레이어에게 보이는 소식" } · when.day = 시작 후 지난 날 수${w.calendar ? '' : ' · 날짜(date)를 쓰려면 기본 탭에서 달력을 정하세요'}`} />
             </>
           )}

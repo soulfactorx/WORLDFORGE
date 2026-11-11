@@ -20,13 +20,15 @@ type Base = { k: string; label: string; hint?: string; /** 비우면 칸 자체�
 export type Field =
   | (Base & { t: 'text' | 'long' | 'num' })
   | (Base & { t: 'bool'; dflt?: boolean })
-  | (Base & { t: 'enum'; options: (readonly [string, string])[] })
+  | (Base & { t: 'enum'; options: (readonly [string, string])[]; /** 값을 숫자로 저장한다 (예: 전열 2 · 후열 3) */ asNumber?: boolean })
   | (Base & { t: 'ref'; of: RefKind })
   | (Base & { t: 'refs'; of: RefKind })
   | (Base & { t: 'cond' })
   | (Base & { t: 'effects' })
   | (Base & { t: 'obj'; fields: Field[] })
   | (Base & { t: 'list'; spec: ListSpec });
+/** ID로 묶인 표 (장소 ID → 상점 같은 것): 무엇의 ID인지와, 값의 모양 */
+export interface MapSpec { of: RefKind; add: string; make: () => unknown; fields?: Field[]; list?: ListSpec }
 export interface ListSpec { fields: Field[]; /** 접힌 줄에 보이는 이름 */ title: (x: Rec, w: WorldPackage) => string; make: (w: WorldPackage, n: number) => Rec; add: string }
 type Rec = Record<string, unknown>;
 
@@ -61,8 +63,8 @@ function FieldInput({ f, value, w, onChange }: { f: Field; value: unknown; w: Wo
       onChange={(e) => onChange(e.target.value === '' ? (f.opt ? undefined : 0) : Number(e.target.value))} /></label>;
     case 'bool': { const on = (value as boolean | undefined) ?? f.dflt ?? false;
       return <label className="check"><input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked === (f.dflt ?? false) ? undefined : e.target.checked)} /> {f.label}{hint}</label>; }
-    case 'enum': return <label>{f.label}{hint}<select value={(value as string) ?? ''} onChange={(e) => out(e.target.value)}>
-      {(f.opt || !f.options.some(([v]) => v === value)) && <option value="">{f.opt ? '(기본)' : '(고르세요)'}</option>}
+    case 'enum': return <label>{f.label}{hint}<select value={value === undefined || value === null ? '' : String(value)} onChange={(e) => out(f.asNumber && e.target.value !== '' ? Number(e.target.value) : e.target.value)}>
+      {(f.opt || !f.options.some(([v]) => v === String(value))) && <option value="">{f.opt ? '(기본)' : '(고르세요)'}</option>}
       {f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>;
     case 'ref': { const opts = refOptions(w, f.of); const cur = (value as string) ?? '';
       return <label>{f.label}{hint}<select value={cur} onChange={(e) => out(e.target.value)}>
@@ -116,13 +118,40 @@ export function ListEditor({ spec, value, w, onChange }: { spec: ListSpec; value
   );
 }
 
+/** ID로 묶인 표: 장소·인물을 골라 더하고, 그 아래에서 값을 편집한다 */
+export function MapEditor({ spec, value, w, onChange }: { spec: MapSpec; value: Record<string, unknown>; w: WorldPackage; onChange: (v: Record<string, unknown>) => void }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const opts = refOptions(w, spec.of);
+  const keys = Object.keys(value);
+  const drop = (k: string) => { const n = { ...value }; delete n[k]; onChange(n); };
+  return (
+    <div className="struct-list">
+      {keys.length === 0 && <p className="small muted">아직 없습니다.</p>}
+      {keys.map((k) => (
+        <div key={k} className="struct-item">
+          <div className="struct-item-head">
+            <button type="button" className="struct-item-title" aria-expanded={open === k} onClick={() => setOpen(open === k ? null : k)}>{open === k ? '▾' : '▸'} {opts.find(([v]) => v === k)?.[1] ?? `⚠ 없는 것: ${k}`}</button>
+            <button type="button" className="icon" aria-label={`${k} 지우기`} title="지우기" onClick={() => { drop(k); setOpen(null); }}>🗑</button>
+          </div>
+          {open === k && (spec.list
+            ? <ListEditor spec={spec.list} value={Array.isArray(value[k]) ? (value[k] as Rec[]) : []} w={w} onChange={(v) => onChange({ ...value, [k]: v })} />
+            : <Fields fields={spec.fields ?? []} value={(value[k] as Rec) ?? {}} w={w} onChange={(v) => onChange({ ...value, [k]: v })} />)}
+        </div>
+      ))}
+      <select value="" aria-label={spec.add} onChange={(e) => { const k = e.target.value; if (!k) return; onChange({ ...value, [k]: spec.make() }); setOpen(k); }}>
+        <option value="">＋ {spec.add}…</option>{opts.filter(([v]) => !keys.includes(v)).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </div>
+  );
+}
+
 /**
  * 선택 화면과 JSON을 오가는 칸. JsonField와 같은 값을 주고받으므로 그대로 바꿔 끼울 수 있다.
  * spec: 목록(ListSpec) · 객체 하나(Field[]) · 고르는 목록({ refs })
  */
 export function StructField<T>({ label, value, onChange, rows = 8, help, spec, w }: {
   label: string; value: T; onChange: (v: T) => void; rows?: number; help?: string; w: WorldPackage;
-  spec: { list: ListSpec } | { fields: Field[] } | { refs: RefKind };
+  spec: { list: ListSpec } | { fields: Field[] } | { refs: RefKind } | { map: MapSpec };
 }) {
   const [json, setJson] = useState(false);
   return (
@@ -136,6 +165,7 @@ export function StructField<T>({ label, value, onChange, rows = 8, help, spec, w
       </div>
       {json ? <JsonField label="" value={value} onChange={onChange} rows={rows} {...(help ? { help } : {})} />
         : 'list' in spec ? <ListEditor spec={spec.list} value={Array.isArray(value) ? (value as Rec[]) : []} w={w} onChange={(v) => onChange(v as T)} />
+        : 'map' in spec ? <MapEditor spec={spec.map} value={value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}} w={w} onChange={(v) => onChange(v as T)} />
         : 'refs' in spec ? <FieldInput f={{ k: '', label: '', t: 'refs', of: spec.refs }} value={value} w={w} onChange={(v) => onChange((v ?? []) as T)} />
         : <Fields fields={spec.fields} value={(value as Rec) ?? {}} w={w} onChange={(v) => onChange(v as T)} />}
     </div>
@@ -199,12 +229,8 @@ export const SPEC = {
       { k: 'renown', label: '명성', t: 'num', opt: true }, { k: 'condition', label: '얻는 조건', t: 'cond' }] } as ListSpec,
   vars: { add: '세계 수치 추가', make: (_w, n) => ({ id: `var/new-${n}`, name: '새 수치', initial: 50 }), title: (x) => `${x.name ?? ''} (${x.id ?? ''}) — 처음 ${x.initial ?? 0}`,
     fields: [{ k: 'id', label: 'ID (var/…)', t: 'text' }, { k: 'name', label: '이름', t: 'text' }, { k: 'initial', label: '처음 값', t: 'num' },
-      { k: 'min', label: '최소 (비우면 0)', t: 'num', opt: true }, { k: 'max', label: '최대 (비우면 100)', t: 'num', opt: true }] } as ListSpec,
-  events: { add: '연표 사건 추가', make: (_w, n) => ({ id: `event/new-${n}`, name: '새 사건', when: { day: 3 }, effects: [] }), title: (x) => `${x.name ?? ''}${(x.when as Rec | undefined)?.day !== undefined ? ` · ${(x.when as Rec).day}일째` : ''}`,
-    fields: [{ k: 'id', label: 'ID (event/…)', t: 'text' }, { k: 'name', label: '이름', t: 'text' },
-      { k: 'when', label: '언제 일어나는가', t: 'obj', hint: '날 수와 조건을 함께 적으면 둘 다 맞아야 한다. 달력 날짜(date)는 JSON에서 적는다', fields: [{ k: 'day', label: '시작 후 며칠째', t: 'num', opt: true }, { k: 'condition', label: '조건', t: 'cond', opt: true }] },
-      { k: 'unless', label: '이 조건이 참이면 일어나지 않는다', t: 'cond', opt: true }, { k: 'effects', label: '일어나는 일', t: 'effects' },
-      { k: 'announce', label: '플레이어에게 보이는 소식 (비우면 조용히)', t: 'long', opt: true }] } as ListSpec,
+      { k: 'min', label: '최소 (비우면 0)', t: 'num', opt: true }, { k: 'max', label: '최대 (비우면 100)', t: 'num', opt: true },
+      { k: 'visible', label: '플레이어에게 보인다 (수첩·서술 분위기)', t: 'bool' }] } as ListSpec,
   approaches: { add: '접근법 추가', make: () => ({ hint: '' }), title: (x) => String(x.hint ?? ''),
     fields: [{ k: 'hint', label: 'GM에게: 이런 길도 있다', t: 'long' }, { k: 'skills', label: '쓰이는 기술', t: 'refs', of: 'skills', opt: true }, { k: 'risk', label: '위험', t: 'text', opt: true }] } as ListSpec,
   outcomes: { add: '결과 추가', make: (_w, n) => ({ id: `outcome-${n}`, name: '새 결과', when: { all: [] } }), title: (x) => String(x.name ?? ''),
@@ -214,6 +240,24 @@ export const SPEC = {
   awaken: { add: '각성 단계 추가', make: () => ({ condition: { all: [] }, name: '새 단계' }), title: (x) => String(x.name ?? ''),
     fields: [{ k: 'name', label: '각성한 이름', t: 'text' }, { k: 'condition', label: '각성 조건', t: 'cond' }, { k: 'text', label: '각성할 때 보이는 글', t: 'long', opt: true },
       { k: 'bonus', label: '보너스', t: 'obj', opt: true, fields: [{ k: 'attack', label: '명중', t: 'num', opt: true }, { k: 'damage', label: '피해', t: 'num', opt: true }, { k: 'ac', label: '방어도', t: 'num', opt: true }, { k: 'save', label: '내성', t: 'num', opt: true }] }] } as ListSpec,
+  randomEvents: { add: '돌발 사건 추가', make: (_w, n) => ({ id: `rand/new-${n}`, name: '새 사건', text: '', kind: 'news' }), title: (x) => `${x.name ?? ''} · ${({ ambush: '기습', meeting: '만남', news: '소문', opportunity: '기회' } as Rec)[String(x.kind)] ?? ''}`,
+    fields: [{ k: 'id', label: 'ID (rand/…)', t: 'text' }, { k: 'name', label: '이름', t: 'text' }, { k: 'text', label: '플레이어에게 보이는 한 줄', t: 'long' },
+      { k: 'kind', label: '종류', t: 'enum', options: [['ambush', '기습 — 적이 나타난다'], ['meeting', '만남 — 누군가 다가온다'], ['news', '소문·소식'], ['opportunity', '뜻밖의 기회']] },
+      { k: 'where', label: '일어나는 장소 (비우면 어디서나)', t: 'refs', of: 'locations', opt: true }, { k: 'dangerous', label: '위험한 곳(조우가 있는 장소)에서만', t: 'bool' },
+      { k: 'weight', label: '나올 무게 (비우면 1)', t: 'num', opt: true }, { k: 'cooldownDays', label: '다시 일어나기까지 며칠 (비우면 1)', t: 'num', opt: true },
+      { k: 'condition', label: '조건 (비우면 늘)', t: 'cond', opt: true }, { k: 'effects', label: '일어나는 일', t: 'effects', opt: true },
+      { k: 'enemies', label: '기습의 적 (비우면 장르·레벨에 맞게)', t: 'list', opt: true, hint: '인물을 적으로 세우려면 JSON에서 "monsterId": "npc:인물ID"로 적는다', spec: {
+        add: '적 추가', make: (w) => ({ monsterId: first(w, 'monsters'), zone: 2 }), title: (x, w) => `${nameOf(w, 'monsters', x.monsterId)} · ${x.zone === 3 ? '후열' : '전열'}`,
+        fields: [{ k: 'monsterId', label: '적', t: 'ref', of: 'monsters' }, { k: 'zone', label: '자리', t: 'enum', asNumber: true, options: [['2', '전열'], ['3', '후열']] }] } }] } as ListSpec,
+  shops: { of: 'locations', add: '상점을 둘 장소', make: () => ({ name: '상점', items: [] }),
+    fields: [{ k: 'name', label: '상점 이름', t: 'text' }, { k: 'items', label: '파는 물건', t: 'refs', of: 'items' }, { k: 'factionId', label: '세력 (평판에 따라 값이 바뀐다)', t: 'ref', of: 'factions', opt: true },
+      { k: 'buys', label: '플레이어의 물건을 사 준다', t: 'bool', dflt: true }] } as MapSpec,
+  pickups: { of: 'locations', add: '주울 것이 있는 장소', make: () => [],
+    list: { add: '주울 것 추가', make: (w) => ({ itemId: first(w, 'items'), hint: '' }), title: (x, w) => `${nameOf(w, 'items', x.itemId)}${x.n ? ` × ${x.n}` : ''}`,
+      fields: [{ k: 'itemId', label: '아이템', t: 'ref', of: 'items' }, { k: 'n', label: '개수 (비우면 1)', t: 'num', opt: true }, { k: 'hint', label: 'GM에게: 어디에 어떻게 있는가', t: 'long' }] } } as MapSpec,
+  gives: { of: 'characters', add: '물건을 건넬 인물', make: () => [],
+    list: { add: '건넬 것 추가', make: (w) => ({ itemId: first(w, 'items') }), title: (x, w) => `${nameOf(w, 'items', x.itemId)}${x.n ? ` × ${x.n}` : ''}${x.condition ? ' (조건 있음)' : ''}`,
+      fields: [{ k: 'itemId', label: '아이템', t: 'ref', of: 'items' }, { k: 'n', label: '개수 (비우면 1)', t: 'num', opt: true }, { k: 'condition', label: '건네는 조건 (비우면 만나면 바로)', t: 'cond', opt: true }] } } as MapSpec,
   loot: [{ k: 'money', label: '돈', t: 'num', opt: true }, { k: 'items', label: '아이템', t: 'list', opt: true, spec: STACKS }] as Field[],
   stacks: STACKS,
 };

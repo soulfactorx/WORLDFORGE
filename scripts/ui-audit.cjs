@@ -137,6 +137,22 @@ const SCREENS = [
     const g = p.locator('.struct-field', { hasText: '일정 (시각에' }).first();
     await g.locator('button:has-text("＋ 일정 추가")').click();
   }],
+  ['편집: 선택형 (세계 수치)', async (p) => {
+    await editorTab(p, '이야기 흐름');
+    await p.locator('.struct-field', { hasText: '세계 수치 (지역 치안' }).first().locator('button:has-text("＋ 세계 수치 추가")').click();
+  }],
+  ['편집: 선택형 (상점·주울 것 — ID로 묶인 표)', async (p) => {
+    await editorTab(p, '아이템·상점');
+    const f = p.locator('.struct-field', { hasText: '주울 수 있는 것 (장소 ID' }).first();
+    await f.locator('select[aria-label="주울 것이 있는 장소"]').selectOption({ index: 1 });
+    await f.locator('button:has-text("＋ 주울 것 추가")').click();
+  }],
+  ['편집: 선택형 (돌발 사건 표)', async (p) => {
+    await editorTab(p, '조우');
+    const direct = p.locator('button:has-text("이 세계만의 표를 직접 정하기")');
+    if (await direct.count()) await direct.click();
+    await p.locator('.struct-field', { hasText: '돌발 사건 표' }).first().locator('button:has-text("＋ 돌발 사건 추가")').click();
+  }],
   ['장면 시험: 결과 비율 맞추기', async (p) => {
     await editorTab(p, '장면'); await p.click('button:has-text("추가하고 바로 테스트")'); await p.waitForSelector('.scene-tester');
     await p.click('.scene-balance > summary');

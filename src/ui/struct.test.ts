@@ -29,4 +29,10 @@ describe('선택형 편집기의 명세', () => {
     expect(SPEC.starts.make(sampleWorld, 2)).toMatchObject({ id: 'start-2', locationId: sampleWorld.start.locationId });
     expect(SPEC.discoveries.title({ claim: sampleWorld.claims[0]!.id }, sampleWorld)).toContain(sampleWorld.claims[0]!.statement.slice(0, 10));
   });
+  it('돌발 사건·ID로 묶인 표의 명세', () => {
+    expect(SPEC.randomEvents.title({ name: '늑대 떼', kind: 'ambush' }, sampleWorld)).toBe('늑대 떼 · 기습');
+    expect(SPEC.shops.make()).toEqual({ name: '상점', items: [] });
+    expect(SPEC.pickups.of).toBe('locations');
+    expect(SPEC.gives.of).toBe('characters');
+  });
 });
