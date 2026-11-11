@@ -419,7 +419,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
             ...(board && !state.combat ? [tab('board', `📜 ${rs(board.name)}`)] : []),
           ];
         })()}
-        <AvControls onChange={() => setAvTick((n) => n + 1)} dcMod={state.dcMod ?? 0}
+        <AvControls onChange={() => setAvTick((n) => n + 1)} dcMod={state.dcMod ?? 0} dcBusy={streaming !== null}
           onDcMod={(v) => { if (clampDcMod(v) !== (state.dcMod ?? 0)) void commitEvents(() => [{ type: 'difficulty_set', dcMod: clampDcMod(v), label: difficultyLabel(clampDcMod(v)) }]); }} />
         {debug && <button onClick={() => setShowDebug(true)} title="디버그: 턴마다 AI 요청·응답과 엔진 처리">🐞 디버그</button>}
         <button onClick={undo} disabled={state.turn === 0 || streaming !== null} title="턴 되돌리기">↶ 되돌리기</button>

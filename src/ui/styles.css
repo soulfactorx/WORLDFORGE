@@ -1041,3 +1041,14 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .scene-diagnosis .diagnosis-end li { display: block; margin: 8px 0; overflow-wrap: anywhere; }
 .diagnosis-why, .diagnosis-fix { display: block; }
 .diagnosis-fix { margin-top: 2px; font-weight: 600; }
+
+/* 플레이 설정: 난이도 (v0.106) — 이름 · 선택 칸 · 설명을 세로로 쌓는다 (한 줄에 넣으면 선택 칸이 눌려 보이지 않았다) */
+.av-difficulty { display: block; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; white-space: normal; }
+.av-difficulty label { display: block; }
+.av-difficulty select { display: block; width: 100%; min-width: 0; margin: 4px 0; }
+.av-difficulty p { margin: 2px 0; white-space: normal; overflow-wrap: anywhere; }
+
+/* 안 나오는 끝: 눌러서 바로 고치기 (v0.106) */
+.diagnosis-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.diagnosis-quick button { min-height: 36px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.av-vol input[type='range'] { min-height: 36px; }

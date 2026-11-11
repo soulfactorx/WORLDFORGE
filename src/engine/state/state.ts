@@ -1,4 +1,4 @@
-import { combatScaleNote } from '../difficulty';
+import { combatScale, combatScaleNote, difficultyLabel } from '../difficulty';
 import type { Belief, EntityId } from '../schema';
 import type { GameEvent, StoredEvent } from './events';
 import { type CharacterSheet, legacyCharacter } from '../character/sheet';
@@ -168,7 +168,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         : sign(r.modifier);
       const label = e.breakdown?.label ?? `${e.skill} 판정`;
       const modeLabel = e.mode === 'advantage' ? ' 이점' : e.mode === 'disadvantage' ? ' 불리점' : '';
-      const text = `${label}${modeLabel} — d20(${r.rolls.join(', ')}) ${mods} = ${r.total} vs DC ${r.dc} → ${r.success ? '성공' : '실패'}`;
+      const text = `${label}${modeLabel} — d20(${r.rolls.join(', ')}) ${mods} = ${r.total} vs DC ${r.dc}${e.dcBase !== undefined && e.dcBase !== r.dc ? ` (난이도 ${difficultyLabel(s.dcMod ?? 0).replace(/ \(DC.*\)$/, '')}: ${e.dcBase} → ${r.dc})` : ''} → ${r.success ? '성공' : '실패'}`;
       return { ...s, rngState: e.rngState, log: [...s.log, { turn, kind: 'check', text }] };
     }
     case 'narration':
@@ -476,8 +476,15 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, worldMinutes: s.worldMinutes + 60, party, player: { ...s.player, sheet: { ...sheet, resources: res } },
         log: [...s.log, { turn, kind: 'check', text: '짧은 휴식 (1시간) — 짧은 휴식 능력 회복' }] };
     }
-    case 'difficulty_set':
-      return { ...s, dcMod: e.dcMod, log: [...s.log, { turn, kind: 'progress', text: `⚖ 난이도: ${e.label}` }] };
+    case 'difficulty_set': {
+      // 전투 중에 바꾸면 지금 싸움에도 바로 적용한다 (v0.106): 적의 방어도를 차이만큼 움직이고, 적의 명중은 combat.difficulty를 따른다. 체력은 이미 진행된 싸움이라 그대로 둔다
+      let combat = s.combat;
+      if (combat) {
+        const dAc = combatScale(e.dcMod).ac - combatScale(combat.difficulty ?? 0).ac;
+        combat = { ...combat, difficulty: e.dcMod, combatants: Object.fromEntries(Object.entries(combat.combatants).map(([id, c]) => [id, c.side === 'enemy' && dAc ? { ...c, ac: Math.max(5, c.ac + dAc) } : c])) };
+      }
+      return { ...s, dcMod: e.dcMod, ...(combat ? { combat } : {}), log: [...s.log, { turn, kind: 'progress', text: `⚖ 난이도: ${e.label}${combat ? ' — 지금 전투에도 적용 (적의 방어도·명중)' : ''}` }] };
+    }
     case 'lead':
       return { ...s, ...(e.key ? { leadKeys: [...(s.leadKeys ?? []), e.key] } : {}), log: [...s.log, { turn, kind: 'check', text: e.text }] };
     case 'transition_queued':

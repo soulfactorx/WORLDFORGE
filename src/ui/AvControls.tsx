@@ -1,13 +1,13 @@
 import { GM_STYLES, setGmStyleOverride } from '../data/gmStyles';
 import { DebugToggle } from './DebugPanel';
-import { DIFFICULTIES, difficultyLabel } from '../engine/difficulty';
+import { DIFFICULTIES, difficultyEffect, difficultyLabel } from '../engine/difficulty';
 import { useEffect, useRef, useState } from 'react';
 import { type BackgroundMode, type DisplayLevel, IMAGE_SIZES, type ImageSize, loadPlayPrefs, savePlayPrefs, SCENE_NARRATIONS, type SceneNarration } from './playPrefs';
 import { isStandalone, loadOrientation, type OrientationPref, saveOrientation } from './orientation';
 import { type AvSettings, loadAv, playSfx, saveAv, stopSpeaking } from './audio';
 
 /** 소리·음성 설정 (플레이 화면 위) */
-export function AvControls({ onChange, dcMod, onDcMod }: { onChange: () => void; /** 이 세이브의 난이도 (v0.90) — 주면 설정에 보인다 */ dcMod?: number; onDcMod?: (dcMod: number) => void }) {
+export function AvControls({ onChange, dcMod, onDcMod, dcBusy }: { onChange: () => void; /** 이 세이브의 난이도 (v0.90) — 주면 설정에 보인다 */ dcMod?: number; onDcMod?: (dcMod: number) => void; /** 턴 진행 중 — 난이도를 바꿀 수 없다 (v0.106) */ dcBusy?: boolean }) {
   const [open, setOpen] = useState(false);
   const [orient, setOrient] = useState<OrientationPref>(loadOrientation);
   const [orientNote, setOrientNote] = useState('');
@@ -84,12 +84,16 @@ export function AvControls({ onChange, dcMod, onDcMod }: { onChange: () => void;
             </select>
           </label>
           {onDcMod && (
-            <label className="small av-vol">난이도 (이 세이브 — 판정 DC · 전투의 적 방어도·체력)
-              <select value={String(dcMod ?? 0)} onChange={(e) => onDcMod(Number(e.target.value) || 0)}>
+            <div className="av-difficulty">
+              <label className="small" htmlFor="av-difficulty">난이도 <span className="muted">(이 세이브)</span></label>
+              <select id="av-difficulty" value={String(dcMod ?? 0)} disabled={dcBusy} onChange={(e) => onDcMod(Number(e.target.value) || 0)}>
                 {!DIFFICULTIES.some((d) => d.dc === (dcMod ?? 0)) && <option value={String(dcMod ?? 0)}>{difficultyLabel(dcMod ?? 0)}</option>}
-                {DIFFICULTIES.map((d) => <option key={d.id} value={d.dc}>{difficultyLabel(d.dc)} — {d.desc}</option>)}
+                {DIFFICULTIES.map((d) => <option key={d.id} value={d.dc}>{difficultyLabel(d.dc)}</option>)}
               </select>
-            </label>
+              <p className="small muted">{DIFFICULTIES.find((d) => d.dc === (dcMod ?? 0))?.desc ?? '직접 정한 보정값'}</p>
+              <p className="small">{difficultyEffect(dcMod ?? 0)}</p>
+              {dcBusy && <p className="small muted">턴이 진행되는 동안에는 바꿀 수 없습니다. 서술이 끝난 뒤 바꾸세요.</p>}
+            </div>
           )}
           <DebugToggle />
           <p className="small muted">소리는 이 기기에서 바로 만들어 냅니다 (파일·인터넷 필요 없음). 음성은 브라우저에 설치된 한국어 목소리를 씁니다.</p>

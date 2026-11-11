@@ -106,7 +106,7 @@ const DIRECTOR_SCHEMA = {
     check_kind: { type: 'string', enum: ['none', 'skill', 'ability', 'save'], description: '결과가 불확실하고 실패에 의미가 있을 때만 판정. skill=기술 판정, ability=기술 없는 능력 판정, save=내성 굴림' },
     check_skill: { type: 'string', enum: [...SKILL_IDS, ''], description: `check_kind가 skill일 때 기술 ID. ${SKILL_IDS.map((k) => `${k}=${SKILLS[k].name}`).join(', ')}` },
     check_ability: { type: 'string', enum: [...ABILITIES], description: 'check_kind가 ability/save일 때 능력치. str=근력 dex=민첩 con=건강 int=지능 wis=지혜 cha=매력' },
-    check_dc_tier: { type: 'string', enum: Object.keys(DC_TIERS) },
+    check_dc_tier: { type: 'string', enum: Object.keys(DC_TIERS), description: `판정 난이도 등급 (d20 + 보정이 이 값 이상이면 성공): ${Object.entries(DC_TIERS).map(([k, v]) => `${k}=${v}`).join(', ')}. 보정이 +2~+5인 초반 주인공 기준 성공 확률 — very_easy 거의 항상 · easy 열에 일곱 · medium 반반 · hard 열에 둘셋 · very_hard 이상은 거의 불가능. 평범하게 불확실한 일은 easy, 실력이 필요한 일은 medium. hard는 전문가도 자주 실패하는 일에만, very_hard 이상은 무모한 일에만 쓴다` },
     check_mode: { type: 'string', enum: ['normal', 'advantage', 'disadvantage'], description: '상황이 명백히 유리/불리할 때만 이점/불리점' },
     check_reason: { type: 'string' },
     move_to: { type: 'string', description: '"이동 가능한 곳" 목록의 ID 중 하나, 이동하지 않으면 ""' },
@@ -243,6 +243,7 @@ const DIRECTOR_SYSTEM = `너는 1인칭 TRPG의 게임 마스터(GM) 판단 모�
 
 ① 판정
 - 결과가 확실하거나 실패해도 의미가 없으면 판정하지 않는다.
+- 난이도 등급은 일의 어려움에 맞춘다: 평범하게 불확실한 일은 easy(10), 실력이 필요한 일은 medium(15). hard(20)는 전문가도 자주 실패하는 일, very_hard 이상은 무모한 일에만. 습관처럼 medium·hard를 고르지 않는다 — 실패가 이어지면 이야기가 멈춘다.
 - 플레이어가 과감하거나 엉뚱한 행동(도발·무례·금기 깨기·훔치기·대담한 제안 등)을 하면 무난하게 흘려보내지 않는다. 결과가 불확실하면 판정을 걸고, 반응할 만한 인물을 speakers에 넣어 파장이 생기게 한다. 이 세계에서 정말 불가능한 일만 막는다.
 - 플레이어가 인물에게 말을 걸거나 인물이 반응할 만한 행동을 하면 speakers에 그 인물을 넣는다.
 - 인물은 낯선 이에게 무관심하지 않다. 이 자리에 인물이 있으면 대부분의 턴에 누군가는 반응한다 — 말을 걸지 않았어도 쳐다보고, 끼어들고, 참견한다. 플레이어가 혼자 조용히 무언가를 하겠다고 한 경우만 비운다. reacting_to에는 그 인물이 무엇에 왜 반응하는지와, 꺼낼 만한 화제(지금 가장 앞에 있는 일과 이어지는 것)를 적는다.
@@ -399,7 +400,8 @@ export async function runTurn(
     const mode: RollMode = ['advantage', 'disadvantage'].includes(d.check_mode) ? d.check_mode : 'normal';
     // 게임 난이도 (v0.90): GM이 고른 난이도 등급에 세이브의 DC 보정을 더한다
     const result = d20Test(rng, breakdown.total, withDcMod(DC_TIERS[d.check_dc_tier], s.dcMod), mode);
-    push({ type: 'check_rolled', skill: breakdown.label, reason: d.check_reason, result, rngState: rng.state(), breakdown, mode });
+    // 난이도 보정이 들어갔으면 원래 난이도도 남긴다 — 기록에 "DC 15 → 7"로 보여, 난이도가 적용되는지 눈으로 확인할 수 있다 (v0.106)
+    push({ type: 'check_rolled', skill: breakdown.label, reason: d.check_reason, result, rngState: rng.state(), breakdown, mode, ...(s.dcMod ? { dcBase: DC_TIERS[d.check_dc_tier] } : {}) });
     // 어려운 판정 성공은 작은 경험치 (설계 v4 P1 — 잘한 플레이에 보상)
     const hard = result.success ? hardCheckXp(s.player.sheet.level, result.dc) : 0;
     if (hard) progressEvents(s, [{ who: 'player', amount: hard }], `어려운 판정 성공 (${breakdown.label} DC ${result.dc})`, levelCapOf(world)).forEach(push);

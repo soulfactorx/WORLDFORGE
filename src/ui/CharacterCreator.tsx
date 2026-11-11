@@ -1,6 +1,6 @@
 import { useRs } from './reskin';
 import { clearNewGameMemory, loadNewGameMemory, saveNewGameMemory } from './newGameMemory';
-import { DIFFICULTIES, difficultyLabel } from '../engine/difficulty';
+import { DIFFICULTIES, difficultyLabel, difficultyEffect } from '../engine/difficulty';
 import { useMemo, useState } from 'react';
 import { recommendedSkills, skillOptionsOf } from '../engine/classes';
 import type { PlayerProfile, TraitAxis, WorldClass } from '../engine/schema';
@@ -186,7 +186,8 @@ export function CharacterCreator({ onCreate, onCancel, classes = DEFAULT_CLASSES
             {!DIFFICULTIES.some((d) => d.dc === dcMod) && <option value="custom">{difficultyLabel(dcMod)}</option>}
           </select>
         </label>
-        <p className="small muted">행동 판정·장면 판정·실마리 굴림의 DC와, 전투에서 적의 방어도·체력에 적용됩니다. 플레이 중에도 "소리·화면" 설정에서 바꿀 수 있습니다.</p>
+        <p className="small">{difficultyEffect(dcMod)}</p>
+        <p className="small muted">행동 판정·장면 판정·실마리 굴림의 DC와, 전투에서 적의 방어도·명중·체력에 적용됩니다. 플레이 중에도 "소리·화면" 설정에서 바꿀 수 있습니다.</p>
       </fieldset>
 
       {errors.length > 0 && <ul className="errors">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}

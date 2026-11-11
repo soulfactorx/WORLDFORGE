@@ -103,7 +103,7 @@ export function SceneBalance({ w, def, sheet, onApply }: { w: WorldPackage; def:
           </ul>
           {result.note && <p className="small warn">⚠ {result.note}</p>}
           {/* 맞춘 뒤에도 안 나오는 끝: 숫자로는 안 되는 까닭을 짚어 준다 (맞춘 설정 기준) */}
-          {def.ends.some((e) => !(result.after.ends[e.id] ?? 0)) && <SceneDiagnosis w={tuned} sceneId={def.id} sheet={sheet} policy={policy} />}
+          {def.ends.some((e) => !(result.after.ends[e.id] ?? 0)) && <SceneDiagnosis w={tuned} sceneId={def.id} sheet={sheet} policy={policy} {...(onApply ? { onApply: (d: SceneDef) => { onApply(d); setResult(null); } } : {})} />}
           {result.changes.length > 0 && (
             <>
               <p className="small"><b>바뀌는 숫자 {result.changes.length}개</b></p>

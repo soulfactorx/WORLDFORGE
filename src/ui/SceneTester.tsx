@@ -24,6 +24,9 @@ export function SceneTester({ w, sceneId, onClose, onApply }: { w: WorldPackage;
   const sheet = useMemo(() => testSheet(w, cls, level), [cls, level]); // eslint-disable-line react-hooks/exhaustive-deps
   const [state, setState] = useState<GameState | null>(null);
   const [sim, setSim] = useState<SimResult | null>(null);
+  // 고치기를 누르면 장면이 바뀐 뒤 자동 시험을 다시 돌린다 (v0.106)
+  const [resim, setResim] = useState(false);
+  useEffect(() => { if (!resim) return; setResim(false); try { setSim(simulateScene(w, sceneId, sheet, 200, seed || 7)); setState(sandboxState(w, sceneId, sheet, seed)); } catch (e) { setErr((e as Error).message); } }, [w, resim]); // eslint-disable-line react-hooks/exhaustive-deps
   const idx = (w.scenes ?? []).findIndex((s) => s.id === sceneId);
   const issues = useMemo(() => validateWorld(w).filter((i) => i.path.startsWith(`scenes[${idx}]`)), [w, idx]);
   const restart = (nextSeed = Math.floor(Math.random() * 1e6)) => { setSeed(nextSeed); setErr(''); try { setState(sandboxState(w, sceneId, sheet, nextSeed)); } catch (e) { setErr((e as Error).message); } };
@@ -78,7 +81,7 @@ export function SceneTester({ w, sceneId, onClose, onApply }: { w: WorldPackage;
               {sim.unreached.length > 0 && <li className="warn">⚠ 한 번도 안 나온 끝: {sim.unreached.map(endName).join(', ')}</li>}
               {sim.unusedActions.length > 0 && <li className="warn">⚠ 한 번도 못 쓴 행동: {sim.unusedActions.map((id) => def.actions.find((a) => a.id === id)?.name ?? id).join(', ')}</li>}
             </ul>
-            {sim.unreached.length > 0 && <SceneDiagnosis w={w} sceneId={sceneId} sheet={sheet} />}
+            {sim.unreached.length > 0 && <SceneDiagnosis w={w} sceneId={sceneId} sheet={sheet} {...(onApply ? { onApply: (d: SceneDef) => { onApply(d); setResim(true); } } : {})} />}
           </section>
         )}
         <SceneBalance key={sceneId} w={w} def={def} sheet={sheet} {...(onApply ? { onApply: (d: SceneDef) => { onApply(d); setSim(null); } } : {})} />

@@ -17,6 +17,7 @@
 import type { Ability } from '../character/rules';
 import { type Abilities, type CharacterSheet, resourcesOf } from '../character/sheet';
 import { npcXp } from '../npcStats';
+import { combatScale } from '../difficulty';
 import { abilityModifier, d20Test, type RollMode } from '../dice/dice';
 import { type Rng, rollDie } from '../dice/rng';
 import { proficiencyBonus, SKILLS } from '../character/rules';
@@ -487,7 +488,8 @@ function rollAttack(cs: CombatState, a: Combatant, t: Combatant, cardName: strin
   const effects: CombatEffect[] = [];
   const abil = attackAbilityMod(a, spec.ability);
   const magic = spec.toHit === undefined && spec.ability !== 'spell';
-  const toHit = spec.toHit ?? abil + a.profBonus + (magic ? a.gearAttack ?? 0 : 0);
+  // 게임 난이도 (v0.106): 적의 명중에도 방어도와 같은 보정 — 쉬울수록 적이 덜 맞힌다
+  const toHit = (spec.toHit ?? abil + a.profBonus + (magic ? a.gearAttack ?? 0 : 0)) + (a.side === 'enemy' ? combatScale(cs.difficulty).ac : 0);
   const pack = !!a.packTactics && Object.values(cs.combatants).some((o) => o.side === a.side && o.id !== a.id && alive(o) && o.zone === t.zone);
   const proneMelee = !!t.prone && spec.kind === 'melee';
   const proneRanged = !!t.prone && spec.kind === 'ranged';

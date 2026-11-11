@@ -13,7 +13,9 @@ import { applyEvent } from '../engine/state/state';
 import { sceneActionEvents } from './scene';
 import { sandboxState, type SimPolicy } from './sceneTest';
 
-export interface Finding { /** 왜 안 나오는가 */ why: string; /** 무엇을 고치면 되는가 */ fix: string }
+/** 눌러서 바로 고치기 (v0.106): 기계적으로 고칠 수 있는 것만. 장면을 받아 고친 장면을 돌려준다 (원본은 건드리지 않는다) */
+export interface QuickFix { label: string; apply: (d: SceneDef) => SceneDef }
+export interface Finding { /** 왜 안 나오는가 */ why: string; /** 무엇을 고치면 되는가 */ fix: string; /** 눌러서 바로 고칠 수 있는 것 */ quick?: QuickFix[] }
 export interface EndDiagnosis { endId: string; name: string; count: number; runs: number; findings: Finding[] }
 export interface SceneTrace {
   runs: number;
@@ -82,6 +84,21 @@ function leaves(c: SceneCond | undefined, out: Leaf[] = [], negated = { v: false
   return out;
 }
 
+/** 끝 조건의 k번째 잎(leaves와 같은 순서)을 바꾼 조건 */
+function patchLeaf(c: SceneCond, k: number, patch: (leaf: Leaf) => SceneCond, n = { i: 0 }): SceneCond {
+  if ('all' in c) return { all: c.all.map((x) => patchLeaf(x, k, patch, n)) };
+  if ('any' in c) return { any: c.any.map((x) => patchLeaf(x, k, patch, n)) };
+  if ('not' in c) return c;
+  return n.i++ === k ? patch(c) : c;
+}
+const editEnd = (d: SceneDef, endId: string, f: (e: SceneDef['ends'][number]) => SceneDef['ends'][number]): SceneDef => ({ ...d, ends: d.ends.map((e) => (e.id === endId ? f(e) : e)) });
+/** 끝 a를 끝 b 바로 위로 */
+const moveAbove = (d: SceneDef, a: string, b: string): SceneDef => {
+  const me = d.ends.find((e) => e.id === a); if (!me) return d;
+  const rest = d.ends.filter((e) => e.id !== a); const at = rest.findIndex((e) => e.id === b);
+  return { ...d, ends: at < 0 ? d.ends : [...rest.slice(0, at), me, ...rest.slice(at)] };
+};
+
 /** 이 장면에서 수치·상태·단계를 움직이는 곳들 */
 function sources(def: SceneDef) {
   const list: { where: string; actionId?: string; d: SceneDelta }[] = [];
@@ -111,7 +128,8 @@ function diagnoseEnd(def: SceneDef, endIndex: number, t: SceneTrace): Finding[] 
     const [wid, n] = Object.entries(sh).sort((a, b) => b[1] - a[1])[0]!;
     const wn = def.ends.find((x) => x.id === wid)?.name ?? wid;
     out.push({ why: `조건은 ${n}판에서 맞았지만, 목록에서 더 위에 있는 끝 「${wn}」이 같은 순간에 먼저 맞아 그쪽으로 끝났습니다. 끝은 위에서부터 처음 맞는 것 하나만 일어납니다.`,
-      fix: `「${e.name}」을 「${wn}」보다 위로 옮기세요 (더 좁고 특별한 조건을 위에). 또는 두 끝의 조건이 같은 때에 함께 맞지 않게 기준을 벌리세요.` });
+      fix: `「${e.name}」을 「${wn}」보다 위로 옮기세요 (더 좁고 특별한 조건을 위에). 또는 두 끝의 조건이 같은 때에 함께 맞지 않게 기준을 벌리세요.`,
+      quick: [{ label: `「${e.name}」을 「${wn}」 위로 옮기기`, apply: (d) => moveAbove(d, e.id, wid) }] });
   }
   // 같은 수치·같은 방향의 더 느슨한 기준이 위에 있으면 언제나 가려진다
   if (ls.length === 1 && 'gauge' in ls[0]!) {
@@ -122,11 +140,14 @@ function diagnoseEnd(def: SceneDef, endIndex: number, t: SceneTrace): Finding[] 
       const o = wl[0]!;
       const covered = (me.gte !== undefined && o.gte !== undefined && o.gte <= me.gte) || (me.lte !== undefined && o.lte !== undefined && o.lte >= me.lte);
       if (covered && !sh?.[w.id]) out.push({ why: `위에 있는 끝 「${w.name}」이 같은 수치(${gname(me.gauge)})를 더 느슨한 기준으로 봅니다. 이 끝의 기준에 닿기 전에 언제나 「${w.name}」이 먼저 납니다.`,
-        fix: `「${e.name}」을 「${w.name}」보다 위로 옮기거나, 「${w.name}」의 기준을 이 끝보다 엄격하게 바꾸세요.` });
+        fix: `「${e.name}」을 「${w.name}」보다 위로 옮기거나, 「${w.name}」의 기준을 이 끝보다 엄격하게 바꾸세요.`,
+        quick: [{ label: `「${e.name}」을 「${w.name}」 위로 옮기기`, apply: (d) => moveAbove(d, e.id, w.id) }] });
     });
   }
 
-  for (const c of ls) {
+  for (const [k, c] of ls.entries()) {
+    // 이 잎의 기준값·차례를 바꾸는 고치기
+    const setThr = (v: number): QuickFix['apply'] => (d) => editEnd(d, e.id, (x) => ({ ...x, when: patchLeaf(x.when, k, (leaf) => ('gauge' in leaf ? (leaf.gte !== undefined ? { gauge: leaf.gauge, gte: v } : { gauge: leaf.gauge, lte: v }) : 'round' in leaf ? { round: v } : leaf)) }));
     if ('gauge' in c) {
       const g = def.gauges.find((x) => x.id === c.gauge);
       if (!g) { out.push({ why: `조건이 없는 수치 "${c.gauge}"를 봅니다.`, fix: '끝 조건의 수치를 이 장면에 있는 것으로 바꾸세요.' }); continue; }
@@ -134,7 +155,9 @@ function diagnoseEnd(def: SceneDef, endIndex: number, t: SceneTrace): Finding[] 
       const lo = g.min ?? 0, hi = g.max ?? 10;
       const word = up ? '이상' : '이하', wordTo = up ? '이상으로' : '이하로', dir = up ? '올리는' : '내리는';
       if (up ? thr > hi : thr < lo) {
-        out.push({ why: `기준이 ${gname(g.id)} ${thr} ${word}인데, 이 수치는 ${lo}~${hi} 사이에서만 움직입니다. 절대 닿을 수 없습니다.`, fix: `기준을 ${up ? hi : lo} ${wordTo} 바꾸거나, 수치의 ${up ? '최대' : '최소'}를 ${thr}까지 넓히세요.` });
+        out.push({ why: `기준이 ${gname(g.id)} ${thr} ${word}인데, 이 수치는 ${lo}~${hi} 사이에서만 움직입니다. 절대 닿을 수 없습니다.`, fix: `기준을 ${up ? hi : lo} ${wordTo} 바꾸거나, 수치의 ${up ? '최대' : '최소'}를 ${thr}까지 넓히세요.`,
+          quick: [{ label: `기준을 ${up ? hi : lo} ${wordTo}`, apply: setThr(up ? hi : lo) },
+            { label: `「${gname(g.id)}」의 ${up ? '최대' : '최소'}를 ${thr}(으)로 넓히기`, apply: (d) => ({ ...d, gauges: d.gauges.map((x) => (x.id === g.id ? { ...x, ...(up ? { max: thr } : { min: thr }) } : x)) }) }] });
         continue;
       }
       const movers = src.filter((s) => { const v = s.d.gauges?.[g.id] ?? 0; return up ? v > 0 : v < 0; });
@@ -155,11 +178,15 @@ function diagnoseEnd(def: SceneDef, endIndex: number, t: SceneTrace): Finding[] 
       const seen = up ? t.gaugeMax[g.id] ?? g.start : t.gaugeMin[g.id] ?? g.start;
       if (def.maxRounds && need > def.maxRounds) {
         out.push({ why: `${gname(g.id)}이(가) 시작값 ${g.start}에서 기준 ${thr}까지 가려면, 매번 가장 잘 풀려도 ${need}차례가 필요합니다 (한 차례에 최대 ${up ? '+' : '−'}${best}). 차례 한도는 ${def.maxRounds}입니다.`,
-          fix: `차례 한도를 ${need} 이상으로 늘리거나, 기준을 ${up ? g.start + best * def.maxRounds : g.start - best * def.maxRounds} ${wordTo} 당기거나, 시작값을 기준 쪽으로 옮기거나, ${dir} 변화량을 키우세요.` });
+          fix: `차례 한도를 ${need} 이상으로 늘리거나, 기준을 ${up ? g.start + best * def.maxRounds : g.start - best * def.maxRounds} ${wordTo} 당기거나, 시작값을 기준 쪽으로 옮기거나, ${dir} 변화량을 키우세요.`,
+          quick: [{ label: `차례 한도를 ${need}(으)로 늘리기`, apply: (d) => ({ ...d, maxRounds: need }) },
+            { label: `기준을 ${up ? g.start + best * def.maxRounds : g.start - best * def.maxRounds} ${wordTo}`, apply: setThr(up ? g.start + best * def.maxRounds : g.start - best * def.maxRounds) }] });
       } else if (up ? seen < thr : seen > thr) {
         const against = src.filter((s) => { const v = s.d.gauges?.[g.id] ?? 0; return up ? v < 0 : v > 0; });
         out.push({ why: `시험 ${t.runs}판 동안 ${gname(g.id)}이(가) 가장 ${up ? '높이' : '낮게'} 간 값이 ${seen}입니다 (기준 ${thr} ${word}). 장면이 평균 ${t.avgRounds}차례에 끝나는데${winnerName && winner![0] !== e.id ? `, 대부분 「${winnerName}」(${Math.round((winner![1] / t.runs) * 100)}%)이 먼저 납니다` : ''}.${against.length ? ` 이 수치를 반대로 미는 곳도 있습니다: ${against.slice(0, 3).map((a) => a.where).join(', ')}.` : ''}`,
-          fix: `기준을 ${seen} ${wordTo} 당기면 바로 나오기 시작합니다. 그대로 두려면 시작값을 기준 쪽으로 옮기거나, ${dir} 변화량을 키우거나, 먼저 나는 끝의 기준을 늦추세요. ("비율 맞추기"에서 끝 조건의 기준값·수치의 시작값 손잡이를 켜면 이 범위에서 대신 찾아 줍니다.)` });
+          fix: `기준을 ${seen} ${wordTo} 당기면 바로 나오기 시작합니다. 그대로 두려면 시작값을 기준 쪽으로 옮기거나, ${dir} 변화량을 키우거나, 먼저 나는 끝의 기준을 늦추세요. ("비율 맞추기"에서 끝 조건의 기준값·수치의 시작값 손잡이를 켜면 이 범위에서 대신 찾아 줍니다.)`,
+          // 시작값과 같은 기준은 시작하자마자 끝나 버리므로 권하지 않는다
+          ...(seen !== g.start ? { quick: [{ label: `기준을 ${seen} ${wordTo} 당기기`, apply: setThr(seen) }] } : {}) });
       }
     } else if ('state' in c) {
       const name = def.states?.find((s) => s.id === c.state)?.name ?? c.state;
@@ -173,14 +200,17 @@ function diagnoseEnd(def: SceneDef, endIndex: number, t: SceneTrace): Finding[] 
       if (!movers.length && !first) out.push({ why: `단계 「${name}」에 있어야 하는데, 이 단계로 넘어가게 하는 행동이나 반작용이 없습니다.`, fix: `어느 행동의 결과에 "단계 넘기기: ${name}"을 넣으세요.` });
       else if (!t.phases.has(c.phase)) out.push({ why: `단계 「${name}」(으)로 넘기는 곳은 ${movers.map((a) => a.where).join(', ')}인데, 시험에서 한 번도 그 단계에 가지 못했습니다.`, fix: '그 행동이 지금 단계에서 고를 수 있는지, 판정 난이도가 너무 높지 않은지 확인하세요.' });
     } else if ('round' in c && !isTimeout) {
-      if (def.maxRounds && c.round > def.maxRounds) out.push({ why: `${c.round}차례가 지나야 하는데 차례 한도가 ${def.maxRounds}입니다.`, fix: `조건의 차례를 ${def.maxRounds} 이하로 내리거나, 이 끝을 "차례가 다하면 이 끝으로"에 지정하세요.` });
-      else if (t.maxRoundsSeen < c.round) out.push({ why: `${c.round}차례가 지나야 하는데, 시험에서 가장 길게 간 판이 ${t.maxRoundsSeen}차례입니다 (평균 ${t.avgRounds}차례).`, fix: `조건의 차례를 ${Math.max(1, Math.round(t.avgRounds))} 안팎으로 내리거나, 다른 끝들이 늦게 나도록 기준을 늦추세요.` });
+      if (def.maxRounds && c.round > def.maxRounds) out.push({ why: `${c.round}차례가 지나야 하는데 차례 한도가 ${def.maxRounds}입니다.`, fix: `조건의 차례를 ${def.maxRounds} 이하로 내리거나, 이 끝을 "차례가 다하면 이 끝으로"에 지정하세요.`,
+        quick: [{ label: `조건의 차례를 ${def.maxRounds}(으)로`, apply: setThr(def.maxRounds) }, { label: '"차례가 다하면 이 끝으로"에 지정하기', apply: (d) => ({ ...d, timeoutEnd: e.id }) }] });
+      else if (t.maxRoundsSeen < c.round) out.push({ why: `${c.round}차례가 지나야 하는데, 시험에서 가장 길게 간 판이 ${t.maxRoundsSeen}차례입니다 (평균 ${t.avgRounds}차례).`, fix: `조건의 차례를 ${Math.max(1, Math.round(t.avgRounds))} 안팎으로 내리거나, 다른 끝들이 늦게 나도록 기준을 늦추세요.`,
+        quick: [{ label: `조건의 차례를 ${Math.max(1, Math.round(t.avgRounds))}(으)로`, apply: setThr(Math.max(1, Math.round(t.avgRounds))) }] });
     }
   }
   // 차례가 다하면 가는 끝: 한도까지 간 판이 없다
   if (isTimeout && !out.length) {
     out.push({ why: `이 끝은 차례 한도(${def.maxRounds})가 다했을 때 납니다. 그런데 시험에서 가장 길게 간 판이 ${t.maxRoundsSeen}차례이고 평균 ${t.avgRounds}차례에 다른 끝으로 끝납니다.`,
-      fix: `차례 한도를 ${Math.max(3, Math.round(t.avgRounds))} 안팎으로 줄이거나, 다른 끝들의 기준을 늦춰 장면이 더 오래 가게 하세요. ("비율 맞추기"에서 차례 한도 손잡이를 켜면 대신 찾아 줍니다.)` });
+      fix: `차례 한도를 ${Math.max(3, Math.round(t.avgRounds))} 안팎으로 줄이거나, 다른 끝들의 기준을 늦춰 장면이 더 오래 가게 하세요. ("비율 맞추기"에서 차례 한도 손잡이를 켜면 대신 찾아 줍니다.)`,
+      quick: [{ label: `차례 한도를 ${Math.max(3, Math.round(t.avgRounds))}(으)로 줄이기`, apply: (d) => ({ ...d, maxRounds: Math.max(3, Math.round(t.avgRounds)) }) }] });
   }
   if (!out.length) out.push({ why: `구조에서 막힌 곳은 찾지 못했습니다. 조건이 여러 개 함께 맞아야 하거나(모두·아님 조건), 드물게만 맞는 조합일 수 있습니다. 시험 ${t.runs}판, 평균 ${t.avgRounds}차례.`,
     fix: '조건을 하나씩 따로 둔 끝으로 바꿔 시험해 보면 어느 조건이 막는지 알 수 있습니다. 시험 플레이어를 바꿔 다시 돌려 보는 것도 방법입니다.' });

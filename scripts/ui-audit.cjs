@@ -55,6 +55,7 @@ const SCREENS = [
   ['홈: 세이브', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세이브")'); }],
   ['주인공 만들기', async (p) => { await home(p); await p.click('button:has-text("주인공 만들고 시작")'); }],
   ['플레이 화면', play],
+  ['플레이: 소리·화면 (난이도)', async (p) => { await play(p); await p.click('button:has-text("소리·화면")'); await p.waitForSelector('.av-difficulty'); await p.selectOption('#av-difficulty', '-8'); await p.waitForTimeout(400); }],
   ['플레이: 캐릭터', async (p) => { await play(p); await p.click('button:has-text("캐릭터")'); }],
   ['플레이: 수첩', async (p) => { await play(p); await p.click('button:has-text("수첩")'); }],
   ...EDITOR_TABS.map((t) => [`편집: ${t}`, (p) => editorTab(p, t)]),

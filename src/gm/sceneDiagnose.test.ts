@@ -66,4 +66,33 @@ describe('장면 끝 진단', () => {
     expect(late).toContain('차례 한도(9)가 다했을 때');
     expect(late).toContain('가장 길게 간 판이 3차례');
   });
+
+  it('눌러서 바로 고치기: 고친 장면에서는 그 끝이 나온다 (원본은 그대로)', () => {
+    const fixAndCount = (d: SceneDef, endId: string, pick = 0) => {
+      const before = structuredClone(d);
+      const q = diag(d).find((x) => x.endId === endId)!.findings.flatMap((f) => f.quick ?? [])[pick]!;
+      const fixed = q.apply(d);
+      expect(d).toEqual(before);
+      return { label: q.label, left: diag(fixed).some((x) => x.endId === endId), fixed };
+    };
+    // 순서: 위로 옮기기
+    const order = base({ ends: [{ id: 'win', name: '도착', when: { gauge: 'p', gte: 6 }, outcome: 'success' }, { id: 'great', name: '완주', when: { gauge: 'p', gte: 10 }, outcome: 'success' }] });
+    expect(diag(order).find((x) => x.endId === 'great')!.findings[0]!.quick![0]!.label).toContain('위로 옮기기');
+    expect(fixAndCount(order, 'great').fixed.ends.map((e) => e.id)).toEqual(['great', 'win']);
+    // 범위 밖: 기준을 범위 안으로
+    const range = base({ ends: [{ id: 'x', name: '초월', when: { gauge: 'p', gte: 12 }, outcome: 'success' }, { id: 'win', name: '도착', when: { gauge: 'p', gte: 6 }, outcome: 'success' }] });
+    const r = fixAndCount(range, 'x');
+    expect(r.label).toBe('기준을 10 이상으로');
+    expect(r.fixed.ends[0]!.when).toEqual({ gauge: 'p', gte: 10 });
+    expect(fixAndCount(range, 'x', 1).fixed.gauges[0]!.max).toBe(12);
+    // 차례 한도: 늘리면 나온다
+    const rounds = base({ maxRounds: 3, timeoutEnd: 'late', actions: [{ id: 'go', name: '나아간다', success: { gauges: { p: 1 } } }],
+      ends: [{ id: 'win', name: '도착', when: { gauge: 'p', gte: 6 }, outcome: 'success' }, { id: 'late', name: '시간 초과', when: { round: 99 }, outcome: 'neutral' }] });
+    const rr = fixAndCount(rounds, 'win');
+    expect(rr.label).toBe('차례 한도를 6(으)로 늘리기');
+    expect(rr.left).toBe(false);
+    // 모두·어느 하나 조건 안쪽의 기준도 제자리만 바꾼다
+    const nested = base({ ends: [{ id: 'x', name: '초월', when: { all: [{ gauge: 'r', lte: 10 }, { gauge: 'p', gte: 12 }] }, outcome: 'success' }, { id: 'win', name: '도착', when: { gauge: 'p', gte: 6 }, outcome: 'success' }] });
+    expect(fixAndCount(nested, 'x').fixed.ends[0]!.when).toEqual({ all: [{ gauge: 'r', lte: 10 }, { gauge: 'p', gte: 10 }] });
+  });
 });

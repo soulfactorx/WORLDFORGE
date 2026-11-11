@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { wuxiaSample } from '../data/sample-genres';
 import { createCharacter, suggestedStandardArray } from '../engine/character/sheet';
-import { clampDcMod, difficultyLabel, withDcMod } from '../engine/difficulty';
+import { clampDcMod, combatScale, difficultyEffect, difficultyLabel, withDcMod } from '../engine/difficulty';
 import { sceneActions, newRun } from '../engine/scene';
 import type { SceneDef } from '../engine/schema';
 import { applyEvent, type GameState, replay } from '../engine/state/state';
@@ -31,8 +31,9 @@ describe('게임 난이도 (v0.90)', () => {
       expect(check?.type === 'check_rolled' && check.result.dc).toBe(15 + dcMod);
     }
     expect(withDcMod(5, -6)).toBe(2);
-    expect(clampDcMod(99)).toBe(6);
-    expect(difficultyLabel(-2)).toContain('쉬움');
+    expect(clampDcMod(99)).toBe(8);
+    expect(difficultyLabel(-4)).toContain('쉬움');
+    expect(difficultyLabel(-8)).toContain('이야기');
     expect(difficultyLabel(3)).toContain('사용자 정의');
   });
 
@@ -50,6 +51,42 @@ describe('게임 난이도 (v0.90)', () => {
       { leads: false, onState: (st) => { if (st.log.some((l) => l.kind === 'check')) { seenCheck = true; if (!order.includes('check-shown')) order.push('check-shown'); } } });
     expect(seenCheck).toBe(true);
     expect(order.indexOf('check-shown')).toBeLessThan(order.indexOf('narrator'));
+  });
+});
+
+describe('난이도 점검 (v0.106)', () => {
+  it('이야기는 보통 판정을 대부분 통하게 한다 · 기록에 원래 난이도가 함께 보인다', async () => {
+    const s: GameState = applyEvent(start(), { type: 'difficulty_set', dcMod: -8, label: difficultyLabel(-8) }, 0);
+    const r = await runTurn(mock([]), wuxiaSample, s, '주모를 설득한다', () => {}, undefined, () => {}, undefined, undefined, { leads: false });
+    const check = r.events.find((e) => e.type === 'check_rolled');
+    expect(check?.type === 'check_rolled' && [check.result.dc, check.dcBase]).toEqual([7, 15]);
+    expect(r.state.log.find((l) => l.kind === 'check')?.text).toContain('(난이도 이야기: 15 → 7)');
+    // 보통 난이도에서는 덧붙이지 않는다
+    const n = await runTurn(mock([]), wuxiaSample, start(), '주모를 설득한다', () => {}, undefined, () => {}, undefined, undefined, { leads: false });
+    expect(n.state.log.find((l) => l.kind === 'check')?.text).not.toContain('난이도');
+    expect(difficultyEffect(-8)).toContain('보통 15 → 7');
+    expect(difficultyEffect(0)).toContain('규칙 그대로');
+  });
+  it('GM 판단에게 난이도 등급의 뜻을 알려 준다', async () => {
+    let schema: Record<string, unknown> = {}; let system = '';
+    const llm: LlmClient = { ...mock([]), async json<T>(req: LlmRequest, sc: Record<string, unknown>) { if (req.system.includes('판단 모듈')) { schema = sc; system = req.system; } return mock([]).json<T>(req, sc); } };
+    await runTurn(llm, wuxiaSample, start(), '주모를 설득한다', () => {}, undefined, () => {}, undefined, undefined, { leads: false });
+    const desc = (schema as { properties: { check_dc_tier: { description: string } } }).properties.check_dc_tier.description;
+    expect(desc).toContain('medium=15');
+    expect(desc).toContain('hard는 전문가도');
+    expect(system).toContain('습관처럼 medium·hard를 고르지 않는다');
+  });
+  it('전투: 적의 방어도·명중·체력 — 전투 중에 바꾸면 지금 싸움의 방어도에 바로 적용된다', () => {
+    expect(combatScale(-8)).toEqual({ ac: -4, hp: 0.5 });
+    expect(combatScale(4)).toEqual({ ac: 2, hp: 1.25 });
+    const foe = { id: 'e1', side: 'enemy', ac: 14 }, me = { id: 'player', side: 'player', ac: 15 };
+    const s0 = { ...start(), combat: { combatants: { e1: foe, player: me } } } as unknown as GameState;
+    const s1 = applyEvent(s0, { type: 'difficulty_set', dcMod: -8, label: '이야기' }, 0);
+    expect(s1.combat!.combatants.e1!.ac).toBe(10);
+    expect(s1.combat!.combatants.player!.ac).toBe(15);
+    expect(s1.combat!.difficulty).toBe(-8);
+    expect(applyEvent(s1, { type: 'difficulty_set', dcMod: 0, label: '보통' }, 0).combat!.combatants.e1!.ac).toBe(14); // 되돌리면 원래대로
+    expect(s1.log.at(-1)!.text).toContain('지금 전투에도 적용');
   });
 });
 

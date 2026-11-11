@@ -15,7 +15,7 @@ export type GameEvent =
   /** use: 플레이어가 쓰겠다고 고른 기술·능력치 (v0.16) 예: 'skill:persuasion', 'ability:str' */
   | { type: 'player_input'; text: string; use?: string }
   /** breakdown은 v0.2부터 (수정치 구성: 능력치 + 숙련 등) */
-  | { type: 'check_rolled'; skill: string; reason: string; result: D20Test; rngState: number; breakdown?: ModifierBreakdown; mode?: RollMode }
+  | { type: 'check_rolled'; skill: string; reason: string; result: D20Test; rngState: number; breakdown?: ModifierBreakdown; mode?: RollMode; /** 난이도 보정 전의 DC (보정이 있었을 때만, v0.106) */ dcBase?: number }
   /** images: 이 장면에 보여줄 이미지 (v0.13). 엔진이 고른 에셋 ID와 설명 */
   | { type: 'narration'; text: string; images?: NarrationImage[] }
   | { type: 'moved'; to: EntityId }
