@@ -61,8 +61,15 @@ export interface SimResult {
 
 const CAP = 200;
 
-/** 자동 시뮬레이션: 할 수 있는 행동 중 무작위로 골라 끝까지 */
-export function simulateScene(world: WorldPackage, sceneId: string, sheet: CharacterSheet, runs = 200, seed = 7): SimResult {
+/**
+ * 시험 플레이어가 행동을 고르는 방식 (v0.104).
+ *  - random: 할 수 있는 행동 중 아무거나
+ *  - careful: 열에 일곱은 성공 확률이 가장 높은 행동, 나머지는 아무거나 (판정을 따져 보고 고르는 플레이어)
+ */
+export type SimPolicy = 'random' | 'careful';
+
+/** 자동 시뮬레이션: 할 수 있는 행동 중에서 골라 끝까지 */
+export function simulateScene(world: WorldPackage, sceneId: string, sheet: CharacterSheet, runs = 200, seed = 7, policy: SimPolicy = 'random'): SimResult {
   const def = sceneDef(world, sceneId)!;
   const pick = createRng(seed);
   const ends: Record<string, number> = {};
@@ -74,7 +81,12 @@ export function simulateScene(world: WorldPackage, sceneId: string, sheet: Chara
     while (s.scene && rounds < CAP) {
       const ok = sceneActions(def, s.scene, s.player.sheet).filter((a) => a.ok);
       if (!ok.length) break;
-      const a = ok[Math.floor(pick.next() * ok.length)]!.action;
+      let a = ok[Math.floor(pick.next() * ok.length)]!.action;
+      if (policy === 'careful' && pick.next() < 0.7) {
+        // 성공 확률: 판정이 없으면 반드시 성공, 있으면 d20 + 보정 ≥ DC
+        const chance = (x: (typeof ok)[number]) => (x.spec ? Math.max(0.05, Math.min(0.95, (21 - (x.dc - (x.mod ?? 0))) / 20)) : 1);
+        a = ok.reduce((best, x) => (chance(x) > chance(best) ? x : best)).action;
+      }
       used.add(a.id);
       s = sandboxAct(world, s, a.id);
       rounds++;

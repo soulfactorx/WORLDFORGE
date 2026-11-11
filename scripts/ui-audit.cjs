@@ -118,6 +118,12 @@ const SCREENS = [
     await p.selectOption('.card-summary select', 'focus');
     await p.click('.card-summary details > summary');
   }],
+  ['장면 시험: 결과 비율 맞추기', async (p) => {
+    await editorTab(p, '장면'); await p.click('button:has-text("추가하고 바로 테스트")'); await p.waitForSelector('.scene-tester');
+    await p.click('.scene-balance > summary');
+    await p.click('.scene-balance button:has-text("맞추기")');
+    await p.waitForSelector('.balance-result', { timeout: 60000 });
+  }],
   ['AI 설정 (제공자 2개 · 역할 안내 펼침)', async (p) => {
     await home(p);
     await p.evaluate(() => localStorage.setItem('worldforge.llm', JSON.stringify({ provider: 'anthropic', apiKey: 'k', model: 'claude-sonnet-5-5', defaultProvider: 'a',

@@ -9,9 +9,11 @@ import { abandonSceneEvents, sceneOpponent } from '../gm/scene';
 import { applyEvent } from '../engine/state/state';
 import { AssetImage } from './AssetImage';
 import { ScenePanel } from './ScenePanel';
+import { SceneBalance } from './SceneBalance';
+import type { SceneDef } from '../engine/schema';
 
 /** 장면 시험 플레이 (v0.71): 편집 중인 장면을 저장 없이 바로 */
-export function SceneTester({ w, sceneId, onClose }: { w: WorldPackage; sceneId: string; onClose: () => void }) {
+export function SceneTester({ w, sceneId, onClose, onApply }: { w: WorldPackage; sceneId: string; onClose: () => void; /** 결과 비율 맞추기가 찾은 설정을 장면에 넣는다 (v0.104) */ onApply?: (d: SceneDef) => void }) {
   const def = sceneDef(w, sceneId);
   const classes = classesFor(w);
   const [cls, setCls] = useState(0);
@@ -77,6 +79,7 @@ export function SceneTester({ w, sceneId, onClose }: { w: WorldPackage; sceneId:
             </ul>
           </section>
         )}
+        <SceneBalance key={sceneId} w={w} def={def} sheet={sheet} {...(onApply ? { onApply: (d: SceneDef) => { onApply(d); setSim(null); } } : {})} />
       </div>
     </div>
   );
