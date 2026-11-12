@@ -159,6 +159,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   useEffect(() => { reload(); return () => abort.current?.abort(); }, [saveId]);
   // 자동 스크롤 (v0.51.1): 맨 아래를 보고 있을 때만 따라간다. 위로 올리면 멈추고 "↓ 새 글" 버튼으로 돌아온다.
   // 글이 길어질 때마다 끌어내리지 않으므로 AI가 쓰는 동안에도 마음대로 스크롤할 수 있다.
+  // 전투창에 보일 "방금 일어난 일"의 시작 위치 (v0.109): 마지막 전투 행동 직전의 기록 길이
+  const combatMark = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const [behind, setBehind] = useState(false);
@@ -272,6 +274,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   async function commitCombat(make: (s: GameState) => GameEvent[]) {
     if (!state?.combat || streaming !== null) return;
     setError('');
+    combatMark.current = state.log.length; // 이 행동으로 생기는 기록부터 전투창의 "방금 일어난 일"에 보인다
     const before = state.combat;
     let events: GameEvent[];
     const dbg = beginDebug('combat', `전투 행동 (턴 ${state.turn}, 라운드 ${state.combat.round ?? '?'})`, { saveId, turn: state.turn });
@@ -393,7 +396,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
 
   return (
     <ReskinContext.Provider value={rs}>
-    <section className={`play img-${imgSize}`}>
+    <section className={`play img-${imgSize}${state.combat && !state.playerDead ? ' in-combat' : ''}`}>
       <div className="play-head">
       <div className="scene-bar">
         {locImage && <AssetImage pkg={world.manifest.id} id={locImage.id} alt={loc?.name ?? ''} className="loc-thumb" zoom />}
@@ -515,6 +518,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       {error && <p className="status">❌ {error}</p>}
       {state.playerDead ? null : state.combat ? (
         <CombatPanel cs={state.combat} busy={streaming !== null} orders={state.partyOrders}
+          recent={(() => { const start = state.log.findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 시작')); return state.log.slice(Math.max(start, combatMark.current, 0)).filter((l) => l.kind === 'combat').map((l) => l.text); })()}
           portrait={(id) => { const img = id === 'player' ? undefined : pickCharacterImage(world, id, 'battle', 'combat'); return img ? <AssetImage pkg={world.manifest.id} id={img.id} alt="" /> : undefined; }}
           onOrder={(npcId: string, order: PartyOrder) => commitCombat((s) => setPartyOrder(s, npcId, order))}
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}

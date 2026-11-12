@@ -56,6 +56,23 @@ const SCREENS = [
   ['주인공 만들기', async (p) => { await home(p); await p.click('button:has-text("주인공 만들고 시작")'); }],
   ['플레이 화면', play],
   ['플레이: 소리·화면 (난이도)', async (p) => { await play(p); await p.click('button:has-text("소리·화면")'); await p.waitForSelector('.av-difficulty'); await p.selectOption('#av-difficulty', '-8'); await p.waitForTimeout(400); }],
+  ['플레이: 전투 중 (기록과 전투창이 함께 보인다)', async (p) => {
+    await home(p);
+    // 전투가 진행 중인 세이브를 넣는다 (scripts/fixtures/combat-save.json — 샘플 세계의 늑대 조우)
+    const fx = JSON.parse(require('fs').readFileSync(path.resolve(__dirname, 'fixtures/combat-save.json'), 'utf8'));
+    await p.evaluate(async (fx) => {
+      await new Promise((res, rej) => { const rq = indexedDB.open('worldforge'); rq.onerror = () => rej(rq.error); rq.onsuccess = () => {
+        const d = rq.result; const tx = d.transaction(['saves', 'events'], 'readwrite');
+        tx.objectStore('saves').put({ id: 'audit-combat', name: '점검용 전투', packageId: fx.packageId, packageVersion: fx.packageVersion, createdAt: Date.now(), updatedAt: Date.now() + 1000 });
+        fx.events.forEach((event, seq) => tx.objectStore('events').put({ saveId: 'audit-combat', seq, turn: 0, event }));
+        tx.oncomplete = () => { d.close(); res(); }; tx.onerror = () => rej(tx.error);
+      }; });
+    }, fx);
+    await p.reload(); await p.waitForTimeout(400);
+    await p.click('.home-tabs button:has-text("세이브")');
+    await p.locator('.saves li', { hasText: '점검용 전투' }).locator('button').first().click();
+    await p.waitForSelector('.combat-panel');
+  }],
   ['플레이: 캐릭터', async (p) => { await play(p); await p.click('button:has-text("캐릭터")'); }],
   ['플레이: 수첩', async (p) => { await play(p); await p.click('button:has-text("수첩")'); }],
   ...EDITOR_TABS.map((t) => [`편집: ${t}`, (p) => editorTab(p, t)]),
@@ -140,6 +157,8 @@ const SCREENS = [
   ['편집: 선택형 (세계 수치)', async (p) => {
     await editorTab(p, '이야기 흐름');
     await p.locator('.struct-field', { hasText: '세계 수치 (지역 치안' }).first().locator('button:has-text("＋ 세계 수치 추가")').click();
+    await p.locator('.struct-field', { hasText: '세계 수치 (지역 치안' }).first().locator('button:has-text("＋ 단계 추가")').click();
+    await p.locator('.struct-field', { hasText: '세계 수치 (지역 치안' }).first().locator('button:has-text("＋ 단계 추가")').click();
   }],
   ['편집: 선택형 (상점·주울 것 — ID로 묶인 표)', async (p) => {
     await editorTab(p, '아이템·상점');

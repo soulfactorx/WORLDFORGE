@@ -16,7 +16,7 @@ const SLOT_LABEL = (r: Record<string, { cur: number; max: number }>) =>
 /** 적 역할별 표식 (초상화가 없을 때) */
 const ROLE_GLYPH: Record<string, string> = { minion: '🗡', brute: '🪓', skirmisher: '🏹', artillery: '🎯', controller: '🌀', leader: '🚩', boss: '👑' };
 
-export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, portrait }: {
+export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, portrait, recent }: {
   cs: CombatState;
   /** 전투원 초상화 (동료·플레이어). 없으면 표식 */
   portrait?: (combatantId: string) => ReactNode;
@@ -25,8 +25,13 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, portr
   onAct: (cardId: string, target: Target) => void;
   onEndTurn: () => void;
   onOrder: (npcId: string, order: PartyOrder) => void;
+  /** 방금 일어난 일 (v0.109): 마지막 행동 뒤에 생긴 전투 기록 — 전투창 안에서 바로 읽는다 */
+  recent?: string[];
 }) {
   const rs = useRs();
+  // 새 줄이 생기면 맨 아래(가장 최근)로
+  const recentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { const el = recentRef.current; if (el) el.scrollTop = el.scrollHeight; }, [recent?.length, recent?.at(-1)]);
   const companions = Object.values(cs.combatants).filter((c) => c.side === 'party' && !c.isPlayer);
   const enemies = Object.values(cs.combatants).filter((c) => c.side === 'enemy' && alive(c));
   const [selected, setSelected] = useState<CardDef | null>(null);
@@ -124,6 +129,15 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, portr
           <b>{rs(selected.name)}</b>: {selected.target === 'zone' ? '이동할 존을 고르세요.' : selected.target === 'area' ? '주문을 펼칠 존을 고르세요.' : '대상을 고르세요.'}{' '}
           <button type="button" onClick={() => setSelected(null)}>취소</button>
         </p>
+      )}
+
+      {recent && recent.length > 0 && (
+        <div className="combat-recent" aria-label="방금 일어난 일">
+          <div className="combat-recent-head small"><b>방금 일어난 일</b> <span className="muted">({recent.length}줄 · 전체 기록은 위쪽)</span></div>
+          <div className="combat-recent-body" ref={recentRef} aria-live="polite" tabIndex={0}>
+            {recent.map((t, i) => <p key={i} className={i === recent.length - 1 ? 'last' : ''}>{rs(t)}</p>)}
+          </div>
+        </div>
       )}
 
       {companions.length > 0 && (

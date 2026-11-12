@@ -23,6 +23,10 @@ export type Field =
   | (Base & { t: 'enum'; options: (readonly [string, string])[]; /** 값을 숫자로 저장한다 (예: 전열 2 · 후열 3) */ asNumber?: boolean })
   | (Base & { t: 'ref'; of: RefKind })
   | (Base & { t: 'refs'; of: RefKind })
+  /** 경험치: 없음 · 작은 보상 · 큰 보상 · 숫자로 (v0.109) */
+  | (Base & { t: 'xp' })
+  /** [숫자, 이름] 짝의 목록 — 세계 수치의 단계 이름 같은 것 (v0.109) */
+  | (Base & { t: 'pairs'; numLabel: string; textLabel: string; add: string })
   | (Base & { t: 'cond' })
   | (Base & { t: 'effects' })
   | (Base & { t: 'obj'; fields: Field[] })
@@ -79,6 +83,31 @@ function FieldInput({ f, value, w, onChange }: { f: Field; value: unknown; w: Wo
           <select value="" aria-label={`${f.label} 추가`} onChange={(e) => { if (e.target.value) out([...cur, e.target.value]); }}>
             <option value="">＋ 추가…</option>{opts.filter(([v]) => !cur.includes(v)).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
         </div>); }
+    case 'xp': { const mode = typeof value === 'number' ? 'num' : value === 'minor' || value === 'major' ? (value as string) : '';
+      return (
+        <div className="struct-xp"><label>{f.label}{hint}
+          <select value={mode} onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value === 'num' ? (typeof value === 'number' ? value : 50) : e.target.value)}>
+            <option value="">(없음)</option><option value="minor">작은 보상 (다음 레벨까지의 15%)</option><option value="major">큰 보상 (40%)</option><option value="num">숫자로 정하기</option>
+          </select></label>
+          {mode === 'num' && <label>경험치 값<input type="number" className="num" min={0} value={value as number} onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))} /></label>}
+        </div>); }
+    case 'pairs': { const rows = Array.isArray(value) ? (value as [number, string][]) : [];
+      const set = (n: [number, string][]) => out(n);
+      return (
+        <fieldset className="struct-obj"><legend>{f.label}</legend>{hint}
+          {rows.length === 0 && <p className="small muted">아직 없습니다.</p>}
+          {rows.map((r, i) => (
+            <div key={i} className="struct-pair">
+              <label>{f.numLabel}<input type="number" className="num" value={r[0] ?? 0} onChange={(e) => set(rows.map((x, j) => (j === i ? [Number(e.target.value) || 0, x[1]] : x)))} /></label>
+              <label className="struct-pair-text">{f.textLabel}<input value={r[1] ?? ''} onChange={(e) => set(rows.map((x, j) => (j === i ? [x[0], e.target.value] : x)))} /></label>
+              <button type="button" className="icon" aria-label={`${i + 1}번째 지우기`} title="지우기" onClick={() => set(rows.filter((_, j) => j !== i))}>🗑</button>
+            </div>
+          ))}
+          <div className="row">
+            <button type="button" className="small" onClick={() => set([...rows, [rows.length ? (rows.at(-1)![0] ?? 0) + 10 : 0, '']])}>＋ {f.add}</button>
+            {rows.length > 1 && rows.some((r, i) => i > 0 && r[0] < rows[i - 1]![0]) && <button type="button" className="small" onClick={() => set([...rows].sort((a, b) => a[0] - b[0]))}>작은 값부터 정렬</button>}
+          </div>
+        </fieldset>); }
     case 'cond': return <ConditionField label={f.label} value={value as Condition | undefined} world={w} optional={!!f.opt} onChange={(c) => onChange(c)} />;
     case 'effects': return <EffectsEditor label={f.label} value={value as StoryEffect[] | undefined} w={w} onChange={(v) => onChange(v.length || !f.opt ? v : undefined)} />;
     case 'obj': return <fieldset className="struct-obj"><legend>{f.label}</legend>{hint}<Fields fields={f.fields} value={(value as Rec) ?? {}} w={w} onChange={(v) => out(v)} /></fieldset>;
@@ -184,7 +213,7 @@ const STACKS: ListSpec = {
 
 /** 보상 (임무·의뢰·장면 끝 공용) */
 export const REWARD_FIELDS: Field[] = [
-  { k: 'xp', label: '경험치', t: 'enum', opt: true, options: [['minor', '작은 보상 (레벨에 맞춰)'], ['major', '큰 보상 (레벨에 맞춰)']], hint: '정해진 숫자로 주려면 JSON에서 "xp": 100처럼 적습니다' },
+  { k: 'xp', label: '경험치', t: 'xp', opt: true, hint: '숫자로 정해도 레벨에 비례한 최소치는 보장됩니다' },
   { k: 'money', label: '돈', t: 'num', opt: true },
   { k: 'items', label: '아이템', t: 'list', opt: true, spec: STACKS },
   { k: 'relationship', label: '관계 변화', t: 'list', opt: true, spec: {
@@ -230,7 +259,8 @@ export const SPEC = {
   vars: { add: '세계 수치 추가', make: (_w, n) => ({ id: `var/new-${n}`, name: '새 수치', initial: 50 }), title: (x) => `${x.name ?? ''} (${x.id ?? ''}) — 처음 ${x.initial ?? 0}`,
     fields: [{ k: 'id', label: 'ID (var/…)', t: 'text' }, { k: 'name', label: '이름', t: 'text' }, { k: 'initial', label: '처음 값', t: 'num' },
       { k: 'min', label: '최소 (비우면 0)', t: 'num', opt: true }, { k: 'max', label: '최대 (비우면 100)', t: 'num', opt: true },
-      { k: 'visible', label: '플레이어에게 보인다 (수첩·서술 분위기)', t: 'bool' }] } as ListSpec,
+      { k: 'visible', label: '플레이어에게 보인다 (수첩·서술 분위기)', t: 'bool' },
+      { k: 'labels', label: '단계 이름', t: 'pairs', opt: true, numLabel: '이 값 이상이면', textLabel: '이름', add: '단계 추가', hint: '값이 그 숫자 이상이면 그 이름으로 불린다. 예: 0 무법 · 40 불안 · 70 평온 (작은 값부터)' }] } as ListSpec,
   approaches: { add: '접근법 추가', make: () => ({ hint: '' }), title: (x) => String(x.hint ?? ''),
     fields: [{ k: 'hint', label: 'GM에게: 이런 길도 있다', t: 'long' }, { k: 'skills', label: '쓰이는 기술', t: 'refs', of: 'skills', opt: true }, { k: 'risk', label: '위험', t: 'text', opt: true }] } as ListSpec,
   outcomes: { add: '결과 추가', make: (_w, n) => ({ id: `outcome-${n}`, name: '새 결과', when: { all: [] } }), title: (x) => String(x.name ?? ''),
