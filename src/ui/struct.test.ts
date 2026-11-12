@@ -32,6 +32,13 @@ describe('선택형 편집기의 명세', () => {
   it('돌발 사건·ID로 묶인 표의 명세', () => {
     expect(SPEC.randomEvents.title({ name: '늑대 떼', kind: 'ambush' }, sampleWorld)).toBe('늑대 떼 · 기습');
     expect(SPEC.shops.make()).toEqual({ name: '상점', items: [] });
+    // 적으로 세울 수 있는 것: 적 목록 + 인물 ("npc:인물ID")
+    const foes = refOptions(sampleWorld, 'foes');
+    const npc = sampleWorld.characters[0]!;
+    expect(foes.find(([v]) => v === `npc:${npc.id}`)?.[1]).toContain(`인물: ${npc.name}`);
+    expect(foes.length).toBe(refOptions(sampleWorld, 'monsters').length + sampleWorld.characters.length);
+    const enemies = SPEC.randomEvents.fields.find((f) => f.k === 'enemies');
+    expect(enemies?.t === 'list' && enemies.spec.title({ monsterId: `npc:${npc.id}`, zone: 3 }, sampleWorld)).toBe(`인물: ${npc.name} · 후열`);
     expect(SPEC.pickups.of).toBe('locations');
     expect(SPEC.gives.of).toBe('characters');
   });

@@ -15,7 +15,9 @@ import { ConditionField } from './ConditionEditor';
 import { JsonField } from './form';
 import { EffectsEditor } from './WorldForms';
 
-export type RefKind = 'locations' | 'characters' | 'claims' | 'factions' | 'scenes' | 'encounters' | 'quests' | 'items' | 'monsters' | 'flags' | 'skills';
+export type RefKind = 'locations' | 'characters' | 'claims' | 'factions' | 'scenes' | 'encounters' | 'quests' | 'items' | 'monsters' | 'flags' | 'skills'
+  /** 적으로 세울 수 있는 것: 적 목록 + 이 세계의 인물 ("npc:인물ID" — 그 인물의 직업·레벨·능력치로 싸운다) (v0.110) */
+  | 'foes';
 type Base = { k: string; label: string; hint?: string; /** 비우면 칸 자체를 지운다 */ opt?: boolean };
 export type Field =
   | (Base & { t: 'text' | 'long' | 'num' })
@@ -49,6 +51,7 @@ export function refOptions(w: WorldPackage, of: RefKind): (readonly [string, str
     case 'claims': return w.claims.map((c) => [c.id, `${c.statement.slice(0, 36)}${c.statement.length > 36 ? '…' : ''} (${c.id})`] as const);
     case 'items': return allItems(w).map((i) => [i.id, `${i.name} (${i.id})`] as const);
     case 'monsters': return Object.values(monsterTable(w)).map((m) => [m.id, `${m.name} (${m.id})`] as const);
+    case 'foes': return [...Object.values(monsterTable(w)).map((m) => [m.id, `${m.name} (${m.id})`] as const), ...w.characters.map((c) => [`npc:${c.id}`, `인물: ${c.name} (${c.id})`] as const)];
     case 'flags': return (w.flags ?? []).map((f) => [f.id, f.id] as const);
     case 'skills': return (Object.keys(SKILLS) as SkillId[]).map((k) => [k, `${SKILLS[k].name} (${k})`] as const);
   }
@@ -276,9 +279,9 @@ export const SPEC = {
       { k: 'where', label: '일어나는 장소 (비우면 어디서나)', t: 'refs', of: 'locations', opt: true }, { k: 'dangerous', label: '위험한 곳(조우가 있는 장소)에서만', t: 'bool' },
       { k: 'weight', label: '나올 무게 (비우면 1)', t: 'num', opt: true }, { k: 'cooldownDays', label: '다시 일어나기까지 며칠 (비우면 1)', t: 'num', opt: true },
       { k: 'condition', label: '조건 (비우면 늘)', t: 'cond', opt: true }, { k: 'effects', label: '일어나는 일', t: 'effects', opt: true },
-      { k: 'enemies', label: '기습의 적 (비우면 장르·레벨에 맞게)', t: 'list', opt: true, hint: '인물을 적으로 세우려면 JSON에서 "monsterId": "npc:인물ID"로 적는다', spec: {
-        add: '적 추가', make: (w) => ({ monsterId: first(w, 'monsters'), zone: 2 }), title: (x, w) => `${nameOf(w, 'monsters', x.monsterId)} · ${x.zone === 3 ? '후열' : '전열'}`,
-        fields: [{ k: 'monsterId', label: '적', t: 'ref', of: 'monsters' }, { k: 'zone', label: '자리', t: 'enum', asNumber: true, options: [['2', '전열'], ['3', '후열']] }] } }] } as ListSpec,
+      { k: 'enemies', label: '기습의 적 (비우면 장르·레벨에 맞게)', t: 'list', opt: true, hint: '목록 아래쪽의 "인물: …"을 고르면 그 인물이 자기 직업·레벨·능력치로 적이 된다', spec: {
+        add: '적 추가', make: (w) => ({ monsterId: first(w, 'foes'), zone: 2 }), title: (x, w) => `${nameOf(w, 'foes', x.monsterId)} · ${x.zone === 3 ? '후열' : '전열'}`,
+        fields: [{ k: 'monsterId', label: '적 (적 목록 또는 이 세계의 인물)', t: 'ref', of: 'foes' }, { k: 'zone', label: '자리', t: 'enum', asNumber: true, options: [['2', '전열'], ['3', '후열']] }] } }] } as ListSpec,
   shops: { of: 'locations', add: '상점을 둘 장소', make: () => ({ name: '상점', items: [] }),
     fields: [{ k: 'name', label: '상점 이름', t: 'text' }, { k: 'items', label: '파는 물건', t: 'refs', of: 'items' }, { k: 'factionId', label: '세력 (평판에 따라 값이 바뀐다)', t: 'ref', of: 'factions', opt: true },
       { k: 'buys', label: '플레이어의 물건을 사 준다', t: 'bool', dflt: true }] } as MapSpec,
