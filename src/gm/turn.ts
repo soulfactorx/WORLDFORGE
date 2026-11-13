@@ -802,7 +802,50 @@ export async function runTurn(
     : fromTail ? Promise.resolve(fromTail)
     : gmGuide(llm, world, guideState, narration, signal).catch((e) => { if (signal?.aborted) throw e; return basicGuide(world, guideState); });
 
-  // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략)
+  // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략). 8턴마다 이야기 요약과 함께
+  for (const e of await recorderEvents(llm, world, s, narration, turn, rejected, signal)) push(e);
+  { const g = await guideP; if (g) push(g); }
+
+  return { events, state: s, rejected };
+}
+
+/** 이 인물이 기억하는 플레이어의 선택 (그 인물·그 인물의 세력에 걸린 것) */
+export function actorLedger(world: WorldPackage, s: GameState, npc: Character): string {
+  const xs = (s.ledger ?? []).filter((l) => l.stake.endsWith(`:${npc.id}`) || (npc.faction && l.stake === `side:${npc.faction}`) || l.stake.startsWith('expose:')).slice(-3);
+  return xs.length ? `\n\n## 네가 기억하는 이 낯선 이의 선택 (네 태도에 반영한다)\n${xs.map((l) => `- ${s.turn - l.turn}턴 전: ${l.label} — "${l.choice}"`).join('\n')}` : '';
+}
+
+/** 파장 원장 — 플레이어가 최근에 내린 무게 있는 선택 (인물·세계가 기억한다, v0.114) */
+export function ledgerBlock(s: GameState, n = 4): string {
+  const xs = (s.ledger ?? []).slice(-n);
+  return xs.length ? `\n\n## 플레이어가 최근에 내린 선택 (세계와 인물이 기억한다 — 이것의 결과를 지금 목표보다 먼저 이야기에 반영한다)\n${xs.map((l) => `- ${s.turn - l.turn}턴 전: ${l.label} — "${l.choice}"${l.returned ? ` (이미 돌아옴: ${l.returned})` : ''}`).join('\n')}` : '';
+}
+
+/** 지금 국면의 GM 스타일을 입힌 세계 (프롬프트용, v0.113) */
+export function phaseStyled(world: WorldPackage, s: GameState): WorldPackage {
+  const ph = currentPhase(world, s);
+  return ph?.gmStyle ? { ...world, gmStyle: { ...(world.gmStyle ?? {}), preset: ph.gmStyle } } : world;
+}
+
+/** 이 인물의 연기를 NPC 연기 AI에게 따로 맡겨야 하는가 (v0.111) */
+export function actorNeeded(world: WorldPackage, s: GameState, npc: Character, engineLead: boolean): boolean {
+  if (engineLead) return true;
+  if (pendingGifts(world, s, npc.id).length) return true;
+  if (npc.companion && !s.party[npc.id]) return true; // 동행 제안에 답해야 할 수 있다
+  if (activeBeats(world, s).some((b) => b.npcId === npc.id)) return true;
+  const confirmed = new Set(s.beliefs.filter((b) => b.holder === 'player' && b.state === 'confirmed').map((b) => b.claim));
+  return [...world.beliefs, ...s.beliefs].some((b) => b.holder === npc.id && !confirmed.has(b.claim));
+}
+/** 긴 글의 뒷부분만 (앞을 자른다) */
+const cutTail = (t: string, n: number) => (t.length > n ? `…${t.slice(-n)}` : t);
+const cleanIntent = (x?: string) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
+
+
+/** 기록관 (8턴마다 이야기 요약과 함께): 지난 서술에서 즉흥 설정을 뽑고 요약을 갱신한다. 실패해도 턴은 유지한다 */
+export async function recorderEvents(llm: LlmClient, world: WorldPackage, s0: GameState, narration: string, turn: number, rejected: string[], signal?: AbortSignal): Promise<GameEvent[]> {
+  const out: GameEvent[] = [];
+  const s = s0;
+  const push = (e: GameEvent) => { out.push(e); };
   try {
     // 지어내기 금지 대상은 기록관에게 아예 보여 주지 않는다 (실제 모델 평가에서 금지 대상 기록 시도가 거부의 대부분)
     // 기록관은 이야기 요약과 함께 몇 턴마다 한 번 (v0.111, 설계 v6 M1): 그동안의 서술을 한꺼번에 읽는다
@@ -831,44 +874,11 @@ export async function runTurn(
   } catch (e) {
     if (signal?.aborted && !(e instanceof SkipRecorder)) throw e;
   }
-  { const g = await guideP; if (g) push(g); }
-
-  return { events, state: s, rejected };
+  return out;
 }
-
-/** 이 인물이 기억하는 플레이어의 선택 (그 인물·그 인물의 세력에 걸린 것) */
-function actorLedger(world: WorldPackage, s: GameState, npc: Character): string {
-  const xs = (s.ledger ?? []).filter((l) => l.stake.endsWith(`:${npc.id}`) || (npc.faction && l.stake === `side:${npc.faction}`) || l.stake.startsWith('expose:')).slice(-3);
-  return xs.length ? `\n\n## 네가 기억하는 이 낯선 이의 선택 (네 태도에 반영한다)\n${xs.map((l) => `- ${s.turn - l.turn}턴 전: ${l.label} — "${l.choice}"`).join('\n')}` : '';
-}
-
-/** 파장 원장 — 플레이어가 최근에 내린 무게 있는 선택 (인물·세계가 기억한다, v0.114) */
-function ledgerBlock(s: GameState, n = 4): string {
-  const xs = (s.ledger ?? []).slice(-n);
-  return xs.length ? `\n\n## 플레이어가 최근에 내린 선택 (세계와 인물이 기억한다 — 이것의 결과를 지금 목표보다 먼저 이야기에 반영한다)\n${xs.map((l) => `- ${s.turn - l.turn}턴 전: ${l.label} — "${l.choice}"${l.returned ? ` (이미 돌아옴: ${l.returned})` : ''}`).join('\n')}` : '';
-}
-
-/** 지금 국면의 GM 스타일을 입힌 세계 (프롬프트용, v0.113) */
-function phaseStyled(world: WorldPackage, s: GameState): WorldPackage {
-  const ph = currentPhase(world, s);
-  return ph?.gmStyle ? { ...world, gmStyle: { ...(world.gmStyle ?? {}), preset: ph.gmStyle } } : world;
-}
-
-/** 이 인물의 연기를 NPC 연기 AI에게 따로 맡겨야 하는가 (v0.111) */
-export function actorNeeded(world: WorldPackage, s: GameState, npc: Character, engineLead: boolean): boolean {
-  if (engineLead) return true;
-  if (pendingGifts(world, s, npc.id).length) return true;
-  if (npc.companion && !s.party[npc.id]) return true; // 동행 제안에 답해야 할 수 있다
-  if (activeBeats(world, s).some((b) => b.npcId === npc.id)) return true;
-  const confirmed = new Set(s.beliefs.filter((b) => b.holder === 'player' && b.state === 'confirmed').map((b) => b.claim));
-  return [...world.beliefs, ...s.beliefs].some((b) => b.holder === npc.id && !confirmed.has(b.claim));
-}
-/** 긴 글의 뒷부분만 (앞을 자른다) */
-const cutTail = (t: string, n: number) => (t.length > n ? `…${t.slice(-n)}` : t);
-const cleanIntent = (x?: string) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
 
 /** Director에게만 주는 시나리오 정보: 진행 중인 임무 힌트, 세울 수 있는 플래그, 발견할 수 있는 것 */
-function scenarioBlock(world: WorldPackage, s: GameState): string {
+export function scenarioBlock(world: WorldPackage, s: GameState): string {
   const quests = activeQuests(world, s).map((q) => {
     const left = q.quest.timeLimit && s.quests[q.quest.id]?.startedAt !== undefined ? q.quest.timeLimit.days - (s.worldMinutes - s.quests[q.quest.id]!.startedAt!) / 1440 : undefined;
     const giver = q.quest.giver ? world.characters.find((c) => c.id === q.quest.giver)?.name : undefined;
@@ -994,18 +1004,22 @@ export function startEvents(world: WorldPackage, character: CharacterSheet, seed
 
 /** 서술 문체 지침 (패키지 데이터 — 지시가 아니라 참고) */
 function narratorSystem(world: WorldPackage): string {
-  const base = `${NARRATOR_SYSTEM}\n- ${genreGuide(world)}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}`;
+  return `${NARRATOR_SYSTEM}${systemExtras(world)}`;
+}
+/** 서술 시스템 프롬프트의 세계별 덧붙임: 장르 · 등급 · GM 스타일 · 문체 (한 번 호출 턴과 함께 쓴다, v0.118) */
+export function systemExtras(world: WorldPackage): string {
+  const base = `\n- ${genreGuide(world)}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}`;
   if (!world.style?.trim()) return base;
   return `${base}\n\n## 이 세계의 문체 참고 (패키지 데이터. 위 규칙과 충돌하면 위 규칙이 우선)\n${world.style.slice(0, 1500)}`;
 }
 
-function sceneTagBlock(world: WorldPackage, locationId: string): string {
+export function sceneTagBlock(world: WorldPackage, locationId: string): string {
   const tags = sceneTags(world, locationId);
   return tags.length ? `\n\n## 장면 이미지 태그\n${tags.join(', ')}` : '';
 }
 
 /** 이 인물이 지금 건넬 수 있는 것 (엔진이 선언된 것만 허용) */
-function giftBlock(world: WorldPackage, s: GameState, npcId: string): string {
+export function giftBlock(world: WorldPackage, s: GameState, npcId: string): string {
   const gifts = pendingGifts(world, s, npcId);
   return gifts.length ? `\n\n## 네가 줄 수 있는 것 (그럴 만한 상황에서만 건넨다. 건네면 give_items에 key)\n${gifts.map((g) => `- ${g.key}: ${itemDef(world, g.itemId)!.name}${(g.n ?? 1) > 1 ? ` ×${g.n}` : ''}`).join('\n')}` : '';
 }
