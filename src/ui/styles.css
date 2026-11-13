@@ -1149,3 +1149,7 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .offline-bar p { margin: 0; flex: 1 1 220px; min-width: 0; }
 .demo-card { border: 2px solid var(--accent); border-radius: 12px; padding: 12px 14px; background: var(--surface); margin-bottom: 12px; }
 .demo-card p { margin: 4px 0 8px; }
+
+/* 예전 장치 (v0.117): 접어 둔다 */
+.legacy-tools { border: 1px dashed var(--border); border-radius: 8px; padding: 6px 10px; margin: 10px 0; }
+.legacy-tools > summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

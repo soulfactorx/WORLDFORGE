@@ -676,7 +676,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           help={`이 세계의 적: ${monstersOfWorld(w).map((m) => `${m.id}(${m.name}·${m.xp}XP)`).join(', ')} · zone 2=적 전열, 3=적 후열 · trigger는 Director에게만 보이는 발동 조건 · when(엔진 조건)·force(바로 시작)·intro·onVictory/onDefeat/onFlee(효과)·retry(진 뒤 쉬는 턴 수, 기본 3 · "gone")`} />
       )}
       {tab === 'encounters' && (
-        (w.randomEvents === undefined
+        <details className="legacy-tools" open={!!w.randomEvents?.length && !w.storylets?.length}><summary className="small"><b>돌발 사건 표</b> — 예전 장치 <span className="muted">(설계 v6: 갈래 카드에 「돌발」 표시를 붙인 카드가 같은 일을 더 잘 한다. 카드가 있는 세계는 잔잔할 때 돌발 사건 대신 카드를 펼친다)</span></summary>
+        {(w.randomEvents === undefined
           ? <div className="struct-field"><div className="struct-head"><span className="struct-label">돌발 사건 표 (이동·휴식 때 엔진이 굴린다)</span></div>
               <p className="small muted">지금은 기본 표를 씁니다: 기습 · 뜻밖의 발견 · 길손 · 수군거림.</p>
               <div className="row"><button type="button" className="small" onClick={() => set({ randomEvents: [] })}>이 세계만의 표를 직접 정하기</button></div></div>
@@ -684,7 +685,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <StructField w={w} spec={{ list: SPEC.randomEvents }} label="돌발 사건 표 (이동·휴식 때 엔진이 굴린다 — 목록이 비어 있으면 돌발 사건이 일어나지 않는다)" value={w.randomEvents} rows={6}
                 onChange={(randomEvents) => set({ randomEvents: Array.isArray(randomEvents) ? randomEvents : undefined })} />
               <div className="row"><button type="button" className="small" onClick={() => { if (!w.randomEvents?.length || confirm('직접 정한 돌발 사건을 지우고 기본 표로 되돌릴까요?')) set({ randomEvents: undefined }); }}>기본 표로 되돌리기</button></div>
-            </>)
+            </>)}
+        </details>
       )}
       {tab === 'encounters' && (w.encounters ?? []).length > 0 && (
         <ul className="small">
@@ -727,12 +729,13 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <JsonField label="결말" value={w.endings ?? []} onChange={(endings) => set({ endings })} rows={8} />
             </>
           )}
-          <h4>의뢰판</h4>
+          <details className="legacy-tools" open={w.locations.some((l) => l.board) && !w.storylets?.length}><summary className="small"><b>의뢰판</b> — 예전 장치 <span className="muted">(설계 v6: 반복할 수 있는 갈래 카드 — 「의뢰」 표시와 「다시 나올 수 있다」 — 가 같은 일을 한다. 쓰던 의뢰판은 그대로 동작한다)</span></summary>
           {questView === 'form' ? <BoardForms w={w} set={set} /> : (
           <JsonField label="의뢰판 (장소 ID → 의뢰판, 반복할 수 있는 의뢰)" value={Object.fromEntries(w.locations.flatMap((l) => (l.board ? [[l.id, l.board]] : [])))}
             onChange={(m: Record<string, Location['board']>) => m && typeof m === 'object' && set({ locations: w.locations.map((l) => { const { board: _b, ...rest } = l; return m[l.id] ? { ...rest, board: m[l.id] } : rest; }) })} rows={12}
             help='예: { "loc/guild": { "name": "길드 게시판", "jobs": [{ "id": "job/wolves", "name": "늑대 퇴치", "type": "hunt", "description": "…", "locationId": "loc/forest", "enemies": [{ "monsterId": "wolf", "zone": 2 }], "timeLimit": { "days": 3 } }, { "id": "job/herbs", "name": "약초 채집", "type": "gather", "description": "…", "locationId": "loc/forest", "complete": { "hasItem": "item/herb", "n": 3 }, "rewards": { "money": 30 }, "requires": { "reputation": "fac/…", "gte": 10 } }] } } · 토벌 의뢰는 받을 때마다 조우가 새로 생기고, 보상이 없으면 위협도로 돈이 정해진다' />
           )}
+          </details>
         </>
       )}
 

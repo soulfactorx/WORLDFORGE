@@ -191,6 +191,9 @@ const SCREENS = [
   }],
   ['편집: 선택형 (돌발 사건 표)', async (p) => {
     await editorTab(p, '조우');
+    // v0.117: 예전 장치로 접혀 있다 — 펼친다
+    const fold = p.locator('details.legacy-tools', { hasText: '돌발 사건 표' }).first();
+    if (!(await fold.evaluate((d) => d.open))) await fold.locator('summary').click();
     const direct = p.locator('button:has-text("이 세계만의 표를 직접 정하기")');
     if (await direct.count()) await direct.click();
     await p.locator('.struct-field', { hasText: '돌발 사건 표' }).first().locator('button:has-text("＋ 돌발 사건 추가")').click();
