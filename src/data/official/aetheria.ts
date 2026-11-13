@@ -1296,3 +1296,7 @@ aetheriaWorld.gmNotes = '봉인의 균열(진행 시계)이 차오를수록 언�
 
 // GM 스타일 (v0.80)
 aetheriaWorld.gmStyle = { preset: 'epic' };
+
+import { applyAetheriaV6 } from './aetheria-v6';
+// 설계 v6 (v0.116): 기류 축 · 국면 · 갈래 카드
+applyAetheriaV6(aetheriaWorld);

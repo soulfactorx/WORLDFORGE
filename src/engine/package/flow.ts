@@ -53,6 +53,9 @@ export function allConditions(w: WorldPackage): { where: string; cond: Condition
   for (const t of w.titles ?? []) add(`칭호 "${t.name}"`, t.condition);
   for (const c of w.characters) for (const g of c.goals ?? []) { add(`${c.name}의 목표 시작`, g.start); add(`${c.name}의 목표 꺾임`, g.stop); }
   for (const e of w.encounters ?? []) { add(`조우 "${e.name}" 조건`, e.when); add(`조우 "${e.name}" 강제 시작`, e.force); }
+  // v0.116: 국면 · 갈래 카드
+  for (const p of w.phases ?? []) add(`국면 "${p.name}"`, p.enter);
+  for (const c of w.storylets ?? []) add(`갈래 카드 "${c.title}"`, c.when);
   return out;
 }
 
@@ -74,6 +77,8 @@ export function flagFlows(w: WorldPackage): FlagFlow[] {
   for (const e of w.encounters ?? []) for (const [k, l] of [['onVictory', '승리'], ['onDefeat', '패배'], ['onFlee', '도주']] as const) for (const f of flagsSet(e[k])) get(f).setBy.push(`조우 "${e.name}" ${l}`);
   for (const c of w.characters) for (const g of c.goals ?? []) for (const f of flagsSet(g.effects)) get(f).setBy.push(`${c.name}의 목표`);
   for (const r of w.randomEvents ?? []) for (const f of flagsSet(r.effects)) get(f).setBy.push(`돌발 사건 "${r.name}"`);
+  for (const p of w.phases ?? []) for (const f of flagsSet(p.effects)) get(f).setBy.push(`국면 "${p.name}"`);
+  for (const c of w.storylets ?? []) for (const o of c.options) for (const k of ['success', 'cost', 'fail'] as const) for (const f of flagsSet(o[k])) get(f).setBy.push(`갈래 카드 "${c.title}" → ${o.label}`);
   for (const { where, cond } of allConditions(w)) for (const f of flagsIn(cond)) get(f).readBy.push(where);
   for (const b of w.relationBeats ?? []) if (b.resolveFlag) get(b.resolveFlag).readBy.push(`관계 사건 "${b.name}" 닫힘`);
   return [...map.values()].sort((a, b) => a.id.localeCompare(b.id));
