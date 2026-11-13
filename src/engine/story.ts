@@ -57,6 +57,7 @@ export interface ClockUpdate {
   clock: Clock;
   value: number;
   minutes: number;
+  turn: number;
   /** 이번에 발동한 조건 눈금 번호 */
   onFired: number[];
   /** 새로 이른 칸 */
@@ -64,6 +65,8 @@ export interface ClockUpdate {
 }
 
 const UNIT = { day: 1440, hour: 60 } as const;
+/** 비트 눈금 (v0.112): 턴마다 찬다 — 세계가 플레이어의 걸음에 맞춰 움직인다 */
+const beatsSince = (state: GameState, from: number | undefined) => Math.max(0, state.turn - (from ?? state.turn));
 
 /**
  * 시계 갱신: 시간 눈금(마지막으로 기록한 시각 이후 지난 만큼) + 처음 참이 된 조건 눈금.
@@ -73,10 +76,10 @@ export function clockUpdates(world: WorldPackage, state: GameState): ClockUpdate
   const out: ClockUpdate[] = [];
   for (const clock of world.clocks ?? []) {
     const max = Math.max(1, clock.segments);
-    const cur = state.clocks?.[clock.id] ?? { value: Math.min(max, clock.start ?? 0), minutes: state.worldMinutes, onFired: [], reached: [] };
+    const cur = state.clocks?.[clock.id] ?? { value: Math.min(max, clock.start ?? 0), minutes: state.worldMinutes, turn: state.turn, onFired: [], reached: [] };
     const fresh = !state.clocks?.[clock.id];
     let value = cur.value;
-    for (const t of clock.tick) if ('every' in t) value += t.by * (Math.floor(state.worldMinutes / UNIT[t.every]) - Math.floor(cur.minutes / UNIT[t.every]));
+    for (const t of clock.tick) if ('every' in t) value += t.every === 'beat' ? t.by * beatsSince(state, cur.turn) : t.by * (Math.floor(state.worldMinutes / UNIT[t.every]) - Math.floor(cur.minutes / UNIT[t.every]));
     const onFired: number[] = [];
     clock.tick.forEach((t, i) => {
       if ('on' in t && !cur.onFired.includes(i) && evalCondition(world, state, t.on)) { value += t.by; onFired.push(i); }
@@ -84,7 +87,7 @@ export function clockUpdates(world: WorldPackage, state: GameState): ClockUpdate
     value = Math.max(0, Math.min(max, value));
     const reached = clock.at.filter((x) => value >= x.segment && !cur.reached.includes(x.segment)).map((x) => x.segment).sort((x, y) => x - y);
     if (!fresh && value === cur.value && !onFired.length && !reached.length) continue;
-    out.push({ clock, value, minutes: state.worldMinutes, onFired, reached });
+    out.push({ clock, value, minutes: state.worldMinutes, turn: state.turn, onFired, reached });
   }
   return out;
 }

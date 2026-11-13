@@ -69,7 +69,7 @@ export interface GameState {
   npcRelations?: Record<string, { kind: import('../schema').NpcRelationKind; note?: string } | null>;
   /** 이야기 엔진 (설계 v3 5장): 줄기 진행 (chapter = 끝낸 장 수) */
   arcs: Record<EntityId, { chapter: number; done: boolean; failed?: boolean }>;
-  clocks: Record<EntityId, { value: number; minutes: number; onFired: number[]; reached: number[] }>;
+  clocks: Record<EntityId, { value: number; minutes: number; /** 비트 눈금을 마지막으로 잰 턴 (v0.112) */ turn?: number; onFired: number[]; reached: number[] }>;
   /** 일어난(또는 막힌) 연표 사건 */
   worldEvents: Record<EntityId, { turn: number; skipped: boolean }>;
   /** 소지품·소지금·장비 (설계 v3 6.4) */
@@ -345,7 +345,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     }
     case 'clock_changed': {
       const c = s.clocks?.[e.clockId] ?? { value: 0, minutes: e.minutes, onFired: [], reached: [] };
-      return { ...s, clocks: { ...(s.clocks ?? {}), [e.clockId]: { ...c, value: e.value, minutes: e.minutes, onFired: [...c.onFired, ...(e.onFired ?? [])] } } };
+      return { ...s, clocks: { ...(s.clocks ?? {}), [e.clockId]: { ...c, value: e.value, minutes: e.minutes, ...(e.turn !== undefined ? { turn: e.turn } : {}), onFired: [...c.onFired, ...(e.onFired ?? [])] } } };
     }
     case 'clock_reached': {
       const c = s.clocks?.[e.clockId] ?? { value: 0, minutes: 0, onFired: [], reached: [] };

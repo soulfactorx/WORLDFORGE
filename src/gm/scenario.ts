@@ -71,7 +71,7 @@ export function scenarioEvents(world: WorldPackage, state: GameState, opts: Enco
   stateRuleEvents(world, s).events.forEach(push);
   // 이야기 엔진: 시계 → 연표 사건 → 줄기·장 → 결정적 선택 (이 결과로 임무가 진행될 수 있으므로 먼저)
   for (const u of clockUpdates(world, s)) {
-    push({ type: 'clock_changed', clockId: u.clock.id, value: u.value, minutes: u.minutes, ...(u.onFired.length ? { onFired: u.onFired } : {}) });
+    push({ type: 'clock_changed', clockId: u.clock.id, value: u.value, minutes: u.minutes, turn: u.turn, ...(u.onFired.length ? { onFired: u.onFired } : {}) });
     for (const seg of u.reached) {
       const at = u.clock.at.find((x) => x.segment === seg)!;
       push({ type: 'clock_reached', clockId: u.clock.id, segment: seg, ...(at.omen ? { omen: at.omen } : {}) });

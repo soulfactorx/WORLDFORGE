@@ -183,9 +183,9 @@ export function ChoiceForms({ w, set }: { w: WorldPackage; set: Set }) {
 export function ClockForms({ w, set }: { w: WorldPackage; set: Set }) {
   return (
     <ItemList<Clock> title="진행 시계" items={w.clocks ?? []} onChange={(clocks) => set({ clocks })}
-      make={(n) => ({ id: `clock/new-${n}`, name: '다가오는 위협', segments: 6, tick: [{ every: 'day', by: 1 }], at: [{ segment: 3, omen: '불길한 소문이 돈다.' }, { segment: 6, effects: [] }] })}
+      make={(n) => ({ id: `clock/new-${n}`, name: '다가오는 위협', segments: 6, tick: [{ every: 'beat', by: 1 }], at: [{ segment: 3, omen: '불길한 소문이 돈다.' }, { segment: 6, effects: [] }] })}
       render={(c, up) => {
-        const daily = c.tick.find((t): t is { every: 'day' | 'hour'; by: number } => 'every' in t);
+        const daily = c.tick.find((t): t is { every: 'day' | 'hour' | 'beat'; by: number } => 'every' in t);
         const ons = c.tick.filter((t): t is { on: import('../engine/schema').Condition; by: number } => 'on' in t);
         const setTicks = (d: typeof daily | undefined, o: typeof ons) => up({ tick: [...(d ? [d] : []), ...o] });
         return (
@@ -196,7 +196,7 @@ export function ClockForms({ w, set }: { w: WorldPackage; set: Set }) {
             <Num label="처음 칸" value={c.start} onChange={(start) => up({ start })} />
             <label>시간 눈금
               <span className="row">
-                <S value={daily?.every ?? ''} options={[['', '(시간으로는 차지 않음)'], ['day', '하루마다'], ['hour', '한 시간마다']]} onChange={(v) => setTicks(v ? { every: v as 'day', by: daily?.by ?? 1 } : undefined, ons)} />
+                <S value={daily?.every ?? ''} options={[['', '(시간으로는 차지 않음)'], ['beat', '턴마다 (권장)'], ['day', '하루마다'], ['hour', '한 시간마다']]} onChange={(v) => setTicks(v ? { every: v as 'day', by: daily?.by ?? 1 } : undefined, ons)} />
                 {daily && <><N value={daily.by} onChange={(by) => setTicks({ ...daily, by }, ons)} />칸</>}
               </span>
             </label>

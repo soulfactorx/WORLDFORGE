@@ -822,7 +822,7 @@ export function validateWorld(input: unknown): Issue[] {
     if (typeof c.segments !== 'number' || c.segments < 1 || c.segments > 20) err(`${p}.segments`, '칸 수는 1~20입니다.');
     (Array.isArray(c.tick) ? c.tick : []).forEach((t, j) => {
       if (isObj(t) && 'on' in t) checkCond(t.on, `${p}.tick[${j}].on`);
-      else if (!isObj(t) || !('every' in t) || !['day', 'hour'].includes(t.every as string)) err(`${p}.tick[${j}]`, '{ "every": "day"|"hour", "by": n } 또는 { "on": 조건, "by": n } 입니다.');
+      else if (!isObj(t) || !('every' in t) || !['day', 'hour', 'beat'].includes(t.every as string)) err(`${p}.tick[${j}]`, '{ "every": "beat"|"day"|"hour", "by": n } 또는 { "on": 조건, "by": n } 입니다.');
     });
     (Array.isArray(c.at) ? c.at : []).forEach((a, j) => {
       if (typeof a.segment !== 'number' || a.segment < 1 || a.segment > c.segments) err(`${p}.at[${j}].segment`, `1~${c.segments} 사이 칸이어야 합니다.`);

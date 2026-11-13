@@ -799,7 +799,7 @@ export interface Clock {
   segments: number;
   /** 처음 칸 (기본 0) */
   start?: number;
-  tick: ({ every: 'day' | 'hour'; by: number } | { on: Condition; by: number })[];
+  tick: ({ every: 'day' | 'hour' | 'beat'; by: number } | { on: Condition; by: number })[];
   /** 이 칸에 이르면: 효과 + 플레이어에게 보이는 징조 한 줄 */
   at: { segment: number; effects?: StoryEffect[]; omen?: string }[];
 }
