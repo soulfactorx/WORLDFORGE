@@ -571,6 +571,8 @@ export type Condition =
   | { flag: string }
   /** 지금 국면 (v0.113) */
   | { phase: EntityId }
+  /** 임무가 진행 중이고 지금 이 단계다 (v0.115, 0부터) */
+  | { questStage: EntityId; is: number }
   /** 갈래 카드에서 고른 것 (v0.115): 골랐다 / 이 갈림길을 골랐다 */
   | { storylet: EntityId; is?: string }
   | { questDone: EntityId }

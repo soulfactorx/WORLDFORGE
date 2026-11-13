@@ -305,6 +305,12 @@ export function validateWorld(input: unknown): Issue[] {
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('trait' in cond) { if (!traitIds.has(cond.trait)) err(path, `없는 성향 축 "${cond.trait}" (${[...traitIds].join(', ')})`); return; }
+    if ('questStage' in cond) {
+      const q = quests.find((x) => x?.id === cond.questStage);
+      if (!q) err(path, `없는 임무 "${cond.questStage}"`);
+      else if (!Number.isInteger(cond.is) || cond.is < 0 || cond.is >= (q.stages?.length ?? 0)) err(path, `임무 "${cond.questStage}"의 단계 번호는 0~${(q.stages?.length ?? 1) - 1}입니다.`);
+      return;
+    }
     if ('storylet' in cond) {
       const c = storyletList.find((x) => x?.id === cond.storylet);
       if (!c) err(path, `없는 갈래 카드 "${cond.storylet}"`);

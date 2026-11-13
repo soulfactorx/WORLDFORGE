@@ -14,14 +14,14 @@ import type { Condition, WorldPackage } from '../engine/schema';
 
 type Kind =
   | 'all' | 'any' | 'not' | 'knows' | 'at' | 'cleared' | 'inParty' | 'relationship' | 'stage' | 'reputation' | 'flag' | 'questDone' | 'questFailed'
-  | 'level' | 'chapter' | 'arcDone' | 'clock' | 'choice' | 'day' | 'hasItem' | 'money' | 'defeated' | 'npcAlive' | 'npcAt' | 'var' | 'questOutcome' | 'npcGoal' | 'sceneEnd' | 'trait' | 'encounter' | 'phase';
+  | 'level' | 'chapter' | 'arcDone' | 'clock' | 'choice' | 'day' | 'hasItem' | 'money' | 'defeated' | 'npcAlive' | 'npcAt' | 'var' | 'questOutcome' | 'npcGoal' | 'sceneEnd' | 'trait' | 'encounter' | 'phase' | 'questStage' | 'storylet';
 
 export const KIND_LABEL: Record<Kind, string> = {
   all: '모두 참 (그리고)', any: '하나라도 참 (또는)', not: '아니다', knows: '플레이어가 안다', at: '플레이어가 그 장소에', cleared: '조우를 이겼다',
   inParty: '동료로 함께', relationship: '관계 수치', stage: '관계 단계', reputation: '세력 평판', flag: '플래그가 섰다', questDone: '임무 성공',
   questFailed: '임무 실패', level: '레벨 이상', chapter: '줄기의 장 진행', arcDone: '줄기가 끝남', clock: '시계 칸', choice: '결정적 선택',
   day: '며칠이 지남', hasItem: '아이템을 가짐', money: '돈 이상', defeated: '적을 쓰러뜨린 수', npcAlive: '인물이 살아 있다', npcAt: '인물이 그 장소에',
-  var: '세계 수치', questOutcome: '임무의 결과', npcGoal: '인물의 목표', sceneEnd: '장면의 결과', trait: '주인공 성향', encounter: '조우의 결과 (승리·패배·도주)', phase: '지금 국면',
+  var: '세계 수치', questOutcome: '임무의 결과', npcGoal: '인물의 목표', sceneEnd: '장면의 결과', trait: '주인공 성향', encounter: '조우의 결과 (승리·패배·도주)', phase: '지금 국면', questStage: '임무의 지금 단계', storylet: '갈래 카드에서 고른 길',
 };
 
 const goals = (w: WorldPackage) => w.characters.flatMap((c) => (c.goals ?? []).map((g) => [g.id, `${c.name}: ${g.text.slice(0, 30)}`] as const));
@@ -61,6 +61,8 @@ function blank(kind: Kind, w: WorldPackage): Condition {
     case 'npcAt': return { npcAt: first(w.characters), at: first(w.locations) };
     case 'var': return { var: first(worldVars(w)), gte: 5 };
     case 'phase': return { phase: phasesOf(w)[0]?.id ?? '' };
+    case 'questStage': return { questStage: first(w.quests), is: 0 };
+    case 'storylet': return { storylet: first(w.storylets?.map((c) => ({ id: c.id })) ) };
     case 'trait': return { trait: traitsFor(w)[0]?.id ?? '', gte: 20 };
     case 'questOutcome': return { questOutcome: first(w.quests) };
     case 'npcGoal': return { npcGoal: goals(w)[0]?.[0] ?? '' };
@@ -105,6 +107,8 @@ export function describeCondition(c: Condition, w: WorldPackage): string {
     case 'npcAt': return `${name(w.characters, x.npcAt as string)}이(가) ${name(w.locations, x.at as string)}에`;
     case 'trait': { const t = traitsFor(w).find((y) => y.id === x.trait); return `성향 ${t ? `${t.name}(${t.low}↔${t.high})` : String(x.trait)}${x.gte !== undefined ? ` ≥ ${x.gte}` : ''}${x.lte !== undefined ? ` ≤ ${x.lte}` : ''}`; }
     case 'phase': return `국면이 ${name(phasesOf(w), x.phase as string)}`;
+    case 'questStage': { const q = w.quests?.find((y) => y.id === x.questStage); return `${q?.name ?? x.questStage} — ${(x.is as number) + 1}단계 진행 중${q?.stages[x.is as number] ? ` (${q.stages[x.is as number]!.objective.slice(0, 20)})` : ''}`; }
+    case 'storylet': { const c = w.storylets?.find((y) => y.id === x.storylet); return `「${c?.title ?? x.storylet}」에서 ${x.is ? `"${c?.options.find((o) => o.id === x.is)?.label ?? x.is}"` : '무엇이든'} 고름`; }
     case 'var': return `${name(worldVars(w), x.var as string)}${x.gte !== undefined ? ` ≥ ${x.gte}` : ''}${x.lte !== undefined ? ` ≤ ${x.lte}` : ''}`;
     case 'sceneEnd': return `${name(w.scenes, x.sceneEnd as string)} ${x.is ? `끝 = ${w.scenes?.find((d) => d.id === x.sceneEnd)?.ends.find((e) => e.id === x.is)?.name ?? x.is}` : x.outcome ? ({ success: '성공', failure: '실패', neutral: '중립' } as Record<string, string>)[x.outcome as string] : '끝남'}`;
     case 'npcGoal': return `${goals(w).find(([id]) => id === x.npcGoal)?.[1] ?? x.npcGoal} ${({ active: '진행 중', done: '이뤄짐', stopped: '꺾임' } as Record<string, string>)[(x.is as string) ?? 'done']}`;
@@ -179,6 +183,10 @@ export function ConditionEditor({ value, world: w, onChange, depth = 0 }: { valu
       case 'money': return <NumIn value={x.money as number} onChange={(v) => set({ money: v ?? 0 })} />;
       case 'trait': return <><Sel value={x.trait as string} options={traitsFor(w).map((t) => [t.id, `${t.name} (${t.low} -100 ↔ +100 ${t.high})`] as const)} onChange={(v) => set({ trait: v })} /> ≥ <NumIn value={x.gte as number} placeholder="(없음)" onChange={(v) => set({ gte: v })} /> ≤ <NumIn value={x.lte as number} placeholder="(없음)" onChange={(v) => set({ lte: v })} /></>;
       case 'phase': return <Sel value={x.phase as string} options={opts(phasesOf(w))} onChange={(v) => set({ phase: v })} />;
+      case 'questStage': { const q = w.quests?.find((y) => y.id === x.questStage);
+        return <><Sel value={x.questStage as string} options={opts(w.quests)} onChange={(v) => set({ questStage: v, is: 0 })} /><Sel value={String(x.is ?? 0)} options={(q?.stages ?? []).map((st, i) => [String(i), `${i + 1}단계: ${st.objective.slice(0, 24)}`] as const)} onChange={(v) => set({ is: Number(v) })} /></>; }
+      case 'storylet': { const c = w.storylets?.find((y) => y.id === x.storylet);
+        return <><Sel value={x.storylet as string} options={(w.storylets ?? []).map((y) => [y.id, `${y.title} (${y.id})`] as const)} onChange={(v) => onChange({ storylet: v } as Condition)} /><Sel value={(x.is as string) ?? ''} options={[['', '(무엇이든 고름)'], ...(c?.options ?? []).map((o) => [o.id, o.label] as const)]} onChange={(v) => onChange((v ? { storylet: x.storylet, is: v } : { storylet: x.storylet }) as Condition)} /></>; }
       case 'var': return <><Sel value={x.var as string} options={opts(worldVars(w))} onChange={(v) => set({ var: v })} /> ≥ <NumIn value={x.gte as number} placeholder="(없음)" onChange={(v) => set({ gte: v })} /> ≤ <NumIn value={x.lte as number} placeholder="(없음)" onChange={(v) => set({ lte: v })} /></>;
       case 'sceneEnd': {
         const d = w.scenes?.find((y) => y.id === x.sceneEnd);

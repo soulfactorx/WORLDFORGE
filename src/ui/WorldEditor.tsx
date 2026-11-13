@@ -18,6 +18,7 @@ import { ClassEditor } from './ClassEditor';
 import { ProfileEditor } from './ProfileEditor';
 import { WorldLibrary } from './WorldLibrary';
 import { TimeFieldset } from './TimeFieldset';
+import { questDraftCards } from '../engine/storylets';
 import { classesFor } from '../engine/classes';
 import { hasErrors, validateWorld } from '../engine/package/validate';
 import { type Belief, type Character, type Claim, type Fact, type Faction, type Location, type NpcRelationKind, QUEST_TYPES, type WorldPackage } from '../engine/schema';
@@ -791,6 +792,13 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           {questView === 'form' ? (
             <>
               <p className="muted small">세계가 스스로 움직이게 하는 장치들입니다. 조건은 조건 빌더로, 일어나는 일은 효과 목록으로 고릅니다.</p>
+              <h4>갈래 카드 (이야기의 단위 — 조건이 맞는 카드 덱에서 다음 장면을 뽑는다)</h4>
+              <p className="muted small">카드는 상황 하나와 갈림길 2~4개입니다. 갈림길마다 <b>다른 것을 건다</b>(판을 키움 · 가라앉힘 · 누구 편 · 가까워짐 · 배신 · 비밀 폭로 · 세계의 방향 · 다른 길). GM이 장면에 맞는 카드를 펼치고, 잔잔하면 엔진이 뽑습니다. 플레이어가 고른 길은 조건 「갈래 카드에서 고른 길」로 다른 카드를 엽니다.</p>
+              {(() => { const drafts = questDraftCards(w); return drafts.length > 0 && (
+                <div className="row"><button type="button" onClick={() => { if (confirm(`임무 단계 ${drafts.length}개를 갈래 카드 초안으로 만듭니다 (접근법이 갈림길, 성공하면 그 단계가 끝남). 만든 뒤 갈림길과 걸린 것을 다듬어 주세요.`)) set({ storylets: [...(w.storylets ?? []), ...drafts] }); }}>임무에서 카드 초안 만들기 ({drafts.length}장)</button></div>
+              ); })()}
+              <StructField w={w} spec={{ list: SPEC.storylets }} label="갈래 카드" value={w.storylets ?? []} rows={10} onChange={(storylets) => set({ storylets: Array.isArray(storylets) && storylets.length ? storylets : undefined })}
+                help='예: { "id": "card/ambush", "title": "매복", "situation": "…", "phases": ["phase/stir"], "options": [{ "id": "a", "label": "정면으로", "stake": "escalate", "check": { "skill": "athletics", "dc": "medium" }, "success": [...] }, { "id": "b", "label": "물러선다", "stake": "defuse" }] }' />
               <h4>줄기 (1부·2부… 시작 조건으로 열리고, 장마다 목표·완료·실패)</h4><ArcForms w={w} set={set} />
               <h4>결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지)</h4><ChoiceForms w={w} set={set} />
               <h4>진행 시계 (시간·사건으로 차오르고, 정해진 칸에서 일이 벌어진다)</h4><ClockForms w={w} set={set} />
@@ -815,6 +823,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             help='예: { "id": "arc/main", "name": "숲의 그림자", "kind": "main", "start": { "all": [] }, "chapters": [{ "name": "낯선 땅", "goal": "GM용 목표", "summary": "수첩에 보이는 한 줄", "complete": { "at": "loc/…" }, "fail": { "flag": "…" } }] } · 2부는 start에 { "arcDone": "arc/main" }' />
           <JsonField label="결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지가 뜬다)" value={w.choices ?? []} onChange={(choices) => set({ choices })} rows={12}
             help='예: { "id": "choice/side", "name": "누구 편인가", "prompt": "누구의 말을 믿을 것인가?", "when": { "knows": "claim/…" }, "locationId": "loc/… (선택)", "options": [{ "id": "a", "text": "장로를 믿는다", "effects": [{ "setFlag": "…" }] }, { "id": "b", "text": "…", "effects": [] }] }' />
+          <JsonField label="갈래 카드 (상황 하나 + 갈림길 2~4개)" value={w.storylets ?? []} rows={12} onChange={(storylets) => set({ storylets: Array.isArray(storylets) && storylets.length ? storylets : undefined })}
+            help='예: { "id": "card/…", "title": "…", "situation": "…", "when": { "phase": "phase/stir" }, "tags": ["main"], "options": [{ "id": "a", "label": "…", "stake": "betray:npc/…", "check": { "skill": "deception", "dc": "medium" }, "success": [{ "setFlag": "…" }], "fallout": [{ "inTurns": 2, "storylet": "card/…" }] }] } · 조건 { "storylet": "card/…", "is": "a" } · { "questStage": "quest/…", "is": 0 } · 효과 { "advanceQuest": "quest/…" } · { "openStorylet": "card/…" }' />
           <JsonField label="국면 (비우면 긴장으로 움직이는 기본 국면 셋)" value={w.phases ?? []} rows={8} onChange={(phases) => set({ phases: Array.isArray(phases) && phases.length ? phases : undefined })}
             help='예: { "id": "phase/rift", "name": "균열", "tone": "이 국면의 문체", "enter": { "var": "tension", "gte": 4 }, "from": ["phase/calm"], "announce": "…", "tint": "dark", "music": "dark", "attitudes": { "npc/…": "…" }, "closed": ["loc/…"] } · 조건 { "phase": "phase/rift" }' />
           <JsonField label="세계 수치 (지역 치안·숲의 위험도 같은 숫자 — 효과 var로 바뀌고 조건 var로 읽힌다)" value={w.vars ?? []} rows={6} onChange={(vars) => set({ vars: Array.isArray(vars) && vars.length ? vars : undefined })}

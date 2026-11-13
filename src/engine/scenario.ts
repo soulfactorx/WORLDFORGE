@@ -71,6 +71,7 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('level' in c) return state.player.sheet.level >= c.level;
   if ('trait' in c) { const v = traitValue(world as WorldPackage, state.player.sheet, c.trait); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('phase' in c) return state.phase === c.phase;
+  if ('questStage' in c) { const q = state.quests[c.questStage]; return !!q && !q.done && q.stage === c.is; }
   if ('storylet' in c) { const r = state.storylets?.[c.storylet]; return !!r?.chosen && (c.is === undefined || r.chosen === c.is); }
   if ('var' in c) { const v = varValue(world, state, c.var); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('encounter' in c) {

@@ -156,6 +156,11 @@ const SCREENS = [
     const g = p.locator('.struct-field', { hasText: '일정 (시각에' }).first();
     await g.locator('button:has-text("＋ 일정 추가")').click();
   }],
+  ['편집: 갈래 카드 (v0.115)', async (p) => {
+    await editorTab(p, '이야기 흐름');
+    const f = p.locator('.struct-field', { hasText: '갈래 카드' }).first();
+    await f.locator('button:has-text("＋ 갈래 카드 추가")').click();
+  }],
   ['편집: 국면 (v0.113)', async (p) => {
     await editorTab(p, '이야기 흐름');
     const f = p.locator('.struct-field', { hasText: '이 세계의 국면' }).first();

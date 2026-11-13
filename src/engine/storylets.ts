@@ -64,3 +64,33 @@ export function dueStorylet(world: WorldPackage, s: GameState): Storylet | undef
   const q = (s.storyletQueue ?? []).find((x) => x.due <= s.turn);
   return q ? storyletOf(world, q.id) : undefined;
 }
+
+/**
+ * 임무 → 갈래 카드 초안 (v0.115, 설계 v6 6장): 단계마다 카드 한 장 — 접근법이 갈림길이 되고, 성공하면 그 단계가 끝난다.
+ * 조우·장면으로 풀리는 단계(via)와 이미 카드가 있는 단계는 건너뛴다. 제작자가 다듬는 초안이다 (갈림길을 더하고, 걸린 것을 가르고).
+ */
+export function questDraftCards(world: WorldPackage): Storylet[] {
+  const have = new Set((world.storylets ?? []).flatMap((c) => (c.when && 'questStage' in c.when ? [`${c.when.questStage}#${c.when.is}`] : [])));
+  const ids = new Set((world.storylets ?? []).map((c) => c.id));
+  const out: Storylet[] = [];
+  for (const q of world.quests ?? []) {
+    q.stages.forEach((st, i) => {
+      if (st.via?.encounter || st.via?.scene || have.has(`${q.id}#${i}`)) return;
+      let id = `card/${q.id.replace(/^[a-z]+\//, '').replace(/[^a-z0-9_-]/gi, '-')}-${i + 1}`;
+      while (ids.has(id)) id += 'x';
+      ids.add(id);
+      const advance = [{ advanceQuest: q.id }];
+      const ways = (q.approaches ?? []).slice(0, 3).map((a, j) => ({
+        id: `way${j + 1}`, label: a.hint.slice(0, 50),
+        ...(a.risk ? { stake: 'escalate' } : {}),
+        ...(a.skills?.[0] ? { check: { skill: a.skills[0], dc: 'medium' as const } } : {}),
+        success: advance,
+      }));
+      const options = ways.length ? ways : [{ id: 'go', label: st.objective.slice(0, 50), success: advance }];
+      options.push({ id: 'later', label: '지금은 물러나 다른 길을 찾는다', stake: 'defuse' } as (typeof options)[number]);
+      out.push({ id, title: `${q.name} ${i + 1}: ${st.objective.slice(0, 30)}`, quest: q.id, tags: [q.kind === 'main' ? 'main' : 'side'],
+        when: { questStage: q.id, is: i }, situation: `${st.objective}${q.motive ? ` — ${q.motive}` : ''}`, options });
+    });
+  }
+  return out;
+}

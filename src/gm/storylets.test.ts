@@ -88,3 +88,27 @@ describe('갈래 카드 덱 (v0.115)', () => {
     expect(users[0]).toContain('갈래 카드의 갈림길');
   });
 });
+
+describe('임무 → 카드 초안 (v0.115)', () => {
+  it('공식 세계의 임무로 만든 초안은 검사기를 통과하고, 고르면 그 단계가 끝난다', async () => {
+    const { aetheriaWorld } = await import('../data/official/aetheria');
+    const { questDraftCards } = await import('../engine/storylets');
+    const w = structuredClone(aetheriaWorld);
+    const drafts = questDraftCards(w);
+    expect(drafts.length).toBeGreaterThan(5);
+    w.storylets = drafts;
+    expect(validateWorld(w).filter((i) => i.level === 'error' && i.path.startsWith('storylets'))).toEqual([]);
+    expect(questDraftCards(w)).toEqual([]); // 이미 카드가 있는 단계는 건너뛴다
+  });
+  it('갈림길의 advanceQuest는 조건과 상관없이 그 단계를 끝낸다', async () => {
+    const { scenarioEvents } = await import('./scenario');
+    const w = structuredClone(sampleWorld);
+    const q = w.quests![0]!;
+    let s = next(start(w));
+    s = step(s, [{ type: 'quest_started', questId: q.id, name: q.name, objective: q.stages[0]!.objective }]);
+    if (!s.quests[q.id]) return;
+    s = step(s, [{ type: 'quest_pushed', questId: q.id, stage: s.quests[q.id]!.stage }]);
+    const evs = scenarioEvents(w, s).events;
+    expect(evs.some((e) => (e.type === 'quest_advanced' || e.type === 'quest_completed') && e.questId === q.id)).toBe(true);
+  });
+});

@@ -15,13 +15,16 @@ import { ConditionField } from './ConditionEditor';
 import { JsonField } from './form';
 import { EffectsEditor } from './WorldForms';
 import { phasesOf } from '../engine/phase';
+import { worldVars } from '../engine/vars';
 import { GM_STYLES } from '../data/gmStyles';
 
 export type RefKind = 'locations' | 'characters' | 'claims' | 'factions' | 'scenes' | 'encounters' | 'quests' | 'items' | 'monsters' | 'flags' | 'skills'
   /** 적으로 세울 수 있는 것: 적 목록 + 이 세계의 인물 ("npc:인물ID" — 그 인물의 직업·레벨·능력치로 싸운다) (v0.110) */
   | 'foes'
   /** 국면 (v0.113) */
-  | 'phases';
+  | 'phases'
+  /** 갈래 카드 · 걸 수 있는 것 · 카드 표시 (v0.115) */
+  | 'storylets' | 'stakes' | 'cardTags';
 type Base = { k: string; label: string; hint?: string; /** 비우면 칸 자체를 지운다 */ opt?: boolean };
 export type Field =
   | (Base & { t: 'text' | 'long' | 'num' })
@@ -63,6 +66,19 @@ export function refOptions(w: WorldPackage, of: RefKind): (readonly [string, str
     case 'flags': return (w.flags ?? []).map((f) => [f.id, f.id] as const);
     case 'skills': return (Object.keys(SKILLS) as SkillId[]).map((k) => [k, `${SKILLS[k].name} (${k})`] as const);
     case 'phases': return named(phasesOf(w));
+    case 'storylets': return (w.storylets ?? []).map((c) => [c.id, `${c.title} (${c.id})`] as const);
+    case 'cardTags': return [['main', '이야기의 뼈대'], ['side', '곁가지'], ['random', '돌발'], ['twist', '반전 (국면마다 하나)'], ['job', '의뢰']] as const;
+    case 'stakes': {
+      const secret = new Set(w.beliefs.filter((b) => b.state === 'secret').map((b) => b.claim));
+      return [
+        ['escalate', '🔥 판을 키운다 (긴장 +2)'], ['defuse', '🕊 가라앉힌다 (긴장 −2)'],
+        ...(w.factions ?? []).map((f) => [`side:${f.id}`, `⚖ ${f.name} 쪽`] as const),
+        ...w.characters.flatMap((c) => [[`bond:${c.id}`, `🤝 ${c.name}와(과) 가까워진다`] as const, [`betray:${c.id}`, `🗡 ${c.name}를(을) 저버린다`] as const]),
+        ...w.claims.filter((c) => secret.has(c.id)).map((c) => [`expose:${c.id}`, `🗝 비밀 폭로: ${c.statement.slice(0, 24)}`] as const),
+        ...worldVars(w).filter((v) => v.poles).flatMap((v) => [[`theme:${v.id}:-`, `🧭 ${v.poles![0]} 쪽`] as const, [`theme:${v.id}:+`, `🧭 ${v.poles![1]} 쪽`] as const]),
+        ...(w.storylets ?? []).map((c) => [`thread:${c.id}`, `🧵 다른 길: ${c.title}`] as const),
+      ];
+    }
   }
 }
 
@@ -309,6 +325,31 @@ export const SPEC = {
       { k: 'attitudes', label: '이 국면의 인물 태도', t: 'textmap', of: 'characters', add: '인물 추가', textLabel: '이 국면에서 어떤가', opt: true },
       { k: 'closed', label: '이 국면에는 갈 수 없는 장소', t: 'refs', of: 'locations', opt: true },
       { k: 'effects', label: '들어올 때 일어나는 일', t: 'effects', opt: true }] } as ListSpec,
+  storylets: { add: '갈래 카드 추가', make: (_w, n) => ({ id: `card/new-${n}`, title: '새 카드', situation: '', options: [{ id: 'a', label: '', stake: 'escalate' }, { id: 'b', label: '', stake: 'defuse' }] }),
+    title: (x) => `${x.title ?? ''}${Array.isArray(x.tags) && x.tags.length ? ` [${(x.tags as string[]).join(',')}]` : ''} — 갈림길 ${Array.isArray(x.options) ? x.options.length : 0}`,
+    fields: [{ k: 'id', label: 'ID (card/…)', t: 'text' }, { k: 'title', label: '제목', t: 'text' },
+      { k: 'situation', label: '상황 — 서술자가 펼칠 장면 (누가 · 어디서 · 무엇이 걸려 있나, 플레이어에게 보이는 일만)', t: 'long' },
+      { k: 'when', label: '덱에 들어오는 조건 (비우면 늘)', t: 'cond', opt: true, hint: '국면·긴장·관계·임무의 지금 단계·다른 카드에서 고른 길… 플레이어가 만든 상황을 조건으로 걸수록 선택이 이야기를 가른다' },
+      { k: 'phases', label: '이 국면들의 덱에만 (비우면 모든 국면)', t: 'refs', of: 'phases', opt: true },
+      { k: 'locationId', label: '이 장소에서만 (비우면 어디서나)', t: 'ref', of: 'locations', opt: true },
+      { k: 'tags', label: '표시', t: 'refs', of: 'cardTags', opt: true },
+      { k: 'quest', label: '속한 임무 (선택)', t: 'ref', of: 'quests', opt: true },
+      { k: 'weight', label: '뽑힐 무게 (비우면 조건 있는 카드 2 · 없는 카드 1)', t: 'num', opt: true },
+      { k: 'repeat', label: '다시 나올 수 있다', t: 'obj', opt: true, fields: [{ k: 'after', label: '고른 뒤 몇 턴이 지나면 (비우면 한 번만)', t: 'num', opt: true }] },
+      { k: 'text', label: 'AI 없이 진행할 때 보여 줄 글 (체험판, 선택)', t: 'long', opt: true },
+      { k: 'options', label: '갈림길 (2~4개 — 갈림길마다 다른 것을 건다)', t: 'list', spec: {
+        add: '갈림길 추가', make: (_w, n) => ({ id: String.fromCharCode(97 + Math.min(25, n - 1)), label: '' }), title: (x, w) => `${x.label || '(글 없음)'}${x.stake ? ` · ${refOptions(w, 'stakes').find(([v]) => v === x.stake)?.[1] ?? x.stake}` : ''}`,
+        fields: [{ k: 'id', label: 'ID (영문, 카드 안에서 하나뿐)', t: 'text' }, { k: 'label', label: '선택지의 뼈대 (AI가 장면에 맞게 다듬는다)', t: 'text' },
+          { k: 'stake', label: '걸린 것 (엔진이 결과를 적용한다)', t: 'ref', of: 'stakes', opt: true },
+          { k: 'check', label: '판정 (비우면 판정 없이 성공)', t: 'obj', opt: true, fields: [{ k: 'skill', label: '기술', t: 'ref', of: 'skills' }, { k: 'dc', label: '난이도', t: 'enum', options: [['very_easy', '아주 쉬움 (5)'], ['easy', '쉬움 (10)'], ['medium', '보통 (15)'], ['hard', '어려움 (20)'], ['very_hard', '아주 어려움 (25)']] }] },
+          { k: 'success', label: '성공·대가 있는 성공에 일어나는 일', t: 'effects', opt: true },
+          { k: 'cost', label: '대가 (비우면 엔진이 고른다)', t: 'effects', opt: true },
+          { k: 'fail', label: '실패해도 일어나는 일 (비우면 엔진이 고른 전개)', t: 'effects', opt: true },
+          { k: 'successText', label: '결과 글 — 성공 (체험판·기록, 선택)', t: 'long', opt: true },
+          { k: 'failText', label: '결과 글 — 실패 (선택)', t: 'long', opt: true },
+          { k: 'fallout', label: '후폭풍: 몇 턴 뒤 이 카드가 반드시 펼쳐진다', t: 'list', opt: true, spec: {
+            add: '후폭풍 추가', make: (w) => ({ inTurns: 2, storylet: w.storylets?.[0]?.id ?? '' }), title: (x, w) => `${x.inTurns ?? 1}턴 뒤 → ${refOptions(w, 'storylets').find(([v]) => v === x.storylet)?.[1] ?? x.storylet}`,
+            fields: [{ k: 'inTurns', label: '몇 턴 뒤', t: 'num' }, { k: 'storylet', label: '펼쳐질 카드', t: 'ref', of: 'storylets' }] } }] } }] } as ListSpec,
   approaches: { add: '접근법 추가', make: () => ({ hint: '' }), title: (x) => String(x.hint ?? ''),
     fields: [{ k: 'hint', label: 'GM에게: 이런 길도 있다', t: 'long' }, { k: 'skills', label: '쓰이는 기술', t: 'refs', of: 'skills', opt: true }, { k: 'risk', label: '위험', t: 'text', opt: true }] } as ListSpec,
   outcomes: { add: '결과 추가', make: (_w, n) => ({ id: `outcome-${n}`, name: '새 결과', when: { all: [] } }), title: (x) => String(x.name ?? ''),
