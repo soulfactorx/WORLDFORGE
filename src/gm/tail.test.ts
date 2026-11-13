@@ -51,3 +51,22 @@ describe('선택지 꼬리 (v0.111, 설계 v6 M1)', () => {
     expect(r.events.some((e) => e.type === 'gm_guide')).toBe(true);
   });
 });
+
+describe('NPC 연기 AI는 필요할 때만 (v0.111)', () => {
+  it('알려 줄 것이 없는 인물은 GM 판단의 요지로 서술자가 쓴다', async () => {
+    const w = structuredClone(sampleWorld);
+    const here = w.start.locationId;
+    w.characters = [{ ...w.characters[0]!, id: 'npc/plain', name: '행인', locationId: here, companion: undefined }];
+    w.beliefs = w.beliefs.filter((b) => b.holder !== 'npc/plain');
+    const st = replay(startEvents(w, legacyCharacter('나'), 7).map((event, seq) => ({ saveId: 's', seq, turn: 0, event })));
+    const systems: string[] = []; const users: string[] = [];
+    const llm: LlmClient = {
+      stream: async (r, onText) => { users.push(r.user); onText('.'); return '.'; },
+      json: async <T,>(r: { system: string }) => { systems.push(r.system); return (r.system.includes('판단 모듈') ? { ...director, speakers: [{ npc_id: 'npc/plain', reacting_to: '인사', intent: '귀찮다는 듯 손을 젓는다', warmth: -1 }] } : { facts: [], summary: '' }) as T; },
+    };
+    const r = await runTurn(llm, w, st, '인사한다', () => {});
+    expect(systems.some((x) => x.includes('한 명의 NPC'))).toBe(false);
+    expect(users[0]).toContain('서술자가 쓴다');
+    expect(r.events.some((e) => e.type === 'relationship_changed')).toBe(true);
+  });
+});

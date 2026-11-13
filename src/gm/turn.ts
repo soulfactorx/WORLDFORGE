@@ -64,7 +64,7 @@ interface DirectorOutput {
   check_mode: RollMode;
   check_reason: string;
   move_to: string; // 이동하지 않으면 ""
-  speakers: { npc_id: string; reacting_to: string }[];
+  speakers: { npc_id: string; reacting_to: string; /** v0.111: 연기를 따로 맡기지 않을 때 서술자가 쓸 요지 */ intent?: string; warmth?: number }[];
   start_encounter: string; // 시작하지 않으면 ""
   rest: 'none' | 'short' | 'long';
   discover: string[];
@@ -138,8 +138,12 @@ const DIRECTOR_SCHEMA = {
       type: 'array',
       description: '이번 턴에 말하거나 반응할 NPC (이 장소에 있는 인물만). 대화 상대가 없으면 빈 배열',
       items: {
-        type: 'object', additionalProperties: false, required: ['npc_id', 'reacting_to'],
-        properties: { npc_id: { type: 'string' }, reacting_to: { type: 'string', description: '이 NPC가 반응할 플레이어의 말/행동 요약' } },
+        type: 'object', additionalProperties: false, required: ['npc_id', 'reacting_to', 'intent', 'warmth'],
+        properties: {
+          npc_id: { type: 'string' }, reacting_to: { type: 'string', description: '이 NPC가 반응할 플레이어의 말/행동 요약' },
+          intent: { type: 'string', description: '이 인물이 이번에 할 말·행동의 요지 한 줄 (80자 이내, 새 사실·비밀 없이). 엔진이 이 인물의 연기를 따로 맡기지 않으면 서술자가 이것으로 대사를 쓴다' },
+          warmth: { type: 'integer', description: '이번 일로 이 인물의 마음이 플레이어 쪽으로 움직인 정도 -3~3 (별일 없으면 0)' },
+        },
       },
     },
   },
@@ -292,7 +296,7 @@ const NARRATOR_SYSTEM = `너는 1인칭 TRPG의 서술자이자 NPC 연기자다
 - 너는 플레이어 편의 이야기꾼이다. 플레이어는 이 세계를 배워 가는 중이다. 이곳 사람이면 누구나 아는 것("이 세계 — 개요"의 배경, 눈앞의 풍습·물건의 쓰임·사람들의 태도가 뜻하는 것)은 장면 속에서 자연스럽게 알게 해 준다 — 설명문이 아니라 보이는 것, 들리는 말, 사람들의 반응으로.
 - 감추는 것은 숨겨진 진실뿐이다: 엔진이 확정하지 않은 비밀·배후·앞일은 말하지 않는다. 그러나 "무언가 있다"는 느낌은 아끼지 않는다.
 - 플레이어는 서술에서 언제나 "당신"이라고 부른다. NPC의 말투("자네", "그대" 등)나 1인칭("나", "내")을 서술에 쓰지 않는다 — 그런 호칭은 큰따옴표 안 NPC 대사에서만.
-- NPC의 대사는 "확정된 NPC 반응"에 있는 것만 쓴다. 대사는 한 글자도 바꾸지 말고 큰따옴표로 그대로 넣는다 — 요약하거나 간접 화법("…라는 말뿐이다")으로 옮기지 않는다. NPC의 말을 새로 지어내지 않는다. (예외: 엔진이 "실마리 — 말문"으로 확정한 이야기가 그 인물의 대사에 빠져 있을 때만, 그 내용을 그가 덧붙여 말했다고 간접 화법으로 전한다.)
+- NPC의 대사는 "확정된 NPC 반응"에 있는 것만 쓴다. 대사는 한 글자도 바꾸지 말고 큰따옴표로 그대로 넣는다 — 요약하거나 간접 화법("…라는 말뿐이다")으로 옮기지 않는다. NPC의 말을 새로 지어내지 않는다. (예외 1: 반응에 "서술자가 쓴다"로 표시된 인물은 적힌 요지대로, 그 인물의 말투로 한두 마디를 네가 쓴다 — 요지에 없는 사실·비밀·약속은 넣지 않는다. 예외 2: 엔진이 "실마리 — 말문"으로 확정한 이야기가 그 인물의 대사에 빠져 있을 때만, 그 내용을 그가 덧붙여 말했다고 간접 화법으로 전한다.)
 - 플레이어가 아직 이름을 듣지 못한 NPC는 외형으로 지칭한다.
 - "즉흥 설정"이 지어내기 금지인 대상에는 새 세부사항을 덧붙이지 않는다. "이미 확정된 세부사항"과 모순되지 않는다.
 - 보호 주제는 언급·암시·창작하지 않는다.
@@ -470,7 +474,7 @@ export async function runTurn(
   const present = presentCharacters(world, s);
   const ruleReact = new Map<string, string[]>();
   for (const n of ruleNotes) for (const r of n.reactions) ruleReact.set(r.npcId, [...(ruleReact.get(r.npcId) ?? []), `${n.name}: ${r.text}`]);
-  let speakers = [...new Map([...(d.speakers ?? []), ...[...ruleReact.keys()].map((id) => ({ npc_id: id, reacting_to: '세계 규칙에 따른 반응' }))].map((sp) => [sp.npc_id, sp])).values()]
+  let speakers: DirectorOutput['speakers'] = [...new Map([...(d.speakers ?? []), ...[...ruleReact.keys()].map((id) => ({ npc_id: id, reacting_to: '세계 규칙에 따른 반응' }))].map((sp) => [sp.npc_id, sp])).values()]
     .filter((sp) => present.some((c) => c.id === sp.npc_id)).slice(0, 3);
   // 실마리 (v0.89): 엔진이 d20으로 굴린다 — 인물이 먼저 꺼내는 이야기(말문), 감추는 것의 낌새, 눈에 걸리는 것(눈썰미), 먼저 말 걸기
   const tellBy = new Map<string, Lead>(); const hintBy = new Map<string, Lead>();
@@ -491,8 +495,13 @@ export async function runTurn(
   report();
   const outcomeText = outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음';
   const actorState = s;
-  if (speakers.length) onStage(`${speakers.map((sp) => present.find((c) => c.id === sp.npc_id)!.name).join(', ')} 반응하는 중`);
-  const actorResults = await Promise.all(speakers.map(async (sp) => {
+  // NPC 연기 AI는 그 인물이 꼭 스스로 정해야 할 것이 있을 때만 부른다 (v0.111, 설계 v6 M1):
+  // 플레이어가 모르는 것을 알고 있다(전할지 정해야 함) · 실마리·규칙 반응 · 줄 물건 · 동행 결정 · 열린 관계 사건.
+  // 나머지는 GM 판단 AI가 정한 요지(intent)로 서술자가 그 인물의 말투로 짧게 쓴다 — 지식 필터는 그대로다 (서술자에게 그 인물의 지식이 가지 않는다).
+  const light = speakers.filter((sp) => sp.intent?.trim() && !actorNeeded(world, actorState, present.find((c) => c.id === sp.npc_id)!, tellBy.has(sp.npc_id) || hintBy.has(sp.npc_id) || ruleReact.has(sp.npc_id)));
+  const acting = speakers.filter((sp) => !light.includes(sp));
+  if (acting.length) onStage(`${acting.map((sp) => present.find((c) => c.id === sp.npc_id)!.name).join(', ')} 반응하는 중`);
+  const actorResults = await Promise.all(acting.map(async (sp) => {
     const npc = present.find((c) => c.id === sp.npc_id)!;
     const out = await llm.json<ActorOutput>({
       system: `${ACTOR_SYSTEM}\n- ${genreGuide(world)}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
@@ -555,6 +564,15 @@ export async function runTurn(
       if (reveals.some((r) => r.type === 'knowledge_revealed' && r.belief.claim === claimId)) continue;
       reveals.push({ type: 'knowledge_revealed', belief: { holder: 'player', claim: claimId, state, source: npc.id }, statement: claim.statement });
     }
+  }
+
+  // 가볍게 반응하는 인물: 요지와 말투만 서술자에게 (대사는 서술자가 쓴다). 마음의 움직임은 GM 판단 AI의 warmth (엔진이 한도로 자른다)
+  for (const sp of light) {
+    const npc = present.find((c) => c.id === sp.npc_id)!;
+    push({ type: 'npc_spoke', npcId: npc.id, dialogue: '', action: cleanIntent(sp.intent) });
+    reactions.push(`- ${displayName(s, npc)} [${npc.id}]: (서술자가 쓴다 — 이 요지대로 이 인물의 말투로 한두 마디. 새 사실·비밀을 말하지 않는다) 요지: ${cleanIntent(sp.intent)} / 말투: ${npc.speech || '성격대로'}`);
+    const w = Math.max(-3, Math.min(3, Math.round(Number(sp.warmth) || 0)));
+    if (w) reveals.push(...relationshipEvents(world, s, npc, { affinity: w, trust: Math.sign(w) }, sp.reacting_to?.slice(0, 40) || '대화'));
   }
 
   // 말문: 엔진이 확정한 이야기는 인물이 대사에 담았든 아니든 플레이어가 알게 된다
@@ -740,6 +758,17 @@ export async function runTurn(
 
   return { events, state: s, rejected };
 }
+
+/** 이 인물의 연기를 NPC 연기 AI에게 따로 맡겨야 하는가 (v0.111) */
+export function actorNeeded(world: WorldPackage, s: GameState, npc: Character, engineLead: boolean): boolean {
+  if (engineLead) return true;
+  if (pendingGifts(world, s, npc.id).length) return true;
+  if (npc.companion && !s.party[npc.id]) return true; // 동행 제안에 답해야 할 수 있다
+  if (activeBeats(world, s).some((b) => b.npcId === npc.id)) return true;
+  const confirmed = new Set(s.beliefs.filter((b) => b.holder === 'player' && b.state === 'confirmed').map((b) => b.claim));
+  return [...world.beliefs, ...s.beliefs].some((b) => b.holder === npc.id && !confirmed.has(b.claim));
+}
+const cleanIntent = (x?: string) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
 
 /** Director에게만 주는 시나리오 정보: 진행 중인 임무 힌트, 세울 수 있는 플래그, 발견할 수 있는 것 */
 function scenarioBlock(world: WorldPackage, s: GameState): string {
