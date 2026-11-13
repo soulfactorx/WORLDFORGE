@@ -1,12 +1,14 @@
 :root {
   --bg: #f6f4ef; --surface: #ffffff; --text: #1f1d1a; --muted: #6b665d; --border: #ddd7cc;
   --accent: #8a5a2b; --accent-text: #ffffff; --check: #2e5d8a; --player: #4a4640; --dialogue: #9a3f2b; --thought: #5d6b8a;
+  --tint-calm: #4f7a5a; --tint-warm: #a0602a; --tint-tense: #9a6a12; --tint-dark: #8a2f3a; --tint-bright: #2f6aa0;
   color-scheme: light;
   font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #16150f; --surface: #201e18; --text: #ebe6dc; --muted: #9c958a; --border: #36332b;
-    --accent: #d39a5c; --accent-text: #16150f; --check: #7fb0e0; --player: #c9c2b6; --dialogue: #f0b77a; --thought: #a9b4d0; color-scheme: dark; }
+    --accent: #d39a5c; --accent-text: #16150f; --check: #7fb0e0; --player: #c9c2b6; --dialogue: #f0b77a; --thought: #a9b4d0; color-scheme: dark;
+    --tint-calm: #8cc79a; --tint-warm: #e0a46a; --tint-tense: #e6c15a; --tint-dark: #f08a96; --tint-bright: #8ec0f0; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); }
@@ -1122,3 +1124,13 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .entry.check .tier-cost { color: var(--accent); }
 .entry.check .tier-fail { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
 .entry.check .roll-detail { color: var(--muted); font-size: 0.85em; }
+
+/* 국면 (v0.113): 국면마다 강조색이 바뀐다 */
+.play.phase-calm { --accent: var(--tint-calm); }
+.play.phase-warm { --accent: var(--tint-warm); }
+.play.phase-tense { --accent: var(--tint-tense); }
+.play.phase-dark { --accent: var(--tint-dark); }
+.play.phase-bright { --accent: var(--tint-bright); }
+.phase-chip { border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 1px 8px; font-size: .8rem; white-space: nowrap; }
+.entry.phase { border: 2px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin: 10px 0; background: var(--surface); font-weight: 600; }
+.entry.phase .phase-label { display: block; font-size: .8rem; color: var(--accent); font-weight: 700; margin-bottom: 2px; }

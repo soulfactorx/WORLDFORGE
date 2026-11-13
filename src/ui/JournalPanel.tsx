@@ -1,3 +1,5 @@
+import { worldVars } from '../engine/vars';
+import { currentPhase, phasesOf } from '../engine/phase';
 import { ZoomImg } from './Lightbox';
 import { RichText } from './RichText';
 import { openQuestions, todoThree } from '../engine/digest';
@@ -34,7 +36,8 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
   const questions = openQuestions(world, state);
   const knows = (claim: string) => state.beliefs.some((b) => b.holder === 'player' && b.claim === claim && b.state !== 'rumor');
   const outcomeName = (q: { outcomes?: { id: string; name: string }[] }, id?: string) => (id ? q.outcomes?.find((o) => o.id === id)?.name : undefined);
-  const vars = (world.vars ?? []).filter((v) => v.visible);
+  const vars = worldVars(world).filter((v) => v.visible);
+  const phase = currentPhase(world, state);
   return (
     <aside className="sheet">
       {world.overview?.trim() && (
@@ -112,7 +115,8 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
       {vars.length > 0 && (
         <>
           <b>이 세계의 상태</b>
-          <ul className="small">{vars.map((v) => <li key={v.id}>{v.name}: <b>{varLabel(v, varValue(world, state, v.id))}</b></li>)}</ul>
+          {phase && <p className="small">지금 국면: <b>{phase.name}</b>{(state.phasePath?.length ?? 0) > 1 && <span className="muted"> (지나온 국면: {state.phasePath!.map((id) => phasesOf(world).find((p) => p.id === id)?.name ?? id).join(' → ')})</span>}</p>}
+          <ul className="small">{vars.map((v) => <li key={v.id}>{v.name}: <b>{varLabel(v, varValue(world, state, v.id)) || varValue(world, state, v.id)}</b>{v.poles && <span className="muted"> ({v.poles[0]} ← {varValue(world, state, v.id)} → {v.poles[1]})</span>}</li>)}</ul>
         </>
       )}
       {date && <p className="small">오늘: <b>{date.label}</b>{date.countdown && <> · <b className="dday">{date.countdown}</b></>}{date.elapsed > 0 && <span className="muted"> (시작한 지 {date.elapsed}일째)</span>}</p>}

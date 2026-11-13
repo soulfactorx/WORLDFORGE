@@ -99,21 +99,23 @@ export function sfxForLog(kind: string, text: string): Sfx | null {
     return null;
   }
   if (kind === 'quest') return text.startsWith('◆ 결정') ? 'decision' : text.includes('실패') ? 'fail' : 'quest';
-  if (kind === 'omen') return 'omen';
+  if (kind === 'omen' || kind === 'phase') return 'omen';
   if (kind === 'check') return 'dice';
   return null;
 }
 
 // ---------------------------------------------------------------- 배경 음악 (절차적, 아주 조용히)
 
-export type Mood = 'fantasy' | 'wuxia' | 'romance' | 'combat';
+export type Mood = 'fantasy' | 'wuxia' | 'romance' | 'combat' | 'tense' | 'dark';
 const SCALES: Record<Mood, number[]> = {
   fantasy: [0, 2, 4, 7, 9, 12, 14],     // 장조 펜타토닉에 가깝게 — 넓고 밝게
   wuxia: [0, 2, 5, 7, 9, 12, 14],        // 궁상각치우 느낌의 5음계
   romance: [0, 4, 7, 11, 14, 16, 19],    // 장7화음 — 부드럽게
   combat: [0, 3, 5, 7, 10, 12, 15],      // 단조 펜타토닉 — 긴장
+  tense: [0, 1, 5, 7, 8, 12, 13],        // 프리지안 — 불안 (국면, v0.113)
+  dark: [0, 3, 6, 8, 11, 12, 15],        // 감7·단음계 — 어둠 (국면, v0.113)
 };
-const ROOT: Record<Mood, number> = { fantasy: 196, wuxia: 220, romance: 174.6, combat: 146.8 };
+const ROOT: Record<Mood, number> = { fantasy: 196, wuxia: 220, romance: 174.6, combat: 146.8, tense: 164.8, dark: 130.8 };
 
 let musicTimer: ReturnType<typeof setInterval> | null = null;
 let musicMood: Mood | null = null;
@@ -131,7 +133,7 @@ export function setMusic(mood: Mood | null) {
   musicBus = a.ctx.createGain();
   musicBus.gain.value = 0.35;
   musicBus.connect(a.out);
-  const beat = mood === 'combat' ? 0.45 : 0.9;
+  const beat = mood === 'combat' ? 0.45 : mood === 'tense' ? 0.7 : mood === 'dark' ? 1.2 : 0.9;
   const tick = () => {
     if (!musicMood || !musicBus) return;
     const sc = SCALES[musicMood], root = ROOT[musicMood];
@@ -154,8 +156,9 @@ export function stopMusic() {
   musicBus = null;
 }
 
-export function moodOf(genreId: string | undefined, inCombat: boolean): Mood {
-  if (inCombat) return 'combat';
+export function moodOf(genreId: string | undefined, inCombat: boolean, phaseMusic?: 'calm' | 'tense' | 'dark' | 'combat'): Mood {
+  if (inCombat || phaseMusic === 'combat') return 'combat';
+  if (phaseMusic === 'tense' || phaseMusic === 'dark') return phaseMusic;
   const k = genreDataKey(genreId);
   return k === 'wuxia' ? 'wuxia' : k === 'romance' ? 'romance' : 'fantasy';
 }

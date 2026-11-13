@@ -14,10 +14,14 @@ import type { Condition, StoryEffect, WorldPackage } from '../engine/schema';
 import { ConditionField } from './ConditionEditor';
 import { JsonField } from './form';
 import { EffectsEditor } from './WorldForms';
+import { phasesOf } from '../engine/phase';
+import { GM_STYLES } from '../data/gmStyles';
 
 export type RefKind = 'locations' | 'characters' | 'claims' | 'factions' | 'scenes' | 'encounters' | 'quests' | 'items' | 'monsters' | 'flags' | 'skills'
   /** 적으로 세울 수 있는 것: 적 목록 + 이 세계의 인물 ("npc:인물ID" — 그 인물의 직업·레벨·능력치로 싸운다) (v0.110) */
-  | 'foes';
+  | 'foes'
+  /** 국면 (v0.113) */
+  | 'phases';
 type Base = { k: string; label: string; hint?: string; /** 비우면 칸 자체를 지운다 */ opt?: boolean };
 export type Field =
   | (Base & { t: 'text' | 'long' | 'num' })
@@ -29,6 +33,10 @@ export type Field =
   | (Base & { t: 'xp' })
   /** [숫자, 이름] 짝의 목록 — 세계 수치의 단계 이름 같은 것 (v0.109) */
   | (Base & { t: 'pairs'; numLabel: string; textLabel: string; add: string })
+  /** 양 끝의 이름 두 개 — 기류 축 (v0.113) */
+  | (Base & { t: 'poles' })
+  /** ID → 한 줄 글 (국면의 인물 태도 같은 것, v0.113) */
+  | (Base & { t: 'textmap'; of: RefKind; add: string; textLabel: string })
   | (Base & { t: 'cond' })
   | (Base & { t: 'effects' })
   | (Base & { t: 'obj'; fields: Field[] })
@@ -54,6 +62,7 @@ export function refOptions(w: WorldPackage, of: RefKind): (readonly [string, str
     case 'foes': return [...Object.values(monsterTable(w)).map((m) => [m.id, `${m.name} (${m.id})`] as const), ...w.characters.map((c) => [`npc:${c.id}`, `인물: ${c.name} (${c.id})`] as const)];
     case 'flags': return (w.flags ?? []).map((f) => [f.id, f.id] as const);
     case 'skills': return (Object.keys(SKILLS) as SkillId[]).map((k) => [k, `${SKILLS[k].name} (${k})`] as const);
+    case 'phases': return named(phasesOf(w));
   }
 }
 
@@ -110,6 +119,29 @@ function FieldInput({ f, value, w, onChange }: { f: Field; value: unknown; w: Wo
             <button type="button" className="small" onClick={() => set([...rows, [rows.length ? (rows.at(-1)![0] ?? 0) + 10 : 0, '']])}>＋ {f.add}</button>
             {rows.length > 1 && rows.some((r, i) => i > 0 && r[0] < rows[i - 1]![0]) && <button type="button" className="small" onClick={() => set([...rows].sort((a, b) => a[0] - b[0]))}>작은 값부터 정렬</button>}
           </div>
+        </fieldset>); }
+    case 'poles': { const v = Array.isArray(value) ? (value as string[]) : ['', ''];
+      const put = (i: number, t: string) => { const n = [...v]; n[i] = t; out(n.every((x) => !x?.trim()) ? undefined : n); };
+      return (
+        <fieldset className="struct-obj"><legend>{f.label}</legend>{hint}
+          <div className="struct-pair">
+            <label className="struct-pair-text">낮은 쪽 (−)<input value={v[0] ?? ''} onChange={(e) => put(0, e.target.value)} /></label>
+            <label className="struct-pair-text">높은 쪽 (+)<input value={v[1] ?? ''} onChange={(e) => put(1, e.target.value)} /></label>
+          </div>
+        </fieldset>); }
+    case 'textmap': { const m = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as Record<string, string>; const opts = refOptions(w, f.of);
+      const put = (n: Record<string, string>) => out(Object.keys(n).length ? n : undefined);
+      return (
+        <fieldset className="struct-obj"><legend>{f.label}</legend>{hint}
+          {Object.keys(m).length === 0 && <p className="small muted">아직 없습니다.</p>}
+          {Object.entries(m).map(([id, t]) => (
+            <div key={id} className="struct-pair">
+              <label className="struct-pair-text">{opts.find(([v]) => v === id)?.[1] ?? `⚠ ${id}`} — {f.textLabel}<input value={t} onChange={(e) => put({ ...m, [id]: e.target.value })} /></label>
+              <button type="button" className="icon" aria-label={`${id} 지우기`} title="지우기" onClick={() => { const { [id]: _x, ...rest } = m; put(rest); }}>🗑</button>
+            </div>
+          ))}
+          <select value="" aria-label={f.add} onChange={(e) => { if (e.target.value) put({ ...m, [e.target.value]: '' }); }}>
+            <option value="">＋ {f.add}…</option>{opts.filter(([v]) => !(v in m)).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
         </fieldset>); }
     case 'cond': return <ConditionField label={f.label} value={value as Condition | undefined} world={w} optional={!!f.opt} onChange={(c) => onChange(c)} />;
     case 'effects': return <EffectsEditor label={f.label} value={value as StoryEffect[] | undefined} w={w} onChange={(v) => onChange(v.length || !f.opt ? v : undefined)} />;
@@ -263,7 +295,20 @@ export const SPEC = {
     fields: [{ k: 'id', label: 'ID (var/…)', t: 'text' }, { k: 'name', label: '이름', t: 'text' }, { k: 'initial', label: '처음 값', t: 'num' },
       { k: 'min', label: '최소 (비우면 0)', t: 'num', opt: true }, { k: 'max', label: '최대 (비우면 100)', t: 'num', opt: true },
       { k: 'visible', label: '플레이어에게 보인다 (수첩·서술 분위기)', t: 'bool' },
-      { k: 'labels', label: '단계 이름', t: 'pairs', opt: true, numLabel: '이 값 이상이면', textLabel: '이름', add: '단계 추가', hint: '값이 그 숫자 이상이면 그 이름으로 불린다. 예: 0 무법 · 40 불안 · 70 평온 (작은 값부터)' }] } as ListSpec,
+      { k: 'labels', label: '단계 이름', t: 'pairs', opt: true, numLabel: '이 값 이상이면', textLabel: '이름', add: '단계 추가', hint: '값이 그 숫자 이상이면 그 이름으로 불린다. 예: 0 무법 · 40 불안 · 70 평온 (작은 값부터)' },
+      { k: 'poles', label: '기류 축의 양 끝 (선택)', t: 'poles', opt: true, hint: '이 수치가 세계의 방향을 가르는 축이면 양 끝의 이름 — 예: 봉인 수호 ↔ 봉인 해방. 선택지가 이 축을 움직인다 (v0.113)' }] } as ListSpec,
+  phases: { add: '국면 추가', make: (_w, n) => ({ id: `phase/new-${n}`, name: '새 국면', tone: '', enter: { var: 'tension', gte: 7 } }), title: (x) => `${x.name ?? ''} (${x.id ?? ''})`,
+    fields: [{ k: 'id', label: 'ID (phase/…)', t: 'text' }, { k: 'name', label: '이름', t: 'text' },
+      { k: 'tone', label: '이 국면의 공기 — 서술·GM·선택지의 문체', t: 'long', hint: '예: 숨 막히는 공포. 문장은 짧게, 소리는 멀리서. 사람들은 문을 걸어 잠근다' },
+      { k: 'enter', label: '들어가는 조건', t: 'cond', hint: '긴장(tension 0~10)·세계 수치·플래그·임무·결정적 선택… 위의 국면부터 차례로 본다' },
+      { k: 'from', label: '이 국면들에서만 올 수 있다 (비우면 어디서든)', t: 'refs', of: 'phases', opt: true },
+      { k: 'announce', label: '바뀔 때 알리는 한 줄', t: 'long', opt: true },
+      { k: 'tint', label: '화면 강조색', t: 'enum', opt: true, options: [['calm', '차분 (초록)'], ['warm', '따뜻 (주황)'], ['tense', '불안 (노랑)'], ['dark', '어둠 (붉음)'], ['bright', '맑음 (파랑)']] },
+      { k: 'music', label: '음악', t: 'enum', opt: true, options: [['calm', '잔잔하게 (장르 기본)'], ['tense', '불안하게'], ['dark', '어둡게'], ['combat', '격렬하게']] },
+      { k: 'gmStyle', label: '이 국면의 GM 스타일 (비우면 세계 설정)', t: 'enum', opt: true, options: GM_STYLES.map((g) => [g.id, `${g.emoji} ${g.name}`] as const) },
+      { k: 'attitudes', label: '이 국면의 인물 태도', t: 'textmap', of: 'characters', add: '인물 추가', textLabel: '이 국면에서 어떤가', opt: true },
+      { k: 'closed', label: '이 국면에는 갈 수 없는 장소', t: 'refs', of: 'locations', opt: true },
+      { k: 'effects', label: '들어올 때 일어나는 일', t: 'effects', opt: true }] } as ListSpec,
   approaches: { add: '접근법 추가', make: () => ({ hint: '' }), title: (x) => String(x.hint ?? ''),
     fields: [{ k: 'hint', label: 'GM에게: 이런 길도 있다', t: 'long' }, { k: 'skills', label: '쓰이는 기술', t: 'refs', of: 'skills', opt: true }, { k: 'risk', label: '위험', t: 'text', opt: true }] } as ListSpec,
   outcomes: { add: '결과 추가', make: (_w, n) => ({ id: `outcome-${n}`, name: '새 결과', when: { all: [] } }), title: (x) => String(x.name ?? ''),

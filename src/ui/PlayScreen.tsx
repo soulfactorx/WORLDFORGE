@@ -14,6 +14,7 @@ import { BoardPanel, InventoryPanel, ShopPanel } from './InventoryPanel';
 import { boardHere } from '../engine/jobs';
 import { autoFightEvents, minorFight, narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
 import { currentActorId } from '../engine/combat/combat';
+import { currentPhase, tensionOf } from '../engine/phase';
 import type { PartyOrder, Target } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
 import { CombatPanel } from './CombatPanel';
@@ -239,7 +240,8 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   }, [state]);
   // 격투 장르는 장면(턴제 격투) 중에도 전투 음악 (v0.49)
   const fightingNow = !!state?.combat || (genreKey(world) === 'fighting' && !!state?.scene);
-  useEffect(() => { setMusic(state ? moodOf(world.genre?.id, fightingNow) : null); }, [fightingNow, world.genre?.id, avTick, !!state]);
+  const phaseNow = state ? currentPhase(world, state) : undefined;
+  useEffect(() => { setMusic(state ? moodOf(world.genre?.id, fightingNow, phaseNow?.music) : null); }, [fightingNow, world.genre?.id, avTick, !!state, phaseNow?.music]);
   useEffect(() => () => { stopMusic(); stopSpeaking(); }, []);
 
   async function submit(choice?: string, choiceUse?: string, decision?: { choiceId: string; optionId: string }) {
@@ -424,12 +426,13 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
 
   return (
     <ReskinContext.Provider value={rs}>
-    <section className={`play img-${imgSize}${state.combat && !state.playerDead ? ' in-combat' : ''}`}>
+    <section className={`play img-${imgSize}${state.combat && !state.playerDead ? ' in-combat' : ''}${phaseNow?.tint ? ` phase-${phaseNow.tint}` : ''}`}>
       <div className="play-head">
       <div className="scene-bar">
         {locImage && <AssetImage pkg={world.manifest.id} id={locImage.id} alt={loc?.name ?? ''} className="loc-thumb" zoom />}
         <b>{loc?.name}</b>
         {Object.keys(state.party).length > 0 && <span className="small muted">동행: {Object.values(state.party).map((c) => c.name).join(', ')}</span>}
+        {phaseNow && loadPlayPrefs().display !== 'immersive' && <span className="phase-chip" title={`지금 국면: ${phaseNow.name} — 긴장 ${tensionOf(state)}/10`}>🌗 {rs(phaseNow.name)} · 긴장 {tensionOf(state)}</span>}
         {date && <span className="small date">{date.label}{date.countdown && <b className={date.daysLeft !== undefined && date.daysLeft <= 7 ? 'dday urgent' : 'dday'}> · {date.countdown}</b>}</span>}
         {loadPlayPrefs().display === 'game' && <XpBar sheet={state.player.sheet} />}
         <span className="muted small nowrap">{String(Math.floor(state.worldMinutes / 60) % 24).padStart(2, '0')}:{String(state.worldMinutes % 60).padStart(2, '0')} · 턴 {state.turn}</span>
@@ -512,7 +515,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                 )}
               </div>
             ) : placed(e) ? <PlacedNarration text={e.text} images={e.images!} pkg={world.manifest.id} size={imgSize} bgMode={loadPlayPrefs().background} />
-              : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : e.kind === 'check' ? <CheckLine text={rs(e.text)} /> : rs(e.text)}</p>}
+              : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : e.kind === 'check' ? <CheckLine text={rs(e.text)} /> : e.kind === 'phase' ? <><span className="phase-label">🌗 세계가 변했다</span>{rs(e.text)}</> : rs(e.text)}</p>}
           </div>
         ))}
         {decisive && streaming === null && (

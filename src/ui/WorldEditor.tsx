@@ -795,6 +795,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <h4>결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지)</h4><ChoiceForms w={w} set={set} />
               <h4>진행 시계 (시간·사건으로 차오르고, 정해진 칸에서 일이 벌어진다)</h4><ClockForms w={w} set={set} />
               <h4>연표 사건 (날짜·날 수·조건에 일어나고, 막을 수 있다)</h4><EventForms w={w} set={set} />
+              <h4>국면 (세계의 공기 — 바뀌면 문체·음악·화면 색·인물 태도·닫힌 장소가 함께 바뀐다)</h4>
+              <p className="muted small">비워 두면 긴장(tension 0~10)으로 움직이는 기본 국면 셋(평온 · 술렁임 · 위기)을 씁니다. 긴장은 실패·전투·징조·사건으로 오르고 휴식·해결로 내립니다. 위의 국면부터 차례로 조건을 보고, 들어간 뒤 3턴은 머뭅니다.</p>
+              <label className="check small"><input type="checkbox" checked={w.autoPhases !== false || !!w.phases?.length} disabled={!!w.phases?.length} onChange={(e) => set({ autoPhases: e.target.checked ? undefined : false })} /> 국면을 정하지 않으면 기본 국면을 쓴다</label>
+              <StructField w={w} spec={{ list: SPEC.phases }} label="이 세계의 국면" value={w.phases ?? []} rows={8} onChange={(phases) => set({ phases: Array.isArray(phases) && phases.length ? phases : undefined })}
+                help='예: { "id": "phase/rift", "name": "균열", "tone": "…", "enter": { "all": [{ "var": "tension", "gte": 4 }, { "var": "var/seal", "lte": -2 }] }, "from": ["phase/calm"], "tint": "dark" }' />
               <StructField w={w} spec={{ list: SPEC.vars }} label="세계 수치 (지역 치안·숲의 위험도 같은 숫자 — 효과로 바뀌고 조건으로 읽힌다)" value={w.vars ?? []} rows={6} onChange={(vars) => set({ vars: Array.isArray(vars) && vars.length ? vars : undefined })}
                 help='예: { "id": "var/safety", "name": "마을 치안", "initial": 50, "min": 0, "max": 100, "labels": [[0, "무법"], [40, "불안"], [70, "평온"]], "visible": true }' />
             </>
@@ -810,6 +815,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
             help='예: { "id": "arc/main", "name": "숲의 그림자", "kind": "main", "start": { "all": [] }, "chapters": [{ "name": "낯선 땅", "goal": "GM용 목표", "summary": "수첩에 보이는 한 줄", "complete": { "at": "loc/…" }, "fail": { "flag": "…" } }] } · 2부는 start에 { "arcDone": "arc/main" }' />
           <JsonField label="결정적 선택 (조건이 맞으면 플레이어 화면에 고정 선택지가 뜬다)" value={w.choices ?? []} onChange={(choices) => set({ choices })} rows={12}
             help='예: { "id": "choice/side", "name": "누구 편인가", "prompt": "누구의 말을 믿을 것인가?", "when": { "knows": "claim/…" }, "locationId": "loc/… (선택)", "options": [{ "id": "a", "text": "장로를 믿는다", "effects": [{ "setFlag": "…" }] }, { "id": "b", "text": "…", "effects": [] }] }' />
+          <JsonField label="국면 (비우면 긴장으로 움직이는 기본 국면 셋)" value={w.phases ?? []} rows={8} onChange={(phases) => set({ phases: Array.isArray(phases) && phases.length ? phases : undefined })}
+            help='예: { "id": "phase/rift", "name": "균열", "tone": "이 국면의 문체", "enter": { "var": "tension", "gte": 4 }, "from": ["phase/calm"], "announce": "…", "tint": "dark", "music": "dark", "attitudes": { "npc/…": "…" }, "closed": ["loc/…"] } · 조건 { "phase": "phase/rift" }' />
           <JsonField label="세계 수치 (지역 치안·숲의 위험도 같은 숫자 — 효과 var로 바뀌고 조건 var로 읽힌다)" value={w.vars ?? []} rows={6} onChange={(vars) => set({ vars: Array.isArray(vars) && vars.length ? vars : undefined })}
             help='예: { "id": "var/safety", "name": "마을 치안", "initial": 50, "min": 0, "max": 100, "labels": [[0, "무법"], [40, "불안"], [70, "평온"]], "visible": true } · 효과 { "var": "var/safety", "add": -10 } · 조건 { "var": "var/safety", "gte": 70 }' />
           <JsonField label="진행 시계 (시간·사건으로 차오르고, 정해진 칸에서 일이 벌어진다)" value={w.clocks ?? []} onChange={(clocks) => set({ clocks })} rows={12}

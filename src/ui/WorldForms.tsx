@@ -1,3 +1,4 @@
+import { worldVars } from '../engine/vars';
 import { traitsFor } from '../engine/traits';
 import { UNSET_CONDITION } from '../engine/scenario';
 /**
@@ -41,7 +42,7 @@ function blankFx(k: FxKind, w: WorldPackage): StoryEffect {
     case 'giveItem': return { giveItem: allItems(w)[0]?.id ?? '' };
     case 'takeItem': return { takeItem: allItems(w)[0]?.id ?? '' };
     case 'money': return { money: 10 };
-    case 'var': return { var: f(w.vars), add: -10 };
+    case 'var': return { var: f(worldVars(w)), add: 1 };
     case 'trait': return { trait: traitsFor(w)[0]?.id ?? '', add: 5 };
     case 'npcRelation': return { npcRelation: f(w.characters), with: w.characters[1]?.id ?? f(w.characters), kind: 'rival' };
     case 'startScene': return { startScene: f(w.scenes) };
@@ -89,7 +90,7 @@ export function EffectsEditor({ label, value, w, onChange }: { label: string; va
               {k === 'startEncounter' && <S value={x.startEncounter as string} options={opts(w.encounters)} onChange={(v) => up(i, { startEncounter: v })} />}
               {k === 'moveTo' && <S value={x.moveTo as string} options={opts(w.locations)} onChange={(v) => up(i, { moveTo: v })} />}
               {k === 'trait' && <><S value={x.trait as string} options={traitsFor(w).map((t) => [t.id, `${t.name} (${t.low}↔${t.high})`] as const)} onChange={(v) => up(i, { ...x, trait: v } as StoryEffect)} /> <N value={x.add as number} onChange={(v) => up(i, { trait: x.trait, add: v ?? 0 } as StoryEffect)} /> <span className="small muted">(+면 {traitsFor(w).find((t) => t.id === x.trait)?.high ?? '높은 쪽'}, -면 {traitsFor(w).find((t) => t.id === x.trait)?.low ?? '낮은 쪽'})</span></>}
-              {k === 'var' && <><S value={x.var as string} options={opts(w.vars)} onChange={(v) => up(i, { ...x, var: v } as StoryEffect)} /><S value={x.set !== undefined ? 'set' : 'add'} options={[['add', '더하기'], ['set', '정하기']]} onChange={(v) => up(i, (v === 'set' ? { var: x.var, set: (x.add as number) ?? 50 } : { var: x.var, add: (x.set as number) ?? 10 }) as StoryEffect)} /><N value={(x.set ?? x.add) as number} onChange={(v) => up(i, (x.set !== undefined ? { var: x.var, set: v ?? 0 } : { var: x.var, add: v ?? 0 }) as StoryEffect)} /></>}
+              {k === 'var' && <><S value={x.var as string} options={opts(worldVars(w))} onChange={(v) => up(i, { ...x, var: v } as StoryEffect)} /><S value={x.set !== undefined ? 'set' : 'add'} options={[['add', '더하기'], ['set', '정하기']]} onChange={(v) => up(i, (v === 'set' ? { var: x.var, set: (x.add as number) ?? 50 } : { var: x.var, add: (x.set as number) ?? 10 }) as StoryEffect)} /><N value={(x.set ?? x.add) as number} onChange={(v) => up(i, (x.set !== undefined ? { var: x.var, set: v ?? 0 } : { var: x.var, add: v ?? 0 }) as StoryEffect)} /></>}
               {k === 'npcRelation' && <><S value={x.npcRelation as string} options={opts(w.characters)} onChange={(v) => up(i, { ...x, npcRelation: v } as StoryEffect)} /> ↔ <S value={x.with as string} options={opts(w.characters)} onChange={(v) => up(i, { ...x, with: v } as StoryEffect)} /><S value={x.kind as string} options={[...Object.entries(RELATION_KIND_LABEL), ['none', '관계 끊김']] as [string, string][]} onChange={(v) => up(i, { ...x, kind: v } as StoryEffect)} /></>}
             </div>
             <button type="button" className="small" onClick={() => onChange(list.filter((_, j) => j !== i))}>✕</button>
