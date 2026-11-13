@@ -156,6 +156,12 @@ const SCREENS = [
     const g = p.locator('.struct-field', { hasText: '일정 (시각에' }).first();
     await g.locator('button:has-text("＋ 일정 추가")').click();
   }],
+  ['편집: 국면 (v0.113)', async (p) => {
+    await editorTab(p, '이야기 흐름');
+    const f = p.locator('.struct-field', { hasText: '이 세계의 국면' }).first();
+    await f.locator('button:has-text("＋ 국면 추가")').click();
+    await f.locator('select[aria-label="인물 추가"]').selectOption({ index: 1 });
+  }],
   ['편집: 선택형 (세계 수치)', async (p) => {
     await editorTab(p, '이야기 흐름');
     await p.locator('.struct-field', { hasText: '세계 수치 (지역 치안' }).first().locator('button:has-text("＋ 세계 수치 추가")').click();
