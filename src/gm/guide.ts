@@ -202,6 +202,11 @@ ${GUIDE_SYSTEM.split('\n').slice(1).join('\n')}
 - skill은 다음 중 하나 또는 "": ${SKILL_IDS.join(', ')}. kind는 advance·bond·bold·wild 중 하나씩.`;
 }
 
+/** 서술 요청에 선택지 꼬리를 붙인다 (전투·장면 뒤 서술도 안내를 따로 부르지 않게, v0.117) */
+export function withChoiceTail<T extends { system: string; user: string }>(world: WorldPackage, s: GameState, req: T): T {
+  return { ...req, system: `${req.system}\n\n${choiceTailRules()}\n${guideRules(world)}`, user: `${req.user}\n\n# 선택지 꼬리의 재료 (서술 뒤 ${TAIL_MARK} 아래 JSON에만 쓴다)\n${guideMaterials(world, s)}` };
+}
+
 /** 서술 글에서 선택지 꼬리를 떼어 낸다. 꼬리가 없으면 tail = null */
 export function splitTail(text: string): { narration: string; tail: GuideOutput | null } {
   const i = text.indexOf(TAIL_MARK);

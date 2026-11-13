@@ -70,3 +70,13 @@ describe('NPC 연기 AI는 필요할 때만 (v0.111)', () => {
     expect(r.events.some((e) => e.type === 'relationship_changed')).toBe(true);
   });
 });
+
+describe('전투 뒤 서술도 선택지 꼬리 (v0.117)', () => {
+  it('꼬리를 청하면 시스템에 꼬리 규칙이 붙고, 흘러나오는 글에서 꼬리가 감춰진다', async () => {
+    const { withChoiceTail } = await import('./guide');
+    const s = start();
+    const req = withChoiceTail(sampleWorld, s, { system: '너는 서술자다.', user: '전투 기록' });
+    expect(req.system).toContain(TAIL_MARK);
+    expect(req.user).toContain('걸 수 있는 것');
+  });
+});

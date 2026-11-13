@@ -36,7 +36,7 @@ import { AssetImage } from './AssetImage';
 import { RichText } from './RichText';
 import { ReskinContext } from './reskin';
 import { reskinner } from '../engine/genre';
-import { basicGuide, CHOICE_KINDS, gmGuide, type ChoiceKind } from '../gm/guide';
+import { basicGuide, CHOICE_KINDS, gmGuide, guideEvent, splitTail, type ChoiceKind } from '../gm/guide';
 import { calendarDate } from '../engine/calendar';
 import { ABILITIES, ABILITY_NAMES, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { checkModifier } from '../engine/character/sheet';
@@ -328,16 +328,19 @@ function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: str
       setStreaming(''); setStage('전투를 서술하는 중'); setStartedAt(Date.now());
       abort.current = new AbortController();
       let text: string;
+      // 전투 뒤 선택지도 서술 끝에 함께 받는다 (v0.117 — 안내를 따로 부르지 않는다). 곧바로 다음 전투·장면이 이어지면 선택지가 필요 없다
+      const wantChoices = !after.combat && !after.scene && !after.playerDead;
+      let tail: ReturnType<typeof splitTail>['tail'] = null;
       try {
-        text = await narrateCombat(createLlmClient(settings), world, before, after, combatLog, events, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal);
+        const raw = await narrateCombat(createLlmClient(settings), world, before, after, combatLog, events, (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, wantChoices ? after : undefined);
+        ({ narration: text, tail } = wantChoices ? splitTail(raw) : { narration: raw, tail: null });
       } catch (e) {
         setError(`전투 서술 실패: ${(e as Error).message}`);
         text = '전투가 끝났다.';
       }
-      // 전투 뒤 선택지도 방금 일어난 일에서 이어지게 (v0.79.5: 정해진 문구 대신 AI 안내)
       const narr: GameEvent = { type: 'narration', text };
-      // 곧바로 다음 전투·장면이 이어지면 선택지를 만들지 않는다 (그것이 끝난 뒤에 만든다)
-      const extra: GameEvent[] = after.combat || after.scene ? [narr] : [narr, await guideAfter(applyEvent(after, narr, after.turn), text)];
+      const st1 = applyEvent(after, narr, after.turn);
+      const extra: GameEvent[] = !wantChoices ? [narr] : [narr, (tail ? guideEvent(world, st1, tail) : null) ?? await guideAfter(st1, text)];
       await appendEvents(saveId, extra.map((event) => ({ saveId, seq: seq++, turn: after.turn, event })));
       setStreaming(null);
     }
@@ -392,13 +395,16 @@ function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: str
     if (sceneId && !after.scene && def) {
       const extra: GameEvent[] = [];
       let text = '';
+      let tail: ReturnType<typeof splitTail>['tail'] = null;
       if (mode !== 'fixed' && settings) {
-        text = await narrate('장면을 서술하는 중', (on, sig) => narrateScene(createLlmClient(settings), world, after, def, [...log, ...lines], events, on, sig), '장면이 끝났다.');
+        const wantChoices = !after.combat && !after.scene;
+        const raw = await narrate('장면을 서술하는 중', (on, sig) => narrateScene(createLlmClient(settings), world, after, def, [...log, ...lines], events, on, sig, wantChoices ? after : undefined), '장면이 끝났다.');
+        ({ narration: text, tail } = wantChoices ? splitTail(raw) : { narration: raw, tail: null });
         extra.push({ type: 'narration', text });
       }
       // 장면이 끝난 뒤 선택지도 그 결과에서 이어지게 (v0.79.5). AI 없이면 다음 카드를 펼친다 (v0.116)
       if (!settings) extra.push(...afterFightOffline(world, after, '장면이 끝났다.'));
-      else if (!after.combat && !after.scene) extra.push(text ? await guideAfter(applyEvent(after, extra[0]!, after.turn), text) : basicGuide(world, after));
+      else if (!after.combat && !after.scene) extra.push(text ? (tail ? guideEvent(world, applyEvent(after, extra[0]!, after.turn), tail) : null) ?? await guideAfter(applyEvent(after, extra[0]!, after.turn), text) : basicGuide(world, after));
       await appendEvents(saveId, extra.map((event) => ({ saveId, seq: seq++, turn: after.turn, event })));
       setStreaming(null);
     } else if (after.scene && def && mode === 'ai' && settings && lines.length) {

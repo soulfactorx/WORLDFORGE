@@ -29,6 +29,7 @@ import { aftermathBlock, NARRATION_CORE } from './brief';
 import { buildNarratorContext } from './context';
 import { effectEvents } from './story';
 import { phaseEvents } from './phase';
+import { tailFilter, withChoiceTail } from './guide';
 
 /**
  * 전투 진행 — 엔진 결과를 이벤트로 만든다. 전투 중에는 LLM을 호출하지 않는다 (비용·속도·결정성).
@@ -288,6 +289,8 @@ export function setPartyOrder(state: GameState, npcId: string, order: PartyOrder
 export async function narrateCombat(
   llm: LlmClient, world: WorldPackage, before: CombatState, after: GameState, combatLog: string[], events: GameEvent[],
   onText: (d: string) => void, signal?: AbortSignal,
+  /** 선택지 꼬리를 함께 받는다 (v0.117): 그때의 상태. 돌려받은 글을 splitTail로 나눈다 */
+  choicesFor?: GameState,
 ): Promise<string> {
   const rs = reskinner(world);
   // 결과는 전투 종료 이벤트에서 직접 읽는다 (v0.85: 기록의 마지막 줄을 쓰던 것 수정 — 승리 뒤에는 경험치·전리품 기록이 이어 붙는다)
@@ -303,7 +306,7 @@ export async function narrateCombat(
   const defeatRule = ended?.type === 'combat_ended' && ended.outcome === 'defeat' && !ended.playerDead && enc?.onDefeat?.length
     ? '- 패배했다. "이 결과로 바뀐 것"에 적힌 대로 이어진다 (붙잡힘·끌려감·잃은 것). 적히지 않은 일을 지어내지 않는다.'
     : '- 패배(쓰러짐)했다면 정신을 잃었다가 한참 뒤 깨어나는 것으로 마무리한다. 누가 구해 줬는지는 지어내지 않는다.';
-  return llm.stream({
+  const req = {
     system: `너는 1인칭 TRPG의 서술자다. 방금 끝난 전투를 3~5문단으로 생생하게 쓴다.
 ${NARRATION_CORE}
 - 전투 기록 전부를 옮기지 않는다. 흐름이 바뀐 고비 두세 개(첫 충돌, 위기, 결정타)를 골라 쓰고 나머지는 한두 문장으로 잇는다. 기록에 없는 명중·피해·쓰러짐을 만들지 않는다.
@@ -317,5 +320,6 @@ ${defeatRule}
 - ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}${world.style?.trim() ? `\n\n## 이 세계의 문체 참고 (패키지 데이터. 위 규칙이 우선)\n${world.style.slice(0, 800)}` : ''}`,
     user: `${buildNarratorContext(world, after, { thread: { chronicle: 5, lastChars: 1200 } })}\n\n## 왜 일어났나\n${why.join('\n')}\n\n## 참가자\n${Object.values(before.combatants).map((c) => `- ${rs(c.name)} (${c.side === 'party' ? '아군' : '적'}${c.look ? ` — ${c.look}` : c.monsterId && MONSTERS[c.monsterId] ? ` — ${MONSTERS[c.monsterId]!.look}` : ''})`).join('\n')}\n\n## 전투 기록\n${combatLog.map(rs).join('\n')}\n\n## 결과 (엔진 확정)\n${outcome}\n플레이어 HP: ${after.player.sheet.hp}/${after.player.sheet.maxHp}\n\n${aftermathBlock(world, after, events)}`,
     maxTokens: 3000,
-  }, onText, signal);
+  };
+  return llm.stream(choicesFor ? withChoiceTail(world, choicesFor, req) : req, choicesFor ? tailFilter(onText) : onText, signal);
 }

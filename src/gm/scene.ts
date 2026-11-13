@@ -1,6 +1,7 @@
 /**
  * 장면 엔진 이벤트 (v0.47): 시작 · 행동(판정) · 끝(효과·보상) · 서술.
  */
+import { tailFilter, withChoiceTail } from './guide';
 import { gmStyleText } from '../data/gmStyles';
 import { genreGuide, reskinner } from '../engine/genre';
 import { RATING_GUIDE } from '../engine/rating';
@@ -100,13 +101,15 @@ export function abandonSceneEvents(world: WorldPackage, state: GameState): GameE
 /** 끝난 장면 서술 — 확정된 기록만 넘긴다. events: 장면이 끝날 때 엔진이 확정한 것 (효과·보상·임무 변화). 수위는 세계의 콘텐츠 등급을 따른다 */
 export async function narrateScene(
   llm: LlmClient, world: WorldPackage, after: GameState, def: SceneDef, log: string[], events: GameEvent[], onText: (d: string) => void, signal?: AbortSignal,
+  /** 선택지 꼬리를 함께 받는다 (v0.117) */
+  choicesFor?: GameState,
 ): Promise<string> {
   const rs = reskinner(world);
   const npc = def.npcId ? world.characters.find((c) => c.id === def.npcId) : undefined;
   const res = after.sceneResults?.[def.id];
   const end = def.ends.find((e) => e.id === res?.endId);
   const stages = (world.quests ?? []).flatMap((q) => q.stages.flatMap((st) => (stageGates(st).scenes.includes(def.id) ? [`${q.name} — ${st.objective}`] : [])));
-  return llm.stream({
+  const req = {
     system: `너는 1인칭 TRPG의 서술자다. 방금 끝난 장면을 2~4문단으로 매듭짓는다.
 ${NARRATION_CORE}
 - 장면 기록의 판정 결과와 끝(결과)을 그대로 따른다.
@@ -117,7 +120,8 @@ ${NARRATION_CORE}
 - ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}${gmStyleText(world, 'narrator')}`,
     user: `${buildNarratorContext(world, after)}\n\n## 장면\n${def.name} — ${def.description}${npc ? `\n상대: ${npc.name} (${npc.appearance})` : ''}${stages.length ? `\n이 장면에 걸린 일: ${stages.join(' / ')}` : ''}\n\n## 장면 기록\n${log.map(rs).join('\n')}${(() => { const so = sceneSoFar(after); return so.lastNarration ? `\n\n## 이 장면에서 차례마다 이미 쓴 서술 (되풀이하지 말고 이어서 맺는다)\n${so.since.filter((x) => x.startsWith('(')).slice(-4).join('\n')}` : ''; })()}\n\n## 끝 (엔진 확정)\n${res?.outcome === 'abandoned' ? '플레이어가 도중에 그만두었다.' : `${end?.name ?? ''}${end?.text ? ` — ${end.text}` : ''}`}\n\n${aftermathBlock(world, after, events)}`,
     maxTokens: 2500,
-  }, onText, signal);
+  };
+  return llm.stream(choicesFor ? withChoiceTail(world, choicesFor, req) : req, choicesFor ? tailFilter(onText) : onText, signal);
 }
 
 /** 장면 서술 방식: 플레이 설정이 우선, 아니면 장면 설정 (기본 end) (v0.50) */
