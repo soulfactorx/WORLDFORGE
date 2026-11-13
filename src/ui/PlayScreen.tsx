@@ -5,6 +5,7 @@ import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
 import { applyEvent, replay, type GameState, type LogEntry } from '../engine/state/state';
 import { runTurn, CONTINUE_INPUT, type ImagePlacer } from '../gm/turn';
+import { runTurnOne } from '../gm/turnOne';
 import { type CallRecord, metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
 import { DebugPanel, useDebugOn } from './DebugPanel';
@@ -280,7 +281,9 @@ function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: str
     try {
       const t0 = performance.now();
       const client = createLlmClient(settings, { sink: (r) => { metrics.addCall(r); turnCalls.push(r); } });
-      const { events, rejected, state: after } = await runTurn(client, world, state, text,
+      // 턴 방식 (v0.118): 기본은 AI 한 번, "정확 모드"는 예전 파이프라인
+      const run = loadPlayPrefs().turnMode === 'precise' ? runTurn : runTurnOne;
+      const { events, rejected, state: after } = await run(client, world, state, text,
         (d) => { if (firstMs === undefined && d) firstMs = Math.round(performance.now() - t0); setStreaming((p) => (p ?? '') + d); }, abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision,
         { ...(stake ? { stake } : {}), ...(option ? { option } : {}), onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true),
           onState: (st) => setPendingLog(st.log.slice(state.log.length).filter((l) => l.kind !== 'narration' && l.kind !== 'guide')) });

@@ -10,8 +10,8 @@ export type SceneNarration = 'scene' | 'fixed' | 'end' | 'ai';
 export const SCENE_NARRATIONS: [SceneNarration, string][] = [['scene', '장면 설정을 따름'], ['fixed', '정해진 글만 (AI 없이 빠르게)'], ['end', '끝날 때만 AI 서술'], ['ai', '매 차례 AI가 장면 서술']];
 /** 배경 이미지 (v0.59): every = 매 턴 서술 맨 앞, change = 장소·장면이 바뀔 때만 */
 export type BackgroundMode = 'every' | 'change';
-export interface PlayPrefs { display: DisplayLevel; images: ImageSize; sceneNarration: SceneNarration; background: BackgroundMode; /** GM 스타일 덮어쓰기 ('world' = 세계 설정 따름, v0.80) */ gmStyle: string; /** 판정 기술을 SRD 18종으로 자세히 (v0.112, 끄면 접근법 6가지) */ skillDetail: boolean; /** 잔챙이 전투는 자동으로 (v0.112) */ autoMinorFights: boolean }
-const DEFAULTS: PlayPrefs = { display: 'standard', images: 'large', sceneNarration: 'scene', background: 'every', gmStyle: 'world', skillDetail: false, autoMinorFights: true };
+export interface PlayPrefs { display: DisplayLevel; images: ImageSize; sceneNarration: SceneNarration; background: BackgroundMode; /** GM 스타일 덮어쓰기 ('world' = 세계 설정 따름, v0.80) */ gmStyle: string; /** 판정 기술을 SRD 18종으로 자세히 (v0.112, 끄면 접근법 6가지) */ skillDetail: boolean; /** 잔챙이 전투는 자동으로 (v0.112) */ autoMinorFights: boolean; /** 턴 방식 (v0.118): one = AI 한 번 · precise = GM 판단 → 인물 연기 → 서술 */ turnMode: 'one' | 'precise' }
+const DEFAULTS: PlayPrefs = { display: 'standard', images: 'large', sceneNarration: 'scene', background: 'every', gmStyle: 'world', skillDetail: false, autoMinorFights: true, turnMode: 'one' };
 export function loadPlayPrefs(): PlayPrefs {
   try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<PlayPrefs>) }; } catch { return { ...DEFAULTS }; }
 }
