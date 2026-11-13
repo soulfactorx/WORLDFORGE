@@ -13,6 +13,11 @@ import { AXES, AXIS_NAMES } from '../engine/relationship';
 import type { Condition, RelationAxis, StoryEffect, WorldPackage } from '../engine/schema';
 import type { GameState } from '../engine/state/state';
 import { traitsFor } from '../engine/traits';
+import { cardLabel, type Divergence, divergence, phaseLabel, POLICY_LABEL } from '../gm/offline';
+import { createCharacter, suggestedStandardArray } from '../engine/character/sheet';
+import { CLASSES } from '../engine/character/rules';
+import { replay } from '../engine/state/state';
+import { startEvents } from '../gm/turn';
 import { AUTO_ACTION_LABEL, AUTO_STYLE_LABEL, type AutoReport, type AutoStyle, autoPlay, blockers, neverSeen } from '../gm/autoplay';
 import {
   condTrace, fightStats, type FightStats, type LabResult, type LabRow, type LabSetup, labChoose, labEffects, labFight, labFireRule, labFlag, labInput, labMove,
@@ -269,6 +274,49 @@ function Blockers({ w, rep, c }: { w: WorldPackage; rep: AutoReport; c: Conditio
   return <ul className="small lab-list">{b.map((x, i) => <li key={i}><span className={x.pct ? '' : 'err'}>{x.pct}%</span> {describeCondition(x.c, w)}{'knows' in x.c && x.pct < 50 && holders(w, x.c.knows) ? <span className="muted"> — 아는 곳: {holders(w, x.c.knows)}</span> : null}</li>)}</ul>;
 }
 
+/**
+ * 분기 다양성 점검 (v0.116, 설계 v6 M7): 성향이 다른 세 정책(신중·관계·파괴)으로 같은 시작에서 굴려,
+ * 열린 갈래 카드와 지나온 국면이 얼마나 다른지 잰다. AI 없이 엔진만.
+ */
+export function DivergenceBox({ w }: { w: WorldPackage }) {
+  const [res, setRes] = useState<Divergence | null>(null);
+  const [turns, setTurns] = useState(40);
+  const [err, setErr] = useState('');
+  const run = () => {
+    setErr('');
+    try {
+      const t = CLASSES.fighter!;
+      const hero = createCharacter({ name: '시험', classId: t.id, method: 'standard', abilities: suggestedStandardArray(t.id), skills: t.skillOptions.slice(0, t.skillChoices) });
+      const s0 = replay(startEvents(w, hero, 7).map((event, seq) => ({ saveId: 'div', seq, turn: 0, event })));
+      setRes(divergence(w, s0, turns));
+    } catch (e) { setErr((e as Error).message); }
+  };
+  return (
+    <div className="lab-box">
+      <b>분기 다양성 점검 (AI 없이 · 갈래 카드)</b>
+      <p className="small muted">성향이 다른 세 플레이어(신중 · 관계 · 파괴)가 같은 시작에서 갈래 카드의 갈림길을 골라 나아갈 때, 열리는 카드와 지나는 국면이 얼마나 다른지 봅니다. 60점 이상이면 선택이 이야기를 충분히 가릅니다.</p>
+      <div className="row">
+        <label className="small">턴 수 <input type="number" className="num" min={10} max={120} value={turns} onChange={(e) => setTurns(Math.max(10, Math.min(120, Number(e.target.value) || 40)))} /></label>
+        <button type="button" onClick={run} disabled={!w.storylets?.length}>점검하기</button>
+        {!w.storylets?.length && <span className="small muted">갈래 카드가 없어 점검할 수 없습니다 (이야기 흐름 탭).</span>}
+      </div>
+      {err && <p className="small err">{err}</p>}
+      {res && (
+        <>
+          <p><b>{res.score}점</b> — {res.verdict} <span className="small muted">(카드 겹침 {Math.round(res.cardOverlap * 100)}% · 국면 경로가 다른 쌍 {Math.round(res.phaseDistinct * 100)}%)</span></p>
+          <ul className="small lab-list">
+            {res.traces.map((t) => (
+              <li key={t.policy}><b>{POLICY_LABEL[t.policy]}</b> — {t.turns}턴{t.stop ? ` (${t.stop})` : ''}{t.ending ? ` · 결말 ${w.endings?.find((e) => e.id === t.ending)?.name ?? t.ending}` : ''}<br />
+                국면: {t.phases.map((p) => phaseLabel(w, p)).join(' → ')}<br />
+                <span className="muted">카드: {t.cards.map((c) => cardLabel(w, c)).join(' · ') || '(없음)'}</span></li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function AutoPlayPanel({ w }: { w: WorldPackage }) {
   const [runs, setRuns] = useState(20);
   const [steps, setSteps] = useState(300);
@@ -292,6 +340,7 @@ export function AutoPlayPanel({ w }: { w: WorldPackage }) {
   const errors = issues.filter((i) => i.level === 'error').length;
   return (
     <div className="lab">
+      <DivergenceBox w={w} />
       <div className="lab-box">
         <b>전체 점검 (정적)</b>
         <ul className="small lab-list">
