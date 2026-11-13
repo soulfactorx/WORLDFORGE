@@ -33,3 +33,14 @@ describe('판정 3단 결과 (v0.112)', () => {
     expect(s.player.sheet.hp).toBe(1);
   });
 });
+
+describe('접근법 (v0.112)', () => {
+  it('접근법을 고르면 그 안에서 가장 잘하는 기술로 굴린다', async () => {
+    const { bestSkill, approachOf, APPROACHES, APPROACH_IDS } = await import('../engine/character/approaches');
+    const { SKILL_IDS } = await import('../engine/character/rules');
+    expect(SKILL_IDS.every((k) => approachOf(k))).toBe(true);
+    expect(APPROACH_IDS.flatMap((a) => APPROACHES[a].skills).sort()).toEqual([...SKILL_IDS].sort());
+    const s = start();
+    expect(APPROACHES.talk.skills).toContain(bestSkill(s.player.sheet, 'talk').skill);
+  });
+});

@@ -1,5 +1,6 @@
 import { combatScale, combatScaleNote, difficultyLabel } from '../difficulty';
 import { checkTier, TIER_LABEL } from '../dice/dice';
+import { APPROACHES, type ApproachId } from '../character/approaches';
 import type { Belief, EntityId } from '../schema';
 import type { GameEvent, StoredEvent } from './events';
 import { type CharacterSheet, legacyCharacter } from '../character/sheet';
@@ -138,6 +139,7 @@ export function useLabel(use: string): string {
   const [kind, id] = use.split(':');
   if (kind === 'skill' && id && id in SKILLS) return SKILLS[id as SkillId].name;
   if (kind === 'ability' && id && id in ABILITY_NAMES) return ABILITY_NAMES[id as Ability];
+  if (kind === 'approach' && id && id in APPROACHES) return APPROACHES[id as ApproachId].name;
   return use;
 }
 

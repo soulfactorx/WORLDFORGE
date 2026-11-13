@@ -35,6 +35,7 @@ import { basicGuide, CHOICE_KINDS, gmGuide, type ChoiceKind } from '../gm/guide'
 import { calendarDate } from '../engine/calendar';
 import { ABILITIES, ABILITY_NAMES, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { checkModifier } from '../engine/character/sheet';
+import { approachOf, APPROACH_IDS, APPROACHES, bestSkill } from '../engine/character/approaches';
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 import { paragraphsOf, pickCharacterImage, pickSceneImage } from '../engine/assets';
@@ -392,6 +393,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   const date = calendarDate(world, state.worldMinutes);
   const rs = reskinner(world);
   const imgSize = loadPlayPrefs().images;
+  const detail = loadPlayPrefs().skillDetail;
   const lastGuide = state.log.findLastIndex((l) => l.kind === 'guide');
   const decisive = !state.combat && !state.ending && !state.playerDead ? pendingChoice(world, state) : undefined;
   const canAct = streaming === null && !state.combat && !state.scene && !state.playerDead;
@@ -482,7 +484,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                       const opens = sceneId ? scenesHere.find((d) => d.id === sceneId) : undefined;
                       return (
                         <button key={k} type="button" className={kind ? `choice-${e.choiceKinds![k]}` : undefined} onClick={() => (opens ? commitScene((s) => startSceneEvents(world, s, opens.id)) : submit(c, sk ? `skill:${sk}` : undefined))} title={kind ? `${kind.label}: ${kind.desc}` : undefined}>
-                          {kind ? <span className="choice-kind">{opens ? '🎭 장면' : `${kind.icon} ${kind.label}`}</span> : `${k + 1}. `}{c}{!opens && sk && sk in SKILLS && <span className="skill-badge">🎲 {SKILLS[sk as SkillId].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
+                          {kind ? <span className="choice-kind">{opens ? '🎭 장면' : `${kind.icon} ${kind.label}`}</span> : `${k + 1}. `}{c}{!opens && sk && sk in SKILLS && <span className="skill-badge">🎲 {detail || !approachOf(sk) ? SKILLS[sk as SkillId].name : APPROACHES[approachOf(sk)!].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
                         </button>
                       );
                     })}
@@ -543,16 +545,17 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         ))}</div>
       )}
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-        <select className="use-select" value={use} onChange={(e) => setUse(e.target.value)} title="이 행동에 쓸 기술·능력치 (판정이 필요할 때 이것으로 굴린다)">
-          <option value="">🎲 기술·능력 (자동)</option>
-          <optgroup label="기술">
+        <select className="use-select" value={use} onChange={(e) => setUse(e.target.value)} title="이 행동에 쓸 접근법·기술 (판정이 필요할 때 이것으로 굴린다)">
+          <option value="">🎲 {detail ? '기술·능력' : '접근법'} (자동)</option>
+          {!detail && APPROACH_IDS.map((a) => { const b = bestSkill(state.player.sheet, a); return <option key={a} value={`approach:${a}`}>{APPROACHES[a].icon} {APPROACHES[a].name} {fmt(b.mod)} — {APPROACHES[a].desc}</option>; })}
+          {detail && <><optgroup label="기술">
             {[...SKILL_IDS].sort((a, b) => Number(state.player.sheet.skillProficiencies.includes(b)) - Number(state.player.sheet.skillProficiencies.includes(a))).map((k) => (
               <option key={k} value={`skill:${k}`}>{SKILLS[k].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: k }).total)}{state.player.sheet.skillProficiencies.includes(k) ? ' ★' : ''}</option>
             ))}
           </optgroup>
           <optgroup label="능력치">
             {ABILITIES.map((a) => <option key={a} value={`ability:${a}`}>{ABILITY_NAMES[a]} {fmt(checkModifier(state.player.sheet, { kind: 'ability', ability: a }).total)}</option>)}
-          </optgroup>
+          </optgroup></>}
         </select>
         <textarea
           value={input} rows={2} placeholder="선택지를 누르거나 직접 행동을 적으세요 — 비워 두고 누르면 흐름대로 이어서"

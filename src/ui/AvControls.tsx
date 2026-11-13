@@ -76,6 +76,7 @@ export function AvControls({ onChange, dcMod, onDcMod, dcBusy }: { onChange: () 
               {GM_STYLES.map((g) => <option key={g.id} value={g.id}>{g.emoji} {g.name}</option>)}
             </select>
           </label>
+          <label className="check small"><input type="checkbox" checked={play.skillDetail} onChange={(e) => { const p = { ...play, skillDetail: e.target.checked }; setPlay(p); savePlayPrefs(p); onChange(); }} /> 판정 기술을 자세히 (SRD 기술 18종 · 끄면 접근법 6가지)</label>
           <label className="small av-vol">표시 수준
             <select value={play.display} onChange={(e) => { const p = { ...play, display: e.target.value as DisplayLevel }; setPlay(p); savePlayPrefs(p); onChange(); }}>
               <option value="immersive">몰입형 (숫자·알림 최소 — 기록에만)</option>

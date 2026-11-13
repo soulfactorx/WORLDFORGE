@@ -1,6 +1,7 @@
 import { genreGuide, levelCapOf } from '../engine/genre';
 import { checkTier, DC_TIERS, type DcTier, type RollMode, d20Test, TIER_LABEL } from '../engine/dice/dice';
 import { costOf, failForwardOf } from './tiers';
+import { APPROACHES, type ApproachId, bestSkill } from '../engine/character/approaches';
 import { ABILITIES, ABILITY_NAMES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/character/sheet';
 import { createRng } from '../engine/dice/rng';
@@ -372,7 +373,7 @@ export async function runTurn(
   const push = (e: GameEvent) => { events.push(e); s = applyEvent(s, e, turn); };
   const rejected: string[] = [];
 
-  const declared = parseUse(use);
+  const declared = parseUse(use, state.player.sheet);
   // 빈 입력 = "이어서" (v0.79.9): 플레이어는 특별한 행동 없이 흐름을 지켜보고, 장면이 자연스럽게 다음으로 흘러간다
   const continuing = !input.trim() || input.trim() === CONTINUE_INPUT;
   if (continuing) input = CONTINUE_INPUT;
@@ -868,8 +869,9 @@ function epilogueFacts(world: WorldPackage, s: GameState): string {
   return [`## 이 이야기에서 내린 결정\n${choices.join('\n') || '(없음)'}`, `## 임무의 결과\n${quests.join('\n') || '(없음)'}`, `## 곁에 남은 사람\n${people.join('\n') || '(없음)'}`].join('\n\n');
 }
 
-function parseUse(use?: string): CheckSpec | null {
+function parseUse(use: string | undefined, sheet: CharacterSheet): CheckSpec | null {
   const [kind, id] = (use ?? '').split(':');
+  if (kind === 'approach' && id && id in APPROACHES) return { kind: 'skill', skill: bestSkill(sheet, id as ApproachId).skill };
   if (kind === 'skill' && id && id in SKILLS) return { kind: 'skill', skill: id as SkillId };
   if (kind === 'ability' && (ABILITIES as readonly string[]).includes(id ?? '')) return { kind: 'ability', ability: id as Ability };
   return null;
