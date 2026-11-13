@@ -94,6 +94,58 @@
 
 사건이 열려 있는 동안 GM이 그 장면을 열 수 있다 (장면의 진입 방식과 상관없이).
 
+## 속도와 파장 (설계 v6, v0.111~)
+
+모두 선택 항목이라 이전 패키지는 그대로 동작한다. 설계: [`design-v6-momentum.md`](design-v6-momentum.md).
+
+### 시간 `time`
+
+```json
+"time": { "pace": "fast" }
+```
+
+한 턴은 "다음 갈림길까지"다. GM 판단 AI가 비트(대화 한 판 30분 · 장면 하나 2시간 · 몽타주 8시간)를 고르고, 세계는 속도(`slow` ×0.5 · `normal` · `fast` ×2)만 정한다. 예전의 `mode`·`perTurn`·`steps`·`move`·`maxPerTurn`은 읽지 않는다(검사기 경고). 진행 시계는 `{ "every": "beat", "by": 1 }`(턴마다)로 찰 수 있다.
+
+### 긴장과 기류 축 `vars`
+
+- **긴장** `drama`(0~10, 처음 2)은 엔진이 둔다. 선언하지 않아도 조건 `{ "var": "drama", "gte": 7 }`·효과 `{ "var": "drama", "add": 2 }`에 쓴다. 실패·전투·징조·사건으로 오르고 휴식·해결로 내린다.
+- 세계 수치에 `poles`(양 끝의 이름)를 달면 **기류 축**이 된다: `{ "id": "path", "name": "봉인의 길", "initial": 0, "min": -5, "max": 5, "poles": ["봉인을 지킨다", "고신의 힘을 쥔다"] }`. 선택지가 이 축을 움직인다.
+
+### 국면 `phases[]`
+
+```json
+{ "id": "phase/rift", "name": "균열", "tone": "이 국면의 공기·문체", "enter": { "var": "drama", "gte": 7 },
+  "from": ["phase/unrest"], "announce": "바뀔 때 한 줄", "tint": "dark", "music": "dark", "gmStyle": "horror",
+  "attitudes": { "npc/…": "이 국면에서 그 인물은" }, "closed": ["loc/…"], "effects": [ … ] }
+```
+
+엔진은 턴마다 위에서부터 들어갈 수 있는 첫 국면으로 옮긴다(`from`이 있으면 그 국면에서만). 들어간 뒤 3턴은 머문다. `phases`를 비우면 긴장으로 움직이는 기본 셋(평온·술렁임·위기), `"autoPhases": false`면 국면 없음. 조건 `{ "phase": "phase/…" }`.
+
+### 걸린 것 (stake)
+
+선택지·갈래 카드의 갈림길에 붙는 방향. 엔진이 결과를 적용한다:
+`escalate` · `defuse` · `side:세력ID` · `bond:인물ID` · `betray:인물ID` · `expose:명제ID` · `theme:수치ID:+` / `theme:수치ID:-` · `thread:카드ID`.
+배신·폭로·판을 키움·누구 편은 2~3턴 뒤 후폭풍으로 돌아온다.
+
+### 갈래 카드 `storylets[]`
+
+```json
+{ "id": "card/…", "title": "…", "situation": "플레이어 앞에 펼쳐지는 상황",
+  "when": { "storylet": "card/앞카드", "is": "a" }, "phases": ["phase/…"], "locationId": "loc/…", "tags": ["main"], "quest": "quest/…",
+  "weight": 2, "repeat": { "after": 5 }, "text": "AI 없이 진행할 때 보여 줄 글",
+  "options": [
+    { "id": "a", "label": "선택지의 뼈대", "stake": "betray:npc/…", "check": { "skill": "deception", "dc": "medium" },
+      "success": [ … ], "cost": [ … ], "fail": [ … ], "successText": "…", "failText": "…",
+      "fallout": [{ "inTurns": 2, "storylet": "card/…" }] }
+  ] }
+```
+
+- 덱: 조건(`when`)·국면·장소가 맞고, 아직 고르지 않은(또는 `repeat` 시간이 지난) 카드. `tags`의 `twist`는 국면마다 하나.
+- 펼쳐지는 때: 예약된 카드(후폭풍·`openStorylet`) > GM이 고른 카드 > 잔잔하면 엔진이 무게대로 뽑는다(조건 있는 카드 기본 2, 없는 카드 1).
+- 갈림길을 고르면 판정(3단: 성공 · 대가 있는 성공 · 실패하되 전개) → `success`(성공·대가) / `cost`(비우면 엔진이 고른 대가) / `fail`(비우면 엔진이 고른 전개) → 걸린 것 → 후폭풍 카드 예약.
+- 조건 `{ "storylet": "card/…", "is": "갈림길ID" }` · `{ "questStage": "quest/…", "is": 0 }`. 효과 `{ "advanceQuest": "quest/…" }`(임무의 지금 단계를 끝냄) · `{ "openStorylet": "card/…", "inTurns": 2 }`.
+- AI 없이(체험판) 진행할 때는 `text`·`successText`·`failText`가 서술이 된다 (없으면 `situation`).
+
 ## 검사기
 
 - **오류**가 있으면 플레이할 수 없다: 없는 ID 참조, 중복 ID, 알 수 없는 조건·직업·몬스터·기술, 형식 위반.

@@ -7,7 +7,19 @@
 - AI: 사용자 본인의 API 키(BYOK) — Claude, OpenAI 호환(OpenAI · OpenRouter · Ollama · LM Studio)
 - 세이브: 브라우저 IndexedDB + 파일 내보내기/가져오기
 
-설계 문서: [`docs/design-review-v2.md`](docs/design-review-v2.md) · 패키지 형식: [`docs/package-format.md`](docs/package-format.md)
+- AI 없이도: 갈래 카드가 있는 세계(내장 「에테리아」)는 API 키 없이 선택지로 체험할 수 있다
+
+설계 문서: [`docs/design-v6-momentum.md`](docs/design-v6-momentum.md) (속도와 파장 — 지금의 기준) · [`docs/design-review-v2.md`](docs/design-review-v2.md) · 패키지 형식: [`docs/package-format.md`](docs/package-format.md)
+
+### 한 턴이 굴러가는 방식 (v0.116)
+
+```
+플레이어의 선택 (갈래 카드의 갈림길 · 걸린 것) 또는 자유 입력
+  → 돌아오는 후폭풍 · 판정 3단(성공 · 대가 · 실패하되 전개) · 걸린 것 적용   ← 엔진
+  → GM 판단 AI (판정·이동·말할 인물·다음에 펼칠 카드)
+  → 긴장 → 국면 전환 → 다음 갈래 카드                                      ← 엔진
+  → 서술자 AI (서술 + 끝에 선택지) — 보통 턴은 AI 요청 2번
+```
 
 ## 개발
 
@@ -31,12 +43,16 @@ src/
 │   ├── combat/        #   존 기반 카드 전투: 카드 정의, 몬스터, 규칙 해결, 적 AI
 │   ├── package/       #   패키지 검사기 (참조 무결성, 조건식, 인젝션 의심 경고)
 │   ├── scenario.ts    #   시나리오 엔진: 조건식, 퀘스트 진행, 플래그, 발견, 결말
+│   ├── phase.ts       #   긴장(drama)·국면·강도 곡선 (설계 v6)
+│   ├── stakes.ts      #   선택지에 걸린 것 (설계 v6)
+│   ├── storylets.ts   #   갈래 카드 덱 (설계 v6)
 │   ├── relationship.ts #  NPC 관계 4축, 단계, 비밀 공개·동행 기준
 │   ├── canon.ts       #   즉흥 설정(Canon L2) 검증, 보호 주제, NPC→플레이어 지식 전달 규칙
 │   └── state/         #   이벤트 소싱: 이벤트 로그 → 상태 재구성 (되돌리기·리플레이)
 ├── importers/         # 외부 캐릭터 가져오기: CHARX·CCv3/V2/V1·PNG 카드 → 인물·지식
 ├── gm/worldgen/       # AI 세계관 생성 보조: 초안 스키마, 정리기, 생성 프롬프트
-├── gm/                # AI GM 턴 파이프라인: Director → Rules → Actor(NPC별) → Narrator → Recorder, 전투 진행
+├── gm/                # AI GM 턴 파이프라인: Director → 엔진 → Actor(필요한 인물만) → Narrator(+선택지), 전투 진행
+│                      #   offline.ts: AI 없이 카드로 진행 · 분기 다양성 점검 / stakes.ts · storylets.ts · phase.ts · tiers.ts
 ├── llm/               # 제공자 독립 LLM 어댑터 (Anthropic SDK / OpenAI 호환 fetch)
 ├── storage/           # IndexedDB(Dexie) 세이브·패키지 라이브러리, .wpk 가져오기/내보내기, 설정
 ├── data/              # 샘플 세계 (Phase 0 검증용, 수작업 JSON)
