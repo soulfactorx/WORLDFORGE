@@ -99,7 +99,7 @@ export function sfxForLog(kind: string, text: string): Sfx | null {
     return null;
   }
   if (kind === 'quest') return text.startsWith('◆ 결정') ? 'decision' : text.includes('실패') ? 'fail' : 'quest';
-  if (kind === 'omen' || kind === 'phase') return 'omen';
+  if (kind === 'omen' || kind === 'phase' || kind === 'fallout') return 'omen';
   if (kind === 'check') return 'dice';
   return null;
 }

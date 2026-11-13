@@ -15,6 +15,7 @@ import { boardHere } from '../engine/jobs';
 import { autoFightEvents, minorFight, narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
 import { currentActorId } from '../engine/combat/combat';
 import { currentPhase, tensionOf } from '../engine/phase';
+import { stakeLabel } from '../engine/stakes';
 import type { PartyOrder, Target } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
 import { CombatPanel } from './CombatPanel';
@@ -244,7 +245,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   useEffect(() => { setMusic(state ? moodOf(world.genre?.id, fightingNow, phaseNow?.music) : null); }, [fightingNow, world.genre?.id, avTick, !!state, phaseNow?.music]);
   useEffect(() => () => { stopMusic(); stopSpeaking(); }, []);
 
-  async function submit(choice?: string, choiceUse?: string, decision?: { choiceId: string; optionId: string }) {
+  async function submit(choice?: string, choiceUse?: string, decision?: { choiceId: string; optionId: string }, stake?: string) {
     // 선택지도 입력도 없으면 "이어서" — 지금 흐름대로 자연스럽게 다음으로 (v0.79.9)
     const text = (choice ?? input).trim() || CONTINUE_INPUT;
     if (!state || streaming !== null) return;
@@ -263,7 +264,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       const client = createLlmClient(settings, { sink: (r) => { metrics.addCall(r); turnCalls.push(r); } });
       const { events, rejected, state: after } = await runTurn(client, world, state, text,
         (d) => { if (firstMs === undefined && d) firstMs = Math.round(performance.now() - t0); setStreaming((p) => (p ?? '') + d); }, abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision,
-        { onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true),
+        { ...(stake ? { stake } : {}), onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true),
           onState: (st) => setPendingLog(st.log.slice(state.log.length).filter((l) => l.kind !== 'narration' && l.kind !== 'guide')) });
       metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected, calls: turnCalls.reduce((a, c) => a + c.calls, 0), input: turnCalls.reduce((a, c) => a + c.input, 0), output: turnCalls.reduce((a, c) => a + c.output, 0), ...(firstMs !== undefined ? { firstMs } : {}) });
       await endDebug(dbg, { events, before: state, after, rejected });
@@ -505,9 +506,12 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                       // 장면으로 들어가는 선택지 (v0.85): 지금도 열 수 있으면 바로 그 장면을 시작한다
                       const sceneId = e.choiceScenes?.[k];
                       const opens = sceneId ? scenesHere.find((d) => d.id === sceneId) : undefined;
+                      // 걸린 것 (v0.114): 선택지가 어디로 가는지 — 표시 수준 몰입형에서는 숨긴다
+                      const stake = e.choiceStakes?.[k] || undefined;
+                      const stakeTag = stake && loadPlayPrefs().display !== 'immersive' ? stakeLabel(world, state, stake) : '';
                       return (
-                        <button key={k} type="button" className={kind ? `choice-${e.choiceKinds![k]}` : undefined} onClick={() => (opens ? commitScene((s) => startSceneEvents(world, s, opens.id)) : submit(c, sk ? `skill:${sk}` : undefined))} title={kind ? `${kind.label}: ${kind.desc}` : undefined}>
-                          {kind ? <span className="choice-kind">{opens ? '🎭 장면' : `${kind.icon} ${kind.label}`}</span> : `${k + 1}. `}{c}{!opens && sk && sk in SKILLS && <span className="skill-badge">🎲 {detail || !approachOf(sk) ? SKILLS[sk as SkillId].name : APPROACHES[approachOf(sk)!].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
+                        <button key={k} type="button" className={kind ? `choice-${e.choiceKinds![k]}` : undefined} onClick={() => (opens ? commitScene((s) => startSceneEvents(world, s, opens.id)) : submit(c, sk ? `skill:${sk}` : undefined, undefined, stake))} title={kind ? `${kind.label}: ${kind.desc}` : undefined}>
+                          {stakeTag ? <span className="choice-kind stake-tag">{opens ? '🎭 장면' : stakeTag}</span> : kind ? <span className="choice-kind">{opens ? '🎭 장면' : `${kind.icon} ${kind.label}`}</span> : `${k + 1}. `}{c}{!opens && sk && sk in SKILLS && <span className="skill-badge">🎲 {detail || !approachOf(sk) ? SKILLS[sk as SkillId].name : APPROACHES[approachOf(sk)!].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
                         </button>
                       );
                     })}

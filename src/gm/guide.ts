@@ -19,8 +19,9 @@ import { gmStyleText } from '../data/gmStyles';
 import { genreGuide, genreProfile } from '../engine/genre';
 import { SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { checkModifier } from '../engine/character/sheet';
+import { stakeOptions, stakeValid } from '../engine/stakes';
 
-export interface GuideOutput { summary: string; suggestion: string; choices: { text: string; skill: string; kind: string; scene?: string }[]; move?: { text: string; location: string } }
+export interface GuideOutput { summary: string; suggestion: string; choices: { text: string; skill: string; kind: string; scene?: string; stake?: string; option?: string }[]; move?: { text: string; location: string } }
 
 /** 선택지 성격 (v0.58): 매번 서로 다른 맛의 선택지 4개 */
 export const CHOICE_KINDS = {
@@ -45,9 +46,11 @@ const GUIDE_SCHEMA = {
     choices: {
       type: 'array', minItems: 4, maxItems: 4, description: '성격이 모두 다른 선택지 4개: advance·bond·bold·wild 각각 하나씩',
       items: {
-        type: 'object', additionalProperties: false, required: ['text', 'skill', 'kind', 'scene'],
+        type: 'object', additionalProperties: false, required: ['text', 'skill', 'kind', 'scene', 'stake', 'option'],
         properties: {
           scene: { type: 'string', description: '이 선택지가 "지금 열 수 있는 장면"으로 들어가는 행동이면 그 장면 ID (누르면 장면이 바로 시작된다). 아니면 ""' },
+          stake: { type: 'string', description: '이 선택지에 걸린 것 — "걸 수 있는 것" 목록의 ID. 네 선택지는 서로 다른 것을 건다 (같은 방향으로 가는 선택지를 만들지 않는다). 해당하는 것이 없으면 ""' },
+          option: { type: 'string', description: '"지금 펼쳐진 갈래 카드"의 갈림길이면 그 ID ("카드ID#갈림길ID"). 아니면 ""' },
           text: { type: 'string', description: '1인칭 행동문 한 줄, 구체적으로 (누구에게·무엇을·어떻게). 예: "샹들리에 아래서 공작에게 춤을 신청한다"' },
           skill: { type: 'string', enum: ['', ...SKILL_IDS], description: `결과가 불확실해 기술을 쓰는 행동이면 그 기술 ID, 아니면 "". ${SKILL_IDS.map((k) => `${k}=${SKILLS[k].name}`).join(', ')}` },
           kind: { type: 'string', enum: Object.keys(CHOICE_KINDS).filter((k) => k !== 'move'), description: Object.entries(CHOICE_KINDS).filter(([k]) => k !== 'move').map(([k, v]) => `${k}=${v.desc}`).join(' / ') },
@@ -157,7 +160,7 @@ export function guideMaterials(world: WorldPackage, s: GameState): string {
   const strong = SKILL_IDS.map((k) => ({ k, m: checkModifier(sheet, { kind: 'skill', skill: k }).total })).sort((a, b) => b.m - a.m).slice(0, 5)
     .map((x) => `${x.k}(${SKILLS[x.k].name}) ${x.m >= 0 ? '+' : ''}${x.m}${sheet.skillProficiencies.includes(x.k) ? ' 숙련' : ''}`);
   const pace = pacing(s);
-  return `## 플레이어 캐릭터의 강한 기술\n${strong.join(', ')}\n\n## 수첩의 임무 목표 (플레이어가 아는 것 · → 는 그 목표가 풀리는 곳)\n${gb.quests.join('\n') || '(없음)'}\n\n## 지금 열 수 있는 장면 (선택지의 scene에 쓸 수 있는 ID)\n${gb.scenes.join('\n') || '(없음)'}\n\n## 이야기 흐름 (엔진 확인)\n${pace.line}\n\n## 지난 선택지 (겹치지 않게)\n${pace.previous.join('\n') || '(없음)'}\n\n## 플레이어가 방금 한 행동\n${lastInput(s) || '(없음 — 장면 시작)'}\n\n## 지금 이 자리에 있는 사람 (선택지는 이 사람들만 짚는다)\n${presentCharacters(world, s).map((c) => `- ${displayName(s, c)}${s.party[c.id] ? ' (동료)' : ''}`).join('\n') || '(아무도 없다)'}`;
+  return `## 플레이어 캐릭터의 강한 기술\n${strong.join(', ')}\n\n## 수첩의 임무 목표 (플레이어가 아는 것 · → 는 그 목표가 풀리는 곳)\n${gb.quests.join('\n') || '(없음)'}\n\n## 지금 열 수 있는 장면 (선택지의 scene에 쓸 수 있는 ID)\n${gb.scenes.join('\n') || '(없음)'}\n\n## 이야기 흐름 (엔진 확인)\n${pace.line}\n\n## 지난 선택지 (겹치지 않게)\n${pace.previous.join('\n') || '(없음)'}\n\n## 플레이어가 방금 한 행동\n${lastInput(s) || '(없음 — 장면 시작)'}\n\n## 지금 이 자리에 있는 사람 (선택지는 이 사람들만 짚는다)\n${presentCharacters(world, s).map((c) => `- ${displayName(s, c)}${s.party[c.id] ? ' (동료)' : ''}`).join('\n') || '(아무도 없다)'}\n\n## 걸 수 있는 것 (선택지의 stake — 엔진이 그 결과를 적용한다. 네 선택지는 서로 다른 것)\n${stakeOptions(world, s, presentCharacters(world, s)).map((o) => `- ${o.id}: ${o.label} — ${o.note}`).join('\n')}`;
 }
 
 /** 장르·문체·등급·GM 스타일을 붙인 안내 지침 */
@@ -173,7 +176,8 @@ export const TAIL_MARK = '<<선택지>>';
 export function choiceTailRules(): string {
   return `서술을 마친 뒤 (선택지 꼬리 — 플레이어에게는 서술만 보이고, 이 부분은 엔진이 읽는다):
 - 서술 다음에 빈 줄, 그다음 줄에 ${TAIL_MARK} 만 쓰고, 그 아래에 JSON 객체 하나만 쓴다 (코드 블록 표시 없이). 그 뒤에는 아무것도 쓰지 않는다.
-- JSON 모양: {"summary": "...", "suggestion": "...", "choices": [{"text": "...", "skill": "", "kind": "advance", "scene": ""}, ×4], "move": {"text": "...", "location": "ID 또는 빈 글"}}
+- JSON 모양: {"summary": "...", "suggestion": "...", "choices": [{"text": "...", "skill": "", "kind": "advance", "scene": "", "stake": "걸 수 있는 것 ID", "option": ""}, ×4], "move": {"text": "...", "location": "ID 또는 빈 글"}}
+- stake (가장 중요): 선택지마다 "걸 수 있는 것" 목록에서 하나를 고른다. 네 선택지의 stake는 서로 달라야 한다 — 맛(말투)만 다르고 같은 결과로 가는 선택지를 만들지 않는다. 선택지 글은 그 stake가 실제로 일어나는 행동이어야 한다 (예: betray면 정말 그 인물을 저버리는 행동).
 - 이 꼬리는 "GM 안내"다. 아래 안내 지침을 따른다 (summary·suggestion·choices·move의 뜻과 길이).
 ${GUIDE_SYSTEM.split('\n').slice(1).join('\n')}
 - skill은 다음 중 하나 또는 "": ${SKILL_IDS.join(', ')}. kind는 advance·bond·bold·wild 중 하나씩.`;
@@ -215,16 +219,19 @@ export function tailFilter(onText: (delta: string) => void): (delta: string) => 
 export function guideEvent(world: WorldPackage, s: GameState, out: GuideOutput | null | undefined): GameEvent | null {
   const open = new Set(availableScenes(world, s, { auto: false }).map((d) => d.id));
   const raw = (Array.isArray(out?.choices) ? out!.choices : []).map((c) => (typeof c === 'string' ? { text: c, skill: '', kind: '' } : c))
-    .map((c) => ({ text: cut(String(c?.text ?? '').trim(), 60), skill: SKILL_IDS.includes(c?.skill as SkillId) ? c.skill : '', kind: c?.kind && c.kind in CHOICE_KINDS ? c.kind : '', scene: open.has(String(c?.scene ?? '')) ? String(c.scene) : '' })).filter((c) => c.text).slice(0, 4);
+    .map((c) => ({ text: cut(String(c?.text ?? '').trim(), 60), skill: SKILL_IDS.includes(c?.skill as SkillId) ? c.skill : '', kind: c?.kind && c.kind in CHOICE_KINDS ? c.kind : '', scene: open.has(String(c?.scene ?? '')) ? String(c.scene) : '', stake: String((c as { stake?: string })?.stake ?? ''), option: String((c as { option?: string })?.option ?? '') })).filter((c) => c.text).slice(0, 4);
   // 장면 선택지는 하나만
   raw.forEach((c, i) => { if (c.scene && raw.findIndex((x) => x.scene) !== i) c.scene = ''; });
+  // 걸린 것 (v0.114): 지금 유효하고, 선택지끼리 겹치지 않는 것만
+  const seen = new Set<string>();
+  const choiceStakes = raw.map((c) => { const st = c.stake; if (!st || seen.has(st) || !stakeValid(world, s, st)) return ''; seen.add(st); return st; });
   if (!out?.summary || !raw.length) return null;
   const summary = cut(String(out.summary).trim(), 500), suggestion = cut(String(out.suggestion ?? '').trim(), 200);
   const images = guideImages(world, `${summary} ${suggestion} ${raw.map((c) => c.text).join(' ')}`, `guide${s.turn}`, 'AI 안내');
   // 장소 이동 선택지 (v0.82.1): AI가 고른 곳이 실제로 갈 수 있는 곳이면 그대로, 아니면 엔진이 고른다
   const mv = moveChoice(world, s, out?.move);
-  if (mv) raw.push({ text: mv, skill: '', kind: 'move', scene: '' });
-  return { type: 'gm_guide', summary, suggestion, choices: raw.map((c) => c.text), ...(raw.some((c) => c.skill) ? { choiceSkills: raw.map((c) => c.skill) } : {}), ...(raw.some((c) => c.kind) ? { choiceKinds: raw.map((c) => c.kind) } : {}), ...(raw.some((c) => c.scene) ? { choiceScenes: raw.map((c) => c.scene) } : {}), ...(images.length ? { images } : {}) };
+  if (mv) { raw.push({ text: mv, skill: '', kind: 'move', scene: '', stake: '', option: '' }); choiceStakes.push(''); }
+  return { type: 'gm_guide', summary, suggestion, choices: raw.map((c) => c.text), ...(raw.some((c) => c.skill) ? { choiceSkills: raw.map((c) => c.skill) } : {}), ...(raw.some((c) => c.kind) ? { choiceKinds: raw.map((c) => c.kind) } : {}), ...(raw.some((c) => c.scene) ? { choiceScenes: raw.map((c) => c.scene) } : {}), ...(choiceStakes.some(Boolean) ? { choiceStakes } : {}), ...(images.length ? { images } : {}) };
 }
 
 export async function gmGuide(llm: LlmClient, world: WorldPackage, s: GameState, narration: string, signal?: AbortSignal): Promise<GameEvent> {

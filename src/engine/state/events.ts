@@ -119,6 +119,11 @@ export type GameEvent =
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number }
+  /** 고른 선택의 무게를 엔진이 적용했다 (v0.114) — 파장 원장에 남는다 */
+  | { type: 'stake_applied'; stake: string; label: string; choice: string; line: string }
+  /** 후폭풍 예약 · 발동 (v0.114) */
+  | { type: 'fallout_queued'; id: string; stake: string; due: number; text: string }
+  | { type: 'fallout_fired'; id: string; text: string }
   /** 국면이 바뀌었다 (v0.113). from이 없으면 처음 정해진 것 (기록에 남기지 않는다) */
   | { type: 'phase_changed'; from?: EntityId; fromName?: string; to: EntityId; name: string; announce?: string }
   /** 전투 밖에서 다치거나 회복함 (v0.112: 판정의 대가). 전투 밖에서는 HP 1 아래로 내려가지 않는다 */
@@ -133,7 +138,7 @@ export type GameEvent =
   /** 지금까지의 이야기 요약 (v0.85): 오래된 턴이 줄거리에서 빠져도 기억하게 */
   | { type: 'story_summarized'; text: string; upto: number }
   /** GM 안내 (v0.14): 이번 턴 상황 요약 + 진행 제안 + 선택지 */
-  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[]; images?: { id: string; caption: string }[]; choiceSkills?: string[]; /** 선택지 성격 (v0.58): advance·bond·bold·wild */ choiceKinds?: string[]; /** 선택지가 여는 장면 ID ('' = 없음) (v0.85) */ choiceScenes?: string[] };
+  | { type: 'gm_guide'; summary: string; suggestion: string; choices: string[]; images?: { id: string; caption: string }[]; choiceSkills?: string[]; /** 선택지 성격 (v0.58): advance·bond·bold·wild */ choiceKinds?: string[]; /** 선택지가 여는 장면 ID ('' = 없음) (v0.85) */ choiceScenes?: string[]; /** 걸린 것 ('' = 없음) (v0.114) */ choiceStakes?: string[]; /** 갈래 카드의 갈림길 "카드ID#갈림길ID" ('' = 없음) (v0.115) */ choiceOptions?: string[] };
 
 export interface StoredEvent {
   saveId: string;

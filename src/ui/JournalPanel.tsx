@@ -119,6 +119,14 @@ export function JournalPanel({ world, state }: { world: WorldPackage; state: Gam
           <ul className="small">{vars.map((v) => <li key={v.id}>{v.name}: <b>{varLabel(v, varValue(world, state, v.id)) || varValue(world, state, v.id)}</b>{v.poles && <span className="muted"> ({v.poles[0]} ← {varValue(world, state, v.id)} → {v.poles[1]})</span>}</li>)}</ul>
         </>
       )}
+      {(state.ledger?.length ?? 0) > 0 && (
+        <>
+          <b>내 선택이 바꾼 것</b>
+          <ul className="small ledger">{[...state.ledger!].reverse().slice(0, 12).map((l, i) => (
+            <li key={i}><span className="muted">턴 {l.turn}</span> {l.label} — "{l.choice}"<br /><span className="muted">→ {l.line}{l.returned ? ` · ${l.returned}` : (state.fallout ?? []).some((f) => f.turn === l.turn && f.stake === l.stake) ? ' · 아직 돌아오지 않은 여파가 있다' : ''}</span></li>
+          ))}</ul>
+        </>
+      )}
       {date && <p className="small">오늘: <b>{date.label}</b>{date.countdown && <> · <b className="dday">{date.countdown}</b></>}{date.elapsed > 0 && <span className="muted"> (시작한 지 {date.elapsed}일째)</span>}</p>}
       <b>알게 된 것</b>
       {known.length === 0 ? (

@@ -12,9 +12,14 @@ import { classResources, resourcesOf } from '../character/sheet';
 import { applyBuildChoice } from '../character/build';
 import { ABILITY_NAMES, type Ability, SKILLS, type SkillId } from '../character/rules';
 
+/** 파장 원장 한 줄 (v0.114) */
+export interface LedgerEntry { turn: number; stake: string; label: string; choice: string; line: string; /** 이 선택에서 돌아온 후폭풍 */ returned?: string }
+/** 예약된 후폭풍 (v0.114) */
+export interface FalloutEntry { id: string; stake: string; turn: number; due: number; text: string }
+
 export interface LogEntry {
   turn: number;
-  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide' | 'omen' | 'phase';
+  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide' | 'omen' | 'phase' | 'stake' | 'fallout';
   text: string;
   /** 서술: 그때의 게임 속 시각(분)과 장소 (v0.79.3 — 이야기를 이어 쓰기 위해) */
   at?: number;
@@ -29,6 +34,10 @@ export interface LogEntry {
   choiceKinds?: string[];
   /** 선택지가 여는 장면 (v0.85) */
   choiceScenes?: string[];
+  /** 선택지마다 걸린 것 (v0.114) */
+  choiceStakes?: string[];
+  /** 선택지마다 갈래 카드의 갈림길 "카드ID#갈림길ID" (v0.115) */
+  choiceOptions?: string[];
 }
 
 export interface SceneRun { sceneId: EntityId; gauges: Record<string, number>; states: string[]; phase?: string; round: number; used: string[]; log: string[]; /** 지금 보이는 장면 그림 (v0.50) */ image?: string }
@@ -92,6 +101,10 @@ export interface GameState {
   phasePath?: string[];
   /** 최근 턴들의 긴장 (턴이 시작할 때의 값, 최근 8개) — 강도 곡선 */
   tensionTrail?: number[];
+  /** 파장 원장 (v0.114): 플레이어가 내린 무게 있는 선택 (최근 40개) */
+  ledger?: LedgerEntry[];
+  /** 돌아올 후폭풍 (v0.114) */
+  fallout?: FalloutEntry[];
   /** 진행 중인 장면 (v0.47) */
   scene?: SceneRun;
   /** 끝난 장면: 결과 */
@@ -269,6 +282,16 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const sheet = s.player.sheet;
       return { ...s, player: { ...s.player, sheet: { ...sheet, traits: { ...(sheet.traits ?? {}), [e.trait]: e.value } } },
         log: [...s.log, { turn, kind: 'progress', text: `◐ ${e.name} ${e.delta > 0 ? '+' : ''}${e.delta} → ${e.label}${e.reason ? ` — ${e.reason}` : ''}` }] };
+    }
+    case 'stake_applied':
+      return { ...s, ledger: [...(s.ledger ?? []), { turn, stake: e.stake, label: e.label, choice: e.choice, line: e.line }].slice(-40),
+        log: [...s.log, { turn, kind: 'stake', text: `${e.label} — ${e.line}` }] };
+    case 'fallout_queued':
+      return { ...s, fallout: [...(s.fallout ?? []).filter((f) => f.id !== e.id), { id: e.id, stake: e.stake, turn, due: e.due, text: e.text }] };
+    case 'fallout_fired': {
+      const f = (s.fallout ?? []).find((x) => x.id === e.id);
+      const ledger = f ? (s.ledger ?? []).map((l) => (l.turn === f.turn && l.stake === f.stake ? { ...l, returned: e.text } : l)) : s.ledger;
+      return { ...s, fallout: (s.fallout ?? []).filter((x) => x.id !== e.id), ...(ledger ? { ledger } : {}), log: [...s.log, { turn, kind: 'fallout', text: e.text }] };
     }
     case 'phase_changed':
       return { ...s, phase: e.to, phaseSince: turn, phasePath: [...(s.phasePath ?? []), e.to],
@@ -515,7 +538,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'time_advanced':
       return { ...s, worldMinutes: s.worldMinutes + e.minutes };
     case 'gm_guide':
-      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices, ...(e.images?.length ? { images: e.images } : {}), ...(e.choiceSkills ? { choiceSkills: e.choiceSkills } : {}), ...(e.choiceKinds ? { choiceKinds: e.choiceKinds } : {}), ...(e.choiceScenes ? { choiceScenes: e.choiceScenes } : {}) }] };
+      return { ...s, log: [...s.log, { turn, kind: 'guide', text: e.summary, suggestion: e.suggestion, choices: e.choices, ...(e.images?.length ? { images: e.images } : {}), ...(e.choiceSkills ? { choiceSkills: e.choiceSkills } : {}), ...(e.choiceKinds ? { choiceKinds: e.choiceKinds } : {}), ...(e.choiceScenes ? { choiceScenes: e.choiceScenes } : {}), ...(e.choiceStakes ? { choiceStakes: e.choiceStakes } : {}), ...(e.choiceOptions ? { choiceOptions: e.choiceOptions } : {}) }] };
   }
 }
 

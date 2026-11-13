@@ -703,6 +703,55 @@ export interface Phase {
 export type PhaseTint = 'calm' | 'warm' | 'tense' | 'dark' | 'bright';
 
 /**
+ * 갈래 카드 (v0.115, 설계 v6 3.5절): 이야기의 단위. 조건이 맞는 카드들의 덱에서 다음 장면을 뽑는다.
+ * 카드는 상황 하나와 갈림길 2~4개다. 갈림길마다 걸린 것(stake)과 결과(성공·대가·실패)가 다르다.
+ */
+export interface Storylet {
+  id: EntityId;
+  title: string;
+  /** 이 카드가 덱에 들어오는 조건 (비우면 늘) */
+  when?: Condition;
+  /** 이 국면들의 덱에만 (비우면 모든 국면) */
+  phases?: EntityId[];
+  /** 이 장소에서만 (비우면 어디서나) */
+  locationId?: EntityId;
+  /** 뽑힐 무게 (기본 1). 조건이 구체적일수록 높게 */
+  weight?: number;
+  /** 종류 표시: main(이야기의 뼈대) · side · random(돌발) · twist(반전 — 장마다 예산) · job(의뢰) */
+  tags?: ('main' | 'side' | 'random' | 'twist' | 'job')[];
+  /** 이 카드가 속한 임무 (수첩에 임무로 보인다) */
+  quest?: EntityId;
+  /** 상황: 서술자가 펼칠 장면 설정 (누가 · 어디서 · 무엇이 걸려 있나) — 플레이어에게 보이는 일만 */
+  situation: string;
+  /** AI 없이 진행할 때(체험판) 그대로 보여 줄 글 (선택) */
+  text?: string;
+  /** 갈림길 2~4개 */
+  options: StoryletOption[];
+  /** 다시 나올 수 있는가: { after: 턴 } (기본: 한 번만) */
+  repeat?: { after: number };
+}
+export interface StoryletOption {
+  id: string;
+  /** 선택지의 뼈대 (AI가 장면에 맞게 다듬는다) */
+  label: string;
+  /** 걸린 것 (engine/stakes 모양) */
+  stake?: string;
+  /** 판정 (없으면 판정 없이 성공) */
+  check?: { skill: string; dc: 'very_easy' | 'easy' | 'medium' | 'hard' | 'very_hard' };
+  /** 성공 · 대가 있는 성공에 일어나는 일 */
+  success?: StoryEffect[];
+  /** 대가 있는 성공의 대가 (비우면 엔진이 고른다) */
+  cost?: StoryEffect[];
+  /** 실패해도 일어나는 일 (비우면 엔진이 고른 전개) */
+  fail?: StoryEffect[];
+  /** 결과 글 (체험판·기록) */
+  successText?: string;
+  failText?: string;
+  /** 후폭풍: 몇 턴 뒤 이 카드가 반드시 펼쳐진다 */
+  fallout?: { inTurns: number; storylet: EntityId }[];
+}
+
+/**
  * 의뢰 (설계 v3 6.3): 장소의 의뢰판에 붙는 반복 가능한 일.
  * enemies가 있으면 받을 때마다 그 장소(locationId)에 토벌 조우가 생기고, 이기면 끝난다. 없으면 complete 조건.
  * 보상이 비면 엔진이 위협도(적 경험치)로 돈을 정한다.
@@ -922,6 +971,8 @@ export interface WorldPackage {
   /** 국면 (v0.113). 비우면 긴장으로 움직이는 기본 국면 셋(평온·술렁임·위기)을 쓴다. autoPhases: false면 국면 없음 */
   phases?: Phase[];
   autoPhases?: boolean;
+  /** 갈래 카드 (v0.115) */
+  storylets?: Storylet[];
   /** 장면 (v0.47) */
   scenes?: SceneDef[];
   /** 돌발 사건 표 (설계 v4 E5): 이동·휴식 때 엔진이 굴린다. 없으면 기본 표, []면 끔 */
