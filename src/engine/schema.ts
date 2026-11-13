@@ -571,6 +571,8 @@ export type Condition =
   | { flag: string }
   /** 지금 국면 (v0.113) */
   | { phase: EntityId }
+  /** 갈래 카드에서 고른 것 (v0.115): 골랐다 / 이 갈림길을 골랐다 */
+  | { storylet: EntityId; is?: string }
   | { questDone: EntityId }
   | { level: number }
   /** 세계 수치 (설계 v4 E6, 예: 마을 치안) */
@@ -838,7 +840,11 @@ export type StoryEffect =
   | { startEncounter: EntityId }
   | { moveTo: EntityId }
   /** 두 인물의 관계가 바뀐다 (설계 v4 E7). kind none = 관계가 끊긴다 */
-  | { npcRelation: EntityId; with: EntityId; kind: NpcRelationKind | 'none'; note?: string };
+  | { npcRelation: EntityId; with: EntityId; kind: NpcRelationKind | 'none'; note?: string }
+  /** 임무의 지금 단계를 끝낸다 (v0.115 — 갈래 카드의 갈림길이 임무를 진행시킬 때) */
+  | { advanceQuest: EntityId }
+  /** 갈래 카드를 다음 턴에 펼친다 (v0.115) */
+  | { openStorylet: EntityId; inTurns?: number };
 
 /** 장 (설계 v3 5.1): 줄기의 큰 단계 */
 export interface Chapter {

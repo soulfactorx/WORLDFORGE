@@ -20,6 +20,8 @@ import { genreGuide, genreProfile } from '../engine/genre';
 import { SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { checkModifier } from '../engine/character/sheet';
 import { stakeOptions, stakeValid } from '../engine/stakes';
+import { activeStorylet, optionKey, parseOptionKey } from '../engine/storylets';
+import { cardChoiceBlock } from './storylets';
 
 export interface GuideOutput { summary: string; suggestion: string; choices: { text: string; skill: string; kind: string; scene?: string; stake?: string; option?: string }[]; move?: { text: string; location: string } }
 
@@ -114,6 +116,21 @@ function towardFocus(world: WorldPackage, s: GameState, b: ReturnType<typeof sto
 
 /** AI 없이 만드는 기본 안내 (시작 장면, 전투 뒤, AI 실패 시) */
 export function basicGuide(world: WorldPackage, s: GameState): GameEvent {
+  // 펼쳐진 갈래 카드가 있으면 그 갈림길이 선택지다 (v0.115 — AI 없이도 이야기가 갈라진다)
+  const card = activeStorylet(world, s);
+  if (card) {
+    const opts = card.options;
+    const mv = moveChoice(world, s);
+    const choices = [...opts.map((o) => cut(o.label, 60)), ...(mv ? [mv] : [])];
+    const pad = (xs: string[]) => [...xs, ...(mv ? [''] : [])];
+    return {
+      type: 'gm_guide', summary: card.situation, suggestion: card.title, choices,
+      ...(opts.some((o) => o.check) ? { choiceSkills: pad(opts.map((o) => o.check?.skill ?? '')) } : {}),
+      ...(opts.some((o) => o.stake) ? { choiceStakes: pad(opts.map((o) => (o.stake && stakeValid(world, s, o.stake) ? o.stake : ''))) } : {}),
+      choiceOptions: pad(opts.map((o) => optionKey(card.id, o.id))),
+      ...(mv ? { choiceKinds: [...opts.map(() => ''), 'move'] } : {}),
+    };
+  }
   const loc = world.locations.find((l) => l.id === s.player.locationId);
   const people = presentCharacters(world, s).filter((c) => !s.party[c.id]);
   const exits = (loc?.connections ?? []).map((id) => world.locations.find((l) => l.id === id)?.name).filter((x): x is string => !!x);
@@ -162,7 +179,7 @@ export function guideMaterials(world: WorldPackage, s: GameState): string {
   const strong = SKILL_IDS.map((k) => ({ k, m: checkModifier(sheet, { kind: 'skill', skill: k }).total })).sort((a, b) => b.m - a.m).slice(0, 5)
     .map((x) => `${x.k}(${SKILLS[x.k].name}) ${x.m >= 0 ? '+' : ''}${x.m}${sheet.skillProficiencies.includes(x.k) ? ' 숙련' : ''}`);
   const pace = pacing(s);
-  return `## 플레이어 캐릭터의 강한 기술\n${strong.join(', ')}\n\n## 수첩의 임무 목표 (플레이어가 아는 것 · → 는 그 목표가 풀리는 곳)\n${gb.quests.join('\n') || '(없음)'}\n\n## 지금 열 수 있는 장면 (선택지의 scene에 쓸 수 있는 ID)\n${gb.scenes.join('\n') || '(없음)'}\n\n## 이야기 흐름 (엔진 확인)\n${pace.line}\n\n## 지난 선택지 (겹치지 않게)\n${pace.previous.join('\n') || '(없음)'}\n\n## 플레이어가 방금 한 행동\n${lastInput(s) || '(없음 — 장면 시작)'}\n\n## 지금 이 자리에 있는 사람 (선택지는 이 사람들만 짚는다)\n${presentCharacters(world, s).map((c) => `- ${displayName(s, c)}${s.party[c.id] ? ' (동료)' : ''}`).join('\n') || '(아무도 없다)'}\n\n## 걸 수 있는 것 (선택지의 stake — 엔진이 그 결과를 적용한다. 네 선택지는 서로 다른 것)\n${stakeOptions(world, s, presentCharacters(world, s)).map((o) => `- ${o.id}: ${o.label} — ${o.note}`).join('\n')}`;
+  return `## 플레이어 캐릭터의 강한 기술\n${strong.join(', ')}\n\n## 수첩의 임무 목표 (플레이어가 아는 것 · → 는 그 목표가 풀리는 곳)\n${gb.quests.join('\n') || '(없음)'}\n\n## 지금 열 수 있는 장면 (선택지의 scene에 쓸 수 있는 ID)\n${gb.scenes.join('\n') || '(없음)'}\n\n## 이야기 흐름 (엔진 확인)\n${pace.line}\n\n## 지난 선택지 (겹치지 않게)\n${pace.previous.join('\n') || '(없음)'}\n\n## 플레이어가 방금 한 행동\n${lastInput(s) || '(없음 — 장면 시작)'}\n\n## 지금 이 자리에 있는 사람 (선택지는 이 사람들만 짚는다)\n${presentCharacters(world, s).map((c) => `- ${displayName(s, c)}${s.party[c.id] ? ' (동료)' : ''}`).join('\n') || '(아무도 없다)'}\n\n## 걸 수 있는 것 (선택지의 stake — 엔진이 그 결과를 적용한다. 네 선택지는 서로 다른 것)\n${stakeOptions(world, s, presentCharacters(world, s)).map((o) => `- ${o.id}: ${o.label} — ${o.note}`).join('\n')}${cardChoiceBlock(world, s)}`;
 }
 
 /** 장르·문체·등급·GM 스타일을 붙인 안내 지침 */
@@ -225,15 +242,24 @@ export function guideEvent(world: WorldPackage, s: GameState, out: GuideOutput |
   // 장면 선택지는 하나만
   raw.forEach((c, i) => { if (c.scene && raw.findIndex((x) => x.scene) !== i) c.scene = ''; });
   // 걸린 것 (v0.114): 지금 유효하고, 선택지끼리 겹치지 않는 것만
+  // 갈래 카드의 갈림길 (v0.115): 지금 펼쳐진 카드의 것만, 겹치지 않게. 걸린 것은 갈림길의 것을 쓴다
+  const card = activeStorylet(world, s);
+  const usedOpt = new Set<string>();
+  const choiceOptions = raw.map((c) => { const k = c.option; const hit = card && k ? parseOptionKey(world, k) : null; if (!hit || hit.card.id !== card!.id || usedOpt.has(k)) return ''; usedOpt.add(k); return k; });
+  raw.forEach((c, i) => { const hit = parseOptionKey(world, choiceOptions[i]); if (hit) { c.stake = hit.option.stake ?? ''; if (hit.option.check) c.skill = hit.option.check.skill; } });
+  // 카드의 갈림길을 선택지가 빠뜨렸으면 뒤에 붙인다 (갈림길은 다 보여야 한다)
+  if (card) for (const o of card.options) { const k = optionKey(card.id, o.id); if (!usedOpt.has(k)) { raw.push({ text: cut(o.label, 60), skill: o.check?.skill ?? '', kind: '', scene: '', stake: o.stake ?? '', option: k }); choiceOptions.push(k); } }
+  // 카드가 펼쳐져 있으면 선택지는 다섯까지 — 갈림길을 남기고 나머지를 줄인다
+  while (raw.length > 5) { const i = choiceOptions.findLastIndex((x) => !x); if (i < 0) break; raw.splice(i, 1); choiceOptions.splice(i, 1); }
   const seen = new Set<string>();
-  const choiceStakes = raw.map((c) => { const st = c.stake; if (!st || seen.has(st) || !stakeValid(world, s, st)) return ''; seen.add(st); return st; });
+  const choiceStakes = raw.map((c, i) => { const st = c.stake; if (!st || (seen.has(st) && !choiceOptions[i]) || !stakeValid(world, s, st)) return ''; seen.add(st); return st; });
   if (!out?.summary || !raw.length) return null;
   const summary = cut(String(out.summary).trim(), 500), suggestion = cut(String(out.suggestion ?? '').trim(), 200);
   const images = guideImages(world, `${summary} ${suggestion} ${raw.map((c) => c.text).join(' ')}`, `guide${s.turn}`, 'AI 안내');
   // 장소 이동 선택지 (v0.82.1): AI가 고른 곳이 실제로 갈 수 있는 곳이면 그대로, 아니면 엔진이 고른다
   const mv = moveChoice(world, s, out?.move);
-  if (mv) { raw.push({ text: mv, skill: '', kind: 'move', scene: '', stake: '', option: '' }); choiceStakes.push(''); }
-  return { type: 'gm_guide', summary, suggestion, choices: raw.map((c) => c.text), ...(raw.some((c) => c.skill) ? { choiceSkills: raw.map((c) => c.skill) } : {}), ...(raw.some((c) => c.kind) ? { choiceKinds: raw.map((c) => c.kind) } : {}), ...(raw.some((c) => c.scene) ? { choiceScenes: raw.map((c) => c.scene) } : {}), ...(choiceStakes.some(Boolean) ? { choiceStakes } : {}), ...(images.length ? { images } : {}) };
+  if (mv) { raw.push({ text: mv, skill: '', kind: 'move', scene: '', stake: '', option: '' }); choiceStakes.push(''); choiceOptions.push(''); }
+  return { type: 'gm_guide', summary, suggestion, choices: raw.map((c) => c.text), ...(raw.some((c) => c.skill) ? { choiceSkills: raw.map((c) => c.skill) } : {}), ...(raw.some((c) => c.kind) ? { choiceKinds: raw.map((c) => c.kind) } : {}), ...(raw.some((c) => c.scene) ? { choiceScenes: raw.map((c) => c.scene) } : {}), ...(choiceStakes.some(Boolean) ? { choiceStakes } : {}), ...(choiceOptions.some(Boolean) ? { choiceOptions } : {}), ...(images.length ? { images } : {}) };
 }
 
 export async function gmGuide(llm: LlmClient, world: WorldPackage, s: GameState, narration: string, signal?: AbortSignal): Promise<GameEvent> {

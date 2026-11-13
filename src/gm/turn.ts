@@ -3,6 +3,8 @@ import { checkTier, DC_TIERS, type DcTier, type RollMode, d20Test, TIER_LABEL } 
 import { costOf, failForwardOf } from './tiers';
 import { phaseBlock, phaseEvents, phaseTransitionLines } from './phase';
 import { falloutEvents, stakeEvents } from './stakes';
+import { chooseOptionEvents, deckBlock, openedLines, openStoryletEvents } from './storylets';
+import { eligibleStorylets } from '../engine/storylets';
 import { stakeOptions, stakeValid } from '../engine/stakes';
 import { closedHere, currentPhase, nextPhase } from '../engine/phase';
 import { APPROACHES, type ApproachId, bestSkill } from '../engine/character/approaches';
@@ -93,6 +95,8 @@ interface DirectorOutput {
   attack_npc?: string;
   /** v0.114: 플레이어가 자유 행동으로 건 것 (걸 수 있는 것 ID, 없으면 "") */
   stake?: string;
+  /** v0.115: 이번에 펼칠 갈래 카드 ID (없으면 "") */
+  storylet?: string;
 }
 
 const BEAT_KINDS = {
@@ -108,7 +112,7 @@ type BeatKind = keyof typeof BEAT_KINDS;
 const DIRECTOR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to', 'speakers', 'start_encounter', 'rest', 'discover', 'set_flags', 'take_items', 'scene_image', 'time_spent', 'trait_shift', 'rules', 'beat', 'start_scene', 'attack_npc', 'stake'],
+  required: ['action_summary', 'check_kind', 'check_skill', 'check_ability', 'check_dc_tier', 'check_mode', 'check_reason', 'move_to', 'speakers', 'start_encounter', 'rest', 'discover', 'set_flags', 'take_items', 'scene_image', 'time_spent', 'trait_shift', 'rules', 'beat', 'start_scene', 'attack_npc', 'stake', 'storylet'],
   properties: {
     action_summary: { type: 'string', description: '플레이어가 하려는 행동 요약' },
     check_kind: { type: 'string', enum: ['none', 'skill', 'ability', 'save'], description: '결과가 불확실하고 실패에 의미가 있을 때만 판정. skill=기술 판정, ability=기술 없는 능력 판정, save=내성 굴림' },
@@ -120,6 +124,7 @@ const DIRECTOR_SCHEMA = {
     move_to: { type: 'string', description: '"이동 가능한 곳" 목록의 ID 중 하나, 이동하지 않으면 ""' },
     start_encounter: { type: 'string', description: '"일어날 수 있는 조우" 목록의 ID. 발동 조건이 충족될 때만. 아니면 ""' },
     start_scene: { type: 'string', description: '"지금 열 수 있는 장면" 목록의 ID. 플레이어의 이번 행동이 그 장면으로 들어가는 것일 때만 (계기 참고). 아니면 ""' },
+    storylet: { type: 'string', description: '"갈래 카드 덱"에서 이번 턴이 끝날 때 플레이어 앞에 펼칠 카드 ID. 지금 장면·강도 곡선·플레이어가 만든 결과와 이어지는 것 하나. 이미 펼친 카드가 있거나 하던 일이 한창이면 ""' },
     stake: { type: 'string', description: '플레이어가 직접 적은 행동이 "걸 수 있는 것" 목록의 하나에 분명히 해당하면 그 ID (판을 키움·가라앉힘·누구 편·배신·비밀 폭로·세계의 방향). 애매하면 "". 플레이어가 선택지를 골랐으면 엔진이 이미 알고 있으니 ""' },
     attack_npc: { type: 'string', description: '플레이어가 조우 목록에 없는 "이 장소에 있는 인물"을 실제로 공격했을 때만 그 인물 ID (말싸움·위협은 아니다). 아니면 ""' },
     beat: {
@@ -373,7 +378,9 @@ export async function runTurn(
     /** 서술 전에 엔진이 확정한 것(판정·실마리·전투 시작…)을 화면이 먼저 보여 줄 수 있게, 그때의 상태를 알린다 (v0.90) */
     onState?: (s: GameState) => void;
     /** 고른 선택지에 걸린 것 (v0.114) */
-    stake?: string } = {},
+    stake?: string;
+    /** 고른 갈래 카드의 갈림길 "카드ID#갈림길ID" (v0.115) */
+    option?: string } = {},
 ): Promise<TurnResult> {
   if (state.combat) throw new Error('전투 중에는 카드로 행동한다');
   if (state.playerDead) throw new Error('당신은 죽었다. 턴 되돌리기로 이전으로 돌아갈 수 있다.');
@@ -403,7 +410,12 @@ export async function runTurn(
   const fo = falloutEvents(world, s);
   fo.events.forEach(push);
   const falloutBlock = fo.lines.length ? `\n\n## 이번 턴에 돌아오는 후폭풍 (엔진 확정 — 플레이어의 지난 선택의 결과. 이번 장면에 반드시 담는다. speakers·beat를 여기에 맞춘다)\n${fo.lines.map((l) => `- ${l}`).join('\n')}` : '';
-  const chosenStake = play.stake && stakeValid(world, s, play.stake) ? play.stake : '';
+  // 갈래 카드의 갈림길 (v0.115): 판정·효과·후폭풍을 엔진이 먼저 확정한다 (GM 판단은 판정을 다시 걸지 않는다)
+  const opt = play.option ? chooseOptionEvents(world, s, play.option) : null;
+  if (play.option && !opt) rejected.push(`지금 고를 수 없는 갈림길: ${play.option}`);
+  opt?.events.forEach(push);
+  const optionBlock = opt ? `\n\n## 플레이어가 고른 갈래 카드의 갈림길 (엔진 확정 — 판정은 이미 끝났다. check_kind는 none)\n${opt.lines.map((l) => `- ${l}`).join('\n')}` : '';
+  const chosenStake = [play.stake, opt?.stake].find((x) => x && stakeValid(world, s, x)) ?? '';
   const stakeList = stakeOptions(world, s, presentCharacters(world, s));
 
   // 1) Director
@@ -411,15 +423,16 @@ export async function runTurn(
   const ruleList = continuing ? '' : actionRuleList(world, s);
   const ruleListBlock = ruleList ? `\n\n## 세계 규칙 (플레이어 행동·말이 이 묘사에 해당하면 rules에 ID)\n${ruleList}` : '';
   const d = await llm.json<DirectorOutput>(
-    { system: `${DIRECTOR_SYSTEM}${gmStyleText(phaseStyled(world, s), 'director')}`, user: `${buildDirectorContext(world, s)}${phaseBlock(world, s, { director: true })}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.name} — ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}${declared ? `\n\n## 플레이어가 쓰겠다고 한 것\n${declared.kind === 'skill' ? `${SKILLS[declared.skill].name} 기술 (${declared.skill})` : `${ABILITY_NAMES[declared.ability]} 능력 (${declared.ability})`} — 결과가 불확실하면 이것으로 판정한다` : ''}${ruleListBlock}${ledgerBlock(s)}${falloutBlock}${chosenStake ? `\n\n## 플레이어가 고른 선택의 무게 (엔진이 적용한다)\n${stakeList.find((o) => o.id === chosenStake)?.label ?? chosenStake}` : !continuing ? `\n\n## 걸 수 있는 것 (stake — 자유 행동이 분명히 해당할 때만)\n${stakeList.map((o) => `- ${o.id}: ${o.label}`).join('\n')}` : ''}${continuing ? `\n\n${CONTINUE_DIRECTOR}` : ''}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
+    { system: `${DIRECTOR_SYSTEM}${gmStyleText(phaseStyled(world, s), 'director')}`, user: `${buildDirectorContext(world, s)}${phaseBlock(world, s, { director: true })}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.name} — ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}${declared ? `\n\n## 플레이어가 쓰겠다고 한 것\n${declared.kind === 'skill' ? `${SKILLS[declared.skill].name} 기술 (${declared.skill})` : `${ABILITY_NAMES[declared.ability]} 능력 (${declared.ability})`} — 결과가 불확실하면 이것으로 판정한다` : ''}${ruleListBlock}${ledgerBlock(s)}${falloutBlock}${optionBlock}${deckBlock(world, s)}${chosenStake ? `\n\n## 플레이어가 고른 선택의 무게 (엔진이 적용한다)\n${stakeList.find((o) => o.id === chosenStake)?.label ?? chosenStake}` : !continuing ? `\n\n## 걸 수 있는 것 (stake — 자유 행동이 분명히 해당할 때만)\n${stakeList.map((o) => `- ${o.id}: ${o.label}`).join('\n')}` : ''}${continuing ? `\n\n${CONTINUE_DIRECTOR}` : ''}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
     DIRECTOR_SCHEMA, signal,
   );
 
   // 2) Validator + Rules Engine
   const outcomes: string[] = decided ? [`플레이어의 결정적 선택: ${decided} (되돌릴 수 없다. 이 결정의 무게를 서술에 담는다)`] : [];
-  let spec = toCheckSpec(d);
-  let tier: 'success' | 'cost' | 'fail' | undefined;
-  let failEncounter = '';
+  let spec = opt ? null : toCheckSpec(d);
+  let tier: 'success' | 'cost' | 'fail' | undefined = opt?.tier;
+  let failEncounter = opt?.encounterId ?? '';
+  if (opt) outcomes.push(...opt.lines);
   // 플레이어가 고른 기술·능력치가 있으면, 판정이 필요한 행동일 때 그것으로 굴린다 (내성은 상황이 정한다)
   if (declared && spec && spec.kind !== 'save') spec = declared;
   if (spec && d.check_dc_tier in DC_TIERS) {
@@ -656,7 +669,9 @@ export async function runTurn(
   let ambushed = false;
   // 잔잔함이 길면 엔진이 직접 일을 꺼낸다 (v0.113, 설계 v6 3.4 강도 곡선): 돌발 사건 하나 + 긴장 +1
   const quiet = pacing(s).quiet >= 3 && !s.combat && !s.scene;
-  const trigger = !enc && (moving ? 'move' : d.rest === 'long' || d.rest === 'short' ? 'rest' : quiet && !d.start_scene && !d.attack_npc ? 'quiet' : null);
+  // 갈래 카드가 있는 세계는 잔잔할 때 돌발 사건 대신 카드를 펼친다 (아래)
+  const cardsWaiting = !!world.storylets?.length && eligibleStorylets(world, s).length > 0;
+  const trigger = !enc && (moving ? 'move' : d.rest === 'long' || d.rest === 'short' ? 'rest' : quiet && !cardsWaiting && !d.start_scene && !d.attack_npc ? 'quiet' : null);
   const rev = trigger ? rollRandomEvent(world, s, createRng((s.rngState ^ Math.imul(turn + 1, 2654435761)) >>> 0), trigger) : null;
   if (rev) {
     const rrng = createRng((s.rngState + Math.imul(turn + 7, 40503)) >>> 0);
@@ -734,7 +749,11 @@ export async function runTurn(
   // 기류·국면 (v0.113): 이 턴의 일로 긴장이 움직이고, 문턱을 넘으면 국면이 바뀐다 — 서술 앞에서 확정
   const ph = phaseEvents(world, ahead, [...events, ...post], quiet ? [{ delta: 1, why: '잔잔함' }] : []);
   ph.forEach(queue);
-  const transitions = [...transitionLines(world, sc.events), ...phaseTransitionLines(world, ph)];
+  // 갈래 카드 (v0.115): 예약된 카드 > GM이 고른 카드 > 잔잔하면 엔진이 뽑는다 — 펼쳐지면 서술은 그 갈림길 앞에서 멈추고, 선택지가 갈림길이 된다
+  const opened = openStoryletEvents(world, ahead, { pick: d.storylet, quiet: pacing(s).quiet >= 2 });
+  if (d.storylet && !opened.some((e) => e.type === 'storylet_opened' && e.id === d.storylet)) rejected.push(`펼칠 수 없는 갈래 카드: ${d.storylet}`);
+  opened.forEach(queue);
+  const transitions = [...transitionLines(world, sc.events), ...phaseTransitionLines(world, ph), ...openedLines(world, opened)];
   const beatBlock = beat ? `\n\n## 이번 장면의 연출 지시 (GM — ${BEAT_KINDS[beat.kind]}. 엔진 확정 결과 안에서만)\n${beat.direction}${beat.ending_hook ? `\n마지막에 걸어 둘 것: ${beat.ending_hook}` : ''}` : '';
 
   // 4) Narrator (확정 결과 + 확정 대사만 전달)

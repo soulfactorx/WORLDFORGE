@@ -49,6 +49,8 @@ export function effectEvents(world: WorldPackage, state: GameState, effects: Sto
     // 전환 (v0.85): 예약만 한다 — 시나리오 평가가 전투·장면이 없을 때 앞에서부터 하나씩 시작한다
     if ('startScene' in fx) { if (world.scenes?.some((x) => x.id === fx.startScene)) push({ type: 'transition_queued', kind: 'scene', id: fx.startScene }); continue; }
     if ('startEncounter' in fx) { if (world.encounters?.some((x) => x.id === fx.startEncounter) && !s.clearedEncounters.includes(fx.startEncounter)) push({ type: 'transition_queued', kind: 'encounter', id: fx.startEncounter }); continue; }
+    if ('advanceQuest' in fx) { const p = s.quests[fx.advanceQuest]; if (p && !p.done) push({ type: 'quest_pushed', questId: fx.advanceQuest, stage: p.stage }); continue; }
+    if ('openStorylet' in fx) { if (world.storylets?.some((x) => x.id === fx.openStorylet)) push({ type: 'storylet_queued', id: fx.openStorylet, due: s.turn + Math.max(1, fx.inTurns ?? 1) }); continue; }
     if ('moveTo' in fx) { if (world.locations.some((l) => l.id === fx.moveTo) && s.player.locationId !== fx.moveTo) push({ type: 'moved', to: fx.moveTo }); continue; }
     if ('npcRelation' in fx) {
       const a = world.characters.find((c) => c.id === fx.npcRelation);

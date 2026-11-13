@@ -119,6 +119,12 @@ export type GameEvent =
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number }
+  /** 갈래 카드 (v0.115): 펼침 · 갈림길을 고름 · 예약 */
+  | { type: 'storylet_opened'; id: EntityId; title: string }
+  | { type: 'storylet_chosen'; id: EntityId; optionId: string; label: string; tier?: 'success' | 'cost' | 'fail' }
+  | { type: 'storylet_queued'; id: EntityId; due: number }
+  /** 갈림길이 임무의 지금 단계를 끝냈다 (v0.115) */
+  | { type: 'quest_pushed'; questId: EntityId; stage: number }
   /** 고른 선택의 무게를 엔진이 적용했다 (v0.114) — 파장 원장에 남는다 */
   | { type: 'stake_applied'; stake: string; label: string; choice: string; line: string }
   /** 후폭풍 예약 · 발동 (v0.114) */

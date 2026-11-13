@@ -3,6 +3,8 @@
  * 오류(error)가 하나라도 있으면 플레이할 수 없다. 경고(warning)는 제작자에게 알리기만 한다.
  */
 import { TENSION } from '../vars';
+import { parseStake } from '../stakes';
+import { SKILLS } from '../character/rules';
 import { defaultPhases } from '../phase';
 import { isPlaceholderText } from '../names';
 import { gmStyleById } from '../../data/gmStyles';
@@ -140,6 +142,8 @@ export function validateWorld(input: unknown): Issue[] {
   const worldVars = arr<NonNullable<WorldPackage['vars']>[number]>('vars', false);
   const varIds = new Set([...worldVars.map((v) => v?.id), TENSION]);
   const phaseList = arr<NonNullable<WorldPackage['phases']>[number]>('phases', false);
+  const storyletList = arr<NonNullable<WorldPackage['storylets']>[number]>('storylets', false);
+  const storyletIds = new Set(storyletList.map((x) => x?.id));
   const phaseIds = new Set((phaseList.length ? phaseList : (input as Record<string, unknown>).autoPhases === false ? [] : defaultPhases(input as unknown as WorldPackage)).map((x) => x?.id));
   const traitIds = new Set((Array.isArray((input as Record<string, unknown>).traits) || (input as Record<string, unknown>).traits === undefined ? traitsFor(input as unknown as WorldPackage) : []).map((t) => t?.id).filter(Boolean));
   const flagIds = new Set(flags.map((f) => f?.id));
@@ -301,6 +305,12 @@ export function validateWorld(input: unknown): Issue[] {
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('trait' in cond) { if (!traitIds.has(cond.trait)) err(path, `없는 성향 축 "${cond.trait}" (${[...traitIds].join(', ')})`); return; }
+    if ('storylet' in cond) {
+      const c = storyletList.find((x) => x?.id === cond.storylet);
+      if (!c) err(path, `없는 갈래 카드 "${cond.storylet}"`);
+      else if (cond.is !== undefined && !(c.options ?? []).some((o) => o?.id === cond.is)) err(path, `카드 "${cond.storylet}"에 없는 갈림길 "${cond.is}"`);
+      return;
+    }
     if ('phase' in cond) { if (!phaseIds.has(cond.phase)) err(path, `없는 국면 "${cond.phase}" (${[...phaseIds].join(', ')})`); return; }
     if ('var' in cond) { if (!varIds.has(cond.var)) err(path, `선언되지 않은 세계 수치 "${cond.var}"`); return; }
     if ('encounter' in cond) {
@@ -584,6 +594,37 @@ export function validateWorld(input: unknown): Issue[] {
     if ((v.labels ?? []).some((l) => !Array.isArray(l) || typeof l[0] !== 'number' || typeof l[1] !== 'string')) err(`${p}.labels`, '단계는 [값, "이름"] 목록입니다.');
     if (v.poles !== undefined && !(Array.isArray(v.poles) && v.poles.length === 2 && v.poles.every((x) => typeof x === 'string' && x.trim()))) err(`${p}.poles`, '양 끝의 이름 두 개 ["…", "…"]입니다.');
   });
+  // ---- 갈래 카드 (v0.115)
+  const seenCards = new Set<string>();
+  storyletList.forEach((c, i) => {
+    const p = `storylets[${i}]`;
+    if (!c?.id) err(`${p}.id`, 'ID가 필요합니다.'); else if (seenCards.has(c.id)) err(`${p}.id`, `겹치는 ID "${c.id}"`); else seenCards.add(c.id);
+    text(c.title, `${p}.title`);
+    text(c.situation, `${p}.situation`);
+    if (c.when !== undefined) checkCond(c.when, `${p}.when`);
+    for (const ph of c.phases ?? []) if (!phaseIds.has(ph)) err(`${p}.phases`, `없는 국면 "${ph}"`);
+    if (c.locationId && !locIds.has(c.locationId)) err(`${p}.locationId`, `없는 장소 "${c.locationId}"`);
+    if (c.quest && !questIds.has(c.quest)) err(`${p}.quest`, `없는 임무 "${c.quest}"`);
+    for (const t of c.tags ?? []) if (!['main', 'side', 'random', 'twist', 'job'].includes(t)) err(`${p}.tags`, `알 수 없는 표시 "${t}" (main · side · random · twist · job)`);
+    if (!Array.isArray(c.options) || c.options.length < 1) err(`${p}.options`, '갈림길이 하나 이상 필요합니다 (2~4개 권장).');
+    else if (c.options.length === 1) warn(`${p}.options`, '갈림길이 하나뿐입니다 — 고를 것이 없습니다. 2~4개를 권장합니다.');
+    const seenOpt = new Set<string>(); const stakes = new Set<string>();
+    (c.options ?? []).forEach((o, j) => {
+      const q = `${p}.options[${j}]`;
+      if (!o?.id) err(`${q}.id`, 'ID가 필요합니다.'); else if (seenOpt.has(o.id)) err(`${q}.id`, `겹치는 ID "${o.id}"`); else seenOpt.add(o.id);
+      text(o.label, `${q}.label`);
+      if (o.stake) {
+        const st = parseStake(o.stake);
+        if (!st) err(`${q}.stake`, '걸린 것의 모양: escalate · defuse · side:세력ID · bond:인물ID · betray:인물ID · expose:명제ID · theme:수치ID:+ / - · thread:카드ID');
+        else if ((st.kind === 'side' && !factionIds.has(st.ref!)) || ((st.kind === 'bond' || st.kind === 'betray') && !charIds.has(st.ref!)) || (st.kind === 'expose' && !claimIds.has(st.ref!)) || (st.kind === 'theme' && !varIds.has(st.ref!)) || (st.kind === 'thread' && !storyletIds.has(st.ref!))) err(`${q}.stake`, `"${o.stake}"이(가) 가리키는 것이 없습니다.`);
+        else if (stakes.has(o.stake)) warn(`${q}.stake`, '같은 카드의 다른 갈림길과 같은 것을 겁니다 — 갈림길마다 다른 방향을 권장합니다.');
+        stakes.add(o.stake);
+      }
+      if (o.check && (!(o.check.skill in SKILLS) || !['very_easy', 'easy', 'medium', 'hard', 'very_hard'].includes(o.check.dc))) err(`${q}.check`, '판정: skill은 SRD 기술 ID, dc는 very_easy · easy · medium · hard · very_hard');
+      for (const k of ['success', 'cost', 'fail'] as const) if (o[k] !== undefined) deferredEffects.push([o[k], `${q}.${k}`]);
+      for (const f of o.fallout ?? []) if (!storyletIds.has(f?.storylet)) err(`${q}.fallout`, `없는 갈래 카드 "${f?.storylet}"`);
+    });
+  });
   // ---- 국면 (v0.113)
   const seenPhases = new Set<string>();
   phaseList.forEach((ph, i) => {
@@ -637,7 +678,9 @@ export function validateWorld(input: unknown): Issue[] {
       if ('startScene' in fx) { if (!allSceneIds.has(fx.startScene as string)) err(p, `없는 장면 "${String(fx.startScene)}"`); return; }
       if ('startEncounter' in fx) { if (!encIds.has(fx.startEncounter as string)) err(p, `없는 조우 "${String(fx.startEncounter)}"`); return; }
       if ('moveTo' in fx) { if (!locIds.has(fx.moveTo as string)) err(p, `없는 장소 "${String(fx.moveTo)}"`); return; }
-      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money·var·trait·npcRelation·startScene·startEncounter·moveTo 중 하나를 쓰세요.');
+      if ('advanceQuest' in fx) { if (!questIds.has(fx.advanceQuest as string)) err(p, `없는 임무 "${String(fx.advanceQuest)}"`); return; }
+      if ('openStorylet' in fx) { if (!storyletIds.has(fx.openStorylet as string)) err(p, `없는 갈래 카드 "${String(fx.openStorylet)}"`); return; }
+      err(p, '알 수 없는 효과입니다. setFlag·moveNpc·killNpc·reveal·relationship·reputation·clock·giveItem·takeItem·money·var·trait·npcRelation·startScene·startEncounter·moveTo·advanceQuest·openStorylet 중 하나를 쓰세요.');
     });
   };
   deferredEffects.forEach(([l, p]) => checkEffects(l, p));

@@ -105,6 +105,14 @@ export interface GameState {
   ledger?: LedgerEntry[];
   /** 돌아올 후폭풍 (v0.114) */
   fallout?: FalloutEntry[];
+  /** 갈래 카드 (v0.115): 펼친 턴 · 끝낸 턴 · 고른 갈림길 */
+  storylets?: Record<EntityId, { seen: number; done?: number; chosen?: string }>;
+  /** 지금 펼쳐져 고르기를 기다리는 카드 */
+  activeStorylet?: { id: EntityId; turn: number };
+  /** 예약된 카드 (후폭풍·다른 길) */
+  storyletQueue?: { id: EntityId; due: number }[];
+  /** 갈림길이 끝낸 임무 단계 (v0.115): 임무 ID → 그 단계 번호 */
+  questPush?: Record<EntityId, number>;
   /** 진행 중인 장면 (v0.47) */
   scene?: SceneRun;
   /** 끝난 장면: 결과 */
@@ -283,6 +291,16 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, player: { ...s.player, sheet: { ...sheet, traits: { ...(sheet.traits ?? {}), [e.trait]: e.value } } },
         log: [...s.log, { turn, kind: 'progress', text: `◐ ${e.name} ${e.delta > 0 ? '+' : ''}${e.delta} → ${e.label}${e.reason ? ` — ${e.reason}` : ''}` }] };
     }
+    case 'storylet_opened':
+      return { ...s, activeStorylet: { id: e.id, turn }, storylets: { ...(s.storylets ?? {}), [e.id]: { ...(s.storylets?.[e.id] ?? {}), seen: turn } },
+        storyletQueue: (s.storyletQueue ?? []).filter((q) => q.id !== e.id) };
+    case 'storylet_chosen':
+      return { ...s, activeStorylet: s.activeStorylet?.id === e.id ? undefined : s.activeStorylet,
+        storylets: { ...(s.storylets ?? {}), [e.id]: { seen: s.storylets?.[e.id]?.seen ?? turn, done: turn, chosen: e.optionId } } };
+    case 'storylet_queued':
+      return { ...s, storyletQueue: [...(s.storyletQueue ?? []).filter((q) => q.id !== e.id), { id: e.id, due: e.due }] };
+    case 'quest_pushed':
+      return { ...s, questPush: { ...(s.questPush ?? {}), [e.questId]: e.stage } };
     case 'stake_applied':
       return { ...s, ledger: [...(s.ledger ?? []), { turn, stake: e.stake, label: e.label, choice: e.choice, line: e.line }].slice(-40),
         log: [...s.log, { turn, kind: 'stake', text: `${e.label} — ${e.line}` }] };

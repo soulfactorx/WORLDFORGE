@@ -1140,3 +1140,6 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .entry.stake { font-size: .85rem; color: var(--accent); }
 .entry.fallout { border-left: 3px solid var(--accent); padding: 4px 10px; font-weight: 600; background: var(--surface); border-radius: 0 8px 8px 0; }
 .ledger li { margin-bottom: 4px; }
+
+/* 갈래 카드 (v0.115) */
+.guide .card-title { margin: 4px 0; color: var(--accent); }

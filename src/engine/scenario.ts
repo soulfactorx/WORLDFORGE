@@ -71,6 +71,7 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('level' in c) return state.player.sheet.level >= c.level;
   if ('trait' in c) { const v = traitValue(world as WorldPackage, state.player.sheet, c.trait); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('phase' in c) return state.phase === c.phase;
+  if ('storylet' in c) { const r = state.storylets?.[c.storylet]; return !!r?.chosen && (c.is === undefined || r.chosen === c.is); }
   if ('var' in c) { const v = varValue(world, state, c.var); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('encounter' in c) {
     const r = state.encounterResults?.[c.encounter];
@@ -127,7 +128,8 @@ export function questTransitions(world: WorldPackage, state: GameState): QuestTr
       const why = questFailure(world, view(), q, p);
       if (why) { p.done = true; p.failed = true; out.push({ kind: 'failed', quest: q, reason: why }); break; }
       const stage = q.stages[p.stage];
-      if (!stage || !evalCondition(world, view(), stage.complete)) break;
+      // 갈래 카드의 갈림길이 이 단계를 끝냈으면 (v0.115) 조건과 상관없이 넘어간다
+      if (!stage || !(state.questPush?.[q.id] === p.stage || evalCondition(world, view(), stage.complete))) break;
       p.stage++;
       if (p.stage >= q.stages.length) {
         p.done = true;
