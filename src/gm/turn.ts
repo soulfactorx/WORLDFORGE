@@ -821,6 +821,11 @@ export function ledgerBlock(s: GameState, n = 4): string {
   return xs.length ? `\n\n## 플레이어가 최근에 내린 선택 (세계와 인물이 기억한다 — 이것의 결과를 지금 목표보다 먼저 이야기에 반영한다)\n${xs.map((l) => `- ${s.turn - l.turn}턴 전: ${l.label} — "${l.choice}"${l.returned ? ` (이미 돌아옴: ${l.returned})` : ''}`).join('\n')}` : '';
 }
 
+/** 서술 글에 놓을 그림 (한 번 호출 턴, v0.118): 글에 이름·직함이 나온 인물과 장소 배경 */
+export function turnImagesFor(world: WorldPackage, s: GameState, _present: string[], turn: number, narration: string): NarrationImage[] {
+  return turnImages(world, s, '', [], false, turn, narration);
+}
+
 /** 지금 국면의 GM 스타일을 입힌 세계 (프롬프트용, v0.113) */
 export function phaseStyled(world: WorldPackage, s: GameState): WorldPackage {
   const ph = currentPhase(world, s);

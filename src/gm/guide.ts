@@ -202,6 +202,12 @@ ${GUIDE_SYSTEM.split('\n').slice(1).join('\n')}
 - skill은 다음 중 하나 또는 "": ${SKILL_IDS.join(', ')}. kind는 advance·bond·bold·wild 중 하나씩.`;
 }
 
+/** 한 번 호출 턴(v0.118)의 JSON 가운데 선택지 부분의 모양과 뜻 */
+export const CHOICE_TAIL_SCHEMA_TEXT = `"summary": "지금 상황 2~3문장", "suggestion": "GM의 짧은 한마디", "choices": [{"text": "1인칭 행동 한 줄", "skill": "", "kind": "advance|bond|bold|wild", "scene": "", "stake": "걸 수 있는 것 ID", "option": "갈래 카드의 갈림길이면 그 ID"} ×4], "move": {"text": "이동 선택지 한 줄", "location": "이동 가능한 곳 ID 또는 \\"\\""}`;
+export function guideFieldRules(): string {
+  return `선택지(summary · suggestion · choices · move)는 "GM 안내"다:\n${GUIDE_SYSTEM.split('\n').slice(1).join('\n')}\n- stake (가장 중요): 선택지마다 "걸 수 있는 것" 목록에서 하나 — 네 선택지는 서로 다른 것을 건다. 선택지 글은 그 stake가 실제로 일어나는 행동이어야 한다.\n- skill은 SRD 기술 ID(${SKILL_IDS.join(', ')}) 또는 "".`;
+}
+
 /** 서술 요청에 선택지 꼬리를 붙인다 (전투·장면 뒤 서술도 안내를 따로 부르지 않게, v0.117) */
 export function withChoiceTail<T extends { system: string; user: string }>(world: WorldPackage, s: GameState, req: T): T {
   return { ...req, system: `${req.system}\n\n${choiceTailRules()}\n${guideRules(world)}`, user: `${req.user}\n\n# 선택지 꼬리의 재료 (서술 뒤 ${TAIL_MARK} 아래 JSON에만 쓴다)\n${guideMaterials(world, s)}` };
