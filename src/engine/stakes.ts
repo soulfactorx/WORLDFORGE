@@ -6,6 +6,7 @@
  * 모양: "escalate" · "defuse" · "side:세력ID" · "bond:인물ID" · "betray:인물ID" · "expose:명제ID" · "theme:수치ID:+" · "theme:수치ID:-" · "thread:갈래ID"
  */
 import { displayName } from './names';
+import { josa } from './text/josa';
 import { phasesOf } from './phase';
 import type { WorldPackage } from './schema';
 import type { GameState } from './state/state';
@@ -35,8 +36,8 @@ export function stakeLabel(world: WorldPackage, s: GameState, id: string): strin
     case 'escalate': return `${icon} 판을 키운다`;
     case 'defuse': return `${icon} 가라앉힌다`;
     case 'side': return `${icon} ${world.factions?.find((f) => f.id === st.ref)?.name ?? st.ref} 쪽`;
-    case 'bond': return `${icon} ${npc()}와 가까워진다`;
-    case 'betray': return `${icon} ${npc()}를 저버린다`;
+    case 'bond': return `${icon} ${josa(npc() ?? '', '과/와')} 가까워진다`;
+    case 'betray': return `${icon} ${josa(npc() ?? '', '을/를')} 저버린다`;
     case 'expose': return `${icon} 비밀을 드러낸다`;
     case 'theme': { const v = worldVars(world).find((x) => x.id === st.ref); return `${icon} ${v?.poles?.[st.dir === 1 ? 1 : 0] ?? v?.name ?? st.ref} 쪽`; }
     case 'thread': return `${icon} ${world.storylets?.find((x) => x.id === st.ref)?.title ?? '다른 길'}`;

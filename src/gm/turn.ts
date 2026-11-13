@@ -4,7 +4,7 @@ import { costOf, failForwardOf } from './tiers';
 import { phaseBlock, phaseEvents, phaseTransitionLines } from './phase';
 import { falloutEvents, stakeEvents } from './stakes';
 import { stakeOptions, stakeValid } from '../engine/stakes';
-import { closedHere, currentPhase } from '../engine/phase';
+import { closedHere, currentPhase, nextPhase } from '../engine/phase';
 import { APPROACHES, type ApproachId, bestSkill } from '../engine/character/approaches';
 import { ABILITIES, ABILITY_NAMES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/character/sheet';
@@ -964,6 +964,9 @@ export function startEvents(world: WorldPackage, character: CharacterSheet, seed
   for (const it of world.start.items ?? [{ itemId: 'std/potion-healing', n: 1 }]) { const ev = gainEvent(world, it, '처음 가진 것'); if (ev) events.push(ev); }
   const state = events.reduce((st, e) => applyEvent(st, e, 0), initialState());
   const sc = scenarioEvents(world, state).events;
+  // 처음 국면 (v0.113): 시작할 때부터 지금 국면이 보이게
+  const first = nextPhase(world, sc.reduce((st, e) => applyEvent(st, e, 0), state));
+  if (first) sc.push({ type: 'phase_changed', to: first.id, name: first.name });
   const final = sc.reduce((st, e) => applyEvent(st, e, 0), state);
   return [...events, ...sc, basicGuide(world, final)];
 }

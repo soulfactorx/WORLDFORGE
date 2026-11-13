@@ -147,6 +147,8 @@ export function basicGuide(world: WorldPackage, s: GameState): GameEvent {
     ...(images.length ? { images } : {}),
     choiceSkills: picks.map((c) => (SKILL_IDS.includes(c.skill as SkillId) ? c.skill : '')),
     choiceKinds: picks.map((c) => c.kind),
+    // 기본 선택지에도 걸린 것 (v0.114): 관계 → 그 인물과 가까워짐, 의외 → 판을 키움
+    ...(() => { const st = picks.map((c) => (c.kind === 'bond' && people[0] ? `bond:${people[0].id}` : c.kind === 'wild' ? 'escalate' : '')); return st.some(Boolean) ? { choiceStakes: st } : {}; })(),
     summary,
     suggestion: quest ? `수첩의 목표: ${quest.stage.objective}${a ? ` — 먼저 ${a}에게 말을 걸어 보자.` : ''}` : a ? `${a}에게 말을 걸어 보자 — 이곳 사람들은 낯선 이를 그냥 두지 않는다.` : '무엇이든 해 보라 — 이 세계는 당신의 행동에 반응한다.',
     choices: picks.map((c) => c.text),
