@@ -51,6 +51,16 @@ const EDITOR_TABS = ['기본', '⚖ 세계 규칙', '주인공', '직업', '보�
 const SCREENS = [
   ['홈: 플레이', home],
   ['상단 메뉴 열기', async (p) => { await home(p); await p.click('.topbar-menu-btn'); }],
+  ['홈: AI 없이 (체험 안내)', async (p) => { await p.goto(FILE); await p.evaluate(() => { localStorage.clear(); localStorage.setItem('worldforge.home.tab', 'play'); }); await p.reload(); await p.waitForSelector('.demo-card'); }],
+  ['플레이: AI 없이 (에테리아 첫 카드)', async (p) => {
+    await p.goto(FILE); await p.evaluate(() => { localStorage.clear(); localStorage.setItem('worldforge.home.tab', 'play'); }); await p.reload();
+    await p.click('button:has-text("에테리아로 새 게임 고르기")');
+    await p.click('button:has-text("주인공 만들고 시작")');
+    await p.click('.gender-pick button >> nth=0');
+    await p.locator('label:has-text("운동") input[type=checkbox]').check(); await p.locator('label:has-text("지각") input[type=checkbox]').check();
+    await p.click('button:has-text("이 캐릭터로 시작")');
+    await p.waitForSelector('.offline-bar');
+  }],
   ['홈: 세계관', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세계관")'); }],
   ['홈: 세이브', async (p) => { await home(p); await p.click('.home-tabs button:has-text("세이브")'); }],
   ['주인공 만들기', async (p) => { await home(p); await p.click('button:has-text("주인공 만들고 시작")'); }],

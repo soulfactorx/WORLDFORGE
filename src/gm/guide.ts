@@ -124,7 +124,7 @@ export function basicGuide(world: WorldPackage, s: GameState): GameEvent {
     const choices = [...opts.map((o) => cut(o.label, 60)), ...(mv ? [mv] : [])];
     const pad = (xs: string[]) => [...xs, ...(mv ? [''] : [])];
     return {
-      type: 'gm_guide', summary: card.situation, suggestion: card.title, choices,
+      type: 'gm_guide', summary: card.situation, suggestion: '', choices,
       ...(opts.some((o) => o.check) ? { choiceSkills: pad(opts.map((o) => o.check?.skill ?? '')) } : {}),
       ...(opts.some((o) => o.stake) ? { choiceStakes: pad(opts.map((o) => (o.stake && stakeValid(world, s, o.stake) ? o.stake : ''))) } : {}),
       choiceOptions: pad(opts.map((o) => optionKey(card.id, o.id))),
