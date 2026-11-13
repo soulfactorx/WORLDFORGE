@@ -38,7 +38,7 @@ import { ambushEnemies, rollRandomEvent } from '../engine/randomEvents';
 import { rollLoot } from '../engine/items';
 import { currentDay } from '../engine/world';
 import { contextExpression, expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
-import { basicGuide, gmGuide, pacing } from './guide';
+import { basicGuide, choiceTailRules, gmGuide, guideEvent, guideMaterials, guideRules, pacing, splitTail, tailFilter } from './guide';
 import { type Lead, rollLeads } from '../engine/leads';
 import { withDcMod } from '../engine/difficulty';
 import { activeGoals, buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects, storyThread } from './context';
@@ -670,14 +670,17 @@ export async function runTurn(
   // 그림 고르기에 필요한 것(배경·말한 인물의 표정)은 이미 정해졌다 — 화면이 글과 함께 그림을 놓을 수 있게 넘긴다 (v0.88)
   const imageSpeakers = actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '', dialogue: r.out.dialogue ?? '' }));
   try { play.onImages?.((text) => turnImages(world, s, d.scene_image ?? '', imageSpeakers, moving, turn, text)); } catch { /* 미리 보기 실패는 무시 — 끝나면 저장된 그림이 나온다 */ }
-  const narration = await llm.stream(
+  // 선택지 꼬리 (v0.111, 설계 v6 M1): 안내를 따로 부르지 않고 서술과 같은 응답에서 받는다. 전투·장면이 막 시작됐으면 선택지가 필요 없다
+  const wantChoices = !ahead.combat && !ahead.scene && !ahead.playerDead;
+  const raw = await llm.stream(
     {
-      system: narratorSystem(world),
-      user: `${buildNarratorContext(world, ahead)}\n\n## 플레이어 소지품 (엔진 확정)\n${inventoryLine(world, ahead)}\n\n## 플레이어 행동\n${continuing ? CONTINUE_NARRATOR : d.action_summary}\n\n## 엔진 확정 결과\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음'}${transitions.length ? `\n\n## 엔진이 확정한 이야기 전환 (이 일이 일어나는 순간을 서술에 담는다)\n${transitions.map((x) => `- ${x}`).join('\n')}` : ''}\n\n## 확정된 NPC 반응 (이 대사를 그대로 사용)\n${reactions.length ? reactions.join('\n') : '(없음)'}${ruleNotes.length ? `\n\n## 이번 턴에 발동한 세계 규칙 (엔진 확정 — 그 결과와 인물 반응을 서술에 담는다)\n${ruleNotesText(ruleNotes)}` : ''}${beatBlock}`,
-      maxTokens: 4000,
+      system: `${narratorSystem(world)}${wantChoices ? `\n\n${choiceTailRules()}\n${guideRules(world)}` : ''}`,
+      user: `${buildNarratorContext(world, ahead)}\n\n## 플레이어 소지품 (엔진 확정)\n${inventoryLine(world, ahead)}\n\n## 플레이어 행동\n${continuing ? CONTINUE_NARRATOR : d.action_summary}\n\n## 엔진 확정 결과\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음'}${transitions.length ? `\n\n## 엔진이 확정한 이야기 전환 (이 일이 일어나는 순간을 서술에 담는다)\n${transitions.map((x) => `- ${x}`).join('\n')}` : ''}\n\n## 확정된 NPC 반응 (이 대사를 그대로 사용)\n${reactions.length ? reactions.join('\n') : '(없음)'}${ruleNotes.length ? `\n\n## 이번 턴에 발동한 세계 규칙 (엔진 확정 — 그 결과와 인물 반응을 서술에 담는다)\n${ruleNotesText(ruleNotes)}` : ''}${beatBlock}${wantChoices ? `\n\n# 선택지 꼬리의 재료 (서술 뒤 ${'<<선택지>>'} 아래 JSON에만 쓴다)\n${guideMaterials(world, ahead)}` : ''}`,
+      maxTokens: wantChoices ? 5000 : 4000,
     },
-    onNarration, signal,
+    wantChoices ? tailFilter(onNarration) : onNarration, signal,
   );
+  const { narration, tail } = wantChoices ? splitTail(raw) : { narration: raw, tail: null };
   const imgWhy: string[] = [];
   const { result: images, picks: imgPicks } = traceImages(() => turnImages(world, s, d.scene_image ?? '', imageSpeakers, moving, turn, narration, imgWhy));
   debugNote('이미지 선택 — 서술', imageNote(images, imgWhy, imgPicks, { 'GM 판단 장면 태그(scene_image)': d.scene_image ?? '', '말한 인물 표정(Actor expression)': actorResults.map((r) => `${r.npc.name}: ${r.out.expression || '(없음)'}`).join(', ') || '(말한 인물 없음)', '장소 이동': moving ? '예' : '아니오' }));
@@ -700,7 +703,11 @@ export async function runTurn(
   const guideState = s;
   // 이 턴에 전투·장면이 시작됐으면 선택지를 만들지 않는다 (v0.86): 화면에 보이지도 않는 안내에 AI 호출을 쓰지 않는다.
   // 전투·장면이 끝나면 그 결과에서 이어지는 안내를 새로 만든다 (PlayScreen)
+  // 서술 꼬리로 받은 선택지가 쓸 만하면 그대로, 아니면(꼬리가 없거나 깨졌으면) 예전처럼 안내를 따로 부른다
+  const fromTail = tail ? guideEvent(world, guideState, tail) : null;
+  if (tail && !fromTail) rejected.push('서술 끝의 선택지 꼬리를 쓸 수 없어 안내를 따로 불렀다');
   const guideP: Promise<GameEvent | null> = guideState.combat || guideState.scene || guideState.playerDead ? Promise.resolve(null)
+    : fromTail ? Promise.resolve(fromTail)
     : gmGuide(llm, world, guideState, narration, signal).catch((e) => { if (signal?.aborted) throw e; return basicGuide(world, guideState); });
 
   // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략)
