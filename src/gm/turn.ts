@@ -234,7 +234,7 @@ const RECORDER_SCHEMA = {
   },
 } as const;
 
-const RECORDER_SYSTEM = `너는 TRPG 기록관이다. 방금 서술에서 등장인물·장소에 대해 새로 확정된 "지속적인 세부사항"만 뽑는다.
+const RECORDER_SYSTEM = `너는 TRPG 기록관이다. 지난 몇 턴의 서술에서 등장인물·장소에 대해 새로 확정된 "지속적인 세부사항"만 뽑는다.
 - 뽑는 것: 이후에도 변하지 않을 사실 (가족, 나이, 과거 경력, 소지품, 장소의 고정된 특징 등).
 - 뽑지 않는 것: 일시적인 행동·표정·날씨, 이미 확정된 세부사항, 장면 설명에 이미 있는 내용, 플레이어에 대한 것.
 - 대상은 주어진 ID 목록에서만 고른다. 목록에 없는 인물·장소는 기록하지 않는다.
@@ -731,16 +731,19 @@ export async function runTurn(
   // 5) Recorder — 실패해도 턴은 유지한다 (기록만 생략)
   try {
     // 지어내기 금지 대상은 기록관에게 아예 보여 주지 않는다 (실제 모델 평가에서 금지 대상 기록 시도가 거부의 대부분)
-    const subjects = sceneSubjects(world, s).filter((id) => improvisationOf(world, id) !== 'none');
-    // 이야기 요약 (v0.85): 몇 턴마다 같은 호출에서 갱신한다 (호출 수는 늘지 않는다)
+    // 기록관은 이야기 요약과 함께 몇 턴마다 한 번 (v0.111, 설계 v6 M1): 그동안의 서술을 한꺼번에 읽는다
     const sumDue = turn - (s.storySummary?.upto ?? 0) >= SUMMARY_EVERY;
-    if (!subjects.length && !sumDue) throw new SkipRecorder();
+    if (!sumDue) throw new SkipRecorder();
+    const since = s.storySummary?.upto ?? 0;
+    const recent = s.log.filter((l) => l.kind === 'narration' && l.turn > since).map((l) => l.text);
+    const batch = cutTail([...recent.slice(0, -1), narration].join('\n\n'), 6000);
+    const subjects = [...new Set([...sceneSubjects(world, s), ...namesIn(world, batch)])].filter((id) => improvisationOf(world, id) !== 'none').slice(0, 12);
     const names = subjects.map((id) => `- ${id}: ${world.characters.find((c) => c.id === id)?.name ?? world.locations.find((l) => l.id === id)?.name}`);
     const established = s.improvisedFacts.filter((f) => subjects.includes(f.subject)).map((f) => `- ${f.subject}: ${f.statement}`);
     const sumBlock = sumDue ? `\n\n## 이야기 요약 갱신 요청\n### 이전 요약\n${s.storySummary?.text || '(없음)'}\n### 그 뒤의 줄거리\n${storyThread(world, s, { mode: 'brief', chronicle: SUMMARY_EVERY + 4 }).join('\n')}` : '';
     const rec = await llm.json<RecorderOutput>({
       system: RECORDER_SYSTEM,
-      user: `## 대상 ID\n${names.join('\n') || '(없음 — facts는 빈 배열)'}\n\n## 이미 확정된 세부사항\n${established.join('\n') || '(없음)'}\n\n## 장면 설명 (이미 알려진 내용)\n${world.locations.find((l) => l.id === s.player.locationId)?.description}\n\n## 방금 서술\n${narration}${sumBlock}`,
+      user: `## 대상 ID\n${names.join('\n') || '(없음 — facts는 빈 배열)'}\n\n## 이미 확정된 세부사항\n${established.join('\n') || '(없음)'}\n\n## 장면 설명 (이미 알려진 내용)\n${world.locations.find((l) => l.id === s.player.locationId)?.description}\n\n## 지난 몇 턴의 서술 (오래된 것부터)\n${batch}${sumBlock}`,
       maxTokens: sumDue ? 1600 : 800,
     }, RECORDER_SCHEMA, signal);
     for (const dec of validateImprovisedFacts(world, s.improvisedFacts, subjects, subjects.length ? rec.facts ?? [] : [])) {
@@ -768,6 +771,8 @@ export function actorNeeded(world: WorldPackage, s: GameState, npc: Character, e
   const confirmed = new Set(s.beliefs.filter((b) => b.holder === 'player' && b.state === 'confirmed').map((b) => b.claim));
   return [...world.beliefs, ...s.beliefs].some((b) => b.holder === npc.id && !confirmed.has(b.claim));
 }
+/** 긴 글의 뒷부분만 (앞을 자른다) */
+const cutTail = (t: string, n: number) => (t.length > n ? `…${t.slice(-n)}` : t);
 const cleanIntent = (x?: string) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
 
 /** Director에게만 주는 시나리오 정보: 진행 중인 임무 힌트, 세울 수 있는 플래그, 발견할 수 있는 것 */

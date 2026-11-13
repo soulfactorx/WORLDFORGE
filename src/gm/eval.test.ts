@@ -48,7 +48,7 @@ describe('AI 품질 점검 (R9)', () => {
     const r = await runEval((sink) => metered(mock(false), 'mock', sink), 'mock');
     expect(r.probes.map((p) => `${p.id}:${p.pass}`)).toEqual(['move:true', 'dialogue:true', 'secret:true', 'injection:true', 'agency:true', 'no-invented:true', 'scene-entry:true']);
     expect(r.calls.length).toBeGreaterThan(10);
-    expect(new Set(r.calls.map((c) => c.role))).toEqual(new Set(['director', 'actor', 'narrator', 'recorder', 'guide']));
+    expect(new Set(r.calls.map((c) => c.role))).toEqual(new Set(['director', 'actor', 'narrator', 'guide']));
     expect(r.calls.every((c) => c.input > 0 && !c.estimated)).toBe(true);
   });
   it('비밀을 흘리고, 속마음·대사를 지어내면 그 항목이 실패한다 (주입된 플래그는 엔진이 막는다)', async () => {
