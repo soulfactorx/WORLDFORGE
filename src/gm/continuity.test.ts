@@ -82,7 +82,7 @@ describe('이어서 진행 (v0.79.9)', () => {
       } };
     const r = await run(llm, sampleWorld, s0, '   ', () => {});
     expect(users.dir).toContain('## 이번 턴은 "이어서 진행"이다');
-    expect(users.narr).toContain('플레이어는 특별한 행동 없이 흐름을 지켜본다');
+    expect(users.narr).toContain('몽타주로 쓴다');
     expect(r.state.log.find((l) => l.kind === 'player')?.text).toBe(CONTINUE_INPUT);
   });
 });

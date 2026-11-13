@@ -235,7 +235,7 @@ export function autoRun(world: WorldPackage, seed: number, steps: number, style:
     try { pick.run(s).forEach(push); } catch (e) { trace.push(`   ⚠ ${(e as Error).message}`); s = before; }
     // 걸린 시간 (전투·장면·휴식은 각자 시간이 흐른다)
     if (!['fight', 'scene', 'rest', 'wait'].includes(pick.kind)) {
-      const t = turnMinutes(world, pick.kind === 'talk' || pick.kind === 'provoke' ? 'moment' : 'short', pick.kind === 'move');
+      const t = turnMinutes(world, pick.kind === 'talk' || pick.kind === 'provoke' ? 'exchange' : 'scene', pick.kind === 'move');
       if (t.minutes > 0) push({ type: 'time_advanced', minutes: t.minutes });
     }
     scenarioEvents(world, s).events.forEach(push);

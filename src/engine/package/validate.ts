@@ -407,14 +407,9 @@ export function validateWorld(input: unknown): Issue[] {
     if (t !== undefined) {
       if (!t || typeof t !== 'object') err('time', '객체여야 합니다.');
       else {
-        if (t.mode !== undefined && t.mode !== 'ai' && t.mode !== 'fixed') err('time.mode', 'ai 또는 fixed입니다.');
-        for (const k of ['perTurn', 'move', 'maxPerTurn'] as const) if (t[k] !== undefined && !(typeof t[k] === 'number' && (t[k] as number) >= 0)) err(`time.${k}`, '0 이상 숫자(분)입니다.');
-        const st = t.steps as Record<string, unknown> | undefined;
-        if (st !== undefined) for (const [k, v] of Object.entries(st ?? {})) {
-          if (!['moment', 'short', 'long', 'hours'].includes(k)) err(`time.steps.${k}`, 'moment·short·long·hours 중 하나입니다.');
-          else if (!(typeof v === 'number' && v >= 0)) err(`time.steps.${k}`, '0 이상 숫자(분)입니다.');
-        }
-        if (typeof t.maxPerTurn === 'number' && t.maxPerTurn > 1440) warn('time.maxPerTurn', '한 턴에 하루 넘게 흐르면 일정·시계가 한꺼번에 지나갈 수 있습니다.');
+        if (t.pace !== undefined && !['slow', 'normal', 'fast'].includes(t.pace as string)) err('time.pace', 'slow · normal · fast 중 하나입니다.');
+        const old = ['mode', 'perTurn', 'move', 'maxPerTurn', 'steps'].filter((k) => t[k] !== undefined);
+        if (old.length) warn('time', `v0.112부터 쓰지 않는 시간 설정이 있습니다 (${old.join(', ')}) — 한 턴의 길이는 GM 판단 AI가 비트(대화 한 판·장면 하나·몽타주)로 고르고, 세계는 시간 속도(pace)만 정합니다.`);
       }
     }
   }

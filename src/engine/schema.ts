@@ -961,7 +961,9 @@ export interface WorldSubclass {
 
 /** 시간 흐름 (v0.58): 한 턴에 게임 속 시간이 얼마나 흐르는가. 휴식(1시간·8시간)은 따로 */
 export interface TimeRules {
-  /** ai = GM 판단 AI가 행동의 길이(잠깐·짧게·오래·몇 시간)를 고른다 (기본), fixed = 턴마다 같은 시간 */
+  /** v0.112: 세계 시간 속도 — 비트 길이(대화 한 판 30분 · 장면 하나 2시간 · 몽타주 8시간)에 곱한다 (느리게 ×0.5 · 보통 · 빠르게 ×2) */
+  pace?: 'slow' | 'normal' | 'fast';
+  /** @deprecated v0.112부터 읽지 않는다. ai = GM 판단 AI가 행동의 길이를 고른다, fixed = 턴마다 같은 시간 */
   mode?: 'ai' | 'fixed';
   /** fixed: 턴마다 흐르는 분 (기본 10) */
   perTurn?: number;

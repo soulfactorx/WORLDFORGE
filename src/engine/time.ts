@@ -1,38 +1,37 @@
 /**
- * 시간 흐름 (v0.58): 턴마다 게임 속 시간이 얼마나 흐르는가.
- * 기본은 GM 판단 AI가 행동의 길이를 네 단계(잠깐·짧게·오래·몇 시간) 중에서 고르고, 엔진이 분으로 바꾼다.
+ * 시간 흐름 — 비트 단위 (v0.112, 설계 v6 M2 3.1절).
+ * 한 턴은 "한 동작"이 아니라 "다음 갈림길까지"다. GM 판단 AI가 이번 턴의 길이를 세 가지 비트 중에서 고르고, 엔진이 분으로 바꾼다.
+ * (v0.58~v0.111의 잠깐·짧게·오래·몇 시간과 분 단위 설정은 없앴다 — 옛 값은 가장 가까운 비트로 읽는다.)
  */
 import type { TimeRules, WorldPackage } from './schema';
 
-export type TimeSpent = 'moment' | 'short' | 'long' | 'hours';
+export type TimeSpent = 'exchange' | 'scene' | 'stretch';
 export const TIME_STEPS: Record<TimeSpent, { label: string; minutes: number; desc: string }> = {
-  moment: { label: '잠깐', minutes: 2, desc: '말 몇 마디, 한두 동작' },
-  short: { label: '짧게', minutes: 15, desc: '살펴보기·흥정·짧은 대화나 활동' },
-  long: { label: '오래', minutes: 60, desc: '꼼꼼한 수색·긴 대화·작업·식사' },
-  hours: { label: '몇 시간', minutes: 180, desc: '하루 일과·긴 기다림·먼 길 (휴식 제외)' },
+  exchange: { label: '대화 한 판', minutes: 30, desc: '몇 마디 주고받기·짧은 확인·한 번의 시도' },
+  scene: { label: '장면 하나', minutes: 120, desc: '한 자리의 일을 매듭짓기 — 조사·흥정·잠입·긴 대화' },
+  stretch: { label: '몽타주', minutes: 480, desc: '반나절~하루를 건너뛴다 — 먼 길·추적·준비·기다림' },
 };
-export const TIME_DEFAULTS = { perTurn: 10, move: 10, maxPerTurn: 240 } as const;
+/** 옛 단계 → 비트 */
+const LEGACY: Record<string, TimeSpent> = { moment: 'exchange', short: 'exchange', long: 'scene', hours: 'stretch' };
+export const normSpent = (spent: string | undefined): TimeSpent => (spent && spent in TIME_STEPS ? (spent as TimeSpent) : LEGACY[spent ?? ''] ?? 'exchange');
 
-export function timeRules(world: Pick<WorldPackage, 'time'>): Required<Omit<TimeRules, 'steps'>> & { steps: Record<TimeSpent, number> } {
-  const t = world.time ?? {};
-  const pos = (v: number | undefined, d: number) => (typeof v === 'number' && v >= 0 ? v : d);
-  return {
-    mode: t.mode === 'fixed' ? 'fixed' : 'ai',
-    perTurn: pos(t.perTurn, TIME_DEFAULTS.perTurn),
-    move: pos(t.move, TIME_DEFAULTS.move),
-    maxPerTurn: pos(t.maxPerTurn, TIME_DEFAULTS.maxPerTurn) || TIME_DEFAULTS.maxPerTurn,
-    steps: Object.fromEntries((Object.keys(TIME_STEPS) as TimeSpent[]).map((k) => [k, pos(t.steps?.[k], TIME_STEPS[k].minutes)])) as Record<TimeSpent, number>,
-  };
-}
+export const PACE = { slow: { label: '느리게', mul: 0.5 }, normal: { label: '보통', mul: 1 }, fast: { label: '빠르게', mul: 2 } } as const;
+export type Pace = keyof typeof PACE;
+/** 이동에 더해지는 분 (보통 속도) */
+export const MOVE_MINUTES = 30;
+const MAX_PER_TURN = 1440;
+
+export function paceOf(world: Pick<WorldPackage, 'time'>): Pace { const p = world.time?.pace; return p && p in PACE ? p : 'normal'; }
 
 /** 이번 턴에 흐를 분 (휴식 제외) */
 export function turnMinutes(world: Pick<WorldPackage, 'time'>, spent: string | undefined, moved: boolean): { minutes: number; why: string } {
-  const r = timeRules(world);
-  const step = (spent && spent in TIME_STEPS ? spent : 'moment') as TimeSpent;
-  const base = r.mode === 'fixed' ? r.perTurn : r.steps[step];
-  const total = Math.min(r.maxPerTurn, base + (moved ? r.move : 0));
-  const why = `${r.mode === 'fixed' ? `턴마다 ${r.perTurn}분 (고정)` : `GM 판단: ${TIME_STEPS[step].label} ${r.steps[step]}분`}${moved ? ` + 이동 ${r.move}분` : ''}${total < base + (moved ? r.move : 0) ? ` → 한 턴 최대 ${r.maxPerTurn}분` : ''}`;
-  return { minutes: total, why };
+  const step = normSpent(spent);
+  const pace = paceOf(world);
+  const mul = PACE[pace].mul;
+  const total = Math.min(MAX_PER_TURN, Math.round((TIME_STEPS[step].minutes + (moved ? MOVE_MINUTES : 0)) * mul));
+  return { minutes: total, why: `GM 판단: ${TIME_STEPS[step].label} ${TIME_STEPS[step].minutes}분${moved ? ` + 이동 ${MOVE_MINUTES}분` : ''}${mul !== 1 ? ` × 세계 시간 속도 ${PACE[pace].label}(${mul})` : ''}` };
 }
 
 export const fmtMinutes = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}` : `${m}분`);
+/** @deprecated v0.112부터 쓰지 않는다 (편집기·옛 패키지 호환용) */
+export type { TimeRules };

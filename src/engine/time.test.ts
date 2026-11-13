@@ -1,28 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { sampleWorld } from '../data/sample-world';
 import { validateWorld } from './package/validate';
-import { timeRules, turnMinutes } from './time';
+import { normSpent, turnMinutes } from './time';
 
-describe('시간 흐름 (v0.58)', () => {
-  it('기본: GM이 고른 길이 + 이동, 없으면 잠깐', () => {
-    expect(turnMinutes(sampleWorld, 'moment', false).minutes).toBe(2);
-    expect(turnMinutes(sampleWorld, 'short', false).minutes).toBe(15);
-    expect(turnMinutes(sampleWorld, 'long', true).minutes).toBe(70);
-    expect(turnMinutes(sampleWorld, 'hours', false).minutes).toBe(180);
-    expect(turnMinutes(sampleWorld, undefined, false).minutes).toBe(2);
-    expect(turnMinutes(sampleWorld, 'short', false).why).toContain('짧게');
+describe('시간 흐름 — 비트 (v0.112, 설계 v6 M2)', () => {
+  it('GM이 고른 비트 + 이동, 없으면 대화 한 판', () => {
+    expect(turnMinutes(sampleWorld, 'exchange', false).minutes).toBe(30);
+    expect(turnMinutes(sampleWorld, 'scene', true).minutes).toBe(150);
+    expect(turnMinutes(sampleWorld, 'stretch', false).minutes).toBe(480);
+    expect(turnMinutes(sampleWorld, undefined, false).minutes).toBe(30);
+    expect(turnMinutes(sampleWorld, 'scene', false).why).toContain('장면 하나');
   });
-  it('세계 설정: 고정·단계별 분·이동·최대', () => {
-    expect(turnMinutes({ time: { mode: 'fixed', perTurn: 30 } }, 'hours', false).minutes).toBe(30);
-    expect(turnMinutes({ time: { steps: { short: 5 }, move: 60 } }, 'short', true).minutes).toBe(65);
-    const capped = turnMinutes({ time: { maxPerTurn: 100 } }, 'hours', true);
-    expect(capped.minutes).toBe(100);
-    expect(capped.why).toContain('최대');
-    expect(timeRules({}).mode).toBe('ai');
+  it('옛 단계는 가장 가까운 비트로 읽는다', () => {
+    expect(normSpent('moment')).toBe('exchange');
+    expect(normSpent('long')).toBe('scene');
+    expect(normSpent('hours')).toBe('stretch');
   });
-  it('검사기', () => {
-    const bad = validateWorld({ ...sampleWorld, time: { mode: 'slow' as never, perTurn: -1, steps: { nap: 3 } as never } }).filter((i) => i.path.startsWith('time')).map((i) => i.path);
-    expect(bad).toEqual(expect.arrayContaining(['time.mode', 'time.perTurn', 'time.steps.nap']));
-    expect(validateWorld({ ...sampleWorld, time: { mode: 'fixed', perTurn: 20 } }).filter((i) => i.path.startsWith('time'))).toEqual([]);
+  it('세계 시간 속도', () => {
+    expect(turnMinutes({ time: { pace: 'fast' } }, 'scene', false).minutes).toBe(240);
+    expect(turnMinutes({ time: { pace: 'slow' } }, 'exchange', true).minutes).toBe(30);
+    expect(turnMinutes({ time: { mode: 'fixed', perTurn: 5 } }, 'scene', false).minutes).toBe(120); // 옛 설정은 읽지 않는다
+  });
+  it('검사기: 잘못된 속도는 오류, 옛 설정은 경고', () => {
+    const bad = validateWorld({ ...sampleWorld, time: { pace: 'warp' as never } }).filter((i) => i.path.startsWith('time'));
+    expect(bad.map((i) => i.path)).toContain('time.pace');
+    const old = validateWorld({ ...sampleWorld, time: { mode: 'fixed', perTurn: 20 } }).filter((i) => i.path.startsWith('time'));
+    expect(old.map((i) => i.level)).toEqual(['warning']);
+    expect(validateWorld({ ...sampleWorld, time: { pace: 'fast' } }).filter((i) => i.path.startsWith('time'))).toEqual([]);
   });
 });
