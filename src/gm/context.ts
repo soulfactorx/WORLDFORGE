@@ -1,3 +1,5 @@
+import { worldVars } from '../engine/vars';
+import { closedHere } from '../engine/phase';
 import { establishedFactsOf, improvisationOf, protectedTopicsOf } from '../engine/canon';
 import { knowledgeOf } from '../engine/knowledge/knowledge';
 import { AXES, AXIS_NAMES, canShareSecret, joinBlocker, loyaltyOf, OBEY_LOYALTY, relationsOf, relationshipOf, reputationLabel, reputationOf, secretTrustOf, stageFor, stageOf } from '../engine/relationship';
@@ -86,7 +88,7 @@ function sceneHeader(world: WorldPackage, state: GameState): string[] {
 
 function exits(world: WorldPackage, state: GameState): string[] {
   const loc = world.locations.find((l) => l.id === state.player.locationId)!;
-  return loc.connections.map((id) => `- ${id}: ${world.locations.find((x) => x.id === id)?.name ?? id}`);
+  return loc.connections.map((id) => `- ${id}: ${world.locations.find((x) => x.id === id)?.name ?? id}${closedHere(world, state, id) ? ' (지금 국면에는 갈 수 없다)' : ''}`);
 }
 
 const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -352,6 +354,6 @@ export function buildNarratorContext(world: WorldPackage, state: GameState, opts
 
 /** 보이는 세계 수치 — 서술의 분위기 (설계 v4 E6) */
 function worldMood(world: WorldPackage, state: GameState): string[] {
-  const vs = (world.vars ?? []).filter((v) => v.visible);
+  const vs = worldVars(world).filter((v) => v.visible);
   return vs.length ? ['## 세계의 분위기 (서술 톤에 반영)', ...vs.map((v) => `- ${v.name}: ${varLabel(v, varValue(world, state, v.id))}`), ''] : [];
 }

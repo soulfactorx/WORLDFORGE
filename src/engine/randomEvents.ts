@@ -44,9 +44,10 @@ export function eligibleEvents(world: WorldPackage, state: GameState): RandomEve
 }
 
 /** 이동·휴식 때 굴린다. 직전 3턴 안에 돌발 사건이 있었으면 쉰다 */
-export function rollRandomEvent(world: WorldPackage, state: GameState, rng: Rng, trigger: 'move' | 'rest'): RandomEvent | null {
+export function rollRandomEvent(world: WorldPackage, state: GameState, rng: Rng, trigger: 'move' | 'rest' | 'quiet'): RandomEvent | null {
   if (state.combat || state.lastRandomTurn !== undefined && state.turn - state.lastRandomTurn < 3) return null;
-  const base = trigger === 'rest' ? 0.25 : 0.2;
+  // quiet (v0.113): 잔잔함이 길어 엔진이 직접 일을 꺼낸다 — 쿨다운만 지키고 반드시 굴린다
+  const base = trigger === 'quiet' ? 1 : trigger === 'rest' ? 0.25 : 0.2;
   const chance = Math.min(0.6, base * (monotonous(state) ? 2 : 1));
   if (rng.next() >= chance) return null;
   const list = eligibleEvents(world, state);

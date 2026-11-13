@@ -119,6 +119,8 @@ export type GameEvent =
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number }
+  /** 국면이 바뀌었다 (v0.113). from이 없으면 처음 정해진 것 (기록에 남기지 않는다) */
+  | { type: 'phase_changed'; from?: EntityId; fromName?: string; to: EntityId; name: string; announce?: string }
   /** 전투 밖에서 다치거나 회복함 (v0.112: 판정의 대가). 전투 밖에서는 HP 1 아래로 내려가지 않는다 */
   | { type: 'hp_changed'; delta: number; reason: string }
   /** 게임 난이도 (v0.90): 모든 판정 DC에 더하는 보정 */

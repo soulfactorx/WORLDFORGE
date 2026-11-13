@@ -14,7 +14,7 @@ import { ABILITY_NAMES, type Ability, SKILLS, type SkillId } from '../character/
 
 export interface LogEntry {
   turn: number;
-  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide' | 'omen';
+  kind: 'player' | 'narration' | 'check' | 'knowledge' | 'combat' | 'relation' | 'progress' | 'quest' | 'guide' | 'omen' | 'phase';
   text: string;
   /** 서술: 그때의 게임 속 시각(분)과 장소 (v0.79.3 — 이야기를 이어 쓰기 위해) */
   at?: number;
@@ -86,6 +86,12 @@ export interface GameState {
   quests: Record<EntityId, { stage: number; done: boolean; failed?: boolean; startedAt?: number; outcome?: string }>;
   /** 세계 수치 (v0.43, 설계 v4 E6) */
   vars?: Record<string, number>;
+  /** 국면 (v0.113): 지금 국면 · 들어온 턴 · 지나온 국면 */
+  phase?: string;
+  phaseSince?: number;
+  phasePath?: string[];
+  /** 최근 턴들의 긴장 (턴이 시작할 때의 값, 최근 8개) — 강도 곡선 */
+  tensionTrail?: number[];
   /** 진행 중인 장면 (v0.47) */
   scene?: SceneRun;
   /** 끝난 장면: 결과 */
@@ -162,7 +168,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...initialState(), namesKnown: [], arrivedTurn: 0, visited: [e.locationId], packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
         player: { name: e.playerName, locationId: e.locationId, sheet: e.character ?? legacyCharacter(e.playerName) } };
     case 'player_input':
-      return { ...s, turn, log: [...s.log, { turn, kind: 'player', text: e.use ? `${e.text}  [${useLabel(e.use)}]` : e.text }] };
+      return { ...s, turn, tensionTrail: [...(s.tensionTrail ?? []), s.vars?.tension ?? 2].slice(-8), log: [...s.log, { turn, kind: 'player', text: e.use ? `${e.text}  [${useLabel(e.use)}]` : e.text }] };
     case 'check_rolled': {
       const r = e.result;
       const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
@@ -264,6 +270,9 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...s, player: { ...s.player, sheet: { ...sheet, traits: { ...(sheet.traits ?? {}), [e.trait]: e.value } } },
         log: [...s.log, { turn, kind: 'progress', text: `◐ ${e.name} ${e.delta > 0 ? '+' : ''}${e.delta} → ${e.label}${e.reason ? ` — ${e.reason}` : ''}` }] };
     }
+    case 'phase_changed':
+      return { ...s, phase: e.to, phaseSince: turn, phasePath: [...(s.phasePath ?? []), e.to],
+        log: e.from ? [...s.log, { turn, kind: 'phase', text: `${e.fromName ?? ''} → ${e.name}${e.announce ? ` — ${e.announce}` : ''}` }] : s.log };
     case 'var_changed':
       return { ...s, vars: { ...(s.vars ?? {}), [e.varId]: e.value }, log: e.label ? [...s.log, { turn, kind: 'omen', text: `◇ ${e.name}: ${e.label}` }] : s.log };
     case 'quest_outcome': {

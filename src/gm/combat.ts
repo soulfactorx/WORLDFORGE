@@ -28,6 +28,7 @@ import { allEncounters, encounterStages, openEncounters } from '../engine/encoun
 import { aftermathBlock, NARRATION_CORE } from './brief';
 import { buildNarratorContext } from './context';
 import { effectEvents } from './story';
+import { phaseEvents } from './phase';
 
 /**
  * 전투 진행 — 엔진 결과를 이벤트로 만든다. 전투 중에는 LLM을 호출하지 않는다 (비용·속도·결정성).
@@ -121,6 +122,8 @@ function finishIfOver(b: Builder) {
   }
   // 조우 결과로 퀘스트가 진행될 수 있다
   scenarioEvents(b.world, b.state).events.forEach((e) => b.push(e));
+  // 기류·국면 (v0.113): 승리면 긴장이 내리고, 패배·도주면 오른다
+  phaseEvents(b.world, b.state, b.events).forEach((e) => b.push(e));
   if (cs.outcome === 'defeat') b.push({ type: 'time_advanced', minutes: 60 });
 }
 

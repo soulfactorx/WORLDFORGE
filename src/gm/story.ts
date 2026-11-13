@@ -1,3 +1,4 @@
+import { worldVars } from '../engine/vars';
 import { traitShift } from '../engine/traitShift';
 import { varLabel, varValue } from '../engine/scenario';
 import type { StoryEffect, WorldPackage } from '../engine/schema';
@@ -69,7 +70,7 @@ export function effectEvents(world: WorldPackage, state: GameState, effects: Sto
       continue;
     }
     if ('var' in fx) {
-      const def = world.vars?.find((v) => v.id === fx.var);
+      const def = worldVars(world).find((v) => v.id === fx.var);
       if (!def) continue;
       const cur = varValue(world, s, def.id);
       const raw = fx.set !== undefined ? fx.set : cur + (fx.add ?? 0);

@@ -1,3 +1,4 @@
+import { worldVars } from './vars';
 import { relationshipOf, reputationOf, stageFor } from './relationship';
 import { npcLocationOf } from './world';
 import type { Condition, Ending, EntityId, KnowledgeState, Quest, QuestType, WorldPackage } from './schema';
@@ -69,6 +70,7 @@ export function evalCondition(world: WorldPackage, state: GameState, c: Conditio
   if ('questDone' in c) return !!state.quests[c.questDone]?.done && !state.quests[c.questDone]?.failed;
   if ('level' in c) return state.player.sheet.level >= c.level;
   if ('trait' in c) { const v = traitValue(world as WorldPackage, state.player.sheet, c.trait); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
+  if ('phase' in c) return state.phase === c.phase;
   if ('var' in c) { const v = varValue(world, state, c.var); return (c.gte === undefined || v >= c.gte) && (c.lte === undefined || v <= c.lte); }
   if ('encounter' in c) {
     const r = state.encounterResults?.[c.encounter];
@@ -173,7 +175,7 @@ export function activeBeats(world: WorldPackage, state: GameState) {
 
 /** 세계 수치 (설계 v4 E6) */
 export function varValue(world: Pick<WorldPackage, 'vars'>, state: GameState, id: string): number {
-  return state.vars?.[id] ?? world.vars?.find((v) => v.id === id)?.initial ?? 0;
+  return state.vars?.[id] ?? worldVars(world).find((v) => v.id === id)?.initial ?? 0;
 }
 export function varLabel(def: NonNullable<WorldPackage['vars']>[number], value: number): string {
   const l = [...(def.labels ?? [])].sort((a, b) => a[0] - b[0]).filter(([n]) => value >= n).at(-1);

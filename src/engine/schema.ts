@@ -569,6 +569,8 @@ export type Condition =
   | { npcAt: EntityId; at: EntityId }
   | { questFailed: EntityId }
   | { flag: string }
+  /** 지금 국면 (v0.113) */
+  | { phase: EntityId }
   | { questDone: EntityId }
   | { level: number }
   /** 세계 수치 (설계 v4 E6, 예: 마을 치안) */
@@ -665,7 +667,40 @@ export interface WorldVar {
   labels?: [number, string][];
   /** 플레이어에게 보이는가 (수첩·서술 분위기) */
   visible?: boolean;
+  /** 기류 축 (v0.113, 설계 v6 3.4절): 양 끝의 이름 — 예: ["봉인 수호", "봉인 해방"]. 축은 선택마다 ±1~2씩 거칠게 움직인다 */
+  poles?: [string, string];
 }
+
+/**
+ * 국면 (v0.113, 설계 v6 3.4절): 기류 축(긴장 등)과 이야기 상태로 정해지는 세계의 공기.
+ * 국면이 바뀌면 서술 문체·GM 성격·음악·화면 색·인물 태도·닫힌 장소가 통째로 바뀐다.
+ * 엔진은 턴마다 위에서부터 들어갈 수 있는 첫 국면으로 옮긴다 (지금 국면에 들어온 지 MIN_PHASE_TURNS 안에는 옮기지 않는다).
+ */
+export interface Phase {
+  id: EntityId;
+  name: string;
+  /** 이 국면의 공기 — 서술·GM·선택지의 문체 (예: "숨 막히는 공포. 문장은 짧게, 소리는 멀리서") */
+  tone: string;
+  /** 들어가는 조건 (축·플래그·임무·국면…) */
+  enter: Condition;
+  /** 이 국면들에서만 올 수 있다 (비우면 어디서든) */
+  from?: EntityId[];
+  /** 바뀔 때 화면과 서술에 알리는 한 줄 */
+  announce?: string;
+  /** 화면 강조색 */
+  tint?: PhaseTint;
+  /** 배경 음악 분위기 */
+  music?: 'calm' | 'tense' | 'dark' | 'combat';
+  /** 이 국면의 GM 스타일 (비우면 세계 설정) */
+  gmStyle?: string;
+  /** 인물 태도: 인물 ID → 이 국면에서 그 인물이 어떤지 한 줄 */
+  attitudes?: Record<EntityId, string>;
+  /** 이 국면에서 갈 수 없는 장소 */
+  closed?: EntityId[];
+  /** 들어올 때 한 번 일어나는 효과 */
+  effects?: StoryEffect[];
+}
+export type PhaseTint = 'calm' | 'warm' | 'tense' | 'dark' | 'bright';
 
 /**
  * 의뢰 (설계 v3 6.3): 장소의 의뢰판에 붙는 반복 가능한 일.
@@ -882,8 +917,11 @@ export interface WorldPackage {
   relationBeats?: RelationBeat[];
   /** 세계 규칙 (v0.83): 특정 행동·말·상태가 일어나면 생기는 결과·연쇄 반응·인물 반응 */
   rules?: WorldRule[];
-  /** 세계 수치 (설계 v4 E6) */
+  /** 세계 수치 (설계 v4 E6) · 기류 축 (v0.113). "tension"(긴장 0~10)은 선언하지 않아도 엔진이 둔다 */
   vars?: WorldVar[];
+  /** 국면 (v0.113). 비우면 긴장으로 움직이는 기본 국면 셋(평온·술렁임·위기)을 쓴다. autoPhases: false면 국면 없음 */
+  phases?: Phase[];
+  autoPhases?: boolean;
   /** 장면 (v0.47) */
   scenes?: SceneDef[];
   /** 돌발 사건 표 (설계 v4 E5): 이동·휴식 때 엔진이 굴린다. 없으면 기본 표, []면 끔 */

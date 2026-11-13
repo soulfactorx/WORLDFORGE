@@ -2,6 +2,8 @@
  * 세계관 패키지 검사기 (설계서 PART 5.2-8 Package Builder, 설계 리뷰 5.2절 패키지 린터).
  * 오류(error)가 하나라도 있으면 플레이할 수 없다. 경고(warning)는 제작자에게 알리기만 한다.
  */
+import { TENSION } from '../vars';
+import { defaultPhases } from '../phase';
 import { isPlaceholderText } from '../names';
 import { gmStyleById } from '../../data/gmStyles';
 import { CLASSES, SKILL_IDS } from '../character/rules';
@@ -136,7 +138,9 @@ export function validateWorld(input: unknown): Issue[] {
   const questIds = new Set(quests.map((q) => q?.id));
   const goalIds = new Set(characters.flatMap((c) => (Array.isArray(c?.goals) ? c.goals.map((g) => g?.id) : [])));
   const worldVars = arr<NonNullable<WorldPackage['vars']>[number]>('vars', false);
-  const varIds = new Set(worldVars.map((v) => v?.id));
+  const varIds = new Set([...worldVars.map((v) => v?.id), TENSION]);
+  const phaseList = arr<NonNullable<WorldPackage['phases']>[number]>('phases', false);
+  const phaseIds = new Set((phaseList.length ? phaseList : (input as Record<string, unknown>).autoPhases === false ? [] : defaultPhases(input as unknown as WorldPackage)).map((x) => x?.id));
   const traitIds = new Set((Array.isArray((input as Record<string, unknown>).traits) || (input as Record<string, unknown>).traits === undefined ? traitsFor(input as unknown as WorldPackage) : []).map((t) => t?.id).filter(Boolean));
   const flagIds = new Set(flags.map((f) => f?.id));
   const entityIds = new Set([...locIds, ...charIds]);
@@ -297,6 +301,7 @@ export function validateWorld(input: unknown): Issue[] {
     if ('flag' in cond) { if (!flagIds.has(cond.flag)) err(path, `선언되지 않은 플래그 "${cond.flag}"`); return; }
     if ('questDone' in cond) { if (!questIds.has(cond.questDone)) err(path, `없는 임무 "${cond.questDone}"`); return; }
     if ('trait' in cond) { if (!traitIds.has(cond.trait)) err(path, `없는 성향 축 "${cond.trait}" (${[...traitIds].join(', ')})`); return; }
+    if ('phase' in cond) { if (!phaseIds.has(cond.phase)) err(path, `없는 국면 "${cond.phase}" (${[...phaseIds].join(', ')})`); return; }
     if ('var' in cond) { if (!varIds.has(cond.var)) err(path, `선언되지 않은 세계 수치 "${cond.var}"`); return; }
     if ('encounter' in cond) {
       if (!encIds.has(cond.encounter)) err(path, `없는 조우 "${cond.encounter}"`);
@@ -577,7 +582,24 @@ export function validateWorld(input: unknown): Issue[] {
     text(v.name, `${p}.name`);
     if (typeof v.initial !== 'number') err(`${p}.initial`, '처음 값은 숫자입니다.');
     if ((v.labels ?? []).some((l) => !Array.isArray(l) || typeof l[0] !== 'number' || typeof l[1] !== 'string')) err(`${p}.labels`, '단계는 [값, "이름"] 목록입니다.');
+    if (v.poles !== undefined && !(Array.isArray(v.poles) && v.poles.length === 2 && v.poles.every((x) => typeof x === 'string' && x.trim()))) err(`${p}.poles`, '양 끝의 이름 두 개 ["…", "…"]입니다.');
   });
+  // ---- 국면 (v0.113)
+  const seenPhases = new Set<string>();
+  phaseList.forEach((ph, i) => {
+    const p = `phases[${i}]`;
+    if (!ph.id) err(`${p}.id`, 'ID가 필요합니다.'); else if (seenPhases.has(ph.id)) err(`${p}.id`, `겹치는 ID "${ph.id}"`); else seenPhases.add(ph.id);
+    text(ph.name, `${p}.name`);
+    text(ph.tone, `${p}.tone`);
+    checkCond(ph.enter, `${p}.enter`);
+    for (const f of ph.from ?? []) if (!phaseIds.has(f)) err(`${p}.from`, `없는 국면 "${f}"`);
+    for (const l of ph.closed ?? []) if (!locIds.has(l)) err(`${p}.closed`, `없는 장소 "${l}"`);
+    for (const c of Object.keys(ph.attitudes ?? {})) if (!charIds.has(c)) err(`${p}.attitudes`, `없는 인물 "${c}"`);
+    if (ph.tint !== undefined && !['calm', 'warm', 'tense', 'dark', 'bright'].includes(ph.tint)) err(`${p}.tint`, 'calm · warm · tense · dark · bright 중 하나입니다.');
+    if (ph.music !== undefined && !['calm', 'tense', 'dark', 'combat'].includes(ph.music)) err(`${p}.music`, 'calm · tense · dark · combat 중 하나입니다.');
+    if (ph.effects !== undefined) deferredEffects.push([ph.effects, `${p}.effects`]);
+  });
+  if (phaseList.length && !phaseList.some((ph) => !ph.from?.length)) warn('phases', '어디서든 들어올 수 있는 국면(from 없음)이 하나도 없습니다 — 첫 국면은 맨 위의 것이 됩니다.');
   // ---- 칭호 (설계 v4 E4)
   arr<NonNullable<WorldPackage['titles']>[number]>('titles', false).forEach((t, i) => {
     const p = `titles[${i}]`;

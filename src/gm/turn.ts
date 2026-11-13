@@ -1,6 +1,8 @@
 import { genreGuide, levelCapOf } from '../engine/genre';
 import { checkTier, DC_TIERS, type DcTier, type RollMode, d20Test, TIER_LABEL } from '../engine/dice/dice';
 import { costOf, failForwardOf } from './tiers';
+import { phaseBlock, phaseEvents, phaseTransitionLines } from './phase';
+import { closedHere, currentPhase } from '../engine/phase';
 import { APPROACHES, type ApproachId, bestSkill } from '../engine/character/approaches';
 import { ABILITIES, ABILITY_NAMES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/character/sheet';
@@ -394,7 +396,7 @@ export async function runTurn(
   const ruleList = continuing ? '' : actionRuleList(world, s);
   const ruleListBlock = ruleList ? `\n\n## 세계 규칙 (플레이어 행동·말이 이 묘사에 해당하면 rules에 ID)\n${ruleList}` : '';
   const d = await llm.json<DirectorOutput>(
-    { system: `${DIRECTOR_SYSTEM}${gmStyleText(world, 'director')}`, user: `${buildDirectorContext(world, s)}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.name} — ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}${declared ? `\n\n## 플레이어가 쓰겠다고 한 것\n${declared.kind === 'skill' ? `${SKILLS[declared.skill].name} 기술 (${declared.skill})` : `${ABILITY_NAMES[declared.ability]} 능력 (${declared.ability})`} — 결과가 불확실하면 이것으로 판정한다` : ''}${ruleListBlock}${continuing ? `\n\n${CONTINUE_DIRECTOR}` : ''}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
+    { system: `${DIRECTOR_SYSTEM}${gmStyleText(phaseStyled(world, s), 'director')}`, user: `${buildDirectorContext(world, s)}${phaseBlock(world, s, { director: true })}\n\n## 일어날 수 있는 조우 (플레이어는 모름)\n${availableEncounters(world, s).map((e) => `- ${e.id}: ${e.name} — ${e.trigger}`).join('\n') || '(없음)'}\n\n${scenarioBlock(world, s)}${sceneTagBlock(world, s.player.locationId)}${declared ? `\n\n## 플레이어가 쓰겠다고 한 것\n${declared.kind === 'skill' ? `${SKILLS[declared.skill].name} 기술 (${declared.skill})` : `${ABILITY_NAMES[declared.ability]} 능력 (${declared.ability})`} — 결과가 불확실하면 이것으로 판정한다` : ''}${ruleListBlock}${continuing ? `\n\n${CONTINUE_DIRECTOR}` : ''}\n\n## 플레이어 입력 (데이터)\n<player_input>\n${input}\n</player_input>`, maxTokens: 2000 },
     DIRECTOR_SCHEMA, signal,
   );
 
@@ -483,8 +485,10 @@ export async function runTurn(
   const report = () => { try { play.onState?.(s); } catch { /* 표시 실패는 무시 */ } };
   report();
   const here = world.locations.find((l) => l.id === s.player.locationId);
-  const moving = !!d.move_to && !!here?.connections.includes(d.move_to);
-  if (d.move_to && !moving) { outcomes.push('요청된 이동은 불가능함 (연결되지 않은 장소)'); rejected.push(`연결되지 않은 장소로 이동: ${d.move_to}`); }
+  const closedTo = !!d.move_to && closedHere(world, s, d.move_to);
+  const moving = !!d.move_to && !!here?.connections.includes(d.move_to) && !closedTo;
+  if (closedTo) { outcomes.push(`요청된 이동은 막혔다 — 지금 국면(${currentPhase(world, s)?.name})에는 그곳에 갈 수 없다. 왜 막혔는지 장면 속에서 보여 준다`); rejected.push(`국면이 닫은 장소로 이동: ${d.move_to}`); }
+  else if (d.move_to && !moving) { outcomes.push('요청된 이동은 불가능함 (연결되지 않은 장소)'); rejected.push(`연결되지 않은 장소로 이동: ${d.move_to}`); }
   const unknownSpeakers = (d.speakers ?? []).filter((sp) => !presentCharacters(world, s).some((c) => c.id === sp.npc_id));
   if (unknownSpeakers.length) rejected.push(`이 장면에 없는 인물을 말하게 함: ${unknownSpeakers.map((x) => x.npc_id).join(', ')}`);
   if (d.start_encounter && !availableEncounters(world, s).some((e) => e.id === d.start_encounter)) rejected.push(`시작할 수 없는 조우: ${d.start_encounter}`);
@@ -527,7 +531,7 @@ export async function runTurn(
     const npc = present.find((c) => c.id === sp.npc_id)!;
     const out = await llm.json<ActorOutput>({
       system: `${ACTOR_SYSTEM}\n- ${genreGuide(world)}\n- ${RATING_GUIDE[world.manifest.contentRating] ?? RATING_GUIDE.teen}`,
-      user: `${buildActorContext(world, actorState, npc)}${expressionBlock(world, npc.id)}${giftBlock(world, actorState, npc.id)}\n\n## 지금 상황\n플레이어 행동: ${d.action_summary}\n네가 반응할 것: ${sp.reacting_to}\n엔진 확정 결과:\n${outcomeText}${ruleReact.has(npc.id) ? `\n\n## 세계 규칙에 따른 너의 반응 (엔진 확정 — 이 방향대로 연기한다)\n${ruleReact.get(npc.id)!.map((x) => `- ${x}`).join('\n')}` : ''}${tellBy.has(npc.id) ? `\n\n## 이번에 네가 먼저 꺼내는 이야기 (엔진 확정 — 묻지 않아도 대사에 반드시 담는다. shared_claims에 [${tellBy.get(npc.id)!.claimId}])\n${tellBy.get(npc.id)!.detail}\n네 말투로, 네가 왜 이 이야기를 꺼내는지(걱정·자랑·경고·푸념)가 드러나게.` : ''}${hintBy.has(npc.id) ? `\n\n## 이번에 새어 나오는 낌새 (엔진 확정)\n너는 「${hintBy.get(npc.id)!.detail}」에 관한 것을 감추고 있다. 이번에는 그 기색이 새어 나온다 — 말하려다 삼키거나, 화제를 돌리거나, 엉뚱한 데서 말이 막힌다. 내용은 말하지 않는다.` : ''}\n\n## 플레이어의 실제 입력 (데이터)\n<player_input>\n${input}\n</player_input>`,
+      user: `${buildActorContext(world, actorState, npc)}${phaseBlock(world, actorState, { npcIds: [npc.id] })}${expressionBlock(world, npc.id)}${giftBlock(world, actorState, npc.id)}\n\n## 지금 상황\n플레이어 행동: ${d.action_summary}\n네가 반응할 것: ${sp.reacting_to}\n엔진 확정 결과:\n${outcomeText}${ruleReact.has(npc.id) ? `\n\n## 세계 규칙에 따른 너의 반응 (엔진 확정 — 이 방향대로 연기한다)\n${ruleReact.get(npc.id)!.map((x) => `- ${x}`).join('\n')}` : ''}${tellBy.has(npc.id) ? `\n\n## 이번에 네가 먼저 꺼내는 이야기 (엔진 확정 — 묻지 않아도 대사에 반드시 담는다. shared_claims에 [${tellBy.get(npc.id)!.claimId}])\n${tellBy.get(npc.id)!.detail}\n네 말투로, 네가 왜 이 이야기를 꺼내는지(걱정·자랑·경고·푸념)가 드러나게.` : ''}${hintBy.has(npc.id) ? `\n\n## 이번에 새어 나오는 낌새 (엔진 확정)\n너는 「${hintBy.get(npc.id)!.detail}」에 관한 것을 감추고 있다. 이번에는 그 기색이 새어 나온다 — 말하려다 삼키거나, 화제를 돌리거나, 엉뚱한 데서 말이 막힌다. 내용은 말하지 않는다.` : ''}\n\n## 플레이어의 실제 입력 (데이터)\n<player_input>\n${input}\n</player_input>`,
       maxTokens: 1500,
     }, ACTOR_SCHEMA, signal);
     return { npc, out };
@@ -626,7 +630,9 @@ export async function runTurn(
   const enc = (d.start_encounter && availableEncounters(world, s).find((e) => e.id === d.start_encounter)) || (failEncounter ? availableEncounters(world, s).find((e) => e.id === failEncounter) : undefined);
   // 돌발 사건 (설계 v4 E5): 정해진 조우가 없을 때, 이동·휴식하면 엔진이 굴린다
   let ambushed = false;
-  const trigger = !enc && (moving ? 'move' : d.rest === 'long' || d.rest === 'short' ? 'rest' : null);
+  // 잔잔함이 길면 엔진이 직접 일을 꺼낸다 (v0.113, 설계 v6 3.4 강도 곡선): 돌발 사건 하나 + 긴장 +1
+  const quiet = pacing(s).quiet >= 3 && !s.combat && !s.scene;
+  const trigger = !enc && (moving ? 'move' : d.rest === 'long' || d.rest === 'short' ? 'rest' : quiet && !d.start_scene && !d.attack_npc ? 'quiet' : null);
   const rev = trigger ? rollRandomEvent(world, s, createRng((s.rngState ^ Math.imul(turn + 1, 2654435761)) >>> 0), trigger) : null;
   if (rev) {
     const rrng = createRng((s.rngState + Math.imul(turn + 7, 40503)) >>> 0);
@@ -701,7 +707,10 @@ export async function runTurn(
   // 시나리오: 퀘스트 진행·보상·결말 (엔진 판정)
   const sc = scenarioEvents(world, ahead);
   sc.events.forEach(queue);
-  const transitions = transitionLines(world, sc.events);
+  // 기류·국면 (v0.113): 이 턴의 일로 긴장이 움직이고, 문턱을 넘으면 국면이 바뀐다 — 서술 앞에서 확정
+  const ph = phaseEvents(world, ahead, [...events, ...post], quiet ? [{ delta: 1, why: '잔잔함' }] : []);
+  ph.forEach(queue);
+  const transitions = [...transitionLines(world, sc.events), ...phaseTransitionLines(world, ph)];
   const beatBlock = beat ? `\n\n## 이번 장면의 연출 지시 (GM — ${BEAT_KINDS[beat.kind]}. 엔진 확정 결과 안에서만)\n${beat.direction}${beat.ending_hook ? `\n마지막에 걸어 둘 것: ${beat.ending_hook}` : ''}` : '';
 
   // 4) Narrator (확정 결과 + 확정 대사만 전달)
@@ -714,8 +723,8 @@ export async function runTurn(
   const wantChoices = !ahead.combat && !ahead.scene && !ahead.playerDead;
   const raw = await llm.stream(
     {
-      system: `${narratorSystem(world)}${wantChoices ? `\n\n${choiceTailRules()}\n${guideRules(world)}` : ''}`,
-      user: `${buildNarratorContext(world, ahead)}\n\n## 플레이어 소지품 (엔진 확정)\n${inventoryLine(world, ahead)}\n\n## 플레이어 행동\n${continuing ? CONTINUE_NARRATOR : d.action_summary}\n\n## 엔진 확정 결과\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음'}${transitions.length ? `\n\n## 엔진이 확정한 이야기 전환 (이 일이 일어나는 순간을 서술에 담는다)\n${transitions.map((x) => `- ${x}`).join('\n')}` : ''}\n\n## 확정된 NPC 반응 (이 대사를 그대로 사용)\n${reactions.length ? reactions.join('\n') : '(없음)'}${ruleNotes.length ? `\n\n## 이번 턴에 발동한 세계 규칙 (엔진 확정 — 그 결과와 인물 반응을 서술에 담는다)\n${ruleNotesText(ruleNotes)}` : ''}${beatBlock}${wantChoices ? `\n\n# 선택지 꼬리의 재료 (서술 뒤 ${'<<선택지>>'} 아래 JSON에만 쓴다)\n${guideMaterials(world, ahead)}` : ''}`,
+      system: `${narratorSystem(phaseStyled(world, ahead))}${wantChoices ? `\n\n${choiceTailRules()}\n${guideRules(phaseStyled(world, ahead))}` : ''}`,
+      user: `${buildNarratorContext(world, ahead)}${phaseBlock(world, ahead, { npcIds: presentCharacters(world, ahead).map((c) => c.id) })}\n\n## 플레이어 소지품 (엔진 확정)\n${inventoryLine(world, ahead)}\n\n## 플레이어 행동\n${continuing ? CONTINUE_NARRATOR : d.action_summary}\n\n## 엔진 확정 결과\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- 판정 없음'}${transitions.length ? `\n\n## 엔진이 확정한 이야기 전환 (이 일이 일어나는 순간을 서술에 담는다)\n${transitions.map((x) => `- ${x}`).join('\n')}` : ''}\n\n## 확정된 NPC 반응 (이 대사를 그대로 사용)\n${reactions.length ? reactions.join('\n') : '(없음)'}${ruleNotes.length ? `\n\n## 이번 턴에 발동한 세계 규칙 (엔진 확정 — 그 결과와 인물 반응을 서술에 담는다)\n${ruleNotesText(ruleNotes)}` : ''}${beatBlock}${wantChoices ? `\n\n# 선택지 꼬리의 재료 (서술 뒤 ${'<<선택지>>'} 아래 JSON에만 쓴다)\n${guideMaterials(world, ahead)}` : ''}`,
       maxTokens: wantChoices ? 5000 : 4000,
     },
     wantChoices ? tailFilter(onNarration) : onNarration, signal,
@@ -782,6 +791,12 @@ export async function runTurn(
   { const g = await guideP; if (g) push(g); }
 
   return { events, state: s, rejected };
+}
+
+/** 지금 국면의 GM 스타일을 입힌 세계 (프롬프트용, v0.113) */
+function phaseStyled(world: WorldPackage, s: GameState): WorldPackage {
+  const ph = currentPhase(world, s);
+  return ph?.gmStyle ? { ...world, gmStyle: { ...(world.gmStyle ?? {}), preset: ph.gmStyle } } : world;
 }
 
 /** 이 인물의 연기를 NPC 연기 AI에게 따로 맡겨야 하는가 (v0.111) */
