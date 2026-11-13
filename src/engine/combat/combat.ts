@@ -985,10 +985,11 @@ const usesResource = (c: CardDef) => !!c.resource || !!c.spellLevel;
 const isRangedCard = (c: CardDef) =>
   (c.effect.type === 'attack' && c.effect.attack.kind === 'ranged') || c.effect.type === 'save_damage' || c.effect.type === 'auto_damage';
 
-export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT_ORDER): PlannedAction | null {
+/** 동료(또는 자동 전투에서 플레이어, v0.112)의 행동 계획 */
+export function planCompanionAction(cs: CombatState, order: PartyOrder = DEFAULT_ORDER, allowPlayer = false): PlannedAction | null {
   const id = currentActorId(cs);
   const a = cs.combatants[id]!;
-  if (a.side !== 'party' || a.isPlayer || cs.outcome || hasCondition(a, 'stunned')) return null;
+  if (a.side !== 'party' || (a.isPlayer && !allowPlayer) || cs.outcome || hasCondition(a, 'stunned')) return null;
   const usable = handOf(a).filter((c) => !unusableReason(cs, id, c));
   const party = Object.values(cs.combatants).filter((o) => o.side === 'party' && alive(o));
   const critical = (c: Combatant) => c.hp <= c.maxHp / 3;

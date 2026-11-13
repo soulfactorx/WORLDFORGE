@@ -16,7 +16,9 @@ const SLOT_LABEL = (r: Record<string, { cur: number; max: number }>) =>
 /** 적 역할별 표식 (초상화가 없을 때) */
 const ROLE_GLYPH: Record<string, string> = { minion: '🗡', brute: '🪓', skirmisher: '🏹', artillery: '🎯', controller: '🌀', leader: '🚩', boss: '👑' };
 
-export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, portrait, recent }: {
+export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, onAuto, portrait, recent }: {
+  /** 자동 전투 (v0.112): 엔진이 대신 싸운다 (위험해지면 멈춤) */
+  onAuto?: () => void;
   cs: CombatState;
   /** 전투원 초상화 (동료·플레이어). 없으면 표식 */
   portrait?: (combatantId: string) => ReactNode;
@@ -183,6 +185,7 @@ export function CombatPanel({ cs, busy, orders, onAct, onEndTurn, onOrder, portr
         })}
       </div>
       <div className="row">
+        {onAuto && <button type="button" disabled={busy || !myTurn} onClick={() => { setSelected(null); onAuto(); }} title="동료처럼 엔진이 대신 싸운다. HP가 많이 줄면 멈추고 손을 넘긴다">⚡ 자동 전투</button>}
         <span className="spacer" />
         <button type="button" className="primary" disabled={busy || !myTurn} onClick={() => { setSelected(null); onEndTurn(); }}>턴 종료</button>
       </div>

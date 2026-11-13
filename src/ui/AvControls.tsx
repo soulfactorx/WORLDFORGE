@@ -76,6 +76,7 @@ export function AvControls({ onChange, dcMod, onDcMod, dcBusy }: { onChange: () 
               {GM_STYLES.map((g) => <option key={g.id} value={g.id}>{g.emoji} {g.name}</option>)}
             </select>
           </label>
+          <label className="check small"><input type="checkbox" checked={play.autoMinorFights} onChange={(e) => { const p = { ...play, autoMinorFights: e.target.checked }; setPlay(p); savePlayPrefs(p); onChange(); }} /> 잔챙이 전투는 자동으로 (보스·임무의 고비는 직접 · 위험해지면 멈춤)</label>
           <label className="check small"><input type="checkbox" checked={play.skillDetail} onChange={(e) => { const p = { ...play, skillDetail: e.target.checked }; setPlay(p); savePlayPrefs(p); onChange(); }} /> 판정 기술을 자세히 (SRD 기술 18종 · 끄면 접근법 6가지)</label>
           <label className="small av-vol">표시 수준
             <select value={play.display} onChange={(e) => { const p = { ...play, display: e.target.value as DisplayLevel }; setPlay(p); savePlayPrefs(p); onChange(); }}>

@@ -4,7 +4,7 @@ import { genreGuide, levelCapOf, reskinner } from '../engine/genre';
 import { RATING_GUIDE } from '../engine/rating';
 import { createRng, type Rng } from '../engine/dice/rng';
 import {
-  type CombatState, currentActorId, resolveCard, runAutoTurns, startCombat, type Target, type PartyOrder, type CompanionEntry,
+  type CombatState, currentActorId, DEFAULT_ORDER, planCompanionAction, resolveCard, runAutoTurns, startCombat, type Target, type PartyOrder, type CompanionEntry,
 } from '../engine/combat/combat';
 import type { WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
@@ -222,6 +222,47 @@ export function playerCombatAction(world: WorldPackage, state: GameState, cardId
   b.push({ type: 'combat_action', actorId: 'player', cardId, target, effects: r.effects, log: r.log, rngState: rng.state() });
   finishIfOver(b);
   return b.events;
+}
+
+/** 잔챙이 전투인가 (v0.112, 설계 v6 V7): 보스가 없고, 임무 단계의 고비도 아니고, 플레이어가 먼저 공격한 인물도 아닌 조우 */
+export function minorFight(world: WorldPackage, cs: CombatState): boolean {
+  if (cs.encounterId.startsWith('adhoc/')) return false;
+  if (Object.values(cs.combatants).some((c) => c.side === 'enemy' && c.role === 'boss')) return false;
+  return encounterStages(world, cs.encounterId).length === 0;
+}
+
+/** 자동 전투를 멈추는 HP 비율 — 이보다 낮아지면 플레이어에게 손을 넘긴다 */
+export const AUTO_STOP_HP = 0.4;
+
+/**
+ * 자동 전투 (v0.112, 설계 v6 M2 "빠른 해결"): 플레이어 차례도 동료 AI 규칙으로 엔진이 대신 싸운다.
+ * 결과는 일반 전투와 같은 이벤트로 남는다 (같은 주사위·같은 경험치·전리품). 플레이어 HP가 AUTO_STOP_HP 아래로 떨어지면 멈춘다.
+ */
+export function autoFightEvents(world: WorldPackage, state: GameState): { events: GameEvent[]; stopped: boolean } {
+  if (!state.combat) throw new Error('전투 중이 아니다');
+  const rng = createRng(state.rngState);
+  const b = new Builder(world, state, state.turn);
+  let stopped = false;
+  for (let guard = 0; guard < 400; guard++) {
+    const cs = b.state.combat;
+    if (!cs || cs.outcome) break;
+    if (currentActorId(cs) !== 'player') { runEnemies(b, rng); continue; }
+    const me = cs.combatants.player!;
+    if (me.hp <= me.maxHp * AUTO_STOP_HP) { stopped = true; break; }
+    const plan = planCompanionAction(cs, DEFAULT_ORDER, true);
+    if (plan) {
+      let r;
+      try { r = resolveCard(cs, 'player', plan.cardId, plan.target, rng); } catch { r = null; }
+      if (r) {
+        b.push({ type: 'combat_action', actorId: 'player', cardId: plan.cardId, target: plan.target, effects: r.effects, log: r.log, rngState: rng.state() });
+        finishIfOver(b);
+        continue;
+      }
+    }
+    b.push({ type: 'combat_turn_ended' });
+    runEnemies(b, rng);
+  }
+  return { events: b.events, stopped };
 }
 
 export function playerEndTurn(world: WorldPackage, state: GameState): GameEvent[] {

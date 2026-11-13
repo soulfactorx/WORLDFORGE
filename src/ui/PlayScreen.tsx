@@ -12,7 +12,8 @@ import { pendingChoice } from '../engine/story';
 import { equipItem, shopHere } from '../gm/economy';
 import { BoardPanel, InventoryPanel, ShopPanel } from './InventoryPanel';
 import { boardHere } from '../engine/jobs';
-import { narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
+import { autoFightEvents, minorFight, narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
+import { currentActorId } from '../engine/combat/combat';
 import type { PartyOrder, Target } from '../engine/combat/combat';
 import type { GameEvent } from '../engine/state/events';
 import { CombatPanel } from './CombatPanel';
@@ -247,7 +248,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (!state || streaming !== null) return;
     const turnUse = choice !== undefined ? choiceUse : use || undefined;
     if (choice === undefined) setUse('');
-    setRewards([]); setShowRecap(false); followNow();
+    setRewards([]); setShowRecap(false); setNotice(''); followNow();
     if (choice === undefined) setInput(''); setError(''); setStreaming(''); setStage('AI에게 보내는 중'); setStartedAt(Date.now());
     abort.current = new AbortController();
     const dbg = beginDebug('turn', `턴 ${state.turn + 1}: ${text.slice(0, 60)}`, { saveId, turn: state.turn + 1, input: text, ...(turnUse ? { use: turnUse } : {}), ...(decision ? { decision } : {}) });
@@ -315,6 +316,25 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (dbg) { const fin = await loadEvents(saveId); await endDebug(dbg, { events: fin.slice(all.length - events.length).map((x) => x.event), before: stateBefore, after: replay(fin) }); }
     await reload();
   }
+
+  /** 자동 전투 (v0.112): 엔진이 대신 싸우고, 위험해지면 멈춰 손을 넘긴다 */
+  const [notice, setNotice] = useState('');
+  const autoTried = useRef('');
+  async function autoFight() {
+    let stopped = false;
+    await commitCombat((s) => { const r = autoFightEvents(world, s); stopped = r.stopped; return r.events; });
+    setNotice(stopped ? '⚡ 위험해져 자동 전투를 멈췄다 — 이제 직접 싸운다.' : '');
+  }
+  // 잔챙이 전투는 시작하자마자 자동으로 (설정에서 끌 수 있다). 같은 전투에서 한 번만 — 멈춘 뒤에는 다시 돌리지 않는다
+  useEffect(() => {
+    const cs = state?.combat;
+    if (!cs || cs.outcome || streaming !== null || !loadPlayPrefs().autoMinorFights || currentActorId(cs) !== 'player' || !minorFight(world, cs)) return;
+    const key = `${cs.encounterId}@${state!.turn}`;
+    if (autoTried.current === key) return;
+    autoTried.current = key;
+    setNotice('⚡ 잔챙이 전투 — 엔진이 대신 싸운다 (위험해지면 멈춘다).');
+    void autoFight();
+  }, [state?.combat?.encounterId, state?.combat?.round, streaming === null]);
 
   /** 장면 (v0.47): 행동은 엔진만, 끝나면 서술 AI가 한 번 서술한다 */
   async function commitScene(make: (s: GameState) => GameEvent[]) {
@@ -524,13 +544,15 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         </div>
       )}
       {error && <p className="status">❌ {error}</p>}
+      {notice && !error && <p className="status small">{notice}</p>}
       {state.playerDead ? null : state.combat ? (
         <CombatPanel cs={state.combat} busy={streaming !== null} orders={state.partyOrders}
           recent={(() => { const start = state.log.findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 시작')); return state.log.slice(Math.max(start, combatMark.current, 0)).filter((l) => l.kind === 'combat').map((l) => l.text); })()}
           portrait={(id) => { const img = id === 'player' ? undefined : pickCharacterImage(world, id, 'battle', 'combat'); return img ? <AssetImage pkg={world.manifest.id} id={img.id} alt="" /> : undefined; }}
           onOrder={(npcId: string, order: PartyOrder) => commitCombat((s) => setPartyOrder(s, npcId, order))}
           onAct={(cardId: string, target: Target) => commitCombat((s) => playerCombatAction(world, s, cardId, target))}
-          onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))} />
+          onEndTurn={() => commitCombat((s) => playerEndTurn(world, s))}
+          onAuto={() => void autoFight()} />
       ) : state.scene && sceneNow ? (
         <ScenePanel dcMod={state.dcMod ?? 0} def={sceneNow} run={state.scene} sheet={state.player.sheet} opp={sceneOpponent(world, state, sceneNow)} busy={streaming !== null} pkg={world.manifest.id}
           npcName={sceneNow.npcId ? world.characters.find((c) => c.id === sceneNow.npcId)?.name : undefined}
