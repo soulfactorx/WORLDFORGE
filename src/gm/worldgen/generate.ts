@@ -1,3 +1,4 @@
+import { generateDeck } from './deck';
 import { genreGuide } from '../../engine/genre';
 import { genreOf } from '../../data/genres';
 import { CLASSES } from '../../engine/character/rules';
@@ -78,6 +79,8 @@ export interface GenerateOptions {
   withScenes?: boolean;
   /** 세계 규칙(행동 → 결과 · 연쇄 반응)까지 만들기 (v0.83, 기본 예) */
   withRules?: boolean;
+  /** 국면·갈래 카드까지 만들기 (v0.116, 설계 v6 — 기본 예) */
+  withDeck?: boolean;
   author?: string;
   /** 장르 프로필 ID (설계 v3 2장) */
   genre?: string;
@@ -208,6 +211,17 @@ export async function generateWorld(
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
     if (r.world) world = mergeRules(world, r.world);
     notes = [...notes, ...r.notes];
+  }
+  // 국면·갈래 카드 (v0.116): 세계의 방향 → 국면 → 국면마다의 카드. 임무·장면·규칙이 다 생긴 뒤라 그것들을 이어 쓸 수 있다
+  if (opts.withDeck !== false) {
+    try {
+      const r = await generateDeck(llm, world, (st) => onStage(st, scenesEnd + 2, 95), signal, opts.prompt.slice(0, 1500));
+      world = r.world;
+      notes = [...notes, ...r.notes];
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      notes = [...notes, `국면·갈래 카드를 만들지 못했습니다 (편집기 이야기 흐름 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`];
+    }
   }
   onStage('기본 이미지 고르기를 마무리하는 중…', opts.withRules !== false ? scenesEnd + 4 : scenesEnd, 97);
   const st = await stockP;

@@ -40,6 +40,7 @@ import { josa } from '../engine/text/josa';
 import { generateScenario } from '../gm/worldgen/generate';
 import { generateScenes } from '../gm/worldgen/scenes';
 import { generateRules } from '../gm/worldgen/rules';
+import { generateDeck } from '../gm/worldgen/deck';
 import { RuleForms } from './RuleForms';
 import { createLlmClient } from '../llm';
 import { setUsageScope } from '../llm/usage';
@@ -121,6 +122,18 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
       setW(r.world);
       setStatus(r.notes.join(' '));
     } catch (e) { setStatus(`장면 생성 실패: ${(e as Error).message}`); }
+  }
+  // 국면·갈래 카드 (v0.116)
+  const [deckRequest, setDeckRequest] = useState('');
+  const deckGen = useGenProgress();
+  async function genDeck() {
+    if (!settings) return;
+    try {
+      const r = await deckGen.run('세계 요약을 보내는 중…', (on, sig) => generateDeck(createLlmClient(settings), w, on, sig, deckRequest));
+      if (!r) { setStatus('국면·카드 만들기를 중단했습니다.'); return; }
+      setW(r.world);
+      setStatus(r.notes.join(' '));
+    } catch (e) { setStatus(`국면·카드 생성 실패: ${(e as Error).message}`); }
   }
   const [ruleRequest, setRuleRequest] = useState('');
   const ruleGen = useGenProgress();
@@ -794,6 +807,11 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               <p className="muted small">세계가 스스로 움직이게 하는 장치들입니다. 조건은 조건 빌더로, 일어나는 일은 효과 목록으로 고릅니다.</p>
               <h4>갈래 카드 (이야기의 단위 — 조건이 맞는 카드 덱에서 다음 장면을 뽑는다)</h4>
               <p className="muted small">카드는 상황 하나와 갈림길 2~4개입니다. 갈림길마다 <b>다른 것을 건다</b>(판을 키움 · 가라앉힘 · 누구 편 · 가까워짐 · 배신 · 비밀 폭로 · 세계의 방향 · 다른 길). GM이 장면에 맞는 카드를 펼치고, 잔잔하면 엔진이 뽑습니다. 플레이어가 고른 길은 조건 「갈래 카드에서 고른 길」로 다른 카드를 엽니다.</p>
+              <div className="row">
+                <input value={deckRequest} placeholder="(선택) 예: 배신이 많은 궁중 암투, 선택마다 계절이 바뀌는 느낌" disabled={deckGen.busy} onChange={(e) => setDeckRequest(e.target.value)} />
+                <button type="button" disabled={!settings || deckGen.busy} onClick={() => void genDeck()}>{deckGen.busy ? '만드는 중…' : '✦ AI로 국면·카드 만들기'}</button>
+              </div>
+              <GenProgress stage={deckGen.stage} pct={deckGen.pct} onCancel={deckGen.cancel} steps={['세계 요약 보내기', 'AI가 방향·국면·카드 쓰기', '정리·검사']} />
               {(() => { const drafts = questDraftCards(w); return drafts.length > 0 && (
                 <div className="row"><button type="button" onClick={() => { if (confirm(`임무 단계 ${drafts.length}개를 갈래 카드 초안으로 만듭니다 (접근법이 갈림길, 성공하면 그 단계가 끝남). 만든 뒤 갈림길과 걸린 것을 다듬어 주세요.`)) set({ storylets: [...(w.storylets ?? []), ...drafts] }); }}>임무에서 카드 초안 만들기 ({drafts.length}장)</button></div>
               ); })()}
