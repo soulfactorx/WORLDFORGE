@@ -68,6 +68,8 @@ const SCREENS = [
         tx.oncomplete = () => { d.close(); res(); }; tx.onerror = () => rej(tx.error);
       }; });
     }, fx);
+    // 잔챙이 전투 자동 진행(v0.112)을 끈다 — 전투창이 그대로 보여야 한다
+    await p.evaluate(() => { const k = 'worldforge.play'; const v = JSON.parse(localStorage.getItem(k) || '{}'); v.autoMinorFights = false; localStorage.setItem(k, JSON.stringify(v)); });
     await p.reload(); await p.waitForTimeout(400);
     await p.click('.home-tabs button:has-text("세이브")');
     await p.locator('.saves li', { hasText: '점검용 전투' }).locator('button').first().click();
