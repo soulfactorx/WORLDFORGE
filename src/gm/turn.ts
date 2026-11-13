@@ -1,5 +1,6 @@
 import { genreGuide, levelCapOf } from '../engine/genre';
-import { DC_TIERS, type DcTier, type RollMode, d20Test } from '../engine/dice/dice';
+import { checkTier, DC_TIERS, type DcTier, type RollMode, d20Test, TIER_LABEL } from '../engine/dice/dice';
+import { costOf, failForwardOf } from './tiers';
 import { ABILITIES, ABILITY_NAMES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/character/sheet';
 import { createRng } from '../engine/dice/rng';
@@ -399,6 +400,8 @@ export async function runTurn(
   // 2) Validator + Rules Engine
   const outcomes: string[] = decided ? [`플레이어의 결정적 선택: ${decided} (되돌릴 수 없다. 이 결정의 무게를 서술에 담는다)`] : [];
   let spec = toCheckSpec(d);
+  let tier: 'success' | 'cost' | 'fail' | undefined;
+  let failEncounter = '';
   // 플레이어가 고른 기술·능력치가 있으면, 판정이 필요한 행동일 때 그것으로 굴린다 (내성은 상황이 정한다)
   if (declared && spec && spec.kind !== 'save') spec = declared;
   if (spec && d.check_dc_tier in DC_TIERS) {
@@ -408,11 +411,25 @@ export async function runTurn(
     // 게임 난이도 (v0.90): GM이 고른 난이도 등급에 세이브의 DC 보정을 더한다
     const result = d20Test(rng, breakdown.total, withDcMod(DC_TIERS[d.check_dc_tier], s.dcMod), mode);
     // 난이도 보정이 들어갔으면 원래 난이도도 남긴다 — 기록에 "DC 15 → 7"로 보여, 난이도가 적용되는지 눈으로 확인할 수 있다 (v0.106)
-    push({ type: 'check_rolled', skill: breakdown.label, reason: d.check_reason, result, rngState: rng.state(), breakdown, mode, ...(s.dcMod ? { dcBase: DC_TIERS[d.check_dc_tier] } : {}) });
+    push({ type: 'check_rolled', skill: breakdown.label, reason: d.check_reason, result, rngState: rng.state(), breakdown, mode, tiered: true, ...(s.dcMod ? { dcBase: DC_TIERS[d.check_dc_tier] } : {}) });
     // 어려운 판정 성공은 작은 경험치 (설계 v4 P1 — 잘한 플레이에 보상)
     const hard = result.success ? hardCheckXp(s.player.sheet.level, result.dc) : 0;
     if (hard) progressEvents(s, [{ who: 'player', amount: hard }], `어려운 판정 성공 (${breakdown.label} DC ${result.dc})`, levelCapOf(world)).forEach(push);
-    outcomes.push(`${breakdown.label} ${result.success ? '성공' : '실패'}${result.natural20 ? ' (자연 20)' : result.natural1 ? ' (자연 1)' : ''}${mode !== 'normal' ? ` [${mode === 'advantage' ? '이점' : '불리점'}]` : ''}`);
+    // 3단 결과 (v0.112, 설계 v6 M2): 대가 있는 성공이면 대가 하나, 실패면 상황을 바꾸는 전개 하나 — 엔진이 고른다
+    tier = checkTier(result);
+    const head = `${breakdown.label} ${TIER_LABEL[tier]}${result.natural20 ? ' (자연 20)' : result.natural1 ? ' (자연 1)' : ''}${mode !== 'normal' ? ` [${mode === 'advantage' ? '이점' : '불리점'}]` : ''}`;
+    const trng = createRng((s.rngState ^ Math.imul(turn + 5, 2654435761)) >>> 0);
+    const ctx = { skillOrAbility: spec.kind === 'skill' ? spec.skill : spec.ability, present: presentCharacters(world, s) };
+    if (tier === 'cost') {
+      const c = costOf(world, s, trng, ctx);
+      c.events.forEach(push);
+      outcomes.push(`${head}: 플레이어는 원하는 것을 얻는다. 그러나 엔진이 정한 대가 — ${c.line}. 서술은 성공과 대가를 함께 그린다.`);
+    } else if (tier === 'fail') {
+      const f = failForwardOf(world, s, trng, ctx);
+      f.events.forEach(push);
+      if (f.encounterId) failEncounter = f.encounterId;
+      outcomes.push(`${head}: 원하는 것을 얻지 못한다. 대신 엔진이 정한 전개 — ${f.line}. "아무 일도 없었다"로 끝내지 않고, 바뀐 상황에서 다음에 무엇을 할지 정해야 하는 순간으로 간다.`);
+    } else outcomes.push(head);
   }
   // 발견: 이 장소에서 아직 찾지 않은 것만. 판정이 필요하면 이번 턴의 같은 기술 판정에 성공해야 한다
   const lastCheck = events.find((e) => e.type === 'check_rolled');
@@ -422,7 +439,8 @@ export async function runTurn(
     const claim = world.claims.find((c) => c.id === claimId);
     if (!disc || !claim) { rejected.push(`발견할 수 없는 것을 발견하려 함: ${claimId}`); continue; }
     if (disc.check) {
-      const ok = spec?.kind === 'skill' && spec.skill === disc.check && lastCheck?.type === 'check_rolled' && lastCheck.result.success;
+      // 대가 있는 성공도 찾아낸다 (v0.112)
+      const ok = spec?.kind === 'skill' && spec.skill === disc.check && lastCheck?.type === 'check_rolled' && tier !== 'fail';
       if (!ok) { rejected.push(`판정 없이 발견하려 함: ${claimId}`); continue; }
     }
     discoveredNow.push({ type: 'knowledge_revealed', belief: { holder: 'player', claim: claimId, state: disc.state ?? 'confirmed', source: s.player.locationId }, statement: claim.statement });
@@ -604,7 +622,7 @@ export async function runTurn(
   }
 
   // 조우 / 휴식 (엔진 검증)
-  const enc = d.start_encounter && availableEncounters(world, s).find((e) => e.id === d.start_encounter);
+  const enc = (d.start_encounter && availableEncounters(world, s).find((e) => e.id === d.start_encounter)) || (failEncounter ? availableEncounters(world, s).find((e) => e.id === failEncounter) : undefined);
   // 돌발 사건 (설계 v4 E5): 정해진 조우가 없을 때, 이동·휴식하면 엔진이 굴린다
   let ambushed = false;
   const trigger = !enc && (moving ? 'move' : d.rest === 'long' || d.rest === 'short' ? 'rest' : null);

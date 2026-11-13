@@ -45,6 +45,20 @@ export function d20Test(rng: Rng, modifier: number, dc: number, mode: RollMode =
   return { rolls, kept, modifier, total, dc, success: total >= dc, natural20: kept === 20, natural1: kept === 1 };
 }
 
+/**
+ * 판정 3단 결과 (v0.112, 설계 v6 3.2절): 같은 굴림을 세 구간으로 읽는다.
+ * 성공 = DC 이상 · 대가 있는 성공 = DC-5 ~ DC-1 · 실패(그러나 상황이 바뀐다) = 그 아래. 자연 20은 성공, 자연 1은 실패.
+ */
+export type CheckTier = 'success' | 'cost' | 'fail';
+export const COST_MARGIN = 5;
+export function checkTier(r: Pick<D20Test, 'total' | 'dc' | 'natural20' | 'natural1' | 'success'>): CheckTier {
+  if (r.natural20) return 'success';
+  if (r.natural1) return 'fail';
+  if (r.success) return 'success';
+  return r.total >= r.dc - COST_MARGIN ? 'cost' : 'fail';
+}
+export const TIER_LABEL: Record<CheckTier, string> = { success: '성공', cost: '대가 있는 성공', fail: '실패 — 상황이 바뀐다' };
+
 /** 능력치 → 수정치 */
 export const abilityModifier = (score: number) => Math.floor((score - 10) / 2);
 

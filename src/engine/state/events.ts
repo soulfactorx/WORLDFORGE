@@ -15,7 +15,7 @@ export type GameEvent =
   /** use: 플레이어가 쓰겠다고 고른 기술·능력치 (v0.16) 예: 'skill:persuasion', 'ability:str' */
   | { type: 'player_input'; text: string; use?: string }
   /** breakdown은 v0.2부터 (수정치 구성: 능력치 + 숙련 등) */
-  | { type: 'check_rolled'; skill: string; reason: string; result: D20Test; rngState: number; breakdown?: ModifierBreakdown; mode?: RollMode; /** 난이도 보정 전의 DC (보정이 있었을 때만, v0.106) */ dcBase?: number }
+  | { type: 'check_rolled'; skill: string; reason: string; result: D20Test; rngState: number; breakdown?: ModifierBreakdown; mode?: RollMode; /** 난이도 보정 전의 DC (보정이 있었을 때만, v0.106) */ dcBase?: number; /** v0.112: 3단 결과로 읽는다 (성공·대가 있는 성공·실패) */ tiered?: boolean }
   /** images: 이 장면에 보여줄 이미지 (v0.13). 엔진이 고른 에셋 ID와 설명 */
   | { type: 'narration'; text: string; images?: NarrationImage[] }
   | { type: 'moved'; to: EntityId }
@@ -119,6 +119,8 @@ export type GameEvent =
   /** 검증에서 거부된 즉흥 사실 (기록되지 않음, 디버그용) */
   | { type: 'fact_rejected'; subject: string; statement: string; reason: string }
   | { type: 'time_advanced'; minutes: number }
+  /** 전투 밖에서 다치거나 회복함 (v0.112: 판정의 대가). 전투 밖에서는 HP 1 아래로 내려가지 않는다 */
+  | { type: 'hp_changed'; delta: number; reason: string }
   /** 게임 난이도 (v0.90): 모든 판정 DC에 더하는 보정 */
   | { type: 'difficulty_set'; dcMod: number; label: string }
   /** 실마리 (v0.89): 엔진이 d20으로 굴린 말문·낌새·눈썰미. key = 다시 나오지 않게 기억할 열쇠 */

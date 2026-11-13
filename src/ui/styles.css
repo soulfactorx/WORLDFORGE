@@ -1116,3 +1116,9 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .struct-pair-text { flex: 1 1 auto; }
 .struct-pair-text input { width: 100%; min-width: 0; }
 .struct-pair .icon { min-width: 36px; min-height: 36px; flex: 0 0 auto; }
+
+/* 판정 3단 결과 (v0.112) */
+.entry.check .tier { font-weight: 700; }
+.entry.check .tier-cost { color: var(--accent); }
+.entry.check .tier-fail { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+.entry.check .roll-detail { color: var(--muted); font-size: 0.85em; }

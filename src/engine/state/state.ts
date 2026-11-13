@@ -1,4 +1,5 @@
 import { combatScale, combatScaleNote, difficultyLabel } from '../difficulty';
+import { checkTier, TIER_LABEL } from '../dice/dice';
 import type { Belief, EntityId } from '../schema';
 import type { GameEvent, StoredEvent } from './events';
 import { type CharacterSheet, legacyCharacter } from '../character/sheet';
@@ -168,7 +169,9 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
         : sign(r.modifier);
       const label = e.breakdown?.label ?? `${e.skill} 판정`;
       const modeLabel = e.mode === 'advantage' ? ' 이점' : e.mode === 'disadvantage' ? ' 불리점' : '';
-      const text = `${label}${modeLabel} — d20(${r.rolls.join(', ')}) ${mods} = ${r.total} vs DC ${r.dc}${e.dcBase !== undefined && e.dcBase !== r.dc ? ` (난이도 ${difficultyLabel(s.dcMod ?? 0).replace(/ \(DC.*\)$/, '')}: ${e.dcBase} → ${r.dc})` : ''} → ${r.success ? '성공' : '실패'}`;
+      // v0.112: 결과(성공 · 대가 있는 성공 · 실패)를 앞에, 굴림은 뒤에 (화면은 앞부분을 굵게 보여 준다)
+      const head = e.tiered ? TIER_LABEL[checkTier(r)] : r.success ? '성공' : '실패';
+      const text = `🎲 ${label}${modeLabel}: ${head} — d20(${r.rolls.join(', ')}) ${mods} = ${r.total} vs DC ${r.dc}${e.dcBase !== undefined && e.dcBase !== r.dc ? ` (난이도 ${difficultyLabel(s.dcMod ?? 0).replace(/ \(DC.*\)$/, '')}: ${e.dcBase} → ${r.dc})` : ''}`;
       return { ...s, rngState: e.rngState, log: [...s.log, { turn, kind: 'check', text }] };
     }
     case 'narration':
@@ -425,6 +428,11 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       const eq = { ...(s.equipped ?? {}) };
       if (e.itemId) eq[e.slot] = e.itemId; else delete eq[e.slot];
       return { ...s, equipped: eq };
+    }
+    case 'hp_changed': {
+      const sheet = s.player.sheet;
+      const hp = Math.max(1, Math.min(sheet.maxHp, sheet.hp + e.delta));
+      return { ...s, player: { ...s.player, sheet: { ...sheet, hp } }, log: [...s.log, { turn, kind: 'check', text: `${e.delta < 0 ? '다침' : '회복'}: HP ${sheet.hp} → ${hp} (${e.reason})` }] };
     }
     case 'item_used': {
       const sheet = s.player.sheet;

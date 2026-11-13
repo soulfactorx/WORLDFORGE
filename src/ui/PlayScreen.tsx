@@ -490,7 +490,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                 )}
               </div>
             ) : placed(e) ? <PlacedNarration text={e.text} images={e.images!} pkg={world.manifest.id} size={imgSize} bgMode={loadPlayPrefs().background} />
-              : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : rs(e.text)}</p>}
+              : <p className={`entry ${e.kind}`}>{e.kind === 'narration' ? <RichText text={e.text} /> : e.kind === 'check' ? <CheckLine text={rs(e.text)} /> : rs(e.text)}</p>}
           </div>
         ))}
         {decisive && streaming === null && (
@@ -575,6 +575,14 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     </section>
     </ReskinContext.Provider>
   );
+}
+
+/** 판정 기록 (v0.112): 결과를 굵게, 굴림은 작게 — 펼치지 않아도 결과가 먼저 읽힌다 */
+function CheckLine({ text }: { text: string }) {
+  const m = /^(🎲 [^:]+: )([^—]+?)( — d20.*)$/.exec(text);
+  if (!m) return <>{text}</>;
+  const tier = m[2]!.startsWith('성공') ? 'success' : m[2]!.startsWith('대가') ? 'cost' : 'fail';
+  return <>{m[1]}<b className={`tier tier-${tier}`}>{m[2]}</b><span className="roll-detail">{m[3]}</span></>;
 }
 
 /** 자리 정보가 있는 서술 이미지인가 (v0.59) */
