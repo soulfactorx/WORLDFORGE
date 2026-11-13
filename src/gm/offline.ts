@@ -62,12 +62,12 @@ export function runOfflineTurn(world: WorldPackage, state: GameState, choice: { 
     r.events.forEach(push);
     const ok = r.tier !== 'fail';
     const text = ok ? hit.option.successText : hit.option.failText;
+    // 판정 결과와 걸린 것은 기록에 따로 보이므로 서술에서는 되풀이하지 않는다 (대가·전개만)
     if (text) lines.push(text);
-    else lines.push(...r.lines.slice(1).map(clean));
+    else lines.push(...r.lines.slice(1).filter((l) => !l.startsWith('판정')).map(clean));
     if (r.stake && stakeValid(world, s, r.stake)) {
       const sk = stakeEvents(world, s, r.stake, r.tier, hit.option.label);
       sk.events.forEach(push);
-      if (!text && sk.line) lines.push(`${sk.line}.`);
     }
     moved = r.events.some((e) => e.type === 'moved');
     if (r.encounterId && availableEncounters(world, s).some((e) => e.id === r.encounterId)) beginEncounter(world, s, r.encounterId, turn).forEach(push);
