@@ -1,7 +1,7 @@
 /** 세계 수치 + 엔진이 두는 긴장 축 (v0.113, 설계 v6 3.4절) */
 import type { WorldPackage, WorldVar } from './schema';
 
-export const TENSION = 'tension';
+export const TENSION = 'drama';
 export const TENSION_START = 2;
 export const TENSION_VAR: WorldVar = {
   id: TENSION, name: '긴장', initial: TENSION_START, min: 0, max: 10, visible: true,

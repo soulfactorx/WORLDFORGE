@@ -45,8 +45,8 @@ describe('기류·국면 (v0.113)', () => {
     const w = structuredClone(sampleWorld);
     w.flags = [...(w.flags ?? []), { id: 'flag/broken', when: '봉인이 깨지면' }];
     w.phases = [
-      { id: 'ph/peace', name: '평화', tone: '고요', enter: { var: 'tension', lte: 10 } },
-      { id: 'ph/fall', name: '붕괴', tone: '무너짐', from: ['ph/peace'], enter: { flag: 'flag/broken' }, closed: [w.locations[1]!.id], effects: [{ var: 'tension', add: 3 }] },
+      { id: 'ph/peace', name: '평화', tone: '고요', enter: { var: 'drama', lte: 10 } },
+      { id: 'ph/fall', name: '붕괴', tone: '무너짐', from: ['ph/peace'], enter: { flag: 'flag/broken' }, closed: [w.locations[1]!.id], effects: [{ var: 'drama', add: 3 }] },
     ];
     w.phases = [w.phases[1]!, w.phases[0]!];
     expect(validateWorld(w).filter((i) => i.level === 'error' && i.path.startsWith('phases'))).toEqual([]);

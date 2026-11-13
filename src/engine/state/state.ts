@@ -189,7 +189,7 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
       return { ...initialState(), namesKnown: [], arrivedTurn: 0, visited: [e.locationId], packageId: e.packageId, packageVersion: e.packageVersion, rngState: e.seed,
         player: { name: e.playerName, locationId: e.locationId, sheet: e.character ?? legacyCharacter(e.playerName) } };
     case 'player_input':
-      return { ...s, turn, tensionTrail: [...(s.tensionTrail ?? []), s.vars?.tension ?? 2].slice(-8), log: [...s.log, { turn, kind: 'player', text: e.use ? `${e.text}  [${useLabel(e.use)}]` : e.text }] };
+      return { ...s, turn, tensionTrail: [...(s.tensionTrail ?? []), s.vars?.drama ?? 2].slice(-8), log: [...s.log, { turn, kind: 'player', text: e.use ? `${e.text}  [${useLabel(e.use)}]` : e.text }] };
     case 'check_rolled': {
       const r = e.result;
       const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
