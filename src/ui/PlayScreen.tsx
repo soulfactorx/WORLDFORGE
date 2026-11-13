@@ -5,7 +5,7 @@ import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
 import { applyEvent, replay, type GameState, type LogEntry } from '../engine/state/state';
 import { runTurn, CONTINUE_INPUT, type ImagePlacer } from '../gm/turn';
-import { metrics } from '../llm/metrics';
+import { type CallRecord, metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
 import { DebugPanel, useDebugOn } from './DebugPanel';
 import { pendingChoice } from '../engine/story';
@@ -19,7 +19,7 @@ import { CombatPanel } from './CombatPanel';
 import { AvControls } from './AvControls';
 import { moodOf, playSfx, setMusic, sfxForLog, speak, stopMusic, stopSpeaking, type Sfx } from './audio';
 import { createLlmClient } from '../llm';
-import { setUsageScope } from '../llm/usage';
+import { beginRun, endRun, setUsageScope } from '../llm/usage';
 import { resumeEvents } from '../llm/visibility';
 import { setGmStyleOverride } from '../data/gmStyles';
 import type { LlmSettings } from '../llm/types';
@@ -250,13 +250,18 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
     if (choice === undefined) setInput(''); setError(''); setStreaming(''); setStage('AI에게 보내는 중'); setStartedAt(Date.now());
     abort.current = new AbortController();
     const dbg = beginDebug('turn', `턴 ${state.turn + 1}: ${text.slice(0, 60)}`, { saveId, turn: state.turn + 1, input: text, ...(turnUse ? { use: turnUse } : {}), ...(decision ? { decision } : {}) });
+    // 턴별 사용량 (v0.111): 이 턴의 호출을 한 작업으로 묶고, 요청 수·토큰·첫 글자까지의 시간을 남긴다
+    const runId = beginRun(`턴 ${state.turn + 1}`);
+    const turnCalls: CallRecord[] = [];
+    let firstMs: number | undefined;
     try {
       const t0 = performance.now();
-      const { events, rejected, state: after } = await runTurn(createLlmClient(settings), world, state, text,
-        (d) => setStreaming((p) => (p ?? '') + d), abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision,
+      const client = createLlmClient(settings, { sink: (r) => { metrics.addCall(r); turnCalls.push(r); } });
+      const { events, rejected, state: after } = await runTurn(client, world, state, text,
+        (d) => { if (firstMs === undefined && d) firstMs = Math.round(performance.now() - t0); setStreaming((p) => (p ?? '') + d); }, abort.current.signal, (st) => { setStage(st); debugStage(st); }, turnUse, decision,
         { onImages: (place) => { placer.current = place; placedParas.current = -1; }, onNarrated: () => setNarrated(true),
           onState: (st) => setPendingLog(st.log.slice(state.log.length).filter((l) => l.kind !== 'narration' && l.kind !== 'guide')) });
-      metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected });
+      metrics.addTurn({ at: Date.now(), ms: Math.round(performance.now() - t0), rejected, calls: turnCalls.reduce((a, c) => a + c.calls, 0), input: turnCalls.reduce((a, c) => a + c.input, 0), output: turnCalls.reduce((a, c) => a + c.output, 0), ...(firstMs !== undefined ? { firstMs } : {}) });
       await endDebug(dbg, { events, before: state, after, rejected });
       const turn = state.turn + 1;
       await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));
@@ -266,6 +271,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       setError(abort.current?.signal.aborted ? '중단했습니다. 이 턴은 저장되지 않았습니다.' : (e as Error).message);
       if (choice === undefined) setInput(text); // 실패한 턴은 저장하지 않는다
     } finally {
+      endRun(runId);
       setStreaming(null);
     }
   }

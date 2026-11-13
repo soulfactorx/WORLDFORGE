@@ -41,6 +41,20 @@ export interface TurnRecord {
   at: number;
   ms: number;
   rejected: string[];
+  /** 턴별 사용량 (v0.111, 설계 v6 M1): 이 턴의 AI 요청 수 · 토큰 · 첫 글자가 보이기까지 */
+  calls?: number;
+  input?: number;
+  output?: number;
+  firstMs?: number;
+}
+
+/** 최근 플레이 턴의 평균 (사용량 화면) */
+export function turnStats(turns: TurnRecord[], n = 20): { n: number; calls: number; ms: number; firstMs: number; tokens: number } | null {
+  const xs = turns.filter((t) => t.calls !== undefined).slice(-n);
+  if (!xs.length) return null;
+  const avg = (f: (t: TurnRecord) => number) => xs.reduce((a, t) => a + f(t), 0) / xs.length;
+  const firsts = xs.filter((t) => t.firstMs !== undefined);
+  return { n: xs.length, calls: avg((t) => t.calls ?? 0), ms: avg((t) => t.ms), firstMs: firsts.length ? firsts.reduce((a, t) => a + t.firstMs!, 0) / firsts.length : 0, tokens: avg((t) => (t.input ?? 0) + (t.output ?? 0)) };
 }
 
 /** 시스템 프롬프트로 역할을 알아낸다 (프롬프트는 이 앱이 쓴 것) */

@@ -43,7 +43,7 @@ export interface RoleRoute { provider?: string; model?: string }
 export type RoleGroup = 'judge' | 'actor' | 'narrator' | 'build' | 'extract' | 'bulk';
 export const ROLE_GROUPS: RoleGroup[] = ['judge', 'actor', 'narrator', 'build', 'extract', 'bulk'];
 export const ROLE_GROUP_LABEL: Record<RoleGroup, string> = {
-  judge: 'GM 판단·안내·기록 (구조화 응답, 매 턴 3번)',
+  judge: 'GM 판단·기록 (구조화 응답, 매 턴 1번 · 기록은 8턴마다)',
   actor: 'NPC 연기 (말하는 인물마다)',
   narrator: '서술·전투 서술 (플레이어가 읽는 글)',
   build: '세계 설계 (세계 구조·뼈대·장면·임무·규칙·점검)',
@@ -56,7 +56,7 @@ export const ROLE_GROUP_LABEL: Record<RoleGroup, string> = {
  */
 export const ROLE_GROUP_HINT: Record<RoleGroup, { work: string; fit: string; caution: string }> = {
   judge: {
-    work: '플레이어의 행동을 읽고 판정·이동·장면 전환을 정하고(GM 판단), 턴이 끝나면 일어난 일을 기록하고 다음 선택지를 낸다. 매 턴 3번, 짧은 구조화 응답(JSON).',
+    work: '플레이어의 행동을 읽고 판정·이동·장면 전환을 정한다(GM 판단, 매 턴 1번). 8턴마다 그동안의 일을 기록·요약한다. 짧은 구조화 응답(JSON). 선택지는 서술 끝에 함께 나오고, 서술이 선택지를 빠뜨렸을 때만 여기서 따로 만든다.',
     fit: '빠르고 지시를 정확히 따르는 중간급~작은 모델. Claude라면 Sonnet이나 Haiku. 다른 제공자라면 mini·flash급 중 JSON을 잘 지키는 것.',
     caution: '너무 작은 모델은 규칙을 어긴 제안(없는 인물·장소, 과한 판정)을 자주 내 엔진이 거부한다. 바꾼 뒤 아래 "품질 점검"에서 거부 횟수를 본다. 매 턴 기다리는 시간에 바로 드러나므로 생각(추론)이 긴 모델은 맞지 않는다.',
   },
@@ -66,7 +66,7 @@ export const ROLE_GROUP_HINT: Record<RoleGroup, { work: string; fit: string; cau
     caution: '작은 모델은 인물마다 말투가 비슷해지거나, 인물이 모르는 것을 말하게 될 수 있다.',
   },
   narrator: {
-    work: '플레이어가 실제로 읽는 글(서술·전투 서술)을 쓴다. 턴마다 한 번, 글이 길고 스트리밍으로 나온다.',
+    work: '플레이어가 실제로 읽는 글(서술·전투 서술)과 그 끝의 선택지를 쓴다. 턴마다 한 번, 글이 길고 스트리밍으로 나온다. 알려 줄 것이 없는 인물의 짧은 대사도 여기서 쓴다.',
     fit: '가장 글을 잘 쓰는 모델을 여기에. Claude라면 Opus나 Sonnet. 비용을 한 곳에만 쓴다면 이 묶음이다.',
     caution: '생각(추론)이 긴 모델은 첫 글자가 나오기까지 오래 걸린다. 한국어 문장이 어색한 모델은 여기서 가장 티가 난다.',
   },

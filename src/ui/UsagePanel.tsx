@@ -3,7 +3,7 @@
  * 비용은 설정 화면에서 넣은 모델 단가로 계산한다 (단가가 없으면 토큰만).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { costOf, metrics, ROLE_LABEL, type Role } from '../llm/metrics';
+import { costOf, metrics, ROLE_LABEL, type Role, turnStats } from '../llm/metrics';
 import { AREA_LABEL, clearUsage, dayKey, groupUsage, loadUsage, migrateOldUsage, runTimeline, timelineText, type Bucket, type UsageArea, type UsageRow } from '../llm/usage';
 import { loadPrice } from './QualityPanel';
 
@@ -105,6 +105,12 @@ export function UsagePanel({ onClose }: { onClose: () => void }) {
             <div><span className="small muted">비용</span><b>{usd(totalCost, rows.length)}</b>{totalCost.unknown > 0 && totalCost.unknown < rows.length && <span className="small muted">단가 없는 {totalCost.unknown}건 제외</span>}</div>
             <div><span className="small muted">평균 응답</span><b>{sec(total!.ms / total!.n)}</b></div>
           </div>
+          {(() => {
+            const ts = turnStats(metrics.get().turns);
+            return ts && (
+              <p className="small usage-turns">🎲 최근 플레이 {ts.n}턴 평균: 요청 <b>{ts.calls.toFixed(1)}회</b> · 첫 글자까지 <b>{sec(ts.firstMs)}</b> · 턴 전체 <b>{sec(ts.ms)}</b> · 토큰 {tok(Math.round(ts.tokens))}. 턴 하나의 단계별 시간은 <b>작업별 (타임라인)</b>에서 "턴 N"을 펼쳐 봅니다.</p>
+            );
+          })()}
           <div className="row usage-groups" role="tablist">
             {(Object.keys(GROUP_LABEL) as GroupBy[]).map((g) => <button key={g} type="button" role="tab" aria-selected={groupBy === g} className={groupBy === g ? 'primary' : ''} onClick={() => setGroupBy(g)}>{GROUP_LABEL[g]}</button>)}
           </div>
