@@ -414,7 +414,7 @@ export const AETHERIA_STORYLETS: Storylet[] = [
       { id: 'source', label: '노래를 퍼뜨린 자를 찾는다', stake: 'escalate', check: { skill: 'investigation', dc: 'medium' }, success: [{ reveal: 'claim/raven-cult', state: 'rumor' }] },
       { id: 'ignore', label: '모자를 깊이 눌러쓰고 지나친다', stake: 'theme:path:+', success: [{ var: 'path', add: 1 }] },
     ] },
-  { id: 'card/ae-dawn-kindness', title: '처음 받은 친절', phases: ['phase/dawn'], tags: ['side'],
+  { id: 'card/ae-dawn-kindness', title: '처음 받은 친절', phases: ['phase/dawn'], tags: ['side'], when: { any: [{ at: 'loc/vellos-gate' }, { at: 'loc/vellos-market' }] },
     situation: '빵집 아주머니가 굶주린 당신에게 갓 구운 빵을 내민다. "언덕에서 온 사람이지? 우리 남편도 그랬어. 이십 년 전에."',
     text: '갓 구운 빵 냄새. 빵집 앞에서 아주머니가 당신을 불러 세운다. "언덕에서 온 사람이지? 얼굴에 써 있어." 그녀가 빵 하나를 쥐여 준다. "우리 남편도 그랬어. 이십 년 전에."',
     options: [

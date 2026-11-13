@@ -56,7 +56,9 @@ export function Menu({ label, title, children, className }: { label: ReactNode; 
   );
 }
 
-export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
+export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt, noAi, onConnect }: {
+  /** AI 설정이 없다 (v0.116): 체험 안내를 보여 준다 */
+  noAi?: boolean; onConnect?: () => void;
   onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null, library?: boolean) => void; onGenerate: () => void; onCard: (file: File, extras?: File[]) => void; onUserArt: () => void;
 }) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
@@ -202,6 +204,16 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt }: {
 
       {tab === 'play' && (
         <>
+          {noAi && (
+            <div className="demo-card">
+              <b>🃏 AI 없이 먼저 해 보기</b>
+              <p className="small">AI가 아직 연결되지 않았습니다. <b>에테리아</b>처럼 갈래 카드가 있는 세계는 AI 없이도 선택지로 첫 장을 체험할 수 있습니다 — 판정·국면·선택의 무게는 그대로, 서술은 미리 쓴 글로 나옵니다. 인물과 자유롭게 대화하고 직접 행동을 적으려면 AI를 연결하세요 (내 API 키, 이 브라우저에만 저장).</p>
+              <div className="row">
+                {(() => { const demo = packages?.find((p) => p.world.storylets?.length && p.world.manifest.id === 'worldforge.official-aetheria'); return demo && <button type="button" className="primary" onClick={() => setSelectedKey(packageKey(demo.world))}>에테리아로 새 게임 고르기</button>; })()}
+                {onConnect && <button type="button" onClick={onConnect}>AI 연결하기</button>}
+              </div>
+            </div>
+          )}
           {saves && saves.length > 0 && (
             <>
               <h2>이어하기</h2>

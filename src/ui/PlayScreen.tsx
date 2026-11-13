@@ -13,6 +13,7 @@ import { equipItem, shopHere } from '../gm/economy';
 import { BoardPanel, InventoryPanel, ShopPanel } from './InventoryPanel';
 import { boardHere } from '../engine/jobs';
 import { autoFightEvents, minorFight, narrateCombat, playerCombatAction, playerEndTurn, setPartyOrder } from '../gm/combat';
+import { afterFightOffline, runOfflineTurn } from '../gm/offline';
 import { currentActorId } from '../engine/combat/combat';
 import { currentPhase, tensionOf } from '../engine/phase';
 import { stakeLabel } from '../engine/stakes';
@@ -76,7 +77,8 @@ function useSaveLock(saveId: string): 'pending' | 'held' | 'busy' {
 }
 
 /** 세이브가 쓰는 세계관 패키지를 찾아서 연다 */
-export function PlayScreen(props: { saveId: string; settings: LlmSettings; onExit: () => void }) {
+/** settings가 없으면 AI 없이 (v0.116): 갈래 카드의 갈림길로만 진행한다 */
+export function PlayScreen(props: { saveId: string; settings: LlmSettings | null; onExit: () => void; onConnect?: () => void }) {
   const [world, setWorld] = useState<WorldPackage | null | 'missing'>(null);
   const [need, setNeed] = useState('');
   useEffect(() => {
@@ -101,7 +103,8 @@ export function PlayScreen(props: { saveId: string; settings: LlmSettings; onExi
   return <PlayWorld {...props} world={world} />;
 }
 
-function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settings: LlmSettings; onExit: () => void; world: WorldPackage }) {
+function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: string; settings: LlmSettings | null; onExit: () => void; onConnect?: () => void; world: WorldPackage }) {
+  const offline = !settings;
   const lock = useSaveLock(saveId);
   const [state, setState] = useState<GameState | null>(null);
   const [nextSeq, setNextSeq] = useState(0);
@@ -246,7 +249,21 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
   useEffect(() => { setMusic(state ? moodOf(world.genre?.id, fightingNow, phaseNow?.music) : null); }, [fightingNow, world.genre?.id, avTick, !!state, phaseNow?.music]);
   useEffect(() => () => { stopMusic(); stopSpeaking(); }, []);
 
+  /** AI 없이 한 턴 (v0.116) — 갈래 카드의 갈림길이나 이동 선택지로만 */
+  async function submitOffline(text: string, option?: string, move?: boolean, decision?: { choiceId: string; optionId: string }) {
+    if (!state || streaming !== null) return;
+    if (!option && !move && !decision) { setError('AI 없이 체험하는 중에는 선택지로만 진행합니다. 직접 행동을 적으려면 AI를 연결하세요.'); return; }
+    setRewards([]); setShowRecap(false); setNotice(''); setError(''); followNow();
+    try {
+      const { events } = runOfflineTurn(world, state, { text, ...(option ? { option } : {}), ...(move ? { move: true } : {}), ...(decision ? { decision } : {}) });
+      const turn = state.turn + 1;
+      await appendEvents(saveId, events.map((event, i) => ({ saveId, seq: nextSeq + i, turn, event })));
+      await reload();
+    } catch (e) { setError((e as Error).message); }
+  }
+
   async function submit(choice?: string, choiceUse?: string, decision?: { choiceId: string; optionId: string }, stake?: string, option?: string) {
+    if (!settings) return;
     // 선택지도 입력도 없으면 "이어서" — 지금 흐름대로 자연스럽게 다음으로 (v0.79.9)
     const text = (choice ?? input).trim() || CONTINUE_INPUT;
     if (!state || streaming !== null) return;
@@ -301,6 +318,13 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
       const endIdx = after.log.findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 종료'));
       const startIdx = after.log.slice(0, endIdx).findLastIndex((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 시작'));
       const combatLog = after.log.slice(Math.max(0, startIdx), endIdx + 1).filter((l) => l.kind === 'combat').map((l) => l.text);
+      if (!settings) {
+        // AI 없이 (v0.116): 다음 카드를 펼치고 선택지를 붙인다
+        const out = after.playerDead ? [] : afterFightOffline(world, after, after.log.findLast((l) => l.kind === 'combat' && l.text.startsWith('⚔ 전투 종료'))?.text.replace(/^⚔\s*/, '') ?? '싸움이 끝났다.');
+        await appendEvents(saveId, out.map((event) => ({ saveId, seq: seq++, turn: after.turn, event })));
+        await reload();
+        return;
+      }
       setStreaming(''); setStage('전투를 서술하는 중'); setStartedAt(Date.now());
       abort.current = new AbortController();
       let text: string;
@@ -372,8 +396,9 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         text = await narrate('장면을 서술하는 중', (on, sig) => narrateScene(createLlmClient(settings), world, after, def, [...log, ...lines], events, on, sig), '장면이 끝났다.');
         extra.push({ type: 'narration', text });
       }
-      // 장면이 끝난 뒤 선택지도 그 결과에서 이어지게 (v0.79.5)
-      if (!after.combat && !after.scene) extra.push(text ? await guideAfter(applyEvent(after, extra[0]!, after.turn), text) : basicGuide(world, after));
+      // 장면이 끝난 뒤 선택지도 그 결과에서 이어지게 (v0.79.5). AI 없이면 다음 카드를 펼친다 (v0.116)
+      if (!settings) extra.push(...afterFightOffline(world, after, '장면이 끝났다.'));
+      else if (!after.combat && !after.scene) extra.push(text ? await guideAfter(applyEvent(after, extra[0]!, after.turn), text) : basicGuide(world, after));
       await appendEvents(saveId, extra.map((event) => ({ saveId, seq: seq++, turn: after.turn, event })));
       setStreaming(null);
     } else if (after.scene && def && mode === 'ai' && settings && lines.length) {
@@ -514,7 +539,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
                       const option = e.choiceOptions?.[k] || undefined;
                       const stakeTag = stake && loadPlayPrefs().display !== 'immersive' ? stakeLabel(world, state, stake) : '';
                       return (
-                        <button key={k} type="button" className={kind ? `choice-${e.choiceKinds![k]}` : undefined} onClick={() => (opens ? commitScene((s) => startSceneEvents(world, s, opens.id)) : submit(c, sk ? `skill:${sk}` : undefined, undefined, stake, option))} title={kind ? `${kind.label}: ${kind.desc}` : undefined}>
+                        <button key={k} type="button" className={kind ? `choice-${e.choiceKinds![k]}` : undefined} onClick={() => (opens ? commitScene((s) => startSceneEvents(world, s, opens.id)) : offline ? submitOffline(c, option, e.choiceKinds?.[k] === 'move') : submit(c, sk ? `skill:${sk}` : undefined, undefined, stake, option))} title={kind ? `${kind.label}: ${kind.desc}` : undefined}>
                           {stakeTag ? <span className="choice-kind stake-tag">{opens ? '🎭 장면' : stakeTag}</span> : kind ? <span className="choice-kind">{opens ? '🎭 장면' : `${kind.icon} ${kind.label}`}</span> : `${k + 1}. `}{c}{!opens && sk && sk in SKILLS && <span className="skill-badge">🎲 {detail || !approachOf(sk) ? SKILLS[sk as SkillId].name : APPROACHES[approachOf(sk)!].name} {fmt(checkModifier(state.player.sheet, { kind: 'skill', skill: sk as SkillId }).total)}{state.player.sheet.skillProficiencies.includes(sk as SkillId) ? ' ★' : ''}</span>}
                         </button>
                       );
@@ -532,7 +557,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
             <p>{rs(decisive.prompt)}</p>
             <div className="choices">
               {decisive.options.map((o) => (
-                <button key={o.id} type="button" onClick={() => confirm(`"${o.text}" — 이 결정은 되돌리기 전에는 바꿀 수 없습니다. 고를까요?`) && submit(o.text, undefined, { choiceId: decisive.id, optionId: o.id })}>{rs(o.text)}</button>
+                <button key={o.id} type="button" onClick={() => confirm(`"${o.text}" — 이 결정은 되돌리기 전에는 바꿀 수 없습니다. 고를까요?`) && (offline ? submitOffline(o.text, undefined, false, { choiceId: decisive.id, optionId: o.id }) : submit(o.text, undefined, { choiceId: decisive.id, optionId: o.id }))}>{rs(o.text)}</button>
               ))}
             </div>
             <p className="small muted">아직 정하지 않았다면 평소처럼 행동해도 됩니다. 이 선택은 고를 때까지 남아 있습니다.</p>
@@ -577,6 +602,12 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
           <button key={d.id} type="button" className="has-pending" title={d.description} onClick={() => commitScene((s) => startSceneEvents(world, s, d.id))}>🎭 {rs(d.name)}</button>
         ))}</div>
       )}
+      {offline ? (
+        <div className="offline-bar">
+          <p className="small">🃏 <b>AI 없이 체험 중</b> — 갈래 카드의 갈림길과 이동으로만 진행합니다. 직접 행동을 적고, 인물과 자유롭게 대화하려면 AI를 연결하세요.</p>
+          {onConnect && <button type="button" className="primary" onClick={onConnect}>AI 연결하기</button>}
+        </div>
+      ) : (
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <select className="use-select" value={use} onChange={(e) => setUse(e.target.value)} title="이 행동에 쓸 접근법·기술 (판정이 필요할 때 이것으로 굴린다)">
           <option value="">🎲 {detail ? '기술·능력' : '접근법'} (자동)</option>
@@ -597,6 +628,7 @@ function PlayWorld({ saveId, settings, onExit, world }: { saveId: string; settin
         />
         <button className="primary" disabled={streaming !== null} title={input.trim() ? '적은 행동을 한다' : '행동을 적지 않으면 지금 흐름대로 자연스럽게 이어서 진행한다'}>{input.trim() ? '행동' : '이어서 ▶'}</button>
       </form>
+      )}
       </>
       )}
       {loot && !levelInfo && (() => {

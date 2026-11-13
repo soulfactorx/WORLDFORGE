@@ -17,11 +17,24 @@ import { scenarioEvents } from './scenario';
 import { phaseEvents } from './phase';
 import { falloutEvents, stakeEvents } from './stakes';
 import { chooseOptionEvents, openStoryletEvents } from './storylets';
+import { effectEvents } from './story';
+import { pendingChoice } from '../engine/story';
+
+/** AI 없이의 선택지: 펼쳐진 카드의 갈림길, 없으면 갈 수 있는 곳 (AI가 지어낼 선택지는 없다) */
+export function offlineGuide(world: WorldPackage, s: GameState): GameEvent {
+  if (activeStorylet(world, s)) return basicGuide(world, s);
+  const here = world.locations.find((l) => l.id === s.player.locationId);
+  const exits = (here?.connections ?? []).map((id) => world.locations.find((l) => l.id === id)).filter((l): l is NonNullable<typeof l> => !!l);
+  return {
+    type: 'gm_guide', summary: `${here?.name ?? '이곳'} — 지금 여기서 펼쳐질 일이 없다. 다른 곳으로 가 보자.`, suggestion: '',
+    choices: exits.map((l) => `${l.name}(으)로 향한다`), choiceKinds: exits.map(() => 'move'),
+  };
+}
 
 const clean = (l: string) => l.replace(/\s*\(엔진 확정[^)]*\)/g, '').replace(/엔진 확정 — /g, '').replace(/^플레이어가 /, '당신이 ');
 
 /** 선택지 하나로 한 턴 (option: "카드#갈림길" · move: 이동 선택지의 글) */
-export function runOfflineTurn(world: WorldPackage, state: GameState, choice: { text: string; option?: string; move?: boolean }): { events: GameEvent[]; state: GameState } {
+export function runOfflineTurn(world: WorldPackage, state: GameState, choice: { text: string; option?: string; move?: boolean; decision?: { choiceId: string; optionId: string } }): { events: GameEvent[]; state: GameState } {
   if (state.combat || state.scene || state.playerDead) throw new Error('지금은 선택지로 진행할 수 없다');
   const turn = state.turn + 1;
   const events: GameEvent[] = [];
@@ -34,7 +47,15 @@ export function runOfflineTurn(world: WorldPackage, state: GameState, choice: { 
   for (const e of fo.events) if (e.type === 'fallout_fired') lines.push(`${e.text}.`);
 
   let moved = false;
-  if (choice.option) {
+  if (choice.decision) {
+    // 결정적 선택: AI가 있을 때와 같이 엔진이 효과를 적용한다
+    const ch = pendingChoice(world, s);
+    const opt = ch?.id === choice.decision.choiceId ? ch.options.find((o) => o.id === choice.decision!.optionId) : undefined;
+    if (!ch || !opt) throw new Error('지금 고를 수 있는 선택이 아니다');
+    push({ type: 'choice_made', choiceId: ch.id, optionId: opt.id, text: `${ch.name}: ${opt.text}` });
+    effectEvents(world, s, opt.effects, ch.name).forEach(push);
+    lines.push(`당신은 결정했다 — ${opt.text}.`);
+  } else if (choice.option) {
     const hit = parseOptionKey(world, choice.option);
     const r = chooseOptionEvents(world, s, choice.option);
     if (!r || !hit) throw new Error('지금 고를 수 있는 갈림길이 아니다');
@@ -71,7 +92,7 @@ export function runOfflineTurn(world: WorldPackage, state: GameState, choice: { 
   else if (opened && card) lines.push(card.text ?? card.situation);
   else if (!lines.length) lines.push(world.locations.find((l) => l.id === s.player.locationId)?.description ?? '시간이 흐른다.');
   push({ type: 'narration', text: lines.filter(Boolean).join('\n\n') });
-  if (!s.combat && !s.scene && !s.playerDead) push(basicGuide(world, s));
+  if (!s.combat && !s.scene && !s.playerDead) push(offlineGuide(world, s));
   return { events, state: s };
 }
 
@@ -84,7 +105,7 @@ export function afterFightOffline(world: WorldPackage, state: GameState, outcome
   openStoryletEvents(world, s, { quiet: true }).forEach(push);
   const card = events.find((e) => e.type === 'storylet_opened') ? activeStorylet(world, s) : undefined;
   push({ type: 'narration', text: [outcome ?? '싸움이 끝났다. 숨을 고른다.', card ? card.text ?? card.situation : ''].filter(Boolean).join('\n\n') });
-  push(basicGuide(world, s));
+  push(offlineGuide(world, s));
   return events;
 }
 

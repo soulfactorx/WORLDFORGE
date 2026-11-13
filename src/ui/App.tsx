@@ -22,7 +22,8 @@ type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: s
 
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
-  const [view, setView] = useState<View>(settings ? { name: 'saves' } : { name: 'settings' });
+  // AI 설정이 없어도 홈으로 (v0.116): 갈래 카드가 있는 세계는 AI 없이 체험할 수 있다
+  const [view, setView] = useState<View>({ name: 'saves' });
   const debug = useDebugOn();
   const [showDebug, setShowDebug] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -73,7 +74,7 @@ export function App() {
             <section className="panel"><h2>디버그</h2><DebugToggle /><p className="small muted">켜면 플레이 화면의 <b>🐞 디버그</b>에서 턴마다 AI에게 보낸 프롬프트·파라미터·실제 요청 본문·응답 원문, 엔진이 만든 이벤트·거부한 제안·상태 변화, 현재 상태·세계 데이터·이벤트 로그 전체를 볼 수 있습니다. 세계 만들기 같은 플레이 밖 AI 호출은 위쪽 🐞 버튼에서 봅니다.</p></section>
           </>
         )}
-        {view.name === 'saves' && <SaveList onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world, library) => setView({ name: 'editor', world, ...(library ? { library: true } : {}) })} onGenerate={() => setView({ name: 'worldgen' })} onUserArt={() => setView({ name: 'userart' })}
+        {view.name === 'saves' && <SaveList noAi={!settings} onConnect={() => setView({ name: 'settings' })} onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world, library) => setView({ name: 'editor', world, ...(library ? { library: true } : {}) })} onGenerate={() => setView({ name: 'worldgen' })} onUserArt={() => setView({ name: 'userart' })}
           onCard={(file, extras) => setView({ name: 'cardworld', file, ...(extras?.length ? { extras } : {}) })} />}
         {view.name === 'storage' && <StoragePanel onClose={() => setView({ name: 'saves' })} />}
         {view.name === 'usage' && <UsagePanel onClose={() => setView({ name: 'saves' })} />}
@@ -84,9 +85,7 @@ export function App() {
         {view.name === 'editor' && <WorldEditor key={view.world?.manifest.id ?? 'new'} initial={view.world} draftNotes={view.notes} alreadySaved={view.saved} initialCard={view.card} openLibrary={view.library} settings={settings} onDone={() => setView({ name: 'saves' })} />}
         {view.name === 'worldgen' && <WorldGenPanel settings={settings} onCancel={() => setView({ name: 'saves' })} onDraft={(world, notes) => setView({ name: 'editor', world, notes })} />}
         {view.name === 'play' && (
-          settings
-            ? <PlayScreen saveId={view.saveId} settings={settings} onExit={() => setView({ name: 'saves' })} />
-            : <p>먼저 AI 설정을 해 주세요.</p>
+          <PlayScreen saveId={view.saveId} settings={settings} onExit={() => setView({ name: 'saves' })} onConnect={() => setView({ name: 'settings' })} />
         )}
       </main>
       {showDebug && <DebugPanel onClose={() => setShowDebug(false)} />}
