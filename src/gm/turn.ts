@@ -986,6 +986,8 @@ export function startEvents(world: WorldPackage, character: CharacterSheet, seed
   // 처음 국면 (v0.113): 시작할 때부터 지금 국면이 보이게
   const first = nextPhase(world, sc.reduce((st, e) => applyEvent(st, e, 0), state));
   if (first) sc.push({ type: 'phase_changed', to: first.id, name: first.name });
+  // 첫 갈래 카드 (v0.116): 시작하자마자 고를 갈림길이 있게
+  sc.push(...openStoryletEvents(world, sc.reduce((st, e) => applyEvent(st, e, 0), state), { quiet: true }));
   const final = sc.reduce((st, e) => applyEvent(st, e, 0), state);
   return [...events, ...sc, basicGuide(world, final)];
 }

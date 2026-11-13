@@ -61,7 +61,7 @@ describe('기류·국면 (v0.113)', () => {
     for (let i = 0; i < 4; i++) s = turn(sampleWorld, s);
     expect(intensityHint(s)?.kind).toBe('rise');
     s = turn(sampleWorld, s, [], [{ delta: 6, why: '시험' }]);
-    for (let i = 0; i < 3; i++) s = turn(sampleWorld, s);
+    for (let i = 0; i < 3; i++) s = turn(sampleWorld, s, [], [{ delta: 0, why: '버팀' }]); // 일이 계속 이어진다 (긴장이 저절로 풀리지 않게)
     expect(intensityHint(s)?.kind).toBe('peak');
   });
   it('검사기: 없는 국면·장소·인물을 가리키면 오류', () => {

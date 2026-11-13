@@ -27,7 +27,8 @@ function world(): WorldPackage {
   w.storylets = cards;
   return w;
 }
-const start = (w: WorldPackage) => replay(startEvents(w, legacyCharacter('나'), 7).map((event, seq) => ({ saveId: 's', seq, turn: 0, event })));
+// 시작할 때 엔진이 첫 카드를 펼치므로(v0.116), 덱 시험은 펼치기 전 상태에서 시작한다
+const start = (w: WorldPackage) => replay(startEvents(w, legacyCharacter('나'), 7).filter((e) => e.type !== 'storylet_opened').map((event, seq) => ({ saveId: 's', seq, turn: 0, event })));
 const step = (s: GameState, evs: GameEvent[]) => evs.reduce((x, e) => applyEvent(x, e, x.turn), s);
 const next = (s: GameState) => applyEvent(s, { type: 'player_input', text: '.' }, s.turn + 1);
 
@@ -96,7 +97,7 @@ describe('임무 → 카드 초안 (v0.115)', () => {
     const w = structuredClone(aetheriaWorld);
     const drafts = questDraftCards(w);
     expect(drafts.length).toBeGreaterThan(5);
-    w.storylets = drafts;
+    w.storylets = [...(w.storylets ?? []), ...drafts];
     expect(validateWorld(w).filter((i) => i.level === 'error' && i.path.startsWith('storylets'))).toEqual([]);
     expect(questDraftCards(w)).toEqual([]); // 이미 카드가 있는 단계는 건너뛴다
   });

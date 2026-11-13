@@ -15,6 +15,10 @@ export function phaseEvents(world: WorldPackage, state: GameState, turnEvents: G
   let s = state;
   const push = (e: GameEvent) => { out.push(e); s = applyEvent(s, e, state.turn); };
   const t = tensionDelta(turnEvents);
+  // 높은 긴장은 아무 일도 더하지 않으면 조금씩 풀린다 (정점이 끝없이 이어지지 않게)
+  const raised = turnEvents.some((e) => e.type === 'var_changed' && e.varId === TENSION);
+  const cool = !t.delta && !extra.length && !raised && tensionOf(state) >= 7 ? [{ delta: -1, why: '시간이 흐르며 조금 풀림' }] : [];
+  extra = [...extra, ...cool];
   const delta = t.delta + extra.reduce((a, x) => a + x.delta, 0);
   if (delta) {
     const why = [...t.why, ...extra.map((x) => `${x.delta > 0 ? '+' : ''}${x.delta} ${x.why}`)].join(', ');
