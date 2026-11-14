@@ -112,3 +112,46 @@ describe('AI 이미지 분류 속도 (v0.65)', () => {
     expect(peak).toBe(6);
   });
 });
+
+describe('파일 이름 낱말 나누기 (v0.123)', () => {
+  it('구분자·글자 종류·낙타 표기로 나눈다', async () => {
+    const { splitWords, nameKey } = await import('./assetmatch');
+    expect(splitWords('리아웃음')).toEqual(['리아웃음']);
+    expect(splitWords('lia웃음_smile02')).toEqual(['lia', '웃음', 'smile', '02']);
+    expect(splitWords('LIAHappy+blush~2')).toEqual(['lia', 'happy', 'blush', '2']);
+    expect(splitWords('[리아]「놀람」.v2')).toEqual(['리아', '놀람', 'v', '2']);
+    expect(splitWords('a3f9c2e1b7d4')).toEqual(['a3f9c2e1b7d4']);
+    expect(nameKey('Hero3_smile_042.png')).toBe('hero3');
+    expect(nameKey('lia_smile02.png')).toBe('lia');
+  });
+  it('이름이 붙은 낱말·성 뺀 이름·조사·배경 낱말', async () => {
+    const { matchAssets } = await import('./assetmatch');
+    const chars = [{ id: 'npc/lia', aliases: ['리아', 'Lia'] }, { id: 'npc/yun', aliases: ['윤세아', 'yun'] }, { id: 'npc/se', aliases: ['서세아'] }, { id: 'npc/liam', aliases: ['liam'] }];
+    const locs = [{ id: 'loc/town', aliases: ['마을', 'town'] }];
+    const r = (name: string) => { const a = matchAssets([{ name, mime: 'image/png', size: 1 }], chars, locs)[0]!; return [a.kind, a.characterId ?? a.locationId ?? '', a.tags.join(',')].join(' '); };
+    expect(r('리아웃음.png')).toBe('character npc/lia 웃음');
+    expect(r('리아의_웃는얼굴.png')).toBe('character npc/lia 웃는');
+    expect(r('liaSmile02.png')).toBe('character npc/lia smile');
+    expect(r('liam_sad.png')).toBe('character npc/liam sad');
+    expect(r('liar_sad.png')).toBe('other  liar,sad');
+    // 세아는 두 인물에 겹치므로 쓰지 않는다
+    expect(r('세아_웃음.png')).toBe('other  세아,웃음');
+    expect(r('마을밤.png')).toBe('scene loc/town 밤');
+    expect(r('bg_night_02.png')).toBe('scene  night');
+  });
+  it('주인공 한 명짜리 카드: 표정 낱말이 있으면 그 인물', async () => {
+    const { matchAssets } = await import('./assetmatch');
+    const r = matchAssets([{ name: 'happy_03.png', mime: 'image/png', size: 1 }, { name: '9f3a1c22b0.png', mime: 'image/png', size: 1 }], [{ id: 'npc/a', aliases: ['에이'] }], [], { mainCharacterId: 'npc/a' });
+    expect(r.map((a) => a.kind)).toEqual(['character', 'other']);
+  });
+  it('편집기에서 다시 분류: 찾은 것만 바꾸고 태그는 더한다', async () => {
+    const { reclassifyByName } = await import('./assetmatch');
+    const a = (id: string, name: string, extra = {}) => ({ id, name, kind: 'other' as const, tags: [] as string[], mime: 'image/png', size: 1, ...extra });
+    const res = reclassifyByName([a('1', '윤세아_blush.png', { tags: ['mine'] }), a('2', 'zzz_qq.png'), a('3', 'mira.png')],
+      [{ id: 'npc/yun', name: '윤세아' }, { id: 'npc/mira', name: 'Mira' }], [], (x) => x.id !== '3');
+    expect(res.changed).toBe(1);
+    expect(res.assets[0]).toMatchObject({ kind: 'character', characterId: 'npc/yun', tags: ['blush', 'mine'] });
+    expect(res.assets[1]).toMatchObject({ kind: 'other', tags: ['zzz', 'qq'] });
+    expect(res.assets[2]!.kind).toBe('other');
+  });
+});

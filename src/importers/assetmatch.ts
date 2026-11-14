@@ -5,18 +5,59 @@
  */
 import type { AssetMeta } from '../engine/schema';
 import type { LlmClient } from '../llm/types';
+import { EXPRESSIONS } from '../engine/assets';
 
 export interface AssetInput { name: string; mime: string; size: number; cardType?: string }
 export interface MatchTarget { id: string; aliases: string[]; gender?: 'M' | 'F' }
 
-const FILLER = new Set(['img', 'image', 'asset', 'assets', 'pic', 'picture', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'emotion', 'emo', 'char', 'npc', 'cg', 'ver', 'v']);
+const FILLER = new Set(['img', 'image', 'images', 'asset', 'assets', 'pic', 'picture', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'emotion', 'emotions', 'emo', 'char', 'chara', 'character', 'npc', 'cg', 'ver', 'v',
+  'face', 'expression', 'portrait', 'sprite', 'sprites', 'illust', 'art', 'file', 'copy', 'final', 'new', 'old', 'the', 'of', 'and',
+  '이미지', '그림', '사진', '얼굴', '표정', '캐릭터', '초상', '일러', '파일', '사본', '최종']);
 const MAP_WORDS = /^(map|maps|지도|맵|floorplan|layout|구조도)$/;
+/** 배경 그림을 뜻하는 낱말 (v0.123): 장소를 못 찾아도 장면(모든 장소)으로 */
+const SCENE_WORDS = /^(bg|bgs|background|backgrounds|backdrop|scene|scenes|scenery|landscape|wallpaper|배경|장면|풍경|배경화면)$/;
+/** 이름 뒤에 붙는 조사 (리아의_웃음, 세아가) */
+const PARTICLE = /^(의|이|가|은|는|을|를|와|과|도|랑|이랑|에게|한테|님|씨|양|군)$/;
 
-export function tokenize(name: string): { tokens: string[]; gender?: 'M' | 'F'; compact: string } {
+type Script = 'hangul' | 'cjk' | 'letter' | 'digit';
+const scriptOf = (ch: string): Script => (/\p{Script=Hangul}/u.test(ch) ? 'hangul' : /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(ch) ? 'cjk' : /\p{N}/u.test(ch) ? 'digit' : 'letter');
+const isHangul = (s: string) => /^\p{Script=Hangul}+$/u.test(s);
+
+/**
+ * 파일 이름을 낱말로 나눈다 (v0.123).
+ * - 구분자: 글자·숫자가 아닌 모든 것 (_ - . 공백 + ~ # [ ] ( ) 「 」 등)
+ * - 글자 종류가 바뀌는 곳: 한글↔영문↔한자·가나↔숫자 (lia웃음 → lia 웃음, smile02 → smile 02)
+ * - 낙타 표기: liaSmile → lia smile, LIAHappy → lia happy
+ * - 해시처럼 보이는 덩어리(a3f9c2e1…)는 나누지 않는다 (나중에 잡음으로 버린다)
+ */
+export function splitWords(name: string, opts: { keepDigits?: boolean } = {}): string[] {
+  const out: string[] = [];
+  for (const chunk of name.split(/[^\p{L}\p{N}]+/u).filter(Boolean)) {
+    if (isHash(chunk.toLowerCase())) { out.push(chunk.toLowerCase()); continue; }
+    let cur = '';
+    let prev: Script | '' = '';
+    const flush = () => { if (cur) out.push(cur); cur = ''; };
+    for (const ch of chunk) {
+      const sc = scriptOf(ch);
+      if (prev && sc !== prev && !(opts.keepDigits && (sc === 'digit' || prev === 'digit') && cur && !/^\p{N}+$/u.test(cur) && sc !== 'hangul' && prev !== 'hangul')) flush();
+      else if (sc === 'letter' && cur) {
+        const last = cur[cur.length - 1]!;
+        // 소문자→대문자 (liaSmile)
+        if (/\p{Ll}/u.test(last) && /\p{Lu}/u.test(ch)) flush();
+      }
+      cur += ch; prev = sc;
+    }
+    flush();
+  }
+  // 대문자 덩어리 뒤의 낙타 낱말 (LIAHappy → LIA Happy)
+  return out.flatMap((w) => { const m = /^(\p{Lu}+)(\p{Lu}\p{Ll}+)$/u.exec(w); return m ? [m[1]!, m[2]!] : [w]; }).map((w) => w.toLowerCase());
+}
+
+export function tokenize(name: string, opts: { keepDigits?: boolean } = {}): { tokens: string[]; gender?: 'M' | 'F'; compact: string } {
   const g = /\((m|f|male|female|남|여)\)/i.exec(name);
   const gender = g ? (/^(m|male|남)$/i.test(g[1]!) ? 'M' : 'F') : undefined;
   const base = name.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/\((m|f|male|female|남|여)\)/gi, ' ');
-  const tokens = base.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const tokens = splitWords(base, opts);
   return { tokens, gender, compact: tokens.join('') };
 }
 
@@ -26,43 +67,136 @@ const withDefault = (tags: string[]) => (!tags.length ? ['default'] : tags.some(
 
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
-function findTarget(tokens: string[], compact: string, targets: MatchTarget[]): { t: MatchTarget; used: Set<string> } | undefined {
-  let best: { t: MatchTarget; len: number; used: Set<string> } | undefined;
+interface Alias { t: MatchTarget; a: string; parts: string[]; weak: boolean }
+
+/**
+ * 연결에 쓸 이름 목록 (v0.123): 적힌 이름 + 덜 확실한 이름(weak)
+ * - 한글 세·네 글자 이름은 성을 뺀 이름도 (윤세아 → 세아, 남궁민수 → 민수)
+ * - 여러 낱말 이름은 낱말 하나씩도 (Karenya Valkzephas → karenya, valkzephas)
+ * 덜 확실한 이름이 두 대상에 겹치거나 다른 대상의 이름과 같으면 쓰지 않는다.
+ */
+function aliasList(targets: MatchTarget[]): Alias[] {
+  const strong: Alias[] = [];
+  const weak: Alias[] = [];
   for (const t of targets) {
-    for (const alias of t.aliases.map(norm).filter(Boolean)) {
-      let used: Set<string> | undefined;
-      if (tokens.includes(alias)) used = new Set([alias]); // 한 글자 이름(윤)은 낱말이 정확히 같을 때만
-      else if (alias.length < 2) continue;
-      else if (alias.length >= 3 && compact.startsWith(alias)) {
-        // 접두사로 붙은 이름 (hedwigsmile) — 이름에 해당하는 토큰을 앞에서부터 덜어낸다
-        used = new Set(); let acc = '';
-        for (const tok of tokens) { if (acc.length >= alias.length) break; acc += tok; used.add(tok); }
-      } else {
-        // 여러 단어 이름 (karenya valkzephas)
-        const parts = t.aliases.find((a) => norm(a) === alias)!.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-        if (parts.length > 1 && parts.every((p) => tokens.includes(p))) used = new Set(parts);
+    for (const raw of t.aliases) {
+      const a = norm(raw);
+      if (!a) continue;
+      const parts = raw.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+      strong.push({ t, a, parts, weak: false });
+      if (parts.length > 1) for (const p of parts) if (isHangul(p) ? p.length >= 2 : p.length >= 3) weak.push({ t, a: p, parts: [p], weak: true });
+      if (parts.length === 1 && isHangul(a) && (a.length === 3 || a.length === 4)) {
+        weak.push({ t, a: a.slice(1), parts: [a.slice(1)], weak: true });
+        if (a.length === 4) weak.push({ t, a: a.slice(2), parts: [a.slice(2)], weak: true });
       }
-      if (used && (!best || alias.length > best.len)) best = { t, len: alias.length, used };
     }
   }
-  return best;
+  const strongOf = new Map<string, Set<string>>();
+  for (const s of strong) strongOf.set(s.a, new Set([...(strongOf.get(s.a) ?? []), s.t.id]));
+  const weakOf = new Map<string, Set<string>>();
+  for (const w of weak) weakOf.set(w.a, new Set([...(weakOf.get(w.a) ?? []), w.t.id]));
+  const ok = weak.filter((w) => weakOf.get(w.a)!.size === 1 && ![...(strongOf.get(w.a) ?? [])].some((id) => id !== w.t.id) && !strongOf.has(w.a));
+  return [...strong, ...ok];
+}
+
+interface Found { t: MatchTarget; used: Set<string>; extra: string[] }
+
+function findTarget(tokens: string[], compact: string, aliases: Alias[]): Found | undefined {
+  let best: (Found & { score: number }) | undefined;
+  for (const { t, a: alias, parts, weak } of aliases) {
+    let hit: Found | undefined;
+    if (tokens.includes(alias)) hit = { t, used: new Set([alias]), extra: [] }; // 한 글자 이름(윤)은 낱말이 정확히 같을 때만
+    else if (alias.length < 2) continue;
+    else {
+      // 낱말 앞에 이름이 붙은 경우: 리아웃음 → 리아 + 웃음, 리아의 → 리아, liasmile → lia + smile
+      const hangul = isHangul(alias);
+      for (const tok of tokens) {
+        if (tok.length <= alias.length || !tok.startsWith(alias)) continue;
+        const rest = tok.slice(alias.length);
+        if (hangul) { hit = { t, used: new Set([tok]), extra: PARTICLE.test(rest) ? [] : [rest] }; break; }
+        if (alias.length >= 3 && rest.length >= 3 && !isHangul(rest)) { hit = { t, used: new Set([tok]), extra: [rest] }; break; }
+      }
+      if (!hit && !weak && alias.length >= 3 && compact.startsWith(alias)) {
+        // 여러 낱말에 걸친 이름 (hed_wig_smile) — 이름에 해당하는 토큰을 앞에서부터 덜어낸다
+        const used = new Set<string>(); let acc = '';
+        for (const tok of tokens) { if (acc.length >= alias.length) break; acc += tok; used.add(tok); }
+        if (acc === alias) hit = { t, used, extra: [] };
+      }
+      // 여러 단어 이름 (karenya valkzephas)
+      if (!hit && parts.length > 1 && parts.every((p) => tokens.includes(p))) hit = { t, used: new Set(parts), extra: [] };
+    }
+    const score = alias.length - (weak ? 0.5 : 0);
+    if (hit && (!best || score > best.score)) best = { ...hit, score };
+  }
+  return best && { t: best.t, used: best.used, extra: best.extra };
+}
+
+/** 한글 낱말 앞에 붙은 아는 낱말을 떼어 낸다 (웃는얼굴 → 웃는 얼굴, 마을밤은 장소를 뗀 뒤 밤) */
+let vocab: string[] | undefined;
+function peel(tok: string): string[] {
+  if (!isHangul(tok) || tok.length < 3) return [tok];
+  vocab ??= [...new Set([...MOOD_WORDS, ...EXPRESSIONS.flatMap((g) => g.words), ...FILLER])].filter((w) => isHangul(w) && w.length >= 2).sort((a, b) => b.length - a.length);
+  for (const w of vocab) if (tok.startsWith(w) && tok.length > w.length) return [w, ...peel(tok.slice(w.length))];
+  return [tok];
+}
+
+/** 태그로 남길 낱말: 이름·잡음·조사·종류 낱말을 뺀 나머지 (최대 5개) */
+function tagWords(tokens: string[], f: Found | undefined, drop: RegExp | null = null): string[] {
+  const left = [...tokens.filter((t) => !f?.used.has(t)), ...(f?.extra ?? [])].flatMap(peel);
+  return [...new Set(left.filter((t) => !isNoise(t) && !FILLER.has(t) && !PARTICLE.test(t) && t.length > 0 && !(drop && drop.test(t))))].slice(0, 5);
 }
 
 /** 이름 규칙으로 연결. 연결하지 못한 이미지는 kind 'other' */
 export function matchAssets(inputs: AssetInput[], characters: MatchTarget[], locations: MatchTarget[], opts: { mainCharacterId?: string } = {}): AssetMeta[] {
+  const chars = aliasList(characters), locs = aliasList(locations);
   return inputs.map((a, i) => {
     const { tokens, gender, compact } = tokenize(a.name);
     const base = { id: `a${i}`, name: a.name, mime: a.mime, size: a.size, ...(gender ? { gender } : {}) };
-    const rest = (used: Set<string>) => tokens.filter((t) => !used.has(t) && !FILLER.has(t) && !/^\d+$/.test(t));
     if (a.cardType === 'icon' && /^(main|icon|cover)$/i.test(a.name)) return { ...base, kind: 'cover' as const, tags: [] };
-    const ch = findTarget(tokens, compact, characters);
-    if (ch) { const tags = withDefault(rest(ch.used)); return { ...base, kind: 'character' as const, characterId: ch.t.id, tags }; }
-    if (tokens.some((t) => MAP_WORDS.test(t))) return { ...base, kind: 'map' as const, tags: rest(new Set(tokens.filter((t) => MAP_WORDS.test(t)))) };
-    const loc = findTarget(tokens, compact, locations);
-    if (loc) return { ...base, kind: 'scene' as const, locationId: loc.t.id, tags: rest(loc.used) };
-    if (a.cardType === 'emotion' && opts.mainCharacterId) { const tags = rest(new Set()); return { ...base, kind: 'character' as const, characterId: opts.mainCharacterId, tags: tags.length ? tags : ['default'] }; }
-    return { ...base, kind: 'other' as const, tags: rest(new Set()) };
+    const ch = findTarget(tokens, compact, chars);
+    if (ch) return { ...base, kind: 'character' as const, characterId: ch.t.id, tags: withDefault(tagWords(tokens, ch, SCENE_WORDS)) };
+    if (tokens.some((t) => MAP_WORDS.test(t))) return { ...base, kind: 'map' as const, tags: tagWords(tokens, undefined, MAP_WORDS) };
+    const loc = findTarget(tokens, compact, locs);
+    if (loc) return { ...base, kind: 'scene' as const, locationId: loc.t.id, tags: tagWords(tokens, loc, SCENE_WORDS) };
+    if (tokens.some((t) => SCENE_WORDS.test(t))) return { ...base, kind: 'scene' as const, tags: tagWords(tokens, undefined, SCENE_WORDS) };
+    const tags = tagWords(tokens, undefined);
+    // 주인공 한 명짜리 카드: 표정 그림이거나 이름에 표정 낱말이 있으면 그 인물
+    if (opts.mainCharacterId && (a.cardType === 'emotion' || tags.some((t) => MOOD_WORDS.has(t) || EXPRESSIONS.some((g) => g.words.includes(t)))))
+      return { ...base, kind: 'character' as const, characterId: opts.mainCharacterId, tags: withDefault(tags) };
+    return { ...base, kind: 'other' as const, tags };
   });
+}
+
+export interface RenameResult { assets: AssetMeta[]; changed: number; tried: number }
+
+/**
+ * 편집기에서 파일 이름으로 다시 분류 (v0.123, AI 없이): 이름을 낱말로 나눠 인물·장소·종류·태그를 찾는다.
+ * 찾은 것만 바꾸고(못 찾으면 그대로), 원래 있던 태그는 남긴 채 새 태그를 더한다.
+ */
+export function reclassifyByName(assets: AssetMeta[], characters: { id: string; name: string; gender?: 'M' | 'F' }[], locations: { id: string; name: string }[], pick: (a: AssetMeta) => boolean): RenameResult {
+  const slug = (id: string) => id.replace(/^[a-z]+\//, '').replace(/[-_]+/g, ' ');
+  const ct = characters.map((c) => ({ id: c.id, aliases: [c.name, slug(c.id)], ...(c.gender ? { gender: c.gender } : {}) }));
+  const lt = locations.map((l) => ({ id: l.id, aliases: [l.name, slug(l.id)] }));
+  const idx = assets.flatMap((a, i) => (pick(a) ? [i] : []));
+  const found = matchAssets(idx.map((i) => ({ name: assets[i]!.name, mime: assets[i]!.mime, size: assets[i]!.size })), ct, lt, characters.length === 1 ? { mainCharacterId: characters[0]!.id } : {});
+  const out = [...assets];
+  let changed = 0;
+  idx.forEach((i, j) => {
+    const a = assets[i]!, f = found[j]!;
+    if (f.kind === 'other') {
+      // 못 찾았어도 분류 안 된 그림이면 낱말을 태그로 남긴다 (거르기·한 번에 고치기에 쓰게)
+      if (a.kind === 'other' && f.tags.some((t) => !a.tags.includes(t))) out[i] = { ...a, tags: [...new Set([...a.tags, ...f.tags])] };
+      return;
+    }
+    const keep = a.tags.filter((t) => t !== 'default' || f.tags.includes('default'));
+    const tags = [...new Set([...f.tags.filter((t) => t !== 'default' || !keep.length), ...keep])];
+    const n: AssetMeta = { ...a, kind: f.kind, tags: f.kind === 'character' && !tags.length ? ['default'] : tags, ...(f.gender && !a.gender ? { gender: f.gender } : {}) };
+    delete n.characterId; delete n.locationId;
+    if (f.characterId) n.characterId = f.characterId;
+    if (f.locationId) n.locationId = f.locationId;
+    if (n.kind !== a.kind || n.characterId !== a.characterId || n.locationId !== a.locationId || n.tags.join() !== a.tags.join()) { out[i] = n; changed++; }
+  });
+  return { assets: out, changed, tried: idx.length };
 }
 
 // ---------------------------------------------------------------- AI 분류 (파일 이름만)
@@ -104,8 +238,9 @@ const isNoise = (t: string) => /^\d+$/.test(t) || isHash(t) || FILLER.has(t) || 
 
 /** 이름 패턴 (v0.65): 숫자·해시·표정 낱말을 뺀 나머지 — 같은 패턴의 이미지는 한 번만 AI에게 묻는다. 의미 없는 이름이면 '' */
 export function nameKey(name: string): string {
-  const { tokens } = tokenize(name);
-  return tokens.filter((t) => !isNoise(t) && !MOOD_WORDS.has(t)).slice(0, 3).join(' ');
+  // 인물을 가르는 숫자(Hero3 · Hero30)는 붙여 둔다
+  const { tokens } = tokenize(name, { keepDigits: true });
+  return tokens.filter((t) => !isNoise(t) && !MOOD_WORDS.has(t.replace(/\d+$/, ''))).slice(0, 3).join(' ');
 }
 /** 이름에 들어 있는 표정·상황 태그 */
 const moodTags = (name: string) => tokenize(name).tokens.filter((t) => MOOD_WORDS.has(t)).slice(0, 3);
@@ -117,11 +252,13 @@ const moodTags = (name: string) => tokenize(name).tokens.filter((t) => MOOD_WORD
 export async function classifyAssetsAI(
   llm: LlmClient, assets: AssetMeta[], characters: { id: string; name: string; aliases: string[] }[], locations: { id: string; name: string }[],
   onProgress?: (done: number, total: number, info?: string) => void, signal?: AbortSignal,
+  /** 물어볼 그림 (기본: 분류 안 된 것) */
+  pick: (a: AssetMeta) => boolean = (a) => a.kind === 'other',
 ): Promise<AssetMeta[]> {
   const out = assets.map((a) => ({ ...a }));
   const groups = new Map<string, number[]>();
   for (const [i, a] of out.entries()) {
-    if (a.kind !== 'other') continue;
+    if (!pick(a)) continue;
     const k = nameKey(a.name);
     if (!k) continue; // 의미 없는 이름 (숫자·해시)
     groups.set(k, [...(groups.get(k) ?? []), i]);
