@@ -11,6 +11,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../storage/db';
 import { applyUserArt, imageNeeds, needsText, targetTag } from '../gm/worldgen/imageNeeds';
 import { addUserArt, listUserArt } from '../storage/userart';
+import { AssetTools } from './AssetTools';
 
 const KIND = [['character', '인물'], ['scene', '장면'], ['map', '지도'], ['cover', '표지'], ['other', '분류 안 됨 (쓰이지 않음)']] as const;
 const PAGE = 60;
@@ -77,6 +78,8 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
   const shown = list.slice(page * PAGE, (page + 1) * PAGE);
   const up = (id: string, patch: Partial<AssetMeta>) => onChange(assets.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => { const n = new Set(selected); if (n.has(id)) n.delete(id); else n.add(id); setSelected(n); };
   return (
     <div>
       <p className="muted small">
@@ -160,12 +163,13 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
         <span className="small">{page + 1} / {pages}</span>
         <button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>▶</button>
       </div>
+      <AssetTools world={world} assets={assets} onChange={onChange} settings={settings} selected={selected} setSelected={setSelected} visible={list} />
       <div className="gallery">
         {shown.map((a) => (
           <figure key={a.id}>
             <AssetImage pkg={world.manifest.id} id={a.id} alt={a.name} zoom />
             <figcaption>
-              {a.name}
+              <label className="check asset-pick"><input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)} /> {a.name}</label>
               <select value={a.kind} onChange={(e) => up(a.id, { kind: e.target.value as AssetMeta['kind'] })}>
                 {KIND.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
