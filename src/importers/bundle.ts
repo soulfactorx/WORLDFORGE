@@ -3,7 +3,7 @@
  * 파일 전체를 메모리에 올리지 않는다(BlobZip). 이미지는 목록만 만들고, 저장할 때 하나씩 읽는다.
  */
 import { BlobZip } from './blobzip';
-import { type LoreEntry, normalize, type NormalizedCard, parseCardFile } from './charx';
+import { type LoreEntry, normalize, type NormalizedCard, parseCardFile, type RegexRule } from './charx';
 import { extractLuaData, type LuaValue } from './luadata';
 import { parseRisum, type RisuModule } from './risum';
 
@@ -28,6 +28,8 @@ export interface CharxBundle {
   extraLore: LoreEntry[];
   lua: { code: string; data: Record<string, LuaValue> };
   regexComments: string[];
+  /** 정규식 스크립트 전체 (v0.124): 카드 + 모듈. 이미지 연결을 읽는 데만 쓴다 */
+  regexRules?: RegexRule[];
   toggles: string;
   assets: BundleAsset[];
   cover?: Blob;
@@ -37,6 +39,9 @@ export interface CharxBundle {
   /** 여러 파일을 합친 묶음이면 파일마다 (v0.62): 출처 카드 기록·기기 이동에 모두 쓴다 */
   parts?: { fileName: string; fingerprint: string; name: string; format: string; creator?: string; lore: number; images: number }[];
 }
+
+const moduleRules = (list?: { comment?: string; in?: string; out?: string }[]): RegexRule[] =>
+  (list ?? []).filter((r) => r.out).map((r) => ({ in: r.in ?? '', out: r.out!, ...(r.comment ? { comment: r.comment } : {}) }));
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
@@ -64,7 +69,7 @@ export async function readCharxBundle(file: Blob, fileName = 'card.charx', onPro
     const fingerprint = await sha256Hex(all);
     return {
       fingerprint,
-      fileName, fileSize: file.size, card: r.card, rawCard: {}, extraLore: [], lua: { code: '', data: {} }, regexComments: [], toggles: '',
+      fileName, fileSize: file.size, card: r.card, rawCard: {}, extraLore: [], lua: { code: r.card.luaCode ?? '', data: r.card.luaCode ? extractLuaData(r.card.luaCode) : {} }, regexComments: [], regexRules: r.card.regexRules ?? [], toggles: '',
       assets: r.card.images.map((i) => ({ name: i.name, ext: i.mime.split('/')[1]!, mime: i.mime, size: i.bytes.byteLength, source: 'card' as const, read: async () => new Blob([new Uint8Array(i.bytes)], { type: i.mime }) })),
       warnings,
     };
@@ -99,7 +104,7 @@ export async function readCharxBundle(file: Blob, fileName = 'card.charx', onPro
     .map((e) => ({ name: e.comment ?? '', keys: (e.key ?? '').split(',').map((k) => k.trim()).filter(Boolean), content: e.content!.trim(), enabled: true, ...(e.alwaysActive ? { constant: true } : {}) }));
 
   // ---- Lua (트리거 코드) — 실행하지 않고 데이터만
-  const codes = (module?.trigger ?? []).flatMap((t) => (t.effect ?? []).map((e) => e.code ?? '')).filter(Boolean);
+  const codes = [...(module?.trigger ?? []).flatMap((t) => (t.effect ?? []).map((e) => e.code ?? '')), card.luaCode ?? ''].filter(Boolean);
   const risu = isObj(data.extensions) && isObj((data.extensions as Record<string, unknown>).risuai) ? (data.extensions as Record<string, Record<string, unknown>>).risuai! : {};
   const code = codes.join('\n\n');
   const luaData = code ? extractLuaData(code) : {};
@@ -132,6 +137,7 @@ export async function readCharxBundle(file: Blob, fileName = 'card.charx', onPro
   return {
     fingerprint, fileName, fileSize: file.size, card, rawCard, module, extraLore, lua: { code, data: luaData },
     regexComments: (module?.regex ?? []).map((r) => r.comment ?? '').filter(Boolean),
+    regexRules: [...(card.regexRules ?? []), ...moduleRules(module?.regex)],
     toggles: typeof risu.toggles === 'string' ? risu.toggles : '', assets, cover, warnings,
   };
 }
@@ -173,7 +179,7 @@ async function readRisumBundle(file: Blob, fileName: string, onProgress?: (msg: 
   const skipped = r.assets.length - assets.length;
   return {
     fingerprint, fileName, fileSize: file.size, card, rawCard: {}, module: m, extraLore: [], lua: { code, data: code ? extractLuaData(code) : {} },
-    regexComments: (m.regex ?? []).map((x) => x.comment ?? '').filter(Boolean), toggles: typeof m.customModuleToggle === 'string' ? m.customModuleToggle : '',
+    regexComments: (m.regex ?? []).map((x) => x.comment ?? '').filter(Boolean), regexRules: moduleRules(m.regex), toggles: typeof m.customModuleToggle === 'string' ? m.customModuleToggle : '',
     assets, warnings: [`RisuAI 모듈 파일입니다 — 인물 카드 본문 없이 로어북 ${lore.length}개와 이미지 ${assets.length}장을 가져옵니다.${skipped ? ` (이미지가 아닌 에셋 ${skipped}개는 뺐습니다)` : ''}`],
   };
 }
@@ -208,6 +214,7 @@ export async function mergeBundles(main: CharxBundle, extras: CharxBundle[]): Pr
     fileSize: all.reduce((s, b) => s + b.fileSize, 0),
     assets: all.flatMap((b) => b.assets),
     regexComments: all.flatMap((b) => b.regexComments),
+    regexRules: all.flatMap((b) => b.regexRules ?? []),
     toggles: all.map((b) => b.toggles).filter(Boolean).join('\n'),
     warnings: [...main.warnings, ...extras.flatMap((x) => x.warnings.map((w) => `${x.fileName}: ${w}`))],
   };

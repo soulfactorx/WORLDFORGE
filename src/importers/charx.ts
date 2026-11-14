@@ -43,7 +43,13 @@ export interface NormalizedCard {
   portrait?: { mime: string; bytes: Uint8Array };
   /** 이름 붙은 에셋 이미지 (세계관 카드의 인물별 초상화 등) */
   images: { name: string; mime: string; bytes: Uint8Array }[];
+  /** 정규식 스크립트 (v0.124): 실행하지 않고, 어떤 글이 어떤 이미지로 바뀌는지 읽어 이미지를 인물에 연결하는 데만 쓴다 */
+  regexRules?: RegexRule[];
+  /** 카드 자체의 트리거 Lua 코드 (v0.124): 실행하지 않고 데이터 표만 읽는다 */
+  luaCode?: string;
 }
+
+export interface RegexRule { in: string; out: string; comment?: string }
 
 export interface ParseResult {
   card: NormalizedCard | null;
@@ -130,6 +136,12 @@ export function normalize(raw: unknown, format: CardFormat): NormalizedCard {
     ['로컬 정규식', ext.regex_scripts],
   ];
   for (const [label, v] of scriptish) if (count(v)) unsupported.push(`${label} ${count(v)}개 (실행하지 않음)`);
+  const objs = (v: unknown) => (Array.isArray(v) ? v.filter(isObj) : []);
+  const regexRules: RegexRule[] = [...objs(risu.customScripts), ...objs(ext.regex_scripts)]
+    .map((r) => ({ in: str(r.in ?? r.findRegex), out: str(r.out ?? r.replaceString), ...(str(r.comment ?? r.scriptName) ? { comment: str(r.comment ?? r.scriptName) } : {}) }))
+    .filter((r) => r.out);
+  const luaCode = [...objs(risu.triggerscript).flatMap((t) => objs(t.effect)).map((e) => str(e.code)), typeof risu.lua === 'string' ? risu.lua : '']
+    .filter(Boolean).join('\n\n');
   if (str(risu.backgroundHTML)) unsupported.push('배경 HTML/CSS (표시하지 않음)');
   if (str(risu.toggles)) unsupported.push('RisuAI 토글 설정');
   if (count(risu.sdData) || count(risu.newGenData)) unsupported.push('이미지 생성 설정');
@@ -144,6 +156,8 @@ export function normalize(raw: unknown, format: CardFormat): NormalizedCard {
     ...(Array.isArray(d.alternate_greetings) && d.alternate_greetings.some((g) => str(g).trim()) ? { alternateGreetings: (d.alternate_greetings as unknown[]).map((g) => str(g).trim()).filter(Boolean) } : {}),
     creator: str(d.creator), version: str(d.character_version), tags: Array.isArray(d.tags) ? (d.tags as unknown[]).map(String) : [],
     lore, ignoredPrompts, unsupported, images: [],
+    ...(regexRules.length ? { regexRules } : {}),
+    ...(luaCode ? { luaCode } : {}),
   };
 }
 

@@ -67,7 +67,7 @@ const withDefault = (tags: string[]) => (!tags.length ? ['default'] : tags.some(
 
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
-interface Alias { t: MatchTarget; a: string; parts: string[]; weak: boolean }
+export interface Alias { t: MatchTarget; a: string; parts: string[]; weak: boolean }
 
 /**
  * 연결에 쓸 이름 목록 (v0.123): 적힌 이름 + 덜 확실한 이름(weak)
@@ -75,7 +75,7 @@ interface Alias { t: MatchTarget; a: string; parts: string[]; weak: boolean }
  * - 여러 낱말 이름은 낱말 하나씩도 (Karenya Valkzephas → karenya, valkzephas)
  * 덜 확실한 이름이 두 대상에 겹치거나 다른 대상의 이름과 같으면 쓰지 않는다.
  */
-function aliasList(targets: MatchTarget[]): Alias[] {
+export function aliasList(targets: MatchTarget[]): Alias[] {
   const strong: Alias[] = [];
   const weak: Alias[] = [];
   for (const t of targets) {
@@ -99,36 +99,75 @@ function aliasList(targets: MatchTarget[]): Alias[] {
   return [...strong, ...ok];
 }
 
-interface Found { t: MatchTarget; used: Set<string>; extra: string[] }
+export interface Found { t: MatchTarget; used: Set<string>; extra: string[] }
+
+function hitOf({ t, a: alias, parts, weak }: Alias, tokens: string[], compact: string): Found | undefined {
+  if (tokens.includes(alias)) return { t, used: new Set([alias]), extra: [] }; // 한 글자 이름(윤)은 낱말이 정확히 같을 때만
+  if (alias.length < 2) return undefined;
+  // 낱말 앞에 이름이 붙은 경우: 리아웃음 → 리아 + 웃음, 리아의 → 리아, liasmile → lia + smile
+  const hangul = isHangul(alias);
+  for (const tok of tokens) {
+    if (tok.length <= alias.length || !tok.startsWith(alias)) continue;
+    const rest = tok.slice(alias.length);
+    if (hangul) return { t, used: new Set([tok]), extra: PARTICLE.test(rest) ? [] : [rest] };
+    if (alias.length >= 3 && rest.length >= 3 && !isHangul(rest)) return { t, used: new Set([tok]), extra: [rest] };
+  }
+  if (!weak && alias.length >= 3 && compact.startsWith(alias)) {
+    // 여러 낱말에 걸친 이름 (hed_wig_smile) — 이름에 해당하는 토큰을 앞에서부터 덜어낸다
+    const used = new Set<string>(); let acc = '';
+    for (const tok of tokens) { if (acc.length >= alias.length) break; acc += tok; used.add(tok); }
+    if (acc === alias) return { t, used, extra: [] };
+  }
+  // 여러 단어 이름 (karenya valkzephas)
+  if (parts.length > 1 && parts.every((p) => tokens.includes(p))) return { t, used: new Set(parts), extra: [] };
+  return undefined;
+}
 
 function findTarget(tokens: string[], compact: string, aliases: Alias[]): Found | undefined {
   let best: (Found & { score: number }) | undefined;
-  for (const { t, a: alias, parts, weak } of aliases) {
-    let hit: Found | undefined;
-    if (tokens.includes(alias)) hit = { t, used: new Set([alias]), extra: [] }; // 한 글자 이름(윤)은 낱말이 정확히 같을 때만
-    else if (alias.length < 2) continue;
-    else {
-      // 낱말 앞에 이름이 붙은 경우: 리아웃음 → 리아 + 웃음, 리아의 → 리아, liasmile → lia + smile
-      const hangul = isHangul(alias);
-      for (const tok of tokens) {
-        if (tok.length <= alias.length || !tok.startsWith(alias)) continue;
-        const rest = tok.slice(alias.length);
-        if (hangul) { hit = { t, used: new Set([tok]), extra: PARTICLE.test(rest) ? [] : [rest] }; break; }
-        if (alias.length >= 3 && rest.length >= 3 && !isHangul(rest)) { hit = { t, used: new Set([tok]), extra: [rest] }; break; }
-      }
-      if (!hit && !weak && alias.length >= 3 && compact.startsWith(alias)) {
-        // 여러 낱말에 걸친 이름 (hed_wig_smile) — 이름에 해당하는 토큰을 앞에서부터 덜어낸다
-        const used = new Set<string>(); let acc = '';
-        for (const tok of tokens) { if (acc.length >= alias.length) break; acc += tok; used.add(tok); }
-        if (acc === alias) hit = { t, used, extra: [] };
-      }
-      // 여러 단어 이름 (karenya valkzephas)
-      if (!hit && parts.length > 1 && parts.every((p) => tokens.includes(p))) hit = { t, used: new Set(parts), extra: [] };
-    }
-    const score = alias.length - (weak ? 0.5 : 0);
+  for (const al of aliases) {
+    const hit = hitOf(al, tokens, compact);
+    const score = al.a.length - (al.weak ? 0.5 : 0);
     if (hit && (!best || score > best.score)) best = { ...hit, score };
   }
   return best && { t: best.t, used: best.used, extra: best.extra };
+}
+
+/** 글 속 대상 모두 (v0.124): 대상마다 가장 그럴듯한 맞음 하나 */
+function findAll(tokens: string[], aliases: Alias[]): Found[] {
+  const best = new Map<string, Found & { score: number }>();
+  for (const al of aliases) {
+    // 글 속에서는 앞에 붙은 이름(compact)은 보지 않는다 — 문장 첫머리가 우연히 이름처럼 시작할 수 있다
+    const hit = hitOf({ ...al, weak: true }, tokens, '');
+    const score = al.a.length - (al.weak ? 0.5 : 0);
+    const prev = best.get(al.t.id);
+    if (hit && (!prev || score > prev.score)) best.set(al.t.id, { ...hit, score });
+  }
+  return [...best.values()];
+}
+
+export interface Context { characterId?: string; locationId?: string; tags: string[]; ambiguous?: boolean }
+
+/**
+ * 글 한 토막에서 인물·장소·태그를 읽는다 (v0.124, 카드 스크립트 연결용).
+ * 인물이 둘 이상 나오면 누구인지 정하지 않는다 (ambiguous). 태그: allWords면 이름·잡음을 뺀 낱말 모두, 아니면 표정·상황 낱말만.
+ */
+export function readContext(text: string, chars: Alias[], locs: Alias[], opts: { allWords?: boolean; exclude?: Set<string> } = {}): Context {
+  const tokens = splitWords(text).filter((t) => !opts.exclude?.has(t));
+  const cs = findAll(tokens, chars);
+  const ls = cs.length ? [] : findAll(tokens, locs);
+  const one = cs.length === 1 ? cs[0] : undefined;
+  const used = new Set([...cs, ...ls].flatMap((f) => [...f.used]));
+  const left = tokens.filter((t) => !used.has(t)).flatMap(peel)
+    .filter((t) => !isNoise(t) && !FILLER.has(t) && !PARTICLE.test(t) && !SCENE_WORDS.test(t) && !MAP_WORDS.test(t) && (isHangul(t) ? t.length >= 1 : t.length >= 2));
+  const known = (t: string) => MOOD_WORDS.has(t) || EXPRESSIONS.some((g) => g.words.includes(t));
+  const tags = [...new Set(opts.allWords ? left : left.filter(known))].slice(0, 4);
+  return {
+    ...(one ? { characterId: one.t.id } : {}),
+    ...(!cs.length && ls.length === 1 ? { locationId: ls[0]!.t.id } : {}),
+    tags,
+    ...(cs.length > 1 ? { ambiguous: true } : {}),
+  };
 }
 
 /** 한글 낱말 앞에 붙은 아는 낱말을 떼어 낸다 (웃는얼굴 → 웃는 얼굴, 마을밤은 장소를 뗀 뒤 밤) */
