@@ -5,6 +5,7 @@
  */
 import type { AssetMeta, Belief, Character, Claim, Fact, WorldPackage } from '../engine/schema';
 import { matchAssets, tokenize } from './assetmatch';
+import { applyScriptHints, bundleSources, linkFromScripts } from './scriptLinks';
 import type { CharxBundle } from './bundle';
 import { type AnalyzedEntry, analyzeEntries, type EntryChoice, isWorldCard, worldCardToEntities } from './worldcard';
 import { cardToEntities, defaultLoreChoices } from './toWorld';
@@ -141,6 +142,9 @@ export function buildEntities(world: WorldPackage, b: CharxBundle, inp: BuildInp
 export function matchCardImages(b: CharxBundle, chars: { id: string; name: string; aliases: string[]; gender?: 'M' | 'F' }[], world: WorldPackage, prefix: string): AssetMeta[] {
   const inputs = b.assets.map((a) => ({ name: a.name, mime: a.mime, size: a.size, ...(a.cardType ? { cardType: a.cardType } : {}) }));
   const main = chars.length === 1 ? { mainCharacterId: chars[0]!.id } : {};
-  return matchAssets(inputs, chars.map((c) => ({ id: c.id, aliases: [c.name, ...c.aliases].filter(Boolean), ...(c.gender ? { gender: c.gender } : {}) })), world.locations.map((l) => ({ id: l.id, aliases: [l.name, l.id.replace(/^loc\//, '')] })), main)
+  const ct = chars.map((c) => ({ id: c.id, aliases: [c.name, ...c.aliases].filter(Boolean), ...(c.gender ? { gender: c.gender } : {}) }));
+  const lt = world.locations.map((l) => ({ id: l.id, aliases: [l.name, l.id.replace(/^loc\//, '')] }));
+  // 이름 규칙 → 카드 스크립트에 적힌 연결 (v0.124)
+  return applyScriptHints(matchAssets(inputs, ct, lt, main), linkFromScripts(inputs.map((a) => a.name), ct, lt, bundleSources(b)), main).assets
     .map((m, i) => ({ ...m, id: `${prefix}${i}` }));
 }

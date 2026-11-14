@@ -1197,3 +1197,5 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .asset-words { margin: 0; padding-left: 18px; }
 .asset-words li { word-break: break-all; }
 .asset-words .mono { font-family: ui-monospace, monospace; }
+.file-pick { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.file-pick input[type=file] { max-width: 100%; min-height: 36px; }

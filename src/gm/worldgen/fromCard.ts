@@ -1,3 +1,4 @@
+import { applyScriptHints, bundleSources, linkFromScripts, statsText, statsTotal } from '../../importers/scriptLinks';
 import { GENRES } from '../../data/genres';
 /**
  * 캐릭터 카드(CHARX) 전체 → 세계관 패키지 (v0.13).
@@ -407,7 +408,11 @@ export async function cardToWorld(
     }
   }
 
-  const matched: AssetMeta[] = matchAssets(inputs, targets, locTargets, ents.characters.length === 1 ? { mainCharacterId: ents.characters[0]!.id } : {});
+  const mainOpt = ents.characters.length === 1 ? { mainCharacterId: ents.characters[0]!.id } : {};
+  // 이름 규칙 → 카드 스크립트(정규식·Lua 표·로어북 글)에 적힌 연결 (v0.124)
+  const linked = applyScriptHints(matchAssets(inputs, targets, locTargets, mainOpt), linkFromScripts(inputs.map((a) => a.name), targets, locTargets, bundleSources(b)), mainOpt);
+  const matched: AssetMeta[] = linked.assets;
+  if (statsTotal(linked.stats)) notes.push(`카드 스크립트에 적힌 연결로 이미지 ${statsTotal(linked.stats)}장을 인물·장소에 붙였습니다 (${statsText(linked.stats)}).`);
   // 이미지 정리(AI 분류 → 초상화 → 기본 이미지)는 이야기 만들기(뼈대 → 장면 → 임무 → 규칙)와 서로 기다릴 것이 없다.
   // v0.86: 둘을 동시에 진행해 전체 시간을 줄인다. 이미지 쪽은 세계를 직접 바꾸지 않고 결과만 돌려주고, 끝에서 합친다
   const imageWorld = world;

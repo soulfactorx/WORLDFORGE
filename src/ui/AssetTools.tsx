@@ -4,6 +4,8 @@
  */
 import { useRef, useState } from 'react';
 import type { AssetMeta, WorldPackage } from '../engine/schema';
+import { mergeBundles, readCharxBundle } from '../importers/bundle';
+import { applyScriptHints, bundleSources, linkFromScripts, statsText, statsTotal } from '../importers/scriptLinks';
 import { classifyAssetsAI, classifyAssetsVision, reclassifyByName, tokenize, type VisionInput } from '../importers/assetmatch';
 import { createLlmClient } from '../llm';
 import { type RouteOverrides, withRoutes } from '../llm/override';
@@ -83,6 +85,26 @@ export function AssetTools({ world, assets, onChange, settings, selected, setSel
     const left = r.assets.filter((a) => a.kind === 'other').length;
     setMsg(r.changed ? `${r.tried}장 중 ${r.changed}장을 고쳤습니다. 저장하세요.${left ? ` 아직 분류 안 됨 ${left}장 — 이름에 인물·장소 이름이 없는 그림입니다. AI로 분류하거나 한 번에 고치세요.` : ''}` : `${r.tried}장에서 파일 이름으로 찾을 수 있는 인물·장소가 없었습니다.${r.assets.some((a, i) => a !== assets[i]) ? ' 이름의 낱말은 태그로 붙여 두었습니다 (거르기에 쓸 수 있습니다).' : ''}`);
   }
+  /** 원본 카드 파일의 정규식·Lua 표·로어북 글에서 연결을 읽는다 (v0.124). 카드 파일은 이 기기에서만 읽고 어디에도 보내지 않는다 */
+  async function fromCardFiles(files: File[]) {
+    setBusy(true); setMsg('카드 읽는 중…');
+    try {
+      const bundles = [];
+      for (const f of files) bundles.push(await readCharxBundle(f, f.name, (m) => setMsg(m)));
+      const b = await mergeBundles(bundles[0]!, bundles.slice(1));
+      const slug = (id: string) => id.replace(/^[a-z]+\//, '').replace(/[-_]+/g, ' ');
+      const ct = world.characters.map((c) => ({ id: c.id, aliases: [c.name, slug(c.id)], ...(c.gender ? { gender: c.gender } : {}) }));
+      const lt = world.locations.map((l) => ({ id: l.id, aliases: [l.name, slug(l.id)] }));
+      const hints = linkFromScripts(assets.map((a) => a.name), ct, lt, bundleSources(b));
+      const r = applyScriptHints(assets, hints, world.characters.length === 1 ? { mainCharacterId: world.characters[0]!.id } : {});
+      const n = statsTotal(r.stats);
+      if (n) change(r.assets, '카드 스크립트 연결');
+      const rules = b.regexRules?.length ?? 0, tables = Object.keys(b.lua.data).length;
+      setMsg(n ? `카드 스크립트에서 ${n}장을 연결했습니다 (${statsText(r.stats)}). 저장하세요.`
+        : `연결을 찾지 못했습니다 — 단서 ${hints.size}개 (정규식 ${rules}개 · Lua 표 ${tables}개 · 로어북 ${b.card.lore.length + b.extraLore.length}개를 읽음). 이 카드는 이미지 이름을 AI가 직접 쓰게 하는 방식이거나, 이미 분류된 그림입니다.`);
+    } catch (e) { setMsg(`❌ 카드를 읽지 못했습니다: ${(e as Error).message}`); }
+    finally { setBusy(false); }
+  }
   async function byName() {
     if (!ai) return;
     if (!scopeIds.size) { setMsg('대상 그림이 없습니다.'); return; }
@@ -152,6 +174,13 @@ export function AssetTools({ world, assets, onChange, settings, selected, setSel
           <button type="button" disabled={busy || !who} onClick={() => othersTo(who)}>분류 안 된 {others.length}장 모두 넘기기</button>
         </fieldset>
       )}
+
+      <fieldset className="struct-obj"><legend>📜 카드 스크립트에서 연결 읽기</legend>
+        <p className="small muted">원본 캐릭터 카드(.charx · .png · .json · 모듈 .risum, 여러 개 가능)를 고르면, 카드의 <b>정규식 스크립트</b>(무엇이 어떤 이미지로 바뀌는지) · <b>Lua 표</b>(인물 → 표정 → 이미지) · <b>로어북·설명 글</b>(이미지 목록)에서 이미지가 어느 인물·표정인지 읽어 붙입니다. 스크립트는 실행하지 않고, 카드 파일은 이 기기에서만 읽습니다. 분류 안 된 그림과 기본 모습만 있는 그림만 바꿉니다.</p>
+        <label className="file-pick">카드 파일 고르기
+          <input type="file" multiple accept=".charx,.risum,.png,.json,application/zip,image/png,application/json" disabled={busy} onChange={(e) => { const fs = [...(e.target.files ?? [])]; if (fs.length) void fromCardFiles(fs); e.target.value = ''; }} />
+        </label>
+      </fieldset>
 
       <fieldset className="struct-obj"><legend>📄 파일 이름으로 다시 분류</legend>
         <p className="small muted">파일 이름을 <b>구분자(_ - . 공백 + ~ # 괄호 등)</b>, 글자 종류가 바뀌는 곳(한글↔영문↔숫자), 낙타 표기(liaSmile)에서 낱말로 나눠 인물·장소·종류·표정 태그를 찾습니다. 성을 뺀 이름(윤세아 → 세아)과 이름에 붙은 조사(리아의)도 알아봅니다.</p>
