@@ -600,6 +600,17 @@ export function validateWorld(input: unknown): Issue[] {
     if ((v.labels ?? []).some((l) => !Array.isArray(l) || typeof l[0] !== 'number' || typeof l[1] !== 'string')) err(`${p}.labels`, '단계는 [값, "이름"] 목록입니다.');
     if (v.poles !== undefined && !(Array.isArray(v.poles) && v.poles.length === 2 && v.poles.every((x) => typeof x === 'string' && x.trim()))) err(`${p}.poles`, '양 끝의 이름 두 개 ["…", "…"]입니다.');
   });
+  // ---- 플레이 기본 모델 (v0.119)
+  {
+    const pm = (input as Record<string, unknown>).playModels as Record<string, unknown> | undefined;
+    if (pm !== undefined) {
+      if (!pm || typeof pm !== 'object') err('playModels', '객체여야 합니다.');
+      else for (const [k, v] of Object.entries(pm)) {
+        if (!['narrator', 'judge', 'actor'].includes(k)) err(`playModels.${k}`, 'narrator · judge · actor 중 하나입니다.');
+        else if (typeof v !== 'string') err(`playModels.${k}`, '모델 이름(글)입니다.');
+      }
+    }
+  }
   // ---- 갈래 카드 (v0.115)
   const seenCards = new Set<string>();
   storyletList.forEach((c, i) => {

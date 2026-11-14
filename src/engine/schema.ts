@@ -981,6 +981,8 @@ export interface WorldPackage {
   autoPhases?: boolean;
   /** 갈래 카드 (v0.115) */
   storylets?: Storylet[];
+  /** 플레이 기본 AI 모델 (v0.119, 제작자 추천): 역할별 모델 이름. 플레이어의 설정에 등록된 제공자로 요청하고, 플레이어가 플레이 중에 바꿀 수 있다 */
+  playModels?: { narrator?: string; judge?: string; actor?: string };
   /** 장면 (v0.47) */
   scenes?: SceneDef[];
   /** 돌발 사건 표 (설계 v4 E5): 이동·휴식 때 엔진이 굴린다. 없으면 기본 표, []면 끔 */

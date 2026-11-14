@@ -1,5 +1,5 @@
 import { genreKey } from '../engine/genre';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
 import { db } from '../storage/db';
 import { findWorld } from '../storage/packages';
@@ -7,6 +7,9 @@ import { applyEvent, replay, type GameState, type LogEntry } from '../engine/sta
 import { runTurn, CONTINUE_INPUT, type ImagePlacer } from '../gm/turn';
 import { runTurnOne } from '../gm/turnOne';
 import { stripMarks } from '../gm/imageMarks';
+import { loadSaveModels, playSettings, type SaveModelChoice, saveSaveModels } from '../llm/override';
+import { resolveRoute } from '../llm/providers';
+import { PlayModelPanel } from './PlayModels';
 import { type CallRecord, metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
 import { DebugPanel, useDebugOn } from './DebugPanel';
@@ -105,8 +108,11 @@ export function PlayScreen(props: { saveId: string; settings: LlmSettings | null
   return <PlayWorld {...props} world={world} />;
 }
 
-function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: string; settings: LlmSettings | null; onExit: () => void; onConnect?: () => void; world: WorldPackage }) {
-  const offline = !settings;
+function PlayWorld({ saveId, settings: mySettings, onExit, onConnect, world }: { saveId: string; settings: LlmSettings | null; onExit: () => void; onConnect?: () => void; world: WorldPackage }) {
+  const offline = !mySettings;
+  // 플레이 모델 (v0.119): 내 설정 < 세계가 추천한 모델 < 이 세이브에서 고른 것. 언제든 바꿀 수 있고 다음 턴부터 쓰인다
+  const [modelChoice, setModelChoice] = useState<SaveModelChoice>(() => loadSaveModels(saveId));
+  const settings = useMemo(() => (mySettings ? playSettings(mySettings, world.playModels, modelChoice) : null), [mySettings, world.playModels, modelChoice]);
   const lock = useSaveLock(saveId);
   const [state, setState] = useState<GameState | null>(null);
   const [nextSeq, setNextSeq] = useState(0);
@@ -155,7 +161,7 @@ function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: str
   const [startedAt, setStartedAt] = useState(0);
   const [, tick] = useState(0);
   useEffect(() => { if (streaming === null) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [streaming !== null]);
-  const [panel, setPanel] = useState<'none' | 'sheet' | 'journal' | 'codex' | 'items' | 'shop' | 'board'>('none');
+  const [panel, setPanel] = useState<'none' | 'sheet' | 'journal' | 'codex' | 'items' | 'shop' | 'board' | 'model'>('none');
   const debug = useDebugOn();
   const [showDebug, setShowDebug] = useState(false);
   const abort = useRef<AbortController | null>(null);
@@ -489,6 +495,7 @@ function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: str
             tab('items', '🎒 소지품'),
             ...(shop && !state.combat ? [tab('shop', `🛒 ${rs(shop.name)}`)] : []),
             ...(board && !state.combat ? [tab('board', `📜 ${rs(board.name)}`)] : []),
+            ...(settings ? [tab('model', `🤖 ${resolveRoute(settings, 'narrator').model.split('/').at(-1)!.slice(0, 18)}`, 'model-tab')] : []),
           ];
         })()}
         <AvControls onChange={() => setAvTick((n) => n + 1)} dcMod={state.dcMod ?? 0} dcBusy={streaming !== null}
@@ -514,6 +521,7 @@ function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: str
           {panel === 'codex' && <CodexPanel world={world} state={state} />}
           {panel === 'items' && <InventoryPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.combat || !!state.playerDead} />}
           {panel === 'board' && (board && !state.combat ? <BoardPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.playerDead} /> : <p className="muted small">여기에는 의뢰판이 없다.</p>)}
+          {panel === 'model' && mySettings && <PlayModelPanel world={world} settings={mySettings} choice={modelChoice} onChange={(c) => { setModelChoice(c); saveSaveModels(saveId, c); }} />}
           {panel === 'shop' && (shop && !state.combat ? <ShopPanel world={world} state={state} onCommit={commitEvents} disabled={streaming !== null || !!state.playerDead} /> : <p className="muted small">여기에는 상점이 없다.</p>)}
         </div>
       )}
