@@ -1153,3 +1153,14 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 /* 예전 장치 (v0.117): 접어 둔다 */
 .legacy-tools { border: 1px dashed var(--border); border-radius: 8px; padding: 6px 10px; margin: 10px 0; }
 .legacy-tools > summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* 모델 고르기 (v0.119) */
+.model-picker { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; margin: 8px 0; background: var(--surface); }
+.model-picker > summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; overflow-wrap: anywhere; }
+.model-picker .role-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 6px 0; align-items: end; }
+.model-picker .role-pick .struct-label { grid-column: 1 / -1; font-weight: 600; }
+.model-picker .role-pick label { display: flex; flex-direction: column; min-width: 0; }
+@media (max-width: 600px) { .model-picker .role-pick { grid-template-columns: 1fr; } }
+.head-tools .model-tab { overflow-wrap: anywhere; }
+.play-model-panel .model-modes { gap: 6px 14px; }
+.play-models label { display: flex; flex-direction: column; min-width: 0; margin: 6px 0; }

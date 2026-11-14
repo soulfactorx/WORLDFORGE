@@ -7,6 +7,8 @@ import { type CharxBundle, mergeBundles, parseToggles, readCharxBundle } from '.
 import { portraitDataUrl } from '../importers/portrait';
 import type { EntryChoice } from '../importers/worldcard';
 import { createLlmClient } from '../llm';
+import { type RouteOverrides, withRoutes } from '../llm/override';
+import { ModelPicker } from './ModelPicker';
 import { confirmAdult, isAdultConfirmed } from './adult';
 import { cached } from '../llm/robust';
 import { clearGenCache, genCache, genCacheCount } from '../storage/gencache';
@@ -62,6 +64,8 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
   const [extraMsg, setExtraMsg] = useState('');
   const [loading, setLoading] = useState('파일 읽는 중…');
   const [error, setError] = useState('');
+  // 이 작업에 쓸 모델 (v0.119)
+  const [models, setModels] = useState<RouteOverrides>({});
   const [choices, setChoices] = useState<EntryChoice[]>([]);
   const [rating, setRating] = useState<WorldPackage['manifest']['contentRating']>('teen');
   const [classify, setClassify] = useState(true);
@@ -163,7 +167,7 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
       if (!reuse) await clearGenCache(bundle.fingerprint);
       let hits = 0;
       // 재시도·잘린 응답 처리 + 단계별 결과 저장(같은 카드로 다시 하면 끝난 단계는 건너뜀)
-      const llm = cached(createLlmClient(settings, { onRetry: (n, why, label) => setStage(`${label ? `${label}: ` : ''}${why.includes('앱을 벗어나') ? `${why} (${n}번째)` : why.includes('요청 한도') ? `${why} (${n}번째)` : `다시 시도하는 중 (${n}번째)… ${why.includes('길이 제한') ? '응답이 길어 잘림 — 한도를 늘려 다시 요청' : why.slice(0, 80)}`}`) }), genCache(bundle.fingerprint), () => { hits++; setStage(`저장된 결과를 다시 쓰는 중… (${hits}개)`); });
+      const llm = cached(createLlmClient(withRoutes(settings, models), { onRetry: (n, why, label) => setStage(`${label ? `${label}: ` : ''}${why.includes('앱을 벗어나') ? `${why} (${n}번째)` : why.includes('요청 한도') ? `${why} (${n}번째)` : `다시 시도하는 중 (${n}번째)… ${why.includes('길이 제한') ? '응답이 길어 잘림 — 한도를 늘려 다시 요청' : why.slice(0, 80)}`}`) }), genCache(bundle.fingerprint), () => { hits++; setStage(`저장된 결과를 다시 쓰는 중… (${hits}개)`); });
       const r = await cardToWorld(llm, bundle, {
         contentRating: rating, classifyImages: classify, withScenario, withScenes, withRules, summaryLevel: summary, choices, translate, aiFindCharacters: findChars,
         makePortrait: async (blob) => portraitDataUrl(new Uint8Array(await blob.arrayBuffer()), blob.type),
@@ -312,6 +316,7 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
           })()}
         </>
       )}
+      {settings && <ModelPicker settings={settings} groups={['build', 'extract', 'bulk']} value={models} onChange={setModels} title="🤖 이 세계를 만들 AI 모델" note="AI 설정에 정한 모델이 기본입니다. 여기서 바꾸면 이번 카드 변환에만 쓰입니다. 모델을 바꿔 다시 만들 때는 '저장된 결과 다시 쓰기'를 끄세요 — 끝난 단계는 저장된 결과를 다시 씁니다." />}
       <div className="row">
         <button onClick={() => (busy ? abort.current?.abort() : onCancel())}>{busy ? '중단' : '취소'}</button>
         <button className="primary" disabled={!b || !settings || busy || !agree} onClick={run}>{busy ? '만드는 중…' : '세계 만들기'}</button>

@@ -2,6 +2,8 @@ import { beginRun, endRun } from '../llm/usage';
 import { useEffect, useRef, useState } from 'react';
 import { generateWorld, type Size } from '../gm/worldgen/generate';
 import { createLlmClient } from '../llm';
+import { type RouteOverrides, withRoutes } from '../llm/override';
+import { ModelPicker } from './ModelPicker';
 import type { LlmSettings } from '../llm/types';
 import type { WorldPackage } from '../engine/schema';
 import { confirmAdult } from './adult';
@@ -32,6 +34,8 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
     if (at !== undefined) setPct((p) => ({ at: Math.max(p.at, at), next: Math.max(next ?? at, at), since: Date.now(), start: p.start || Date.now() }));
   };
   const [error, setError] = useState('');
+  // 이 작업에 쓸 모델 (v0.119): 설정대로 보여 주고, 여기서만 바꾼다
+  const [models, setModels] = useState<RouteOverrides>({});
   const abort = useRef<AbortController | null>(null);
 
   async function run() {
@@ -41,7 +45,7 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
     setPct({ at: 0, next: 2, since: Date.now(), start: Date.now() });
     const runId = beginRun('AI로 세계 만들기');
     try {
-      const r = await generateWorld(createLlmClient(settings), { prompt, size, contentRating: rating, withScenario, withScenes, withRules, genre: genre.id, ...(genre.custom ? { genreCustom: genre.custom } : {}) }, onStage, abort.current.signal);
+      const r = await generateWorld(createLlmClient(withRoutes(settings, models)), { prompt, size, contentRating: rating, withScenario, withScenes, withRules, genre: genre.id, ...(genre.custom ? { genreCustom: genre.custom } : {}) }, onStage, abort.current.signal);
       onDraft(r.world, r.notes);
     } catch (e) {
       if (!abort.current.signal.aborted) setError((e as Error).message);
@@ -80,7 +84,8 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
         <label className="check"><input type="checkbox" checked={withScenes} disabled={busy} onChange={(e) => setWithScenes(e.target.checked)} /> 장면(협상·추격·대결·데이트…)까지 만들기</label>
         <label className="check"><input type="checkbox" checked={withRules} disabled={busy} onChange={(e) => setWithRules(e.target.checked)} /> 세계 규칙(행동 → 결과 · 연쇄 반응)까지 만들기</label>
       </div>
-      <p className="muted small">AI 호출 {1 + (withScenario ? 1 : 0) + (withScenes ? 1 : 0) + (withRules ? 1 : 0)}회 · 설정한 모델과 API 키를 씁니다. 큰 응답이라 시간이 조금 걸립니다.</p>
+      <p className="muted small">AI 호출 {1 + (withScenario ? 1 : 0) + (withScenes ? 1 : 0) + (withRules ? 1 : 0) + 1}회 안팎 · 큰 응답이라 시간이 조금 걸립니다.</p>
+      {settings && <ModelPicker settings={settings} groups={['build', 'bulk']} value={models} onChange={setModels} title="🤖 이 세계를 만들 AI 모델" note="AI 설정에 정한 모델이 기본입니다. 여기서 바꾸면 이번 세계 만들기에만 쓰입니다 (설정은 그대로)." />}
       <div className="row">
         <button onClick={() => (busy ? abort.current?.abort() : onCancel())}>{busy ? '중단' : '취소'}</button>
         <button className="primary" disabled={!settings || busy || prompt.trim().length < 10} onClick={run}>{busy ? '만드는 중…' : '초안 만들기'}</button>

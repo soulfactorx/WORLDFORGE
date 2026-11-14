@@ -18,6 +18,9 @@ import { ClassEditor } from './ClassEditor';
 import { ProfileEditor } from './ProfileEditor';
 import { WorldLibrary } from './WorldLibrary';
 import { TimeFieldset } from './TimeFieldset';
+import { ModelPicker } from './ModelPicker';
+import { PlayModelsFieldset } from './PlayModels';
+import { type RouteOverrides, withRoutes } from '../llm/override';
 import { questDraftCards } from '../engine/storylets';
 import { classesFor } from '../engine/classes';
 import { hasErrors, validateWorld } from '../engine/package/validate';
@@ -98,7 +101,7 @@ function tabForPath(path: string): Tab {
 
 // ---------------------------------------------------------------- 편집기
 
-export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard, alreadySaved, openLibrary }: {
+export function WorldEditor({ initial, onDone, settings: baseSettings, draftNotes, initialCard, alreadySaved, openLibrary }: {
   initial: WorldPackage | null; onDone: () => void; settings?: LlmSettings | null; draftNotes?: string[];
   /** 이미 라이브러리에 저장된 AI 결과 (카드로 만든 세계) */
   alreadySaved?: boolean;
@@ -107,6 +110,9 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
   /** 자료실을 바로 연다 (v0.63: 여러 세계에서 골라 새 세계 만들기) */
   openLibrary?: boolean;
 }) {
+  // 편집기의 AI 버튼에 쓸 모델 (v0.119): 설정대로 보여 주고, 이 편집기에서만 바꾼다
+  const [aiModels, setAiModels] = useState<RouteOverrides>({});
+  const settings = baseSettings ? withRoutes(baseSettings, aiModels) : baseSettings;
   const [w, setW] = useState<WorldPackage>(() => structuredClone(initial ?? blankWorld()));
   useEffect(() => { setUsageScope({ world: w.manifest.id, worldName: w.manifest.name, area: 'editor' }); }, [w.manifest.id, w.manifest.name]);
   const [questView, setQuestView] = useState<'form' | 'json'>('form');
@@ -320,6 +326,8 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
         const count = (ids: Tab[]) => issues.filter((i) => ids.includes(tabForPath(i.path))).reduce((n, i) => n + (i.level === 'error' ? 1 : 0), 0);
         const group = TAB_GROUPS.find((g) => g.tabs.includes(tab)) ?? TAB_GROUPS[0]!;
         return (
+          <>
+          {baseSettings && <ModelPicker settings={baseSettings} groups={['build', 'bulk']} value={aiModels} onChange={setAiModels} title="🤖 편집기 AI 모델" note="✦ AI 버튼(장면·임무·규칙·국면·카드·점검·이미지)에 쓰는 모델입니다. 설정에 정한 모델이 기본이고, 여기서 바꾸면 이 편집기에서만 쓰입니다." />}
           <nav className="editor-nav" aria-label="편집 탭">
             <div className="editor-groups" role="tablist">
               {TAB_GROUPS.map((g) => { const n = count(g.tabs); return (
@@ -336,6 +344,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
               ); })}
             </div>
           </nav>
+          </>
         );
       })()}
 
@@ -358,6 +367,7 @@ export function WorldEditor({ initial, onDone, settings, draftNotes, initialCard
           <Select label="시작 장소" value={w.start.locationId} options={locOptions} onChange={(locationId) => set({ start: { ...w.start, locationId } })} />
           <Area label="첫 장면 (플레이어가 깨어났을 때)" value={w.start.openingScene} onChange={(openingScene) => set({ start: { ...w.start, openingScene } })} />
           <TimeFieldset w={w} set={set} />
+          <PlayModelsFieldset w={w} set={set} settings={baseSettings} />
           <fieldset><legend>달력 (선택) — 게임 속 날짜와 카운트다운</legend>
             <div className="row">
               <Text label="연호" value={w.calendar?.era} placeholder="제국력" onChange={(era) => set({ calendar: { year: 1, month: 1, day: 1, ...w.calendar, era } })} />
