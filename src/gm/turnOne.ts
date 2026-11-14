@@ -50,6 +50,7 @@ import { falloutEvents, stakeEvents } from './stakes';
 import { phaseBlock, phaseEvents, phaseTransitionLines } from './phase';
 import { chooseOptionEvents, openedLines, openStoryletEvents } from './storylets';
 import { basicGuide, CHOICE_TAIL_SCHEMA_TEXT, guideEvent, guideFieldRules, type GuideOutput, guideMaterials, guideRules, pacing, splitTail, tailFilter, TAIL_MARK } from './guide';
+import { imageMenu, mergeMarkedImages, stripMarks } from './imageMarks';
 import { CONTINUE_INPUT, ledgerBlock, phaseStyled, recorderEvents, scenarioBlock, systemExtras, type ImagePlacer, type TurnResult, turnImagesFor } from './turn';
 
 /** AI가 서술 끝에 붙이는 JSON (선택지 꼬리 + 엔진 요청) */
@@ -271,12 +272,16 @@ export async function runTurnOne(
     `\n\n## 엔진 확정 (반드시 장면에 담는다)\n${outcomes.length ? outcomes.map((o) => `- ${o}`).join('\n') : '- (특별한 것 없음)'}`,
     transitions.length ? `\n\n## 엔진이 확정한 이야기 전환 (이 일이 일어나는 순간을 담는다)\n${transitions.map((x) => `- ${x}`).join('\n')}` : '',
     ruleNotes.length ? `\n\n## 이번 턴에 발동한 세계 규칙\n${ruleNotesText(ruleNotes)}` : '',
+    imageMenu(world, s, [...present, ...world.characters.filter((c) => s.party[c.id] && !present.includes(c))]),
     `\n\n# 선택지 꼬리의 재료 (서술 뒤 ${TAIL_MARK} 아래 JSON에만 쓴다)\n${guideMaterials(world, s)}`,
     `\n\n## 플레이어 행동 (데이터)\n${continuing ? '(이어서) 플레이어는 하던 일을 이어 가며 흐름에 맡긴다 — 몽타주로: 흐른 시간을 압축해 건너뛰고(time: stretch), 다시 정해야 할 일이 생기는 순간에서 멈춘다. 플레이어의 새 결정·대사는 지어내지 않는다.' : `<player_input>\n${input}\n</player_input>${opt ? '\n(플레이어가 고른 갈래 카드의 갈림길이다)' : ''}`}`,
   ].join('');
-  try { play.onImages?.((text) => turnImagesFor(world, s, present.map((c) => c.id), turn, text)); } catch { /* 무시 */ }
+  // 그림 (v0.119): AI가 서술 속 [[그림 …]] 표시로 자리와 표정을 고른다. 표시가 없으면 엔진의 짐작
+  const imagesFor = (text: string) => mergeMarkedImages(world, s, text, String(turn), (clean) => turnImagesFor(world, s, present.map((c) => c.id), turn, clean));
+  try { play.onImages?.(imagesFor); } catch { /* 무시 */ }
   const raw = await llm.stream({ system: sys, user, maxTokens: 6000 }, tailFilter(onNarration), signal);
-  const { narration, tail } = splitTail(raw);
+  const { narration: rawNarration, tail } = splitTail(raw);
+  const narration = stripMarks(rawNarration).trim();
   const out = (tail ?? {}) as OneOutput;
   if (!tail) rejected.push('서술 끝의 JSON이 없거나 깨져 엔진 요청 없이 처리했다');
 
@@ -396,7 +401,7 @@ export async function runTurnOne(
   phaseEvents(world, ahead, post).forEach(queue);
 
   // ── 7) 기록: 서술 → 그 뒤의 일 → 선택지
-  const { result: images } = traceImages(() => turnImagesFor(world, s, present.map((c) => c.id), turn, narration));
+  const { result: images } = traceImages(() => imagesFor(rawNarration));
   push({ type: 'narration', text: narration, ...(images.length ? { images } : {}) });
   try { play.onNarrated?.(); } catch { /* 무시 */ }
   post.forEach(push);

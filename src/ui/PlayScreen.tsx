@@ -6,6 +6,7 @@ import { findWorld } from '../storage/packages';
 import { applyEvent, replay, type GameState, type LogEntry } from '../engine/state/state';
 import { runTurn, CONTINUE_INPUT, type ImagePlacer } from '../gm/turn';
 import { runTurnOne } from '../gm/turnOne';
+import { stripMarks } from '../gm/imageMarks';
 import { type CallRecord, metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
 import { DebugPanel, useDebugOn } from './DebugPanel';
@@ -576,8 +577,8 @@ function PlayWorld({ saveId, settings, onExit, onConnect, world }: { saveId: str
           <div key={`p${i}`} className={`entry-wrap k-${e.kind}`}><p className={`entry ${e.kind}`}>{rs(e.text)}</p></div>
         ))}
         {streaming !== null && (streaming && streamImages.length > 0 && imgSize !== 'hidden'
-          ? <PlacedNarration text={streaming} images={streamImages} pkg={world.manifest.id} size={imgSize} bgMode={loadPlayPrefs().background} />
-          : <p className="entry narration">{streaming ? <RichText text={streaming} /> : '…'}</p>)}
+          ? <PlacedNarration text={stripMarks(streaming)} images={streamImages} pkg={world.manifest.id} size={imgSize} bgMode={loadPlayPrefs().background} />
+          : <p className="entry narration">{streaming ? <RichText text={stripMarks(streaming)} /> : '…'}</p>)}
         <div ref={bottom} />
       </div>
       {behind && <button type="button" className="jump-new" onClick={followNow}>↓ 새 글{streaming !== null ? ' (쓰는 중)' : ''}</button>}
