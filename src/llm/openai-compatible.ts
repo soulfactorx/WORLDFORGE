@@ -18,9 +18,13 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
   // v0.98: minimal은 생각을 끈다 (enabled: false). effort 'minimal'은 받기는 해도 생각이 줄지 않았다 (번역 한 묶음에 여전히 생각 4~5k) —
   // 생각을 켜고 끄는 것만 되는 모델이 있어서다. 끄기를 거절(400)하는 모델이면 그 뒤로는 low로 보낸다
   const reasoning = (req: LlmRequest) => (openRouter ? { reasoning: req.effort === 'minimal' ? (minimalOk ? { enabled: false } : { effort: 'low' }) : { effort: req.effort ?? 'low' } } : {});
+  /** 사용자 메시지: 그림이 있으면 OpenAI 형식의 여러 부분 (v0.121) */
+  const userContent = (req: LlmRequest) => (req.images?.length
+    ? [{ type: 'text', text: req.user }, ...req.images.map((im) => ({ type: 'image_url', image_url: { url: `data:${im.mime};base64,${im.data}` } }))]
+    : req.user);
   const messages = (req: LlmRequest) => [
     { role: 'system', content: req.system },
-    { role: 'user', content: req.user },
+    { role: 'user', content: userContent(req) },
   ];
 
   return {
@@ -60,7 +64,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
         model: s.model, max_tokens: req.maxTokens, response_format: { type: 'json_object' }, ...reasoning(req),
         messages: [
           { role: 'system', content: `${req.system}\n\n반드시 다음 JSON 스키마에 맞는 JSON 객체 하나만 출력한다:\n${JSON.stringify(schema)}` },
-          { role: 'user', content: req.user },
+          { role: 'user', content: userContent(req) },
         ],
       });
       let reqBody = build();

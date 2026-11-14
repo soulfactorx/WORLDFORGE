@@ -22,7 +22,9 @@ export function createAnthropicClient(s: LlmSettings): LlmClient {
     model: s.model,
     max_tokens: req.maxTokens,
     system: req.system,
-    messages: [{ role: 'user' as const, content: req.user }],
+    messages: [{ role: 'user' as const, content: req.images?.length
+      ? [...req.images.map((im) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: im.mime as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif', data: im.data } })), { type: 'text' as const, text: req.user }]
+      : req.user }],
     betas: [FALLBACK_BETA],
     fallbacks: 'default' as const,
   });
