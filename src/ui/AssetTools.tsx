@@ -105,7 +105,7 @@ export function AssetTools({ world, assets, onChange, settings, selected, setSel
 
   return (
     <details className="asset-tools" open={others.length > 0}>
-      <summary className="small"><b>🧩 분류 도구</b> — 분류 안 됨 <b>{others.length}</b>장 (분류 안 된 이미지는 플레이에 쓰이지 않습니다)</summary>
+      <summary className="small"><b>🧩 분류 도구</b> — <span className="nowrap">분류 안 됨 <b>{others.length}장</b></span> (분류 안 된 이미지는 플레이에 쓰이지 않습니다)</summary>
 
       <fieldset className="struct-obj"><legend>여러 장 한 번에 고치기 — 선택 {selected.size}장</legend>
         <div className="row">

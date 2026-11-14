@@ -178,6 +178,12 @@ const SCREENS = [
     const boxes = p.locator('.asset-pick input[type=checkbox]');
     if (await boxes.count()) await boxes.first().check();
   }],
+  ['편집: 이미지 거르기 (v0.122)', async (p) => {
+    await editorTab(p, '이미지');
+    const chips = p.locator('.asset-tags .tag-chip');
+    if (await chips.count()) await chips.first().click();
+    await p.locator('.asset-filter-q').fill('-zzz');
+  }],
   ['편집: 국면 (v0.113)', async (p) => {
     await editorTab(p, '이야기 흐름');
     const f = p.locator('.struct-field', { hasText: '이 세계의 국면' }).first();

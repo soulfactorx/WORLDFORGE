@@ -12,6 +12,8 @@ import { db } from '../storage/db';
 import { applyUserArt, imageNeeds, needsText, targetTag } from '../gm/worldgen/imageNeeds';
 import { addUserArt, listUserArt } from '../storage/userart';
 import { AssetTools } from './AssetTools';
+import { AssetFilterBar } from './AssetFilterBar';
+import { type AssetFilter, EMPTY_FILTER, filterAssets } from '../gm/assetFilter';
 
 const KIND = [['character', '인물'], ['scene', '장면'], ['map', '지도'], ['cover', '표지'], ['other', '분류 안 됨 (쓰이지 않음)']] as const;
 const PAGE = 60;
@@ -66,19 +68,14 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
     const t = target.slice(2);
     onChange([...assets, stockAsset(art, nextStockIndex(assets), target.startsWith('c:') ? { characterId: t } : { locationId: t })]);
   }
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter0] = useState<AssetFilter>(EMPTY_FILTER);
   const [page, setPage] = useState(0);
-  const [q, setQ] = useState('');
-  const list = useMemo(() => {
-    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const cn = new Map(world.characters.map((c) => [c.id, c.name])), ln = new Map(world.locations.map((l) => [l.id, l.name]));
-    return assets.filter((a) => (filter === 'all' || a.kind === filter || a.characterId === filter || a.locationId === filter)
-      && (!words.length || ((h) => words.every((t) => h.includes(t)))([a.name, a.id, a.kind, ({ character: '인물', scene: '장소 배경', map: '지도', cover: '표지', other: '기타' } as Record<string, string>)[a.kind] ?? '', ((g) => (g === 'F' ? '여성 여자' : g === 'M' ? '남성 남자' : ''))(a.gender ?? world.characters.find((c) => c.id === a.characterId)?.gender), ...a.tags, a.characterId ? cn.get(a.characterId) ?? '' : '', a.locationId ? ln.get(a.locationId) ?? '' : ''].join(' ').toLowerCase())));
-  }, [assets, filter, q, world.characters, world.locations]);
+  const setFilter = (f: AssetFilter) => { setFilter0(f); setPage(0); };
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const list = useMemo(() => filterAssets(world, assets, filter, selected), [world, assets, filter, selected]);
   const shown = list.slice(page * PAGE, (page + 1) * PAGE);
   const up = (id: string, patch: Partial<AssetMeta>) => onChange(assets.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const toggle = (id: string) => { const n = new Set(selected); if (n.has(id)) n.delete(id); else n.add(id); setSelected(n); };
   return (
     <div>
@@ -148,22 +145,14 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
           ))}
         </div>
       </details>
-      <div className="row">
-        <label>보기
-          <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(0); }}>
-            <option value="all">전체</option>
-            {KIND.map(([v, l]) => <option key={v} value={v}>{l} ({assets.filter((a) => a.kind === v).length})</option>)}
-            {world.characters.map((c) => <option key={c.id} value={c.id}>인물: {c.name} ({assets.filter((a) => a.characterId === c.id).length})</option>)}
-            {world.locations.map((l) => <option key={l.id} value={l.id}>장소: {l.name} ({assets.filter((a) => a.locationId === l.id).length})</option>)}
-          </select>
-        </label>
-        <input type="search" className="gallery-search" placeholder="🔍 이름·태그·인물·장소로 찾기" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
-        <span className="small muted">{list.length}장</span>
-        <button disabled={page === 0} onClick={() => setPage(page - 1)}>◀</button>
-        <span className="small">{page + 1} / {pages}</span>
-        <button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>▶</button>
+      <AssetFilterBar world={world} assets={assets} value={filter} onChange={setFilter} selected={selected} found={list.length} />
+      <div className="row asset-pager">
+        <button disabled={page === 0} onClick={() => setPage(page - 1)} aria-label="앞 쪽">◀</button>
+        <span className="small">{page + 1} / {pages} 쪽 · {list.length}장</span>
+        <button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} aria-label="뒤 쪽">▶</button>
       </div>
       <AssetTools world={world} assets={assets} onChange={onChange} settings={settings} selected={selected} setSelected={setSelected} visible={list} />
+      {!list.length && assets.length > 0 && <p className="small muted">이 조건에 맞는 그림이 없습니다. <button type="button" className="small" onClick={() => setFilter(EMPTY_FILTER)}>조건 지우기</button></p>}
       <div className="gallery">
         {shown.map((a) => (
           <figure key={a.id}>
