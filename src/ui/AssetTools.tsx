@@ -4,7 +4,7 @@
  */
 import { useRef, useState } from 'react';
 import type { AssetMeta, WorldPackage } from '../engine/schema';
-import { classifyAssetsAI, classifyAssetsVision, type VisionInput } from '../importers/assetmatch';
+import { classifyAssetsAI, classifyAssetsVision, reclassifyByName, tokenize, type VisionInput } from '../importers/assetmatch';
 import { createLlmClient } from '../llm';
 import { type RouteOverrides, withRoutes } from '../llm/override';
 import { resolveRoute } from '../llm/providers';
@@ -39,6 +39,15 @@ export function AssetTools({ world, assets, onChange, settings, selected, setSel
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<RouteOverrides>({});
   const abort = useRef<AbortController | null>(null);
+  /** 되돌리기 (v0.123): 도구가 마지막으로 바꾸기 전의 목록 */
+  const [undo, setUndo] = useState<{ assets: AssetMeta[]; what: string } | null>(null);
+  const change = (next: AssetMeta[], what: string) => { setUndo({ assets, what }); onChange(next); };
+  type Scope = 'selected' | 'visible' | 'other';
+  const [scope0, setScope] = useState<Scope | ''>('');
+  const scope: Scope = scope0 || (selected.size ? 'selected' : 'other');
+  const scopeIds = new Set((scope === 'selected' ? assets.filter((a) => selected.has(a.id)) : scope === 'visible' ? visible : others).map((a) => a.id));
+  const inScope = (a: AssetMeta) => scopeIds.has(a.id);
+  const sample = assets.filter(inScope).slice(0, 3);
   const ai = settings ? withRoutes(settings, models) : null;
   const tagsOf = (s: string) => s.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
 
@@ -55,25 +64,37 @@ export function AssetTools({ world, assets, onChange, settings, selected, setSel
       if (k === 'character' && !n.tags.length) n = { ...n, tags: ['default'] };
       return n;
     });
-    onChange(next);
+    change(next, '한 번에 고치기');
     setMsg(`${selected.size}장에 적용했습니다. 저장하세요.`);
     setSelected(new Set());
   }
   function othersTo(npcId: string) {
     if (!npcId || !others.length) return;
     if (!confirm(`분류 안 된 이미지 ${others.length}장을 모두 「${world.characters.find((c) => c.id === npcId)?.name}」의 이미지로 넘길까요? 태그는 파일 이름에서 가져오고, 없으면 기본 모습이 됩니다. (나중에 하나씩 고칠 수 있습니다)`)) return;
-    onChange(assets.map((a) => (a.kind === 'other' ? { ...a, kind: 'character', characterId: npcId, tags: a.tags.length ? a.tags : ['default'] } : a)));
+    change(assets.map((a) => (a.kind === 'other' ? { ...a, kind: 'character', characterId: npcId, tags: a.tags.length ? a.tags : ['default'] } : a)), '모두 한 인물로');
     setMsg(`${others.length}장을 넘겼습니다. 저장하세요.`);
+  }
+  /** AI 없이: 파일 이름을 낱말로 나눠 인물·장소·종류·태그를 찾는다 */
+  function byWords() {
+    if (!scopeIds.size) { setMsg('대상 그림이 없습니다.'); return; }
+    const r = reclassifyByName(assets, world.characters.map((c) => ({ id: c.id, name: c.name, ...(c.gender ? { gender: c.gender } : {}) })), world.locations.map((l) => ({ id: l.id, name: l.name })), inScope);
+    if (r.changed) change(r.assets, '낱말로 나눠 분류');
+    else if (r.assets.some((a, i) => a !== assets[i])) change(r.assets, '낱말 태그 붙이기');
+    const left = r.assets.filter((a) => a.kind === 'other').length;
+    setMsg(r.changed ? `${r.tried}장 중 ${r.changed}장을 고쳤습니다. 저장하세요.${left ? ` 아직 분류 안 됨 ${left}장 — 이름에 인물·장소 이름이 없는 그림입니다. AI로 분류하거나 한 번에 고치세요.` : ''}` : `${r.tried}장에서 파일 이름으로 찾을 수 있는 인물·장소가 없었습니다.${r.assets.some((a, i) => a !== assets[i]) ? ' 이름의 낱말은 태그로 붙여 두었습니다 (거르기에 쓸 수 있습니다).' : ''}`);
   }
   async function byName() {
     if (!ai) return;
+    if (!scopeIds.size) { setMsg('대상 그림이 없습니다.'); return; }
+    const route = resolveRoute(ai, 'bulk');
+    if (!confirm(`파일 이름 ${scopeIds.size}장을 「${route.provider.name}」의 ${route.model} 모델에 보냅니다.\n\n· 그림은 보내지 않고 파일 이름과 인물·장소 목록만 보냅니다.\n· 같은 이름 패턴은 한 번만 묻습니다 (숫자·해시뿐인 이름은 묻지 않음).\n· 요청 수만큼 비용이 듭니다.\n\n보낼까요?`)) return;
     abort.current = new AbortController(); setBusy(true);
     try {
       const chars = world.characters.map((c) => ({ id: c.id, name: c.name, aliases: [c.name, c.id.replace(/^[a-z]+\//, '')] }));
       const out = await classifyAssetsAI(createLlmClient(ai), assets, chars, world.locations.map((l) => ({ id: l.id, name: l.name })),
-        (d, t, info) => setMsg(`파일 이름으로 분류 중 — ${d}/${t}장${info ? ` · ${info}` : ''}`), abort.current.signal);
-      const n = out.filter((a, i) => a.kind !== assets[i]!.kind).length;
-      onChange(out);
+        (d, t, info) => setMsg(`파일 이름으로 분류 중 — ${d}/${t}장${info ? ` · ${info}` : ''}`), abort.current.signal, inScope);
+      const n = out.filter((a, i) => a.kind !== assets[i]!.kind || a.characterId !== assets[i]!.characterId || a.locationId !== assets[i]!.locationId).length;
+      if (n) change(out, 'AI 파일 이름 분류');
       setMsg(n ? `${n}장을 분류했습니다. 저장하세요. 남은 것은 파일 이름에 단서가 없는 이미지입니다 — 그림을 보고 분류하거나 한 번에 고치세요.` : '파일 이름으로는 더 분류할 수 없었습니다 (숫자·해시 이름은 묻지 않습니다).');
     } catch (e) { setMsg(abort.current?.signal.aborted ? '중단했습니다.' : `❌ ${(e as Error).message}`); }
     finally { setBusy(false); }
@@ -96,7 +117,7 @@ export function AssetTools({ world, assets, onChange, settings, selected, setSel
       }
       const r = await classifyAssetsVision(createLlmClient(ai), inputs, assets, world.characters.map((c) => ({ id: c.id, name: c.name, look: appearanceOf(c) })), world.locations.map((l) => ({ id: l.id, name: l.name })),
         (d, t, info) => setMsg(`그림을 보고 분류 중 — ${d}/${t}장${info ? ` · ${info}` : ''}`), abort.current.signal);
-      onChange(r.assets);
+      change(r.assets, '그림을 보고 분류');
       setMsg(`${r.changed}장을 분류했습니다${r.failed ? ` (실패 ${r.failed}장)` : ''}. 저장하세요. 결과를 한 번 훑어보고 틀린 것은 고치세요.`);
       setSelected(new Set());
     } catch (e) { setMsg(abort.current?.signal.aborted ? '중단했습니다 (그때까지 분류한 것은 버렸습니다).' : `❌ ${(e as Error).message}`); }
@@ -132,12 +153,34 @@ export function AssetTools({ world, assets, onChange, settings, selected, setSel
         </fieldset>
       )}
 
-      <fieldset className="struct-obj"><legend>✦ AI로 다시 분류</legend>
+      <fieldset className="struct-obj"><legend>📄 파일 이름으로 다시 분류</legend>
+        <p className="small muted">파일 이름을 <b>구분자(_ - . 공백 + ~ # 괄호 등)</b>, 글자 종류가 바뀌는 곳(한글↔영문↔숫자), 낙타 표기(liaSmile)에서 낱말로 나눠 인물·장소·종류·표정 태그를 찾습니다. 성을 뺀 이름(윤세아 → 세아)과 이름에 붙은 조사(리아의)도 알아봅니다.</p>
+        <div className="asset-bulk">
+          <label>대상
+            <select value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
+              <option value="selected">선택한 그림 ({selected.size}장)</option>
+              <option value="visible">지금 보이는(거른) 그림 ({visible.length}장)</option>
+              <option value="other">분류 안 된 그림 ({others.length}장)</option>
+            </select>
+          </label>
+        </div>
+        {sample.length > 0 && (
+          <ul className="small muted asset-words">
+            {sample.map((a) => <li key={a.id}><span className="mono">{a.name}</span> → {tokenize(a.name).tokens.join(' · ') || '(낱말 없음)'}</li>)}
+          </ul>
+        )}
+        <div className="row">
+          <button type="button" className="primary" disabled={busy || !scopeIds.size} onClick={byWords}>낱말로 나눠 분류 — AI 없이 ({scopeIds.size}장)</button>
+          {settings && <button type="button" disabled={busy || !scopeIds.size} onClick={() => void byName()}>✦ AI로 분류 ({scopeIds.size}장)</button>}
+        </div>
+        <p className="small muted">찾은 것만 바꾸고, 원래 붙어 있던 태그는 남깁니다. 먼저 AI 없이 해 보고, 남은 것만 AI로 보내면 비용이 적습니다. AI 모델은 아래에서 고릅니다.</p>
+      </fieldset>
+
+      <fieldset className="struct-obj"><legend>✦ AI 모델 · 그림을 보고 분류</legend>
         {!settings ? <p className="small muted">AI 설정을 하면 쓸 수 있습니다.</p> : (
           <>
             <ModelPicker settings={settings} groups={['bulk']} value={models} onChange={setModels} title="🤖 분류에 쓸 AI 모델" note="AI 설정의 「번역·이미지 분류」 묶음이 기본입니다. 그림을 보고 분류하려면 이미지 인식을 지원하는 모델(예: Claude, GPT-4o급, Gemini)을 고르세요." />
             <div className="row">
-              <button type="button" disabled={busy || !others.length} onClick={() => void byName()}>파일 이름으로 다시 분류 ({others.length}장)</button>
               <button type="button" disabled={busy} onClick={() => void byPicture()}>그림을 보고 분류 ({selected.size || others.length}장)</button>
               {busy && <button type="button" onClick={() => abort.current?.abort()}>중단</button>}
             </div>
@@ -155,6 +198,7 @@ export function AssetTools({ world, assets, onChange, settings, selected, setSel
         )}
       </fieldset>
       {msg && <p className="status small">{msg}</p>}
+      {undo && !busy && <div className="row"><button type="button" className="small" onClick={() => { onChange(undo.assets); setUndo(null); setMsg(`「${undo.what}」을 되돌렸습니다.`); }}>↶ 「{undo.what}」 되돌리기</button></div>}
     </details>
   );
 }
