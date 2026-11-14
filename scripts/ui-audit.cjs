@@ -40,6 +40,18 @@ async function editor(page) {
   await page.locator('.saves li', { hasText: '장미 정원' }).locator('button:has-text("⋯")').click();
   await page.click('.menu-pop button:has-text("복제해서 편집")');
 }
+/** 마법사 (v0.125): 예시로 채우고 n번째 단계로 */
+async function wizard(page, n) {
+  await home(page);
+  await page.click('.home-tabs button:has-text("세계관")');
+  await page.click('button:has-text("＋ 만들기")');
+  await page.click('button:has-text("마법사로 차근차근")');
+  await page.waitForSelector('.wizard');
+  if (n === undefined) return;
+  page.once('dialog', (d) => d.accept());
+  await page.click('.wiz-head button:has-text("예시로 채워 보기")');
+  await page.click(`.wiz-steps li >> nth=${n} >> button`);
+}
 const TAB_GROUP = { 기본: '세계', '⚖ 세계 규칙': '세계', 장소: '세계', 지식: '세계', '관계·세력': '세계', '보드·지도·시뮬레이터': '시험', '상태 시험대': '시험', '자동 플레이·전체 점검': '시험', 인물: '인물', 주인공: '인물', 직업: '인물', '임무·플래그·결말': '이야기', '이야기 흐름': '이야기', 장면: '이야기', 조우: '이야기', '아이템·상점': '이야기', 이미지: '자료', 'JSON 전체': '자료' };
 async function editorTab(page, tab) {
   await editor(page);
@@ -172,6 +184,13 @@ const SCREENS = [
     const f = p.locator('.struct-field', { hasText: '갈래 카드' }).first();
     await f.locator('button:has-text("＋ 갈래 카드 추가")').click();
   }],
+  ['마법사: 시작 (빈 초안)', (p) => wizard(p)],
+  ['마법사: 장소', (p) => wizard(p, 2)],
+  ['마법사: 인물', (p) => wizard(p, 3)],
+  ['마법사: 비밀', (p) => wizard(p, 4)],
+  ['마법사: 목표·결말', (p) => wizard(p, 5)],
+  ['마법사: 첫 장면', (p) => wizard(p, 6)],
+  ['마법사: 확인', (p) => wizard(p, 7)],
   ['편집: 이미지 분류 도구 (v0.121)', async (p) => {
     await editorTab(p, '이미지');
     await p.locator('details.asset-tools').evaluate((d) => { d.open = true; });

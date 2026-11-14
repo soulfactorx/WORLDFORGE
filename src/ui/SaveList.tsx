@@ -56,10 +56,10 @@ export function Menu({ label, title, children, className }: { label: ReactNode; 
   );
 }
 
-export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt, noAi, onConnect }: {
+export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserArt, noAi, onConnect }: {
   /** AI 설정이 없다 (v0.116): 체험 안내를 보여 준다 */
   noAi?: boolean; onConnect?: () => void;
-  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null, library?: boolean) => void; onGenerate: () => void; onCard: (file: File, extras?: File[]) => void; onUserArt: () => void;
+  onOpen: (saveId: string) => void; onEdit: (world: WorldPackage | null, library?: boolean) => void; onGenerate: () => void; onWizard: () => void; onCard: (file: File, extras?: File[]) => void; onUserArt: () => void;
 }) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
   const packages = useLiveQuery(() => listPackages(), []);
@@ -263,6 +263,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onCard, onUserArt, noAi, 
         <>
           <div className="row toolbar">
             <Menu label="＋ 만들기 ▾" className="primary-menu">
+              <button onClick={onWizard}>🧭 마법사로 차근차근 만들기 (처음이라면 추천)</button>
               <button onClick={() => onEdit(null)}>＋ 빈 세계관에서 직접 만들기</button>
               <button onClick={onGenerate}>✦ AI로 세계관 만들기</button>
               <button onClick={() => onEdit(null, true)}>🌌 만계서고에서 골라 크로스오버 세계 만들기 (AI 없이)</button>

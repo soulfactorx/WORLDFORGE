@@ -1199,3 +1199,41 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .asset-words .mono { font-family: ui-monospace, monospace; }
 .file-pick { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .file-pick input[type=file] { max-width: 100%; min-height: 36px; }
+
+/* 세계관 만들기 마법사 (v0.125) */
+.wizard { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wiz-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.wiz-head h2 { margin: 0; flex: 1 1 auto; }
+@media (max-width: 600px) { .wiz-head h2 { flex-basis: 100%; } }
+.wiz-steps { list-style: none; margin: 0; padding: 2px 0 4px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
+.wiz-steps li { flex: 0 0 auto; }
+.wiz-step { min-height: 36px; white-space: nowrap; border-radius: 18px; }
+.wiz-step.on { border-color: var(--accent); color: var(--accent); font-weight: 700; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.wiz-step.done { color: var(--muted); }
+.wiz-need { color: var(--accent); font-weight: 700; }
+.wiz-progress { height: 4px; }
+.wiz-title { margin: 6px 0 0; }
+.wiz-tips ul { margin: 4px 0 0; padding-left: 18px; }
+.wiz-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wiz-body > label, .wiz-card label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wiz-body label.check, .wiz-card label.check { flex-direction: row; align-items: center; }
+.wiz-card { background: var(--surface); }
+.wiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 10px; }
+.wiz-grid select, .wiz-grid input { width: 100%; min-width: 0; }
+.wiz-links { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.wiz-links > .small:first-child { flex-basis: 100%; }
+.wiz-links label.check { min-height: 36px; }
+.wiz-sub { margin: 8px 0 0; }
+.wiz-preview { border-left: 3px solid var(--accent); padding: 6px 10px; background: var(--surface); white-space: pre-wrap; }
+.wiz-preview p { margin: 4px 0 0; }
+.wiz-ai { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.wiz-ai label { display: flex; flex-direction: column; gap: 3px; }
+.wiz-notes { margin: 0; padding-left: 4px; list-style: none; }
+.wiz-notes .need, .wiz-note.need { color: var(--accent); font-weight: 600; }
+.wiz-notes .tip, .wiz-note.tip { color: var(--muted); }
+.wiz-nav { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; background: var(--bg); border-top: 1px solid var(--border); }
+.wiz-nav button { min-width: 96px; }
+.wiz-review { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wiz-review li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); min-width: 0; word-break: break-word; }
+.wiz-review-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wiz-finish { display: flex; flex-direction: column; gap: 8px; }
