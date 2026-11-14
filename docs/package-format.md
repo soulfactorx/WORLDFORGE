@@ -146,6 +146,14 @@
 - 조건 `{ "storylet": "card/…", "is": "갈림길ID" }` · `{ "questStage": "quest/…", "is": 0 }`. 효과 `{ "advanceQuest": "quest/…" }`(임무의 지금 단계를 끝냄) · `{ "openStorylet": "card/…", "inTurns": 2 }`.
 - AI 없이(체험판) 진행할 때는 `text`·`successText`·`failText`가 서술이 된다 (없으면 `situation`).
 
+### 플레이 기본 AI 모델 `playModels` (v0.119)
+
+```json
+"playModels": { "narrator": "claude-sonnet-5-5", "judge": "claude-haiku-5-5" }
+```
+
+제작자가 추천하는 모델 이름. 플레이어의 설정에 등록된 제공자로 요청하고, 플레이어가 플레이 중에 바꿀 수 있다.
+
 ## 검사기
 
 - **오류**가 있으면 플레이할 수 없다: 없는 ID 참조, 중복 ID, 알 수 없는 조건·직업·몬스터·기술, 형식 위반.
