@@ -427,3 +427,7 @@ function tailRules(world: WorldPackage): string {
 ${guideFieldRules()}
 ${guideRules(world)}`;
 }
+
+/** 한 번 호출 턴이 쓰는 AI 설정의 역할 묶음 — 시스템 프롬프트의 첫머리("서술자")로 정해진다 (llm/metrics roleOf) */
+export const ONE_CALL_GROUP = 'narrator' as const;
+export const oneSystemPrompt = () => ONE_SYSTEM;

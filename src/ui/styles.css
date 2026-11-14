@@ -1164,3 +1164,9 @@ button.linklike { background: none; border: none; padding: 0; color: var(--accen
 .head-tools .model-tab { overflow-wrap: anywhere; }
 .play-model-panel .model-modes { gap: 6px 14px; }
 .play-models label { display: flex; flex-direction: column; min-width: 0; margin: 6px 0; }
+.play-model-panel .turn-ai { border-left: 3px solid var(--accent); padding: 4px 10px; margin-bottom: 8px; }
+.play-model-panel .turn-ai p { margin: 4px 0 0; overflow-wrap: anywhere; }
+.play-model-panel .role-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.play-model-panel .role-pick label { display: flex; flex-direction: column; min-width: 0; }
+@media (max-width: 600px) { .play-model-panel .role-pick { grid-template-columns: 1fr; } }
+.turn-ai-note { border-left: 3px solid var(--accent); padding: 4px 10px; overflow-wrap: anywhere; }

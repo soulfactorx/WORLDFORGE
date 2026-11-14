@@ -126,6 +126,11 @@ export function SettingsPanel({ initial, onSaved }: { initial: LlmSettings | nul
         역할마다 다른 제공자와 모델을 쓸 수 있습니다. 비워 두면 기본 제공자({nameOf(defP)})의 기본 모델({defP.model || '아직 없음'})을 씁니다.
         바꾼 뒤에는 📊 품질 점검으로 규칙을 잘 지키는지, AI 사용량의 타임라인으로 속도와 토큰을 확인하세요.
       </p>
+      {(() => {
+        const r = roles.narrator ?? {};
+        const p = list.find((x) => x.id === (r.provider ?? '')) ?? defP;
+        return <p className="small turn-ai-note">▶ <b>플레이의 매 턴 AI 호출(빠른 턴 방식, 1번)</b>은 아래 <b>「서술·전투 서술」</b> 묶음을 씁니다 — 지금: <b>{nameOf(p)}</b> · <code>{r.model?.trim() || p.model || '(모델 없음)'}</code>. 세계가 추천한 모델이 있거나 플레이 중 🤖 버튼에서 바꾸면 그쪽이 먼저입니다.</p>;
+      })()}
       {ROLE_GROUPS.map((g) => {
         const r = roles[g] ?? {};
         const inherit = (g === 'extract' || g === 'bulk') && !r.provider && !r.model?.trim();

@@ -85,7 +85,7 @@ const SCREENS = [
     await p.locator('.saves li', { hasText: '점검용 전투' }).locator('button').first().click();
     await p.waitForSelector('.combat-panel');
   }],
-  ['플레이: AI 모델 바꾸기 (v0.119)', async (p) => { await play(p); await p.click('.head-tools button.model-tab'); await p.click('.play-model-panel label:has-text("직접 고르기") input'); await p.locator('.play-model-panel details.model-picker').evaluate((d) => { d.open = true; }); }],
+  ['플레이: AI 모델 바꾸기 (v0.119)', async (p) => { await play(p); await p.click('.head-tools button.model-tab'); await p.locator('.play-model-panel details.model-picker').evaluate((d) => { d.open = true; }); }],
   ['플레이: 캐릭터', async (p) => { await play(p); await p.click('button:has-text("캐릭터")'); }],
   ['플레이: 수첩', async (p) => { await play(p); await p.click('button:has-text("수첩")'); }],
   ...EDITOR_TABS.map((t) => [`편집: ${t}`, (p) => editorTab(p, t)]),

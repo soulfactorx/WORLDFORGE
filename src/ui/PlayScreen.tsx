@@ -8,8 +8,7 @@ import { runTurn, CONTINUE_INPUT, type ImagePlacer } from '../gm/turn';
 import { runTurnOne } from '../gm/turnOne';
 import { stripMarks } from '../gm/imageMarks';
 import { loadSaveModels, playSettings, type SaveModelChoice, saveSaveModels } from '../llm/override';
-import { resolveRoute } from '../llm/providers';
-import { PlayModelPanel } from './PlayModels';
+import { PlayModelPanel, turnAiLine } from './PlayModels';
 import { type CallRecord, metrics } from '../llm/metrics';
 import { beginDebug, debugStage, endDebug } from '../debug/trace';
 import { DebugPanel, useDebugOn } from './DebugPanel';
@@ -495,7 +494,7 @@ function PlayWorld({ saveId, settings: mySettings, onExit, onConnect, world }: {
             tab('items', '🎒 소지품'),
             ...(shop && !state.combat ? [tab('shop', `🛒 ${rs(shop.name)}`)] : []),
             ...(board && !state.combat ? [tab('board', `📜 ${rs(board.name)}`)] : []),
-            ...(settings ? [tab('model', `🤖 ${resolveRoute(settings, 'narrator').model.split('/').at(-1)!.slice(0, 18)}`, 'model-tab')] : []),
+            ...(mySettings ? [tab('model', `🤖 ${turnAiLine(mySettings, world, modelChoice).model.split('/').at(-1)!.slice(0, 18)}`, 'model-tab')] : []),
           ];
         })()}
         <AvControls onChange={() => setAvTick((n) => n + 1)} dcMod={state.dcMod ?? 0} dcBusy={streaming !== null}

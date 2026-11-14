@@ -88,3 +88,12 @@ describe('한 번 호출 턴 (v0.118)', () => {
     void applyEvent;
   });
 });
+
+describe('한 번 호출 턴의 모델', () => {
+  it('AI 설정의 서술 묶음(narrator)으로 간다', async () => {
+    const { roleOf } = await import('../llm/metrics');
+    const { groupOf } = await import('../llm');
+    const { oneSystemPrompt, ONE_CALL_GROUP } = await import('./turnOne');
+    expect(groupOf(roleOf(oneSystemPrompt()))).toBe(ONE_CALL_GROUP);
+  });
+});
