@@ -21,6 +21,8 @@ export interface EditorDraft {
   world: import('../engine/schema').WorldPackage;
   notes?: string[];
   savedAt: number;
+  /** 편집을 시작한 때의 저장본 (v0.131): 합칠 때 초안이 무엇을 바꿨는지 가려낸다 */
+  origin?: import('../engine/schema').WorldPackage;
 }
 
 export interface SaveMeta {
