@@ -155,3 +155,13 @@ describe('파일 이름 낱말 나누기 (v0.123)', () => {
     expect(res.assets[2]!.kind).toBe('other');
   });
 });
+
+describe('파일 이름 → 태그 (v0.133)', () => {
+  it('낱말 모두 태그로, 성별·배경은 따로', async () => {
+    const { nameWords } = await import('./assetmatch');
+    expect(nameWords('knight_female_smile02.png')).toEqual({ tags: ['knight', 'smile'], gender: 'F', scene: false });
+    expect(nameWords('엘라-견습수도사_웃음 (2).webp', ['엘라'])).toMatchObject({ tags: ['견습수도사', '웃음'] });
+    expect(nameWords('bg_ForestNight_v2.jpg')).toEqual({ tags: ['forest', 'night'], scene: true });
+    expect(nameWords('IMG_20240101_123456.png').tags).toEqual([]);
+  });
+});

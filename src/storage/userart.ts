@@ -48,6 +48,19 @@ export async function addUserArt(files: File[], meta: { kind: UserArt['kind']; g
   return n;
 }
 
+/** 여러 장을 그림마다 다른 종류·성별·태그로 저장 (v0.133, 일괄 올리기 미리보기) */
+export async function addUserArtItems(items: { file: File; kind: UserArt['kind']; gender?: UserArt['gender']; tags: string[]; label?: string }[], onProgress?: (d: number, t: number) => void): Promise<number> {
+  let n = 0;
+  for (const it of items) {
+    const f = it.file;
+    if (!/^image\/(png|jpeg|webp|gif|avif|svg\+xml)$/.test(f.type)) continue;
+    const blob = f.type === 'image/svg+xml' ? f : await shrink(f);
+    await db.userArt.put({ id: crypto.randomUUID().slice(0, 12), kind: it.kind, label: (it.label ?? baseName(f.name)).slice(0, 60) || '그림', tags: it.tags.slice(0, 20), ...(it.gender ? { gender: it.gender } : {}), blob, createdAt: Date.now() + n });
+    onProgress?.(++n, items.length);
+  }
+  return n;
+}
+
 export async function updateUserArt(id: string, patch: Partial<Pick<UserArt, 'label' | 'tags' | 'gender' | 'kind'>>): Promise<void> {
   await db.userArt.update(id, patch);
 }

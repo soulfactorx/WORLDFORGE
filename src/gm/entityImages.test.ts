@@ -11,10 +11,10 @@ describe('인물·장소 이미지 (v0.127)', () => {
     const ids = newImageIds([], 3, 1);
     expect(new Set(ids).size).toBe(3);
     const m = uploadedMeta([{ name: 'lia_front.png', mime: 'image/png', size: 1 }, { name: '리아_웃음_02.webp', mime: 'image/webp', size: 1 }, { name: 'night-angry.jpg', mime: '', size: 1 }], lia, [], ids);
-    expect(m.map((x) => x.tags)).toEqual([['default'], ['웃음'], ['night', 'angry']]);
+    expect(m.map((x) => x.tags)).toEqual([['front', 'default'], ['웃음'], ['night', 'angry']]);
     expect(m[0]).toMatchObject({ kind: 'character', characterId: 'npc/lia', name: 'lia_front' });
     const s = uploadedMeta([{ name: 'square.png', mime: 'image/png', size: 1 }], town, [], ['x']);
-    expect(s[0]).toMatchObject({ kind: 'scene', locationId: 'loc/town', tags: ['default'] });
+    expect(s[0]).toMatchObject({ kind: 'scene', locationId: 'loc/town', tags: ['square', 'default'] });
   });
   it('붙이기·떼기·태그', () => {
     let list = [a('o1', {}), a('stock.x--0', { kind: 'character', characterId: 'npc/lia', tags: ['default'] })];

@@ -5,7 +5,7 @@
  */
 import { EXPRESSIONS, pickCharacterImage, pickSceneImage } from '../engine/assets';
 import type { AssetMeta, WorldPackage } from '../engine/schema';
-import { knownTags } from '../importers/assetmatch';
+import { nameWords } from '../importers/assetmatch';
 
 export type ImageTarget = { kind: 'character' | 'location'; id: string; name: string };
 
@@ -50,12 +50,16 @@ export function newImageIds(assets: AssetMeta[], n: number, now = Date.now()): s
   return out;
 }
 
-/** 직접 올린 파일 → 이 대상의 이미지. 파일 이름에 표정·상황 낱말이 있으면 태그로, 이 대상의 첫 그림이면 기본 모습 */
+/**
+ * 직접 올린 파일 → 이 대상의 이미지 (v0.133: 파일 이름의 낱말을 모두 태그로 — 이 대상의 이름·ID 낱말은 뺀다).
+ * 이 대상의 첫 그림은 기본 모습(default)도 된다. 인물 그림은 이름의 성별 낱말(female·여자…)로 성별도.
+ */
 export function uploadedMeta(files: { name: string; mime: string; size: number }[], t: ImageTarget, assets: AssetMeta[], ids: string[]): AssetMeta[] {
   const first = !imagesOf(assets, t).length;
   return files.map((f, i) => {
-    const tags = knownTags(f.name);
-    return { id: ids[i]!, name: f.name.replace(/\.[a-z0-9]{2,5}$/i, ''), mime: f.mime || 'image/png', size: f.size, ...link(t), tags: tags.length ? tags : first && i === 0 ? ['default'] : [] };
+    const nw = nameWords(f.name, [t.name, t.id.replace(/^[a-z]+\//, '')]);
+    const tags = first && i === 0 && !nw.tags.includes('default') ? [...nw.tags, 'default'] : nw.tags;
+    return { id: ids[i]!, name: f.name.replace(/\.[a-z0-9]{2,5}$/i, ''), mime: f.mime || 'image/png', size: f.size, ...link(t), tags, ...(t.kind === 'character' && nw.gender ? { gender: nw.gender } : {}) };
   });
 }
 

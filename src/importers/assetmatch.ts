@@ -12,6 +12,7 @@ export interface MatchTarget { id: string; aliases: string[]; gender?: 'M' | 'F'
 
 const FILLER = new Set(['img', 'image', 'images', 'asset', 'assets', 'pic', 'picture', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'emotion', 'emotions', 'emo', 'char', 'chara', 'character', 'npc', 'cg', 'ver', 'v',
   'face', 'expression', 'portrait', 'sprite', 'sprites', 'illust', 'art', 'file', 'copy', 'final', 'new', 'old', 'the', 'of', 'and',
+  'a', 'an', 'for', 'with', 'in', 'on', 'at', 'to', 'from', 'by', 'is', 'my', 'very', 'name', 'untitled', 'download', 'edit', 'edited', 'resize', 'resized', 'crop', 'cropped', 'screenshot',
   '이미지', '그림', '사진', '얼굴', '표정', '캐릭터', '초상', '일러', '파일', '사본', '최종']);
 const MAP_WORDS = /^(map|maps|지도|맵|floorplan|layout|구조도)$/;
 /** 배경 그림을 뜻하는 낱말 (v0.123): 장소를 못 찾아도 장면(모든 장소)으로 */
@@ -426,4 +427,22 @@ export async function classifyAssetsVision(
 export function knownTags(name: string): string[] {
   const known = (t: string) => MOOD_WORDS.has(t) || EXPRESSIONS.some((g) => g.words.includes(t));
   return [...new Set(tokenize(name).tokens.flatMap(peel).filter(known))].slice(0, 3);
+}
+
+const FEMALE = /^(f|female|woman|women|girl|lady|여|여자|여성|소녀|숙녀)$/;
+const MALE = /^(m|male|man|men|boy|남|남자|남성|소년)$/;
+
+/**
+ * 파일 이름 → 태그 (v0.133, 내 이미지·인물·장소 그림 올리기): 구분자·글자 종류·낙타 표기로 나눈 낱말 가운데
+ * 숫자·해시·잡음·조사를 뺀 것 모두. 성별 낱말은 성별로, 배경 낱말은 장면 그림이라는 뜻으로 따로 알려 준다.
+ * drop: 태그에서 뺄 낱말 (예: 그 인물의 이름)
+ */
+export function nameWords(name: string, drop: string[] = []): { tags: string[]; gender?: 'M' | 'F'; scene: boolean } {
+  const { tokens, gender: g0 } = tokenize(name);
+  const words = tokens.flatMap(peel);
+  const gender = g0 ?? (words.some((w) => FEMALE.test(w)) ? 'F' : words.some((w) => MALE.test(w)) ? 'M' : undefined);
+  const scene = words.some((w) => SCENE_WORDS.test(w) || MAP_WORDS.test(w));
+  const skip = new Set(drop.flatMap((d) => splitWords(d)));
+  const tags = [...new Set(words.filter((w) => !isNoise(w) && !FILLER.has(w) && !PARTICLE.test(w) && !FEMALE.test(w) && !MALE.test(w) && !SCENE_WORDS.test(w) && !skip.has(w) && !/^[a-z]$/.test(w)))].slice(0, 10);
+  return { tags, ...(gender ? { gender } : {}), scene };
 }
