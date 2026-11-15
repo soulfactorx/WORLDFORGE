@@ -4,6 +4,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { STOCK_ART } from '../data/stockart';
+import { EXPRESSIONS } from '../engine/assets';
 import type { AssetMeta, WorldPackage } from '../engine/schema';
 import { newImageIds } from '../gm/entityImages';
 import { nextStockIndex, stockAsset } from '../gm/worldgen/stock';
@@ -11,6 +12,7 @@ import { assetBlob, storeAssets } from '../storage/assets';
 import { listPackages } from '../storage/packages';
 import { listUserArt } from '../storage/userart';
 import { AssetImage } from './AssetImage';
+import { UserArtUpload } from './UserArtUpload';
 
 type Src = 'world' | 'user' | 'stock';
 interface Item { key: string; src: Src; from: string; pkg: string; id: string; name: string; kind: string; tags: string[]; gender?: 'M' | 'F'; sub: string; hay: string; meta?: AssetMeta }
@@ -35,6 +37,8 @@ export function LibraryImages({ target, kind, onAdd, onClose }: {
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   }, [busy]);
 
+  const [reload, setReload] = useState(0);
+  const [uploading, setUploading] = useState(false);
   useEffect(() => {
     void (async () => {
       const out: Item[] = [];
@@ -56,7 +60,7 @@ export function LibraryImages({ target, kind, onAdd, onClose }: {
       for (const s of STOCK_ART) out.push({ key: `stock|${s.id}`, src: 'stock', from: '앱 기본 이미지', pkg: target.manifest.id, id: `stock.${s.id}`, name: s.label, kind: s.kind, tags: s.tags, ...(s.gender ? { gender: s.gender } : {}), sub: '앱 기본 이미지', hay: [s.label, ...s.tags].join(' ').toLowerCase() });
       setItems(out); setHidden(skip);
     })();
-  }, []);
+  }, [reload]);
 
   const sources = useMemo(() => [...new Set(items.filter((i) => i.src === 'world').map((i) => i.from))], [items]);
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -83,7 +87,10 @@ export function LibraryImages({ target, kind, onAdd, onClose }: {
     let n = nextStockIndex([...assets, ...out]);
     for (const c of chosen.filter((i) => i.src !== 'world')) {
       const art = { id: c.src === 'user' ? `u:${c.id.slice(5)}` : c.id.slice(6), kind: (c.kind === 'scene' ? 'scene' : 'character') as 'scene' | 'character', label: c.name, tags: c.tags, ...(c.gender ? { gender: c.gender } : {}) };
-      out.push({ ...stockAsset(art, n++, {}), kind });
+      const meta = { ...stockAsset(art, n++, {}), kind };
+      // 내 이미지의 태그는 그대로 가져온다 (표정 태그가 없으면 기본 모습도) — 앱 기본 이미지는 기본 모습
+      if (c.src === 'user' && c.tags.length) meta.tags = kind === 'character' && !c.tags.some((t) => EXPRESSIONS.some((g) => g.key === t || g.words.includes(t))) ? [...c.tags, 'default'] : [...c.tags];
+      out.push(meta);
     }
     onAdd(out);
   }
@@ -92,6 +99,11 @@ export function LibraryImages({ target, kind, onAdd, onClose }: {
     <div className="dialog library lib-images" role="dialog" aria-label="만계서고에서 그림 고르기">
       <div className="row"><b className="multiverse-title">🌌 만계서고에서 그림 고르기</b><span className="spacer" /><button type="button" onClick={onClose} disabled={!!busy}>닫기</button></div>
       <p className="small muted">다른 세계의 그림 · 내 기본 이미지 · 앱 기본 이미지에서 여러 장을 골라 넣습니다. 다른 세계의 그림은 이 세계로 복사되고, 태그도 함께 옵니다.</p>
+      <div className="row">
+        <button type="button" className={uploading ? 'on' : ''} aria-expanded={uploading} onClick={() => setUploading((v) => !v)}>⇧ 내 이미지 올리기 (일괄)</button>
+        <span className="small muted">올린 그림은 「내 기본 이미지」에 모여 모든 세계에서 쓸 수 있습니다.</span>
+      </div>
+      {uploading && <UserArtUpload defaultKind={kind} onDone={() => { setReload((n) => n + 1); setFrom('user'); setUploading(false); }} />}
       <div className="lib-img-filters">
         <label>어디서
           <select value={from} onChange={(e) => { setFrom(e.target.value); setLimit(PAGE); }}>

@@ -10,6 +10,7 @@ import type { WorldPackage } from '../engine/schema';
 import { assetBlob, storeAssets } from '../storage/assets';
 import { listPackages, packageKey } from '../storage/packages';
 import { AssetImage } from './AssetImage';
+import { UserArtManager } from './UserArtManager';
 import { confirmAdult } from './adult';
 import { JsonTree } from './DebugPanel';
 import { zoomImage } from './Lightbox';
@@ -40,6 +41,8 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
   const toggleWhole = (s: Src) => setBasket((b) => { const n = new Map(b); const k = wholeKey(s.key); if (n.has(k)) n.delete(k); else { for (const key of [...n.keys()]) if (key.startsWith(`${s.key}|`)) n.delete(key); n.set(k, { src: s.key, kind: 'whole', id: '*', name: `세계 통째로 — ${s.world.manifest.name}` }); } return n; });
   const [opts, setOpts] = useState({ withKnowledge: true, withImages: true, withFaction: true, link: true });
   const [busy, setBusy] = useState('');
+  /** 내 이미지 관리 (v0.133): 만계서고 안에서 올리기·일괄 올리기·태그 고치기 */
+  const [artOpen, setArtOpen] = useState(false);
   /** 자세히 보기 (v0.66) */
   const [detail, setDetail] = useState<{ src: Src; e: CatalogEntry } | null>(null);
   const [error, setError] = useState('');
@@ -121,7 +124,10 @@ export function WorldLibrary({ target, onApply, onClose, title }: {
   const shown = rows.slice(0, limit);
   return (
     <div className="dialog library">
-      <div className="row"><b className="multiverse-title">🌌 {title ?? '만계서고 萬界書庫'}</b><span className="small muted">멀티버스 아카이브 — 모든 세계가 만나는 곳</span><span className="spacer" /><button type="button" onClick={onClose} disabled={!!busy}>닫기</button></div>
+      <div className="row"><b className="multiverse-title">🌌 {title ?? '만계서고 萬界書庫'}</b><span className="small muted">멀티버스 아카이브 — 모든 세계가 만나는 곳</span><span className="spacer" />
+        <button type="button" className={artOpen ? 'on' : ''} aria-expanded={artOpen} onClick={() => setArtOpen((v) => !v)} title="모든 세계에서 쓰는 내 이미지를 올리고(일괄)·태그를 고치고·지운다">🖼 내 이미지 관리</button>
+        <button type="button" onClick={onClose} disabled={!!busy}>닫기</button></div>
+      {artOpen && <div className="lib-art"><UserArtManager onClose={() => setArtOpen(false)} /></div>}
       <p className="small muted">만들어 둔 세계(우주)들의 <b>존재·사물</b>(인물·장소·아이템…)과 <b>서사·법칙</b>(이야기 줄기·임무·결말…)을 골라 담아 <b>{target.manifest.name}</b>(으)로 불러옵니다. AI를 다시 쓰지 않습니다. 겹치는 ID는 새로 붙이고, 딸린 것과 서사가 가리키는 것(인물·장소·플래그·조우…)도 함께 옮깁니다.</p>
       <div className="universes">
         <button type="button" className={`universe${from === 'all' ? ' on' : ''}`} onClick={() => { setFrom('all'); setLimit(PAGE); }}><b>✦ 모든 우주</b><span>{srcs.length}개 세계</span></button>

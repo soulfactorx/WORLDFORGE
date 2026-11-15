@@ -99,7 +99,7 @@ export function EntityImages({ w, target, onChange, onPortrait }: {
         <button type="button" className={open === 'library' ? 'on' : ''} aria-expanded={open === 'library'} onClick={() => setOpen(open === 'library' ? '' : 'library')}>🌌 만계서고에서 고르기</button>
         {assets.length > list.length && <button type="button" className={open === 'world' ? 'on' : ''} aria-expanded={open === 'world'} onClick={() => setOpen(open === 'world' ? '' : 'world')}>🔍 이 세계의 그림에서</button>}
       </div>
-      <p className="small muted">파일 이름에 표정·상황 낱말(웃음·smile·밤…)이 있으면 그 태그가 저절로 붙습니다.</p>
+      <p className="small muted">파일 이름을 낱말로 나눠 태그로 붙입니다 (예: <code>엘라_웃음_밤.png</code> → 웃음, 밤 — 이 인물·장소의 이름과 숫자는 뺍니다). 첫 그림은 기본 그림이 됩니다.</p>
       {busy && <p className="small status">{busy}</p>}
       {open === 'world' && (
         <ImageSearchGrid w={{ ...w, assets: assets.filter((a) => !list.includes(a)) }} fx={false} onPick={(id) => { onChange(attachImages(assets, [id], target)); setBusy('붙였습니다. 태그를 확인하세요.'); }} />

@@ -2,8 +2,10 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { STOCK_ART, stockDataUrl } from '../data/stockart';
 import { db, type UserArt } from '../storage/db';
-import { addUserArt, applyUserArtToLibrary, deleteUserArt, exportUserArt, importUserArt, updateUserArt } from '../storage/userart';
+import { applyUserArtToLibrary, deleteUserArt, exportUserArt, importUserArt, updateUserArt } from '../storage/userart';
 import { imageNeeds, needsText } from '../gm/worldgen/imageNeeds';
+import { nameWords } from '../importers/assetmatch';
+import { UserArtUpload } from './UserArtUpload';
 
 const KIND = [['character', '인물'], ['scene', '장소·장면']] as const;
 const GENDER = [['', '성별 없음'], ['F', '여'], ['M', '남']] as const;
@@ -21,21 +23,9 @@ function Thumb({ art }: { art: UserArt }) {
  */
 export function UserArtManager({ onClose }: { onClose: () => void }) {
   const list = useLiveQuery(() => db.userArt.orderBy('createdAt').toArray(), []) ?? [];
-  const [kind, setKind] = useState<UserArt['kind']>('character');
-  const [gender, setGender] = useState<'' | 'M' | 'F'>('');
-  const [tags, setTags] = useState('');
   const [filter, setFilter] = useState<'all' | UserArt['kind']>('all');
   const [status, setStatus] = useState('');
   const [showBuiltin, setShowBuiltin] = useState(false);
-
-  async function upload(files: FileList | null) {
-    if (!files?.length) return;
-    setStatus('저장 중…');
-    try {
-      const n = await addUserArt([...files], { kind, ...(gender ? { gender } : {}), tags: splitTags(tags) }, (d, t) => setStatus(`저장 중… ${d}/${t}`));
-      setStatus(`${n}장을 추가했습니다.${await applyReport()}`);
-    } catch (e) { setStatus(`❌ ${(e as Error).message}`); }
-  }
 
   async function backup() {
     const blob = await exportUserArt();
@@ -68,24 +58,19 @@ export function UserArtManager({ onClose }: { onClose: () => void }) {
         <b> 태그</b>에 신분·직업·장소 낱말(예: 기사, 시녀, 마법사 / 정원, 집무실, 숲)을 적어 두면 잘 골라집니다.
       </p>
 
-      <fieldset>
-        <legend>그림 추가</legend>
-        <div className="row">
-          <label>종류<select value={kind} onChange={(e) => setKind(e.target.value as UserArt['kind'])}>{KIND.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-          {kind === 'character' && <label>성별<select value={gender} onChange={(e) => setGender(e.target.value as typeof gender)}>{GENDER.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>}
-          <label>태그 (쉼표로 구분)<input value={tags} placeholder={kind === 'character' ? '기사, knight, 호위' : '정원, garden, 장미'} onChange={(e) => setTags(e.target.value)} /></label>
-        </div>
-        <label className="file">이미지 파일 고르기 (여러 장 가능, png·jpg·webp·gif·svg)
-          <input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml" onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
-        </label>
-        <p className="muted small">큰 그림은 긴 변 1024px로 줄여 저장합니다. 파일 이름이 그림 이름이 됩니다.</p>
-      </fieldset>
+      <UserArtUpload onDone={async () => setStatus(`올렸습니다.${await applyReport()}`)} />
+      <p className="muted small">큰 그림은 긴 변 1024px로 줄여 저장합니다.</p>
 
       <div className="row">
         <label>보기<select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
           <option value="all">전체 ({list.length})</option>
           {KIND.map(([v, l]) => <option key={v} value={v}>{l} ({list.filter((a) => a.kind === v).length})</option>)}
         </select></label>
+        <button type="button" disabled={!shown.length} title="그림 이름(올릴 때의 파일 이름)을 낱말로 나눠 태그에 더한다" onClick={async () => {
+          let n = 0;
+          for (const a of shown) { const nw = nameWords(a.label); const tags = [...new Set([...a.tags, ...nw.tags])].slice(0, 20); if (tags.length !== a.tags.length || (!a.gender && nw.gender && a.kind === 'character')) { await updateUserArt(a.id, { tags, ...(!a.gender && nw.gender && a.kind === 'character' ? { gender: nw.gender } : {}) }); n++; } }
+          setStatus(n ? `${n}장에 이름의 낱말을 태그로 더했습니다.${await applyReport()}` : '더할 낱말이 없었습니다.');
+        }}>🏷 이름으로 태그 채우기 ({shown.length}장)</button>
         <span className="spacer" />
         <button onClick={backup} disabled={!list.length}>⇩ 묶음 파일로 백업 (.wfart)</button>
         <label className="file">⇧ 묶음 파일 가져오기<input type="file" accept=".wfart,.zip,application/zip" onChange={(e) => { restore(e.target.files?.[0]); e.target.value = ''; }} /></label>

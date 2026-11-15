@@ -1296,3 +1296,16 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .merge-kind.added { border-color: var(--accent); color: var(--accent); }
 .merge-foot { position: sticky; bottom: 0; background: var(--surface); padding-top: 6px; }
 .merge-kind.changed { border-color: var(--accent); color: var(--accent); }
+
+/* 내 이미지 일괄 올리기 (v0.133) */
+.art-upload-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 10px; align-items: end; }
+.art-upload-opts label:not(.check) { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.art-upload-opts select, .art-upload-opts input { width: 100%; min-width: 0; }
+.art-pending { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow: auto; }
+.art-pending li { display: flex; gap: 8px; align-items: flex-start; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); min-width: 0; }
+.art-pending img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; flex: 0 0 auto; }
+.art-pending-fields { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.art-pending-fields input { width: 100%; min-width: 0; }
+.art-pending-fields .row { gap: 4px; flex-wrap: wrap; }
+.lib-art > .panel { margin: 0; border: 1px dashed var(--border); }
+.art-pending li > button { white-space: nowrap; flex: 0 0 auto; }

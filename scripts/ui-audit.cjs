@@ -204,6 +204,25 @@ const SCREENS = [
     await p.click('.gimmick-add button');
     await p.waitForSelector('.gimmick-form');
   }],
+  ['내 이미지: 일괄 올리기 미리보기 (v0.133)', async (p) => {
+    await home(p);
+    await p.click('.home-tabs button:has-text("세계관")');
+    await p.click('button:has-text("내 기본 이미지")');
+    // 1×1 png
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    await p.locator('.art-upload input[type=file]').setInputFiles([
+      { name: 'knight_female_smile02.png', mimeType: 'image/png', buffer: png },
+      { name: 'bg_ForestNight_v2.png', mimeType: 'image/png', buffer: png },
+      { name: 'very-long-file-name-for-a-wizard-character-portrait-angry.png', mimeType: 'image/png', buffer: png },
+    ]);
+    await p.waitForSelector('.art-pending li');
+  }],
+  ['편집: 만계서고 내 이미지 관리 (v0.133)', async (p) => {
+    await editor(p);
+    await p.click('.editor-bar button[aria-label="만계서고에서 불러오기"]');
+    await p.click('.library button:has-text("내 이미지 관리")');
+    await p.waitForSelector('.lib-art .art-upload');
+  }],
   ['홈: 이어서 만들기 (v0.126)', async (p) => {
     await wizard(p);
     await p.fill('label:has-text("세계 이름") input', '만들던 세계');
