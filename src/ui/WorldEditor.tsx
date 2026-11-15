@@ -5,6 +5,7 @@ import { AutoPlayPanel, LabPanel } from './WorldLab';
 import { SKILL_IDS } from '../engine/character/rules';
 import { SceneForms } from './SceneForms';
 import { PortraitPicker } from './PortraitPicker';
+import { EntityImages } from './EntityImages';
 import { deleteAssets, storeAssets } from '../storage/assets';
 import { addSource, removeSource, sourcesOf } from '../engine/sources';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
@@ -439,6 +440,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
               <Text label="ID" value={l.id} onChange={(id) => up({ id })} />
               <Text label="이름" value={l.name} onChange={(name) => up({ name })} />
               <Area label="묘사 (플레이어가 감각으로 알 수 있는 것)" value={l.description} onChange={(description) => up({ description })} />
+              <EntityImages w={w} target={{ kind: 'location', id: l.id, name: l.name }} onChange={(assets) => set({ assets })} />
               <Select label="AI 즉흥 설정" value={l.improvisation ?? 'minor'} options={IMPROV} onChange={(improvisation) => up({ improvisation })} />
               <fieldset><legend>연결된 장소</legend>
                 <div className="skill-grid">
@@ -508,6 +510,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
               <Area label="배경 (이 인물만 아는 과거)" value={c.background} onChange={(background) => up({ background: background || undefined })} rows={3} />
               <Area label="첫 만남의 말 (참고)" value={c.greeting} onChange={(greeting) => up({ greeting: greeting || undefined })} rows={2} />
               <PortraitPicker c={c} w={w} onChange={(portrait) => up({ portrait })} />
+              <EntityImages w={w} target={{ kind: 'character', id: c.id, name: c.name }} onChange={(assets) => set({ assets })} onPortrait={(portrait) => up({ portrait })} />
               {c.source && <p className="muted small">출처: {c.source.format.toUpperCase()} "{c.source.name}"{c.source.creator && ` · 제작 ${c.source.creator}`} · 가져온 날 {c.source.importedAt.slice(0, 10)}</p>}
               <Select label="있는 곳" value={c.locationId} options={locOptions} onChange={(locationId) => up({ locationId })} />
               <StructField w={w} spec={{ list: SPEC.goals }} label="목표 (이 인물이 스스로 이루려는 일 — 시작하면 날 수가 지나 이뤄지고, 막는 조건이면 꺾인다)" value={c.goals ?? []} onChange={(goals) => up({ goals: Array.isArray(goals) && goals.length ? goals : undefined })} rows={4}

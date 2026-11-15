@@ -184,6 +184,20 @@ const SCREENS = [
     const f = p.locator('.struct-field', { hasText: '갈래 카드' }).first();
     await f.locator('button:has-text("＋ 갈래 카드 추가")').click();
   }],
+  ['편집: 인물 이미지 (v0.127)', async (p) => {
+    await editorTab(p, '인물');
+    const box = p.locator('.entity-images').first();
+    await box.scrollIntoViewIfNeeded();
+    const tagBtn = box.locator('button:has-text("🏷 태그")').first();
+    if (await tagBtn.count()) await tagBtn.click();
+  }],
+  ['편집: 장소 이미지 · 만계서고 (v0.127)', async (p) => {
+    await editorTab(p, '장소');
+    const box = p.locator('.entity-images').first();
+    await box.locator('button:has-text("만계서고에서 고르기")').click();
+    await p.waitForSelector('.lib-images .lib-cell');
+    await p.locator('.lib-images .lib-cell').first().click();
+  }],
   ['홈: 이어서 만들기 (v0.126)', async (p) => {
     await wizard(p);
     await p.fill('label:has-text("세계 이름") input', '만들던 세계');
