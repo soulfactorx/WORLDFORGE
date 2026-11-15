@@ -12,6 +12,7 @@ import { db } from '../storage/db';
 import { applyUserArt, imageNeeds, needsText, targetTag } from '../gm/worldgen/imageNeeds';
 import { addUserArt, listUserArt } from '../storage/userart';
 import { AssetTools } from './AssetTools';
+import { ImageFileButtons } from './ImageFiles';
 import { AssetFilterBar } from './AssetFilterBar';
 import { type AssetFilter, EMPTY_FILTER, filterAssets } from '../gm/assetFilter';
 
@@ -36,7 +37,7 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
     } catch (e) { setBusy(`❌ ${(e as Error).message}`); }
   }
   const needs = imageNeeds(world);
-  async function uploadFor(need: ReturnType<typeof imageNeeds>[number], files: FileList | null) {
+  async function uploadFor(need: ReturnType<typeof imageNeeds>[number], files: FileList | File[] | null) {
     if (!files?.length) return;
     setBusy('내 기본 이미지에 저장하는 중…');
     try {
@@ -102,7 +103,7 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
                   <b>{nd.kind === 'character' ? '인물' : '장소'} · {nd.name}</b> <span className="small muted">{nd.status === 'stock' ? '앱 내장 그림으로 대신하는 중' : '이미지 없음'} · 추천 파일 이름 <code>{nd.fileName}</code></span>
                   {nd.describe && <span className="small muted need-desc">{nd.describe}</span>}
                 </span>
-                <label className="file small">⇧ 그림 올리기<input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml" multiple onChange={(e) => { uploadFor(nd, e.target.files); e.target.value = ''; }} /></label>
+                <ImageFileButtons className="file small" label="⇧ 그림 올리기" onFiles={(fs) => void uploadFor(nd, fs)} />
               </li>
             );
           })}

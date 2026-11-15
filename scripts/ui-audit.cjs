@@ -210,7 +210,8 @@ const SCREENS = [
     await p.click('button:has-text("내 기본 이미지")');
     // 1×1 png
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-    await p.locator('.art-upload input[type=file]').setInputFiles([
+    await p.locator('.art-upload input[type=file]').first().setInputFiles([
+      { name: '1000012345.jpg', mimeType: 'image/jpeg', buffer: png },
       { name: 'knight_female_smile02.png', mimeType: 'image/png', buffer: png },
       { name: 'bg_ForestNight_v2.png', mimeType: 'image/png', buffer: png },
       { name: 'very-long-file-name-for-a-wizard-character-portrait-angry.png', mimeType: 'image/png', buffer: png },

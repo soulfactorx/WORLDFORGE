@@ -1309,3 +1309,9 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .art-pending-fields .row { gap: 4px; flex-wrap: wrap; }
 .lib-art > .panel { margin: 0; border: 1px dashed var(--border); }
 .art-pending li > button { white-space: nowrap; flex: 0 0 auto; }
+
+/* 모바일 그림 고르기 (v0.134) */
+.image-pick-pair { display: flex; flex-wrap: wrap; gap: 6px; }
+.nameless-bar { padding: 8px 10px; border: 1px solid var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.nameless-bar p { margin: 0 0 6px; }
+.nameless-bar .row input { flex: 1 1 180px; min-width: 0; }

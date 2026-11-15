@@ -9,6 +9,7 @@ import { assetUrl, storeAssets } from '../storage/assets';
 import { AssetImage } from './AssetImage';
 import { ImageSearchGrid } from './ImagePicker';
 import { LibraryImages } from './LibraryImages';
+import { ImageFileButtons, meaninglessName } from './ImageFiles';
 
 const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/avif';
 
@@ -35,9 +36,12 @@ export function EntityImages({ w, target, onChange, onPortrait }: {
       const ids = newImageIds(assets, files.length);
       const r = await storeAssets(w.manifest.id, files.map((f, i) => ({ id: ids[i]!, read: async () => f })), (d, t) => setBusy(`그림 저장 중… ${d}/${t}`));
       const bad = new Set(r.failed);
-      const metas = uploadedMeta(files.map((f) => ({ name: f.name, mime: f.type, size: f.size })), target, assets, ids).filter((m) => !bad.has(m.id));
+      // 휴대폰 사진 앱은 파일 이름을 넘겨주지 않는다 (숫자·image) — 그런 그림은 "이름 N"으로 하고 태그는 직접 (v0.134)
+      let k = list.length;
+      const nameless = files.filter((f) => meaninglessName(f.name)).length;
+      const metas = uploadedMeta(files.map((f) => ({ name: meaninglessName(f.name) ? `${target.name} ${++k}` : f.name, mime: f.type, size: f.size })), target, assets, ids).filter((m) => !bad.has(m.id));
       onChange([...assets, ...metas]);
-      setBusy(`${metas.length}장을 넣었습니다. 그림마다 태그를 붙여 언제 보일지 정하세요. 저장을 눌러야 반영됩니다.`);
+      setBusy(`${metas.length}장을 넣었습니다. 그림마다 태그를 붙여 언제 보일지 정하세요. 저장을 눌러야 반영됩니다.${nameless ? ` 📱 ${nameless}장은 파일 이름이 전달되지 않아(휴대폰 사진 앱) 태그를 붙이지 못했습니다 — 🏷 태그로 정하거나 「📁 파일 앱에서」로 고르면 이름이 남습니다.` : ''}`);
     } catch (e) { setBusy(`❌ ${(e as Error).message}`); }
   }
   async function asPortrait(id: string) {
@@ -95,7 +99,7 @@ export function EntityImages({ w, target, onChange, onPortrait }: {
       {!list.length && <p className="small muted">아직 이 {word}의 그림이 없습니다. 플레이 중에는 앱의 기본 그림이 쓰일 수 있습니다.</p>}
 
       <div className="row entity-add">
-        <label className="file">📁 파일에서 추가<input type="file" multiple accept={ACCEPT} onChange={(e) => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; void addFiles(fs); }} /></label>
+        <ImageFileButtons label="📁 파일에서 추가" onFiles={(fs) => void addFiles(fs)} />
         <button type="button" className={open === 'library' ? 'on' : ''} aria-expanded={open === 'library'} onClick={() => setOpen(open === 'library' ? '' : 'library')}>🌌 만계서고에서 고르기</button>
         {assets.length > list.length && <button type="button" className={open === 'world' ? 'on' : ''} aria-expanded={open === 'world'} onClick={() => setOpen(open === 'world' ? '' : 'world')}>🔍 이 세계의 그림에서</button>}
       </div>
