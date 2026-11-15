@@ -22,7 +22,8 @@ import type { NarrationImage } from '../engine/state/events';
 import { fmtMinutes, TIME_STEPS, type TimeSpent, turnMinutes } from '../engine/time';
 import { MAX_SHIFT, traitsFor } from '../engine/traits';
 import { traitShift } from '../engine/traitShift';
-import { debugNote, imageNote } from '../debug/trace';
+import { debugNote } from '../debug/trace';
+import { stickyImages } from './stickyImages';
 import { josa } from '../engine/text/josa';
 import { relationshipEvents } from './relationship';
 import { progressEvents } from './progression';
@@ -740,7 +741,9 @@ export async function runTurn(
   onStage('장면을 서술하는 중');
   // 그림 고르기에 필요한 것(배경·말한 인물의 표정)은 이미 정해졌다 — 화면이 글과 함께 그림을 놓을 수 있게 넘긴다 (v0.88)
   const imageSpeakers = actorResults.map((r) => ({ id: r.npc.id, name: r.npc.name, expression: r.out.expression ?? '', dialogue: r.out.dialogue ?? '' }));
-  try { play.onImages?.((text) => turnImages(world, s, d.scene_image ?? '', imageSpeakers, moving, turn, text)); } catch { /* 미리 보기 실패는 무시 — 끝나면 저장된 그림이 나온다 */ }
+  // 서술 그림 고정 (v0.137): 흘러나오는 동안 놓인 그림을 끝난 뒤에도 그대로 — 화면과 저장이 같은 목록
+  const sticky = stickyImages((text) => { const why: string[] = []; const images = turnImages(world, s, d.scene_image ?? '', imageSpeakers, moving, turn, text, why); return { images, why: why.filter((w) => !w.startsWith('(')) }; });
+  try { play.onImages?.((text) => sticky.place(text)); } catch { /* 미리 보기 실패는 무시 — 끝나면 저장된 그림이 나온다 */ }
   // 선택지 꼬리 (v0.111, 설계 v6 M1): 안내를 따로 부르지 않고 서술과 같은 응답에서 받는다. 전투·장면이 막 시작됐으면 선택지가 필요 없다
   const wantChoices = !ahead.combat && !ahead.scene && !ahead.playerDead;
   const raw = await llm.stream(
@@ -752,9 +755,8 @@ export async function runTurn(
     wantChoices ? tailFilter(onNarration) : onNarration, signal,
   );
   const { narration, tail } = wantChoices ? splitTail(raw) : { narration: raw, tail: null };
-  const imgWhy: string[] = [];
-  const { result: images, picks: imgPicks } = traceImages(() => turnImages(world, s, d.scene_image ?? '', imageSpeakers, moving, turn, narration, imgWhy));
-  debugNote('이미지 선택 — 서술', imageNote(images, imgWhy, imgPicks, { 'GM 판단 장면 태그(scene_image)': d.scene_image ?? '', '말한 인물 표정(Actor expression)': actorResults.map((r) => `${r.npc.name}: ${r.out.expression || '(없음)'}`).join(', ') || '(말한 인물 없음)', '장소 이동': moving ? '예' : '아니오' }));
+  const images = sticky.place(narration, true);
+  debugNote('이미지 선택 — 서술', sticky.note({ 'GM 판단 장면 태그(scene_image)': d.scene_image ?? '', '말한 인물 표정(Actor expression)': actorResults.map((r) => `${r.npc.name}: ${r.out.expression || '(없음)'}`).join(', ') || '(말한 인물 없음)', '장소 이동': moving ? '예' : '아니오' }));
   debugNote('연출 지시 · 이야기 전환', { '연출 지시(beat)': beat ?? '(없음)', '서술 앞에 확정된 전환': transitions.length ? transitions : '(없음)' });
   push({ type: 'narration', text: narration, ...(images.length ? { images } : {}) });
   post.forEach(push);
@@ -801,8 +803,8 @@ export function ledgerBlock(s: GameState, n = 4): string {
 }
 
 /** 서술 글에 놓을 그림 (한 번 호출 턴, v0.118): 글에 이름·직함이 나온 인물과 장소 배경 */
-export function turnImagesFor(world: WorldPackage, s: GameState, _present: string[], turn: number, narration: string): NarrationImage[] {
-  return turnImages(world, s, '', [], false, turn, narration);
+export function turnImagesFor(world: WorldPackage, s: GameState, _present: string[], turn: number, narration: string, why: string[] = []): NarrationImage[] {
+  return turnImages(world, s, '', [], false, turn, narration, why);
 }
 
 /** 지금 국면의 GM 스타일을 입힌 세계 (프롬프트용, v0.113) */

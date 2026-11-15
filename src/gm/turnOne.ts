@@ -51,7 +51,9 @@ import { falloutEvents, stakeEvents } from './stakes';
 import { phaseBlock, phaseEvents, phaseTransitionLines } from './phase';
 import { chooseOptionEvents, openedLines, openStoryletEvents } from './storylets';
 import { basicGuide, CHOICE_TAIL_SCHEMA_TEXT, guideEvent, guideFieldRules, type GuideOutput, guideMaterials, guideRules, pacing, splitTail, tailFilter, TAIL_MARK } from './guide';
-import { imageMenu, mergeMarkedImages, stripMarks } from './imageMarks';
+import { imageMenu, marksToImages, readMarks, stripMarks } from './imageMarks';
+import { stickyImages } from './stickyImages';
+import { debugNote } from '../debug/trace';
 import { CONTINUE_INPUT, ledgerBlock, phaseStyled, recorderEvents, scenarioBlock, systemExtras, type ImagePlacer, type TurnResult, turnImagesFor } from './turn';
 
 /** AI가 서술 끝에 붙이는 JSON (선택지 꼬리 + 엔진 요청) */
@@ -278,8 +280,28 @@ export async function runTurnOne(
     `\n\n## 플레이어 행동 (데이터)\n${continuing ? '(이어서) 플레이어는 하던 일을 이어 가며 흐름에 맡긴다 — 몽타주로: 흐른 시간을 압축해 건너뛰고(time: stretch), 다시 정해야 할 일이 생기는 순간에서 멈춘다. 플레이어의 새 결정·대사는 지어내지 않는다.' : `<player_input>\n${input}\n</player_input>${opt ? '\n(플레이어가 고른 갈래 카드의 갈림길이다)' : ''}`}`,
   ].join('');
   // 그림 (v0.119): AI가 서술 속 [[그림 …]] 표시로 자리와 표정을 고른다. 표시가 없으면 엔진의 짐작
-  const imagesFor = (text: string) => mergeMarkedImages(world, s, text, String(turn), (clean) => turnImagesFor(world, s, present.map((c) => c.id), turn, clean));
-  try { play.onImages?.(imagesFor); } catch { /* 무시 */ }
+  // 서술 속 그림 (v0.119 표시 + v0.137 고정): AI가 [[그림 …]]으로 표시한 그림이 있으면 그것을, 없으면 엔진 짐작.
+  // 흘러나오는 동안 놓인 그림은 끝난 뒤에도 바뀌지 않는다 (stickyImages) — 화면과 저장이 같은 목록, 까닭은 디버그에
+  const sticky = stickyImages((text) => {
+    const fbWhy: string[] = [];
+    const base = turnImagesFor(world, s, present.map((c) => c.id), turn, stripMarks(text), fbWhy);
+    const baseWhy = fbWhy.filter((w) => !w.startsWith('('));
+    const marked = marksToImages(world, s, text, String(turn));
+    if (!marked.length) return { images: base, why: baseWhy.map((w) => `엔진 짐작 — ${w}`) };
+    const marks = readMarks(text);
+    const bgMark = marked.find((m) => m.bg);
+    const bgBase = base.find((b) => b.bg);
+    const bg = bgMark ?? bgBase;
+    const people = marked.filter((m) => !m.bg);
+    const images = [...(bg ? [bg] : []), ...people].slice(0, 6);
+    const why = images.map((im) => {
+      if (im === bgBase) return `엔진 — ${baseWhy[base.indexOf(im)] ?? '배경'} (AI가 배경 표시를 하지 않음)`;
+      const m = marks.find((x) => (im.bg ? x.kind === 'bg' : x.kind === 'char' && x.para === im.para));
+      return `AI가 서술에 표시함 [[${im.bg ? '배경' : '그림'} ${m ? `${m.id ?? ''} ${m.tag}`.trim() : ''}]]`;
+    });
+    return { images, why };
+  });
+  try { play.onImages?.((text) => sticky.place(text)); } catch { /* 무시 */ }
   const raw = await llm.stream({ system: sys, user, maxTokens: 6000 }, tailFilter(onNarration), signal);
   const { narration: rawNarration, tail } = splitTail(raw);
   const narration = stripMarks(rawNarration).trim();
@@ -412,7 +434,13 @@ export async function runTurnOne(
   phaseEvents(world, ahead, post).forEach(queue);
 
   // ── 7) 기록: 서술 → 그 뒤의 일 → 선택지
-  const { result: images } = traceImages(() => imagesFor(rawNarration));
+  const images = sticky.place(rawNarration, true);
+  const marks = readMarks(rawNarration);
+  debugNote('이미지 선택 — 서술', sticky.note({
+    'AI가 서술에 쓴 그림 표시': marks.length ? marks.map((m) => `[[${m.kind === 'bg' ? '배경' : '그림'} ${m.id ? `${m.id} ` : ''}${m.tag}]] → ${m.para + 1}번째 문단`).join(' · ') : '(없음 — 엔진이 서술에 나온 인물·문맥으로 짐작)',
+    '이 장면의 인물': present.map((c) => c.name).join(', ') || '(없음)',
+    'AI에게 준 그림 목록': imageMenu(world, s, present) ? '줌 (인물별 표정·장면 태그)' : '(이 장면에 그림이 있는 인물·장소 없음)',
+  }));
   push({ type: 'narration', text: narration, ...(images.length ? { images } : {}) });
   try { play.onNarrated?.(); } catch { /* 무시 */ }
   post.forEach(push);
