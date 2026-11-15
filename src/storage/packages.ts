@@ -138,10 +138,17 @@ export function parsePackageFile(name: string, input: Uint8Array): ParsedPackage
   return { world: hasErrors(issues) && !(data && typeof data === 'object' && 'manifest' in data) ? null : (data as WorldPackage), issues };
 }
 
-/** 빈 세계 템플릿 */
+/** 겹치지 않는 세계 ID (v0.132): 시각 + 무작위 — 빈 세계·복제본이 서로 덮어쓰지 않게 */
+export function newWorldId(prefix = 'me.world'): string {
+  let r = '';
+  try { r = Array.from(crypto.getRandomValues(new Uint8Array(3)), (b) => b.toString(36).padStart(2, '0')).join(''); } catch { r = Math.random().toString(36).slice(2, 7); }
+  return `${prefix}-${Date.now().toString(36)}${r}`;
+}
+
+/** 빈 세계 템플릿 (v0.132: 만들 때마다 새 ID) */
 export function blankWorld(): WorldPackage {
   return {
-    manifest: { id: 'me.new-world', type: 'world', name: '새 세계', version: '0.1.0', schemaVersion: '0', author: '', license: 'CC-BY-4.0', contentRating: 'teen', locales: ['ko'] },
+    manifest: { id: newWorldId(), type: 'world', name: '새 세계', version: '0.1.0', schemaVersion: '0', author: '', license: 'CC-BY-4.0', contentRating: 'teen', locales: ['ko'] },
     locations: [{ id: 'loc/start', name: '시작 장소', description: '당신이 눈을 뜬 곳.', connections: [] }],
     characters: [], facts: [], claims: [], beliefs: [], encounters: [], quests: [], flags: [], endings: [],
     start: { locationId: 'loc/start', openingScene: '낯선 곳에서 눈을 뜬다.' },

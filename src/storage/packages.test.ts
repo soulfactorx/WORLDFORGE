@@ -74,3 +74,13 @@ describe('성인 등급 고정', () => {
     expect((await db.packages.get('me.lock@0.2.0'))!.world.manifest.contentRating).toBe('mature');
   });
 });
+
+describe('세계 ID (v0.132)', () => {
+  it('빈 세계는 만들 때마다 다른 ID', async () => {
+    const { newWorldId } = await import('./packages');
+    const ids = new Set(Array.from({ length: 50 }, () => blankWorld().manifest.id));
+    expect(ids.size).toBe(50);
+    expect(newWorldId('x.copy')).toMatch(/^x\.copy-[a-z0-9]+$/);
+    expect(validateWorld(blankWorld()).filter((i) => i.level === 'error')).toEqual([]);
+  });
+});

@@ -30,7 +30,8 @@ import { type Belief, type Character, type Claim, type Fact, type Faction, type 
 import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { RELATION_KIND_LABEL, STAGES } from '../engine/relationship';
 import { STD_ITEMS } from '../data/items';
-import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
+import { blankWorld, exportWpk, packageKey, PRIVATE_NOTE, savePackage } from '../storage/packages';
+import { db } from '../storage/db';
 import { deleteEditorDraft, type EditorDraft, getEditorDraft, pruneDraftsFor, saveEditorDraft } from '../storage/drafts';
 import { DraftMerge } from './DraftMerge';
 import { useLeaveGuard } from './leaveGuard';
@@ -188,6 +189,8 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
   // 초안 저절로 보관 (v0.126): 바뀌면 잠시 뒤 IndexedDB에, 앱이 가려지거나 꺼질 때는 바로. 저장하면 지운다
   const keyRef = useRef(draftKey ?? (initial && alreadySaved !== false && !draftNotes ? initial.manifest.id : `new.${Date.now().toString(36)}`));
   const key = keyRef.current;
+  /** 이 편집이 저장하는(이미 저장된) 세계의 ID (v0.132) — 다른 ID로 저장된 세계를 덮어쓰려 하면 묻는다 */
+  const savedAs = useRef<string | undefined>(origin?.manifest.id ?? (initial && !restored && (alreadySaved || !draftNotes) ? initial.manifest.id : undefined));
   // 편집을 시작한 때의 저장본 (v0.131): 초안과 함께 보관해, 나중에 합칠 때 초안이 무엇을 바꿨는지 가려낸다
   const originRef = useRef<WorldPackage | undefined>(restored ? origin : keyRef.current === initial?.manifest.id ? structuredClone(initial) : undefined);
   const latest = useRef({ w, notes: draftNotes as string[] | undefined, dirty });
@@ -236,7 +239,11 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
 
   async function save() {
     try {
+      // 다른 세계를 덮어쓰지 않게 (v0.132): 같은 ID·버전으로 저장된 것이 이 편집의 세계가 아니면 묻는다
+      const clash = savedAs.current !== w.manifest.id ? await db.packages.get(packageKey(w)).catch(() => undefined) : undefined;
+      if (clash && !confirm(`같은 ID·버전(${packageKey(w)})으로 저장된 다른 세계 「${clash.name}」가 있습니다. 덮어쓸까요?\n\n덮어쓰지 않으려면 취소하고 「기본」 탭에서 ID를 바꾸세요.`)) { setStatus('저장하지 않았습니다 — 기본 탭에서 ID를 바꾼 뒤 저장하세요.'); return; }
       await savePackage(w, 'created');
+      savedAs.current = w.manifest.id;
       // 뺀 출처 카드의 이미지 파일은 저장할 때 지운다 (저장하지 않고 닫으면 그대로)
       if (pruneOnSave.length) { await deleteAssets(w.manifest.id, pruneOnSave.filter((id) => !(w.assets ?? []).some((a) => a.id === id))); setPruneOnSave([]); }
       setApproved(true);

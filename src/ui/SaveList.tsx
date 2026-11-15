@@ -12,7 +12,7 @@ import type { WorldPackage } from '../engine/schema';
 import { startEvents } from '../gm/turn';
 import { clampDcMod, difficultyLabel } from '../engine/difficulty';
 import { appendEvents, db, deleteSave, exportSave, importSave } from '../storage/db';
-import { deletePackage, exportWpk, listPackages, MAX_FILE_BYTES, packageKey, parsePackageFile, PRIVATE_NOTE, savePackage } from '../storage/packages';
+import { deletePackage, exportWpk, listPackages, MAX_FILE_BYTES, newWorldId, packageKey, parsePackageFile, PRIVATE_NOTE, savePackage } from '../storage/packages';
 import { BlobZip } from '../importers/blobzip';
 import { imageNeeds } from '../gm/worldgen/imageNeeds';
 import { MoveInPanel, MoveOutButton } from './MovePanel';
@@ -170,7 +170,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
               if (!p.builtin) { onEdit(w); return; }
               // 내장 패키지는 복제해서 편집한다
               const copy = structuredClone(w);
-              copy.manifest = { ...copy.manifest, id: `${copy.manifest.id}-copy`, name: `${copy.manifest.name} (사본)` };
+              copy.manifest = { ...copy.manifest, id: newWorldId(`${copy.manifest.id}-copy`), name: `${copy.manifest.name} (사본)` };
               onEdit(copy);
             }}>✎ {p.builtin ? '복제해서 편집' : '편집'}</button>
             {w.manifest.private || shareBlocked(w)
