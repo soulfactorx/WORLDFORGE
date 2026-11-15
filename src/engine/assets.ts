@@ -198,6 +198,87 @@ export function pickCharacterImage(world: WorldPackage, npcId: EntityId, tag: st
   return r;
 }
 
+/** 때 (게임 시각 → morning·day·evening·night) */
+export const partOfDay = (worldMinutes: number) => { const h = Math.floor(worldMinutes / 60) % 24; return h < 5 || h >= 20 ? 'night' : h < 10 ? 'morning' : h < 17 ? 'day' : 'evening'; };
+/** 글에 나온 때·날씨·상황 낱말 (비·눈·싸움·축제…) — 배경 그림 고르기용 (v0.139) */
+export function situationWords(text: string): string[] {
+  const out = new Set<string>();
+  for (const w of textWords(text)) { const k = TAG_GROUPS.find((g) => g.some((x) => normTag(x) === normTag(w)))?.[0]; if (k && ['night', 'day', 'morning', 'evening', 'rain', 'snow', 'battle'].includes(k)) out.add(k); }
+  return [...out];
+}
+
+/** 그 인물이 나온 문장들 (+ 바로 이어지는 대사·그/그녀 문장) — 그림을 고를 때 읽는 범위 */
+export function aboutText(text: string, names: string[]): string {
+  const near: string[] = [];
+  for (const para of text.split(/\n\s*\n/)) {
+    const sentences = para.split(/(?<=[.!?。…"”])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
+    sentences.forEach((x, i) => {
+      if (!names.some((n) => n && x.includes(n))) return;
+      near.push(x);
+      const next = sentences[i + 1] ?? '';
+      if (/^["“「『]|^(그는|그녀는|그가|그녀가)/.test(next)) near.push(next);
+    });
+  }
+  return near.join(' ');
+}
+
+const JOSA_END = /(으로써|으로|에게서|에게|한테|께서|에서|부터|까지|처럼|보다|이랑|하고|이나|이며|이다|였다|했다|하며|하고|한|은|는|이|가|을|를|의|에|와|과|도|만|로|랑)$/;
+/** 글의 낱말 (조사를 뗀 꼴도) — 그림 태그와 맞춰 본다 */
+export function textWords(text: string): string[] {
+  const out = new Set<string>();
+  for (const w of text.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
+    if (!w) continue;
+    out.add(w);
+    const b = w.replace(JOSA_END, '');
+    // 한 글자 한글 낱말(비·밤·눈)도 — 조사를 떼면 한 글자만 남는 경우가 많다
+    if (b !== w && (b.length >= 2 || /^\p{Script=Hangul}$/u.test(b))) out.add(b);
+    if (out.size > 400) break;
+  }
+  return [...out];
+}
+/** 글에서 느껴지는 표정 무리 (웃었다 → smile, 노려봤다 → angry …) */
+export const cueKeys = (text: string) => (text ? EXPRESSIONS.filter((g) => g.cues.test(text)).map((g) => g.key) : []);
+
+/**
+ * 인물 그림 고르기 — 여러 단서를 함께 (v0.139).
+ *  wanted: AI가 고른 태그(표시 · 표정) — 가장 무겁게 (×3)
+ *  text: 그 인물이 나온 문장 — 글에서 느껴지는 표정(×2)과, 태그와 같은 낱말(교복·비·침대·술…, ×1)
+ * 점수가 가장 높은 그림 → 같으면 군더더기 태그가 적은 그림 → 그래도 여럿이면 턴마다 돌려 가며. 아무 단서도 안 맞으면 기본 모습.
+ */
+export function pickCharacterFor(world: WorldPackage, npcId: EntityId, o: { wanted?: string; text?: string }, salt: string): AssetMeta | undefined {
+  const c = world.characters.find((x) => x.id === npcId);
+  if (!c) return undefined;
+  const list = characterAssets(world, c);
+  const wanted = wantedTags(o.wanted ?? '');
+  const ctx = (o.text ?? '').slice(0, 1500);
+  const cues = cueKeys(ctx);
+  const words = ctx ? textWords(ctx) : [];
+  if (!wanted.length && !cues.length && !words.length) return pickCharacterImage(world, npcId, '', salt);
+  const scored = list.map((a) => {
+    const w = scoreImage(a.tags, wanted), q = scoreImage(a.tags, cues);
+    // 글 낱말: 같은 낱말·같은 뜻 무리만 (비슷한 꼴은 글에서는 헷갈리기 쉬워 뺀다) — 태그마다 한 번
+    const hit = a.tags.filter((t) => t !== 'default' && words.some((x) => tagMatch(x, t) >= 2));
+    const total = w.score * 3 + q.score * 2 + hit.length * 2;
+    const used = new Set([...w.matched, ...q.matched].map((m) => m.split('→').pop()!).concat(hit));
+    return { a, total, w, q, hit, extra: a.tags.filter((t) => t !== 'default' && !used.has(t)).length };
+  }).filter((x) => x.total > 0);
+  if (!scored.length) {
+    note({ step: '인물 이미지', target: `${c.name} (${npcId})`, ...(o.wanted ? { wanted: o.wanted } : {}), rule: `원한 태그${wanted.length ? ` "${wanted.join(' ')}"` : ' 없음'} · 글의 표정 단서 ${cues.length ? cues.join('/') : '없음'} · 글 낱말과도 맞는 태그가 없어 기본 모습` });
+    return pickCharacterImage(world, npcId, '', salt);
+  }
+  const top = Math.max(...scored.map((x) => x.total));
+  const lvl = scored.filter((x) => x.total === top);
+  const least = Math.min(...lvl.map((x) => x.extra));
+  const best = lvl.filter((x) => x.extra === least);
+  const r = pickOne(best.map((x) => x.a), `${npcId}|${wanted.join('+')}|${cues.join('+')}|${salt}`);
+  const b = best[0]!;
+  const parts = [b.w.matched.length ? `원한 태그 ${b.w.matched.map((m) => `"${m}"`).join(', ')}` : '', b.q.matched.length ? `글의 표정 ${b.q.matched.map((m) => `"${m}"`).join(', ')}` : '', b.hit.length ? `글에 나온 낱말 ${b.hit.map((m) => `"${m}"`).join(', ')}` : ''].filter(Boolean);
+  note({ step: '인물 이미지', target: `${c.name} (${npcId})`, ...(o.wanted ? { wanted: o.wanted } : {}), resolved: [...b.w.matched, ...b.q.matched, ...b.hit].join(', '),
+    rule: `${parts.join(' + ')} (점수 ${top}${b.extra ? `, 다른 태그 ${b.extra}개` : ''}) — ${best.length}장 중${best.length > 1 ? ' 턴마다 돌려 가며' : ''} 하나${wanted.length && !b.w.score ? ` · 원한 "${wanted.join(' ')}"은 맞는 태그가 없어 글로 골랐다` : ''}`,
+    candidates: best.length, ...(r ? { chosen: r.id } : {}) });
+  return r;
+}
+
 /** 이 인물의 이미지 태그 조합 (v0.138, AI에게 주는 그림 목록): 이미지마다의 태그 묶음을 겹치지 않게, 많이 쓰인 순 */
 export function tagCombos(world: WorldPackage, npcId: EntityId, max = 50): string[] {
   const c = world.characters.find((x) => x.id === npcId);
@@ -282,7 +363,7 @@ export function mentionedImages(world: WorldPackage, text: string, salt: string,
     const c = world.characters.find((x) => x.id === id)!;
     note({ step: '서술 언급', target: `${c.name} (${id})`, rule: `글에 이름 "${c.name}"${titleOf(c) ? ` 또는 직함 "${titleOf(c)}"` : ''}이(가) 나옴` });
     // 그 인물이 나온 문장의 분위기로 표정을 고른다 (서술에 "윤이 웃었다" → 윤의 웃는 얼굴)
-    const img = pickCharacterImage(world, id, contextExpression(text, [c.name, titleOf(c)], expressionTags(world, id)), salt);
+    const img = pickCharacterFor(world, id, { text: aboutText(text, [c.name, titleOf(c)]) }, salt);
     if (img && !skip.includes(img.id) && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: c.name });
   }
   return out;

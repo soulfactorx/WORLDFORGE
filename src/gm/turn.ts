@@ -17,7 +17,7 @@ import { RATING_GUIDE } from '../engine/rating';
 import { applyEvent, type GameState, initialState, MAX_PARTY } from '../engine/state/state';
 import { npcSheet } from '../engine/npcStats';
 import { gmStyleText } from '../data/gmStyles';
-import { paragraphOf, titleOf, traceImages } from '../engine/assets';
+import { aboutText, paragraphOf, partOfDay, pickCharacterFor, scoreImage, situationWords, titleOf, traceImages, wantedTags } from '../engine/assets';
 import type { NarrationImage } from '../engine/state/events';
 import { fmtMinutes, TIME_STEPS, type TimeSpent, turnMinutes } from '../engine/time';
 import { MAX_SHIFT, traitsFor } from '../engine/traits';
@@ -1034,12 +1034,20 @@ function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speaker
   // 같은 장소면 직전 배경을 그대로 이어 쓴다 (턴마다 그림이 바뀌지 않게)
   const lastBg = fresh ? undefined : [...s.log].reverse().flatMap((l) => l.images ?? []).find((im) => im.bg);
   const prevAsset = lastBg && world.assets.find((x) => x.id === lastBg.id && x.kind !== 'character');
-  const scene = prevAsset ?? pickSceneImage(world, s.player.locationId, sceneTag, fresh ? String(turn) : 'bg');
-  if (scene) add({ id: scene.id, caption: loc?.name ?? '', bg: fresh ? 'new' : 'same' }, sceneTag ? `배경: GM 판단 AI가 장면 태그 "${sceneTag}"를 고름` : moved ? '배경: 다른 장소로 옮겨 그 장소 이미지' : prevAsset ? '배경: 같은 장소 — 직전 배경을 이어서 (매 턴 서술 맨 앞)' : '배경: 같은 장소 (매 턴 서술 맨 앞)');
+  // v0.139: 배경도 단서로 — 지금 때(아침·낮·저녁·밤)와 서술 첫 문단의 날씨·상황 낱말(비·눈·싸움…)을 함께 원한다
+  const firstPara = narration.split(/\n\s*\n/)[0] ?? '';
+  const bgWant = [sceneTag, partOfDay(s.worldMinutes), ...situationWords(firstPara)].filter(Boolean).join(' ');
+  const pick = pickSceneImage(world, s.player.locationId, bgWant, fresh ? String(turn) : 'bg');
+  // 같은 장소라도 지금 때·상황에 더 맞는 배경이 있으면 바꾼다 (밤이 됐는데 밤 그림이 있으면)
+  const want = wantedTags(bgWant);
+  const better = !!prevAsset && !!pick && pick.id !== prevAsset.id && scoreImage(pick.tags, want).score > scoreImage(prevAsset.tags, want).score;
+  const scene = better ? pick : prevAsset ?? pick;
+  const newBg = fresh || better;
+  if (scene) add({ id: scene.id, caption: loc?.name ?? '', bg: newBg ? 'new' : 'same' }, `${sceneTag ? `배경: GM 판단 AI가 장면 태그 "${sceneTag}"를 고름` : moved ? '배경: 다른 장소로 옮겨 그 장소 이미지' : better ? `배경: 같은 장소지만 지금(${bgWant})에 더 맞는 그림으로 바꿈` : prevAsset ? '배경: 같은 장소 — 직전 배경을 이어서 (매 턴 서술 맨 앞)' : '배경: 같은 장소 (매 턴 서술 맨 앞)'} · 원한 것 "${bgWant}"`);
   else why.push(`(배경 이미지 없음 — 이 장소에 이미지가 없음${sceneTag ? `, 태그 "${sceneTag}"` : ''})`);
   for (const sp of speakers) {
     // 말한 인물: Actor가 고른 표정 → 없으면 서술에서 그 인물이 나온 문장의 분위기
-    const img = pickCharacterImage(world, sp.id, sp.expression || contextExpression(narration, [sp.name], expressionTags(world, sp.id)), String(turn));
+    const img = pickCharacterFor(world, sp.id, { wanted: sp.expression, text: aboutText(narration, [sp.name, sp.dialogue?.slice(0, 14) ?? '']) }, String(turn));
     if (img && !out.some((o) => o.id === img.id)) add({ id: img.id, caption: sp.name, ...opt(paraOf(charOf(sp.id), sp.dialogue)) }, sp.expression ? `말한 인물: NPC 연기 AI가 표정 "${sp.expression}"을 고름` : '말한 인물: 표정은 서술 문맥으로 짐작');
   }
   // 서술에 나온 인물 (말하지 않았어도 이름·직함이 나오면)
@@ -1054,7 +1062,7 @@ function turnImages(world: WorldPackage, s: GameState, sceneTag: string, speaker
   for (const c of people) {
     if (out.filter((o) => !o.bg).length >= 3) break;
     if (shown.has(c.name)) continue;
-    const img = pickCharacterImage(world, c.id, contextExpression(narration, [c.name], expressionTags(world, c.id)), String(turn));
+    const img = pickCharacterFor(world, c.id, { text: aboutText(narration, [c.name, titleOf(c)]) }, String(turn));
     if (img && !out.some((o) => o.id === img.id)) { add({ id: img.id, caption: c.name, ...opt(paraOf(c)) }, s.party[c.id] ? '함께 다니는 동료 (인물 이미지 3장까지 채움)' : '이 장소에 있는 인물 (인물 이미지 3장까지 채움)'); shown.add(c.name); }
   }
   // 매 턴 한 장은 보여준다: 이 장소의 인물·동료 → 장소 이미지 → 지도 → 표지

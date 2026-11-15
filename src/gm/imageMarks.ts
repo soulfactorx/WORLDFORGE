@@ -7,7 +7,7 @@
  *
  * 엔진은 표시를 글에서 지우고, 실제 이미지(같은 뜻의 태그 포함)로 바꾼다. 없는 인물·태그는 가장 가까운 것으로.
  */
-import { expressionTags, paragraphsOf, pickCharacterImage, pickSceneImage, sceneTags, tagCombos } from '../engine/assets';
+import { expressionTags, paragraphsOf, pickCharacterFor, pickSceneImage, sceneTags, tagCombos } from '../engine/assets';
 import { displayName } from '../engine/names';
 import type { Character, WorldPackage } from '../engine/schema';
 import type { NarrationImage } from '../engine/state/events';
@@ -43,6 +43,7 @@ export function readMarks(raw: string): ImageMark[] {
 export function marksToImages(world: WorldPackage, s: GameState, raw: string, salt: string): NarrationImage[] {
   const out: NarrationImage[] = [];
   const find = (key: string): Character | undefined => world.characters.find((c) => c.id === key || c.name === key || c.id.replace(/^[a-z]+\//, '') === key);
+  const paras = paragraphsOf(stripMarks(raw));
   for (const m of readMarks(raw)) {
     if (m.kind === 'bg') {
       const img = pickSceneImage(world, s.player.locationId, m.tag, salt);
@@ -55,7 +56,8 @@ export function marksToImages(world: WorldPackage, s: GameState, raw: string, sa
     let c: Character | undefined, k = 1;
     for (let n = Math.min(words.length, 4); n >= 1 && !c; n--) { c = find(words.slice(0, n).join(' ')); if (c) k = n; }
     if (!c) continue;
-    const img = pickCharacterImage(world, c.id, words.slice(k).join(' '), `${salt}|${m.para}`);
+    // 표시한 태그 + 그 문단의 글 (표시한 태그가 목록에 없어도 글의 표정·낱말로 고른다 — v0.139)
+    const img = pickCharacterFor(world, c.id, { wanted: words.slice(k).join(' '), text: paras[m.para] ?? '' }, `${salt}|${m.para}`);
     if (img && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: c.name, para: m.para });
   }
   return out;

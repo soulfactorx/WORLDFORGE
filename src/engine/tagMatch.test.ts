@@ -52,3 +52,28 @@ describe('태그로 그림 찾기 (v0.138)', () => {
     expect(imageMenu(world, s, [world.characters[0]!])).toContain('smile+uniform');
   });
 });
+
+describe('글과 함께 고르기 (v0.139)', () => {
+  it('원한 태그가 없거나 안 맞아도 그 인물이 나온 문장으로 고른다', async () => {
+    const { pickCharacterFor, aboutText } = await import('./assets');
+    const text = '리아가 교복 차림으로 활짝 웃었다. 보리는 멀리서 지켜본다.';
+    expect(pickCharacterFor(world, 'npc/lia', { text: aboutText(text, ['리아']) }, 't')?.id).toBe('smile-uni');
+    expect(pickCharacterFor(world, 'npc/lia', { wanted: '대략난감', text: '리아가 화를 내며 노려봤다. 교복 소매를 걷는다.' }, 't')?.id).toBe('angry-uni');
+    // 원한 태그가 맞으면 그것이 가장 무겁다
+    expect(pickCharacterFor(world, 'npc/lia', { wanted: 'smile swimsuit', text: '리아가 교복 차림으로 웃었다.' }, 't')?.id).toBe('smile-swim');
+    // 아무 단서도 없으면 기본 모습
+    expect(pickCharacterFor(world, 'npc/lia', { text: '리아가 서 있다.' }, 't')?.id).toBe('def');
+  });
+  it('표시의 태그가 목록에 없어도 그 문단의 글로', async () => {
+    const s = { player: { locationId: 'loc/inn' } } as unknown as GameState;
+    const imgs = marksToImages(world, s, '[[그림 npc/lia 대충웃는얼굴]]\n리아가 교복을 여미며 웃었다.', 't');
+    expect(imgs[0]?.id).toBe('smile-uni');
+  });
+  it('배경: 지금 때와 날씨 낱말', async () => {
+    const { partOfDay, situationWords } = await import('./assets');
+    expect(partOfDay(22 * 60)).toBe('night');
+    expect(partOfDay(12 * 60)).toBe('day');
+    expect(situationWords('창밖에 비가 내리는 밤이다.')).toEqual(expect.arrayContaining(['rain', 'night']));
+    expect(pickSceneImage(world, 'loc/inn', ['night', ...situationWords('비가 온다')].join(' '), 's')?.id).toBe('bg-night');
+  });
+});
