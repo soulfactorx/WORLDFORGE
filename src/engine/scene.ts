@@ -9,6 +9,7 @@ import { evalCondition } from './scenario';
 import type { SceneAction, SceneCond, SceneDef, SceneDelta, SceneEnd, WorldPackage } from './schema';
 import type { GameState, SceneRun } from './state/state';
 import { npcLocationOf } from './world';
+import { gimmickPassed } from './gimmick';
 
 export const sceneDef = (world: WorldPackage, id: string) => world.scenes?.find((s) => s.id === id);
 
@@ -49,8 +50,11 @@ export function sceneEntry(def: SceneDef): { mode: SceneEntryMode; trigger: stri
 export function availableScenes(world: WorldPackage, state: GameState, opts: { auto?: boolean } = {}): SceneDef[] {
   if (state.scene || state.combat || state.playerDead || state.ending) return [];
   return (world.scenes ?? []).filter((d) => {
-    if (opts.auto !== undefined && (sceneEntry(d).mode === 'auto') !== opts.auto) return false;
-    if (state.sceneResults?.[d.id] && !d.repeatable) return false;
+    // 함정·퍼즐 (v0.129): 지나가지 못했으면(실패·그만두기) 다시 해 볼 수 있다 — 다시 할 때는 버튼으로
+    const res = state.sceneResults?.[d.id];
+    const retry = !!d.gimmick && !!res && !gimmickPassed(d, state);
+    if (opts.auto !== undefined && (sceneEntry(d).mode === 'auto' && !retry) !== opts.auto) return false;
+    if (res && !d.repeatable && !retry) return false;
     if (d.locationId && d.locationId !== state.player.locationId) return false;
     if (d.npcId) {
       const npc = world.characters.find((c) => c.id === d.npcId);

@@ -6,9 +6,10 @@ import { gmStyleText } from '../data/gmStyles';
 import { genreGuide, reskinner } from '../engine/genre';
 import { RATING_GUIDE } from '../engine/rating';
 import { createRng } from '../engine/dice/rng';
-import { d20Test } from '../engine/dice/dice';
+import { d20Test, roll } from '../engine/dice/dice';
 import { checkModifier } from '../engine/character/sheet';
-import { applyDelta, applyReactions, availableScenes, deltaLine, gaugeMods, sceneActions, sceneDef, sceneEndOf, newRun } from '../engine/scene';
+import { applyDelta, applyReactions, availableScenes, deltaLine, gaugeMods, sceneActions, sceneCond, sceneDef, sceneEndOf, newRun } from '../engine/scene';
+import { answerMatches } from '../engine/gimmick';
 import type { SceneDef, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import { applyEvent, type GameState } from '../engine/state/state';
@@ -52,7 +53,8 @@ function endEvents(world: WorldPackage, s0: GameState, def: SceneDef, endId: str
   return out;
 }
 
-export function sceneActionEvents(world: WorldPackage, state: GameState, actionId: string): GameEvent[] {
+/** answer: 답하기 행동(수수께끼·암호)에서 플레이어가 적은 답 */
+export function sceneActionEvents(world: WorldPackage, state: GameState, actionId: string, answer?: string): GameEvent[] {
   const run = state.scene;
   const def = run && sceneDef(world, run.sceneId);
   if (!run || !def) throw new Error('진행 중인 장면이 없다');
@@ -64,7 +66,14 @@ export function sceneActionEvents(world: WorldPackage, state: GameState, actionI
   let success = true;
   let rollText = '';
   let great = false;
-  if (opt.spec) {
+  if (a.answer) {
+    // 답하기 (v0.129): 판정 없이 답이 맞는지로
+    success = answerMatches(a.answer, answer ?? '');
+    rollText = ` — 「${(answer ?? '').trim().slice(0, 40) || '(빈 답)'}」 → ${success ? '맞음' : '틀림'}`;
+  } else if (a.rightWhen) {
+    // 순서 맞추기 (v0.129): 지금 이 행동이 맞는 차례인가
+    success = sceneCond(a.rightWhen, run);
+  } else if (opt.spec) {
     const m = checkModifier(state.player.sheet, opt.spec);
     const gm = gaugeMods(def, run, a);
     const total = m.total + gm.reduce((x, g) => x + g.value, 0);
@@ -86,9 +95,16 @@ export function sceneActionEvents(world: WorldPackage, state: GameState, actionI
   const ev: GameEvent = { type: 'scene_action', run: next, line, rngState: rng.state(), ...(images.length ? { images } : {}) };
   // 한 차례에 게임 속 시간 몇 분 (v0.79.3: 장면이 시간 없이 지나가던 것 수정)
   const tick: GameEvent = { type: 'time_advanced', minutes: SCENE_ROUND_MINUTES };
-  const s1 = applyEvent(applyEvent(state, ev, state.turn), tick, state.turn);
+  // 피해 (v0.129, 함정 등): 주사위를 굴려 HP를 깎는다 (1 밑으로는 내려가지 않는다)
+  const hurt: GameEvent[] = [];
+  if (delta?.damage?.trim()) {
+    let n = Number(delta.damage);
+    if (!Number.isFinite(n)) { try { n = roll(rng, delta.damage).total; } catch { n = 0; } }
+    if (n > 0) hurt.push({ type: 'hp_changed', delta: -Math.round(n), reason: `${def.name}: ${a.name}` });
+  }
+  const s1 = [...hurt, tick].reduce((x, e) => applyEvent(x, e, state.turn), applyEvent(state, { ...ev, rngState: rng.state() } as GameEvent, state.turn));
   const end = sceneEndOf(def, next);
-  return [ev, tick, ...(end ? endEvents(world, s1, def, end.id) : [])];
+  return [{ ...ev, rngState: rng.state() } as GameEvent, ...hurt, tick, ...(end ? endEvents(world, s1, def, end.id) : [])];
 }
 
 /** 그만두기: 효과 없이 끝난다 (다시 할 수 있는 장면이 아니면 다시 열리지 않는다) */

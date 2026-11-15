@@ -203,6 +203,8 @@ export interface SceneDelta {
   text?: string;
   /** 이 결과의 그림 (에셋 ID — 세계의 이미지 또는 stock.fx-…) (v0.50) */
   image?: string;
+  /** 주인공이 입는 피해 (v0.129, 함정 등): 주사위 표기 "2d6" 또는 숫자. HP는 1 밑으로 내려가지 않는다 */
+  damage?: string;
 }
 export interface SceneAction {
   id: string;
@@ -223,6 +225,10 @@ export interface SceneAction {
   once?: boolean;
   /** 지금 수치가 굴림에 더해진다 (v0.48): 값 × per (반올림), ±max로 제한. 예: 상대의 경계 1당 −1 → { gauge: "guard", per: -1 } */
   mods?: { gauge: string; per: number; max?: number }[];
+  /** 답하기 (v0.129, 수수께끼·암호): 플레이어가 적은 답이 이 중 하나면 성공 (띄어쓰기·대소문자 무시). check 대신 */
+  answer?: string[];
+  /** 맞고 틀림을 장면 상태로 (v0.129, 순서 맞추기): 이 조건이 참일 때 하면 성공, 아니면 실패. check 대신 */
+  rightWhen?: SceneCond;
   success?: SceneDelta;
   /** 대성공 (난이도를 5 이상 넘기거나 20): 없으면 success (v0.48) */
   great?: SceneDelta;
@@ -287,6 +293,47 @@ export interface SceneDef {
   /** 이 차례가 지나면 끝 (timeoutEnd, 없으면 마지막 끝) */
   maxRounds?: number;
   timeoutEnd?: string;
+  /** 함정·퍼즐 (v0.129): 쉬운 양식으로 만든 장면. 이 값으로 장면의 수치·행동·끝을 만든다 (편집기가 다시 만든다) */
+  gimmick?: Gimmick;
+}
+
+/**
+ * 함정·퍼즐 기믹 (v0.129). 장면 엔진 위에서 돈다 — 판정은 엔진, AI는 확정된 결과를 서술만 한다.
+ * - trap: 숨은 함정 — 살펴보기(찾기) → 해제하기 / 조심해서 지나가기 / 그냥 지나가기, 걸리면 피해와 그 뒤의 일
+ * - riddle: 수수께끼·암호 — 답을 적는다, 기회 n번, 단서 떠올리기
+ * - sequence: 순서 맞추기 — 레버·문양·종을 올바른 순서로, 틀리면 처음부터
+ * - device: 장치·장애물 — 기술 판정을 여러 번 성공해야 (봉인 풀기, 무너진 다리 건너기)
+ */
+export interface Gimmick {
+  kind: 'trap' | 'riddle' | 'sequence' | 'device';
+  /** 플레이어가 처음 보는 것 (함정이면 낌새만) */
+  intro: string;
+  /** 이 장소에서 다른 장소로 가는 길을 막는다 — 풀거나 지나가기 전에는 그쪽으로 갈 수 없다 */
+  guards?: EntityId;
+  /** 함정: 찾기 DC · 해제 기술·DC · 피하기 기술·DC · 정체(찾았을 때 보이는 글) · 걸렸을 때 글 */
+  findDc?: number;
+  disarm?: { check: string; dc: number };
+  avoid?: { check: string; dc: number };
+  reveal?: string;
+  sprung?: string;
+  /** 수수께끼: 문제 · 정답들 · 기회 */
+  question?: string;
+  answers?: string[];
+  tries?: number;
+  /** 순서 맞추기: 올바른 순서대로 적은 것 (화면에는 섞여 보인다) · 틀려도 되는 횟수 */
+  steps?: string[];
+  mistakes?: number;
+  /** 장치: 판정 · 필요한 성공 수 · 버틸 수 있는 실패 수 · 다른 방법(선택) */
+  check?: { check: string; dc: number; label?: string };
+  alt?: { check: string; dc: number; label?: string };
+  goal?: number;
+  /** 단서 떠올리기 (수수께끼·순서·장치): 판정 · 성공하면 보이는 글 */
+  hint?: { check: string; dc: number; text: string };
+  /** 실패·걸렸을 때 피해 (주사위 표기, 비우면 없음) */
+  damage?: string;
+  /** 성공했을 때 · 실패했을 때 (효과·보상) */
+  onSuccess?: { text?: string; effects?: StoryEffect[]; rewards?: Rewards };
+  onFail?: { text?: string; effects?: StoryEffect[] };
 }
 
 /** NPC 목표 (설계 v4 E7): 인물이 스스로 이루려는 일. 시작하면 날 수가 지나 이뤄지고(효과), 막는 조건이 참이 되면 꺾인다 */

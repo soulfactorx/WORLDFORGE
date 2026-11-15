@@ -1,5 +1,5 @@
 import { worldVars } from '../engine/vars';
-import { closedHere } from '../engine/phase';
+import { closedReason } from '../engine/phase';
 import { establishedFactsOf, improvisationOf, protectedTopicsOf } from '../engine/canon';
 import { knowledgeOf } from '../engine/knowledge/knowledge';
 import { AXES, AXIS_NAMES, canShareSecret, joinBlocker, loyaltyOf, OBEY_LOYALTY, relationsOf, relationshipOf, reputationLabel, reputationOf, secretTrustOf, stageFor, stageOf } from '../engine/relationship';
@@ -88,7 +88,7 @@ function sceneHeader(world: WorldPackage, state: GameState): string[] {
 
 function exits(world: WorldPackage, state: GameState): string[] {
   const loc = world.locations.find((l) => l.id === state.player.locationId)!;
-  return loc.connections.map((id) => `- ${id}: ${world.locations.find((x) => x.id === id)?.name ?? id}${closedHere(world, state, id) ? ' (지금 국면에는 갈 수 없다)' : ''}`);
+  return loc.connections.map((id) => `- ${id}: ${world.locations.find((x) => x.id === id)?.name ?? id}${closedReason(world, state, id) ? ` (${closedReason(world, state, id)})` : ''}`);
 }
 
 const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;

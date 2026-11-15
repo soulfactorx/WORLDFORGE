@@ -22,7 +22,7 @@ import { applyEvent, type GameState, MAX_PARTY } from '../engine/state/state';
 import { normSpent, turnMinutes } from '../engine/time';
 import { flagAllowed, pendingDiscoveries } from '../engine/scenario';
 import { pendingChoice } from '../engine/story';
-import { closedHere } from '../engine/phase';
+import { closedHere, closedReason } from '../engine/phase';
 import { stakeValid } from '../engine/stakes';
 import { offerableScenes, newRun } from '../engine/scene';
 import { canShareSecret, joinBlocker, relationshipOf, wantsToLeave } from '../engine/relationship';
@@ -380,7 +380,7 @@ export async function runTurnOne(
   const here = world.locations.find((l) => l.id === ahead.player.locationId);
   const goTo = String(out.go_to ?? '');
   const moving = !!goTo && !!here?.connections.includes(goTo) && !closedHere(world, ahead, goTo);
-  if (goTo && !moving) rejected.push(`갈 수 없는 곳으로 이동: ${goTo}`);
+  if (goTo && !moving) { rejected.push(`갈 수 없는 곳으로 이동: ${goTo}`); const why = closedReason(world, ahead, goTo); if (why) post.push({ type: 'gm_note', text: `이동이 막혔다 — ${why}. 다음 서술에서 왜 막혔는지 보여 준다` }); }
   const spent = continuing ? 'stretch' : opt ? 'scene' : normSpent(out.time);
   const tm = turnMinutes(world, spent, moving);
   if (tm.minutes > 0) queue({ type: 'time_advanced', minutes: tm.minutes });

@@ -6,7 +6,7 @@ import { falloutEvents, stakeEvents } from './stakes';
 import { chooseOptionEvents, deckBlock, openedLines, openStoryletEvents } from './storylets';
 import { eligibleStorylets } from '../engine/storylets';
 import { stakeOptions, stakeValid } from '../engine/stakes';
-import { closedHere, currentPhase, nextPhase } from '../engine/phase';
+import { closedHere, closedReason, currentPhase, nextPhase } from '../engine/phase';
 import { APPROACHES, type ApproachId, bestSkill } from '../engine/character/approaches';
 import { ABILITIES, ABILITY_NAMES, type Ability, SKILL_IDS, SKILLS, type SkillId } from '../engine/character/rules';
 import { type CharacterSheet, type CheckSpec, checkModifier } from '../engine/character/sheet';
@@ -525,7 +525,7 @@ export async function runTurn(
   const here = world.locations.find((l) => l.id === s.player.locationId);
   const closedTo = !!d.move_to && closedHere(world, s, d.move_to);
   const moving = !!d.move_to && !!here?.connections.includes(d.move_to) && !closedTo;
-  if (closedTo) { outcomes.push(`요청된 이동은 막혔다 — 지금 국면(${currentPhase(world, s)?.name})에는 그곳에 갈 수 없다. 왜 막혔는지 장면 속에서 보여 준다`); rejected.push(`국면이 닫은 장소로 이동: ${d.move_to}`); }
+  if (closedTo) { outcomes.push(`요청된 이동은 막혔다 — ${closedReason(world, s, d.move_to!)}. 왜 막혔는지 장면 속에서 보여 준다`); rejected.push(`막힌 장소로 이동: ${d.move_to}`); }
   else if (d.move_to && !moving) { outcomes.push('요청된 이동은 불가능함 (연결되지 않은 장소)'); rejected.push(`연결되지 않은 장소로 이동: ${d.move_to}`); }
   const unknownSpeakers = (d.speakers ?? []).filter((sp) => !presentCharacters(world, s).some((c) => c.id === sp.npc_id));
   if (unknownSpeakers.length) rejected.push(`이 장면에 없는 인물을 말하게 함: ${unknownSpeakers.map((x) => x.npc_id).join(', ')}`);

@@ -4,6 +4,7 @@
  *  - 국면: 축과 이야기 상태로 정해지는 세계의 공기. 바뀌면 문체·음악·색·인물 태도·닫힌 장소가 함께 바뀐다.
  *  - 강도 곡선: 최근 긴장의 흐름을 보고 "오름 · 정점 · 숨 돌림"을 GM에게 알린다.
  */
+import { blockingGimmick } from './gimmick';
 import { genreProfile } from './genre';
 import { evalCondition } from './scenario';
 import type { Phase, WorldPackage } from './schema';
@@ -87,5 +88,12 @@ export function intensityHint(s: GameState): { kind: 'rise' | 'peak' | 'breather
 
 /** 국면이 닫은 장소인가 */
 export function closedHere(world: WorldPackage, s: GameState, locationId: string): boolean {
-  return !!currentPhase(world, s)?.closed?.includes(locationId);
+  return !!currentPhase(world, s)?.closed?.includes(locationId) || !!blockingGimmick(world, s, locationId);
+}
+
+/** 갈 수 없는 까닭 (빈 글이면 갈 수 있다) — 국면이 닫았거나, 함정·퍼즐이 길을 막고 있다 (v0.129) */
+export function closedReason(world: WorldPackage, s: GameState, locationId: string): string {
+  if (currentPhase(world, s)?.closed?.includes(locationId)) return '지금 국면에는 갈 수 없다';
+  const g = blockingGimmick(world, s, locationId);
+  return g ? `「${g.name}」을(를) ${g.gimmick?.kind === 'trap' ? '지나가야' : '풀어야'} 갈 수 있다` : '';
 }
