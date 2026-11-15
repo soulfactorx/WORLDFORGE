@@ -609,7 +609,7 @@ function PlayWorld({ saveId, settings: mySettings, onExit, onConnect, world }: {
       ) : state.scene && sceneNow ? (
         <ScenePanel dcMod={state.dcMod ?? 0} def={sceneNow} run={state.scene} sheet={state.player.sheet} opp={sceneOpponent(world, state, sceneNow)} busy={streaming !== null} pkg={world.manifest.id}
           npcName={sceneNow.npcId ? world.characters.find((c) => c.id === sceneNow.npcId)?.name : undefined}
-          onAct={(id) => commitScene((s) => sceneActionEvents(world, s, id))}
+          onAct={(id, answer) => commitScene((s) => sceneActionEvents(world, s, id, answer))}
           onQuit={() => commitScene((s) => abandonSceneEvents(world, s))} />
       ) : (
       <>

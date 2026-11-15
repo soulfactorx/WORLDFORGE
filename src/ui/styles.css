@@ -1278,3 +1278,9 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 
 /* GM 즉흥 등장 (v0.128) */
 .improv-fields label:not(.check) { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+/* 함정·퍼즐 (v0.129) */
+.scene-question { margin: 4px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--surface); white-space: pre-wrap; }
+.scene-answer { display: flex; gap: 6px; flex-wrap: nowrap; }
+.scene-answer input { flex: 1 1 auto; min-width: 0; }
+.scene-answer button { flex: 0 0 auto; white-space: nowrap; }

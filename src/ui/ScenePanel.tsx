@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { SKILLS } from '../engine/character/rules';
 import { ABILITY_NAMES } from '../engine/character/rules';
 import { sceneActions } from '../engine/scene';
@@ -12,9 +13,10 @@ const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 export function ScenePanel({ def, run, sheet, opp, busy, npcName, pkg, onAct, onQuit, dcMod = 0 }: {
   /** 게임 난이도 보정 (v0.90) */ dcMod?: number;
   def: SceneDef; run: SceneRun; sheet: GameState['player']['sheet']; opp?: GameState['player']['sheet']; busy: boolean; npcName?: string; pkg: string;
-  onAct: (actionId: string) => void; onQuit: () => void;
+  onAct: (actionId: string, answer?: string) => void; onQuit: () => void;
 }) {
   const rs = useRs();
+  const [answer, setAnswer] = useState('');
   const phase = def.phases?.find((p) => p.id === run.phase);
   const acts = sceneActions(def, run, sheet, opp, dcMod).filter((a) => !a.action.phases?.length || a.ok || a.why !== '지금 단계에서는 못 한다');
   const checkName = (c?: string) => {
@@ -41,8 +43,15 @@ export function ScenePanel({ def, run, sheet, opp, busy, npcName, pkg, onAct, on
       {run.states.length > 0 && (
         <div className="row scene-states">{run.states.map((id) => { const st = def.states?.find((x) => x.id === id); return <span key={id} className={`tag ${st?.edge === 1 ? 'confirmed' : st?.edge === -1 ? 'stage-hostile' : ''}`} title={st?.text}>{rs(st?.name ?? id)}</span>; })}</div>
       )}
+      {def.gimmick?.question?.trim() && <p className="scene-question">❓ {rs(def.gimmick.question.trim())}</p>}
+      {acts.filter((x) => x.action.answer).map(({ action: a, ok, why }) => (
+        <form key={a.id} className="scene-answer" onSubmit={(e) => { e.preventDefault(); if (answer.trim() && ok && !busy) { onAct(a.id, answer); setAnswer(''); } }}>
+          <input value={answer} placeholder="답을 적으세요" aria-label={rs(a.name)} disabled={busy || !ok} onChange={(e) => setAnswer(e.target.value)} />
+          <button type="submit" className="primary" disabled={busy || !ok || !answer.trim()} title={why}>{rs(a.name)}</button>
+        </form>
+      ))}
       <div className="scene-actions">
-        {acts.map(({ action: a, ok, why, mode, mod, gaugeMod, dc, oppose }) => (
+        {acts.filter((x) => !x.action.answer).map(({ action: a, ok, why, mode, mod, gaugeMod, dc, oppose }) => (
           <button key={a.id} type="button" disabled={busy || !ok} onClick={() => onAct(a.id)} title={why || rs(a.text ?? '')} className={a.image ? 'has-art' : undefined}>
             {a.image && <AssetImage pkg={pkg} id={a.image} alt="" className="act-art" />}
             <b>{rs(a.name)}</b>
