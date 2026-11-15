@@ -421,3 +421,9 @@ export async function classifyAssetsVision(
   if (batches.length && failed === inputs.length) throw new Error('그림 분류 요청이 모두 실패했습니다 — 이 모델이 이미지 인식을 지원하는지 확인하세요');
   return { assets: out, changed, failed };
 }
+
+/** 파일 이름에 든 표정·상황 낱말만 태그로 (v0.127, 직접 올린 그림: "엘라_웃음_02.png" → 웃음) */
+export function knownTags(name: string): string[] {
+  const known = (t: string) => MOOD_WORDS.has(t) || EXPRESSIONS.some((g) => g.words.includes(t));
+  return [...new Set(tokenize(name).tokens.flatMap(peel).filter(known))].slice(0, 3);
+}
