@@ -1,3 +1,4 @@
+import { useLeaveGuard } from './leaveGuard';
 import { beginRun, endRun } from '../llm/usage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WorldPackage } from '../engine/schema';
@@ -194,6 +195,8 @@ export function CardWorldPanel({ file, extraFiles, settings, onDone, onCancel, o
   }
 
   const busy = stage !== '';
+  // 뒤로 가기 (v0.126): 만드는 중이면 묻는다
+  useLeaveGuard(() => !busy || confirm('세계를 만드는 중입니다. 나가면 멈춥니다. 나갈까요?'));
   const b = bundle;
   const toggles = b ? parseToggles(b.toggles) : [];
   const luaKeys = b ? Object.keys(b.lua.data) : [];

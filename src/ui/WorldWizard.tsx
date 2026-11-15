@@ -16,18 +16,13 @@ import { type RouteOverrides, withRoutes } from '../llm/override';
 import type { LlmSettings } from '../llm/types';
 import { beginRun, endRun } from '../llm/usage';
 import { savePackage } from '../storage/packages';
+import { loadWizard, storeWizard } from '../storage/drafts';
 import { confirmAdult } from './adult';
 import { GenrePicker } from './GenrePicker';
 import { ModelPicker } from './ModelPicker';
 
-const KEY = 'worldforge.wizard.v1';
-interface Saved { draft: WizDraft; step: number }
-function load(): Saved | null {
-  try { const s = JSON.parse(localStorage.getItem(KEY) ?? '') as Saved; return s?.draft?.places ? s : null; } catch { return null; }
-}
-function store(s: Saved | null) {
-  try { if (s) localStorage.setItem(KEY, JSON.stringify(s)); else localStorage.removeItem(KEY); } catch { /* 저장 못 해도 마법사는 쓴다 */ }
-}
+const load = loadWizard;
+const store = (s: { draft: WizDraft; step: number } | null) => storeWizard(s);
 
 /** 단계마다 초보자에게 주는 팁 */
 const TIPS: Record<StepId, string[]> = {

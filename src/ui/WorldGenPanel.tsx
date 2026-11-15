@@ -1,3 +1,4 @@
+import { useLeaveGuard } from './leaveGuard';
 import { beginRun, endRun } from '../llm/usage';
 import { useEffect, useRef, useState } from 'react';
 import { generateWorld, type Size } from '../gm/worldgen/generate';
@@ -56,6 +57,8 @@ export function WorldGenPanel({ settings, onDraft, onCancel }: {
   }
 
   const busy = stage !== '';
+  // 뒤로 가기 (v0.126): 만드는 중이면 묻는다
+  useLeaveGuard(() => !busy || confirm('세계를 만드는 중입니다. 나가면 멈춥니다. 나갈까요?'));
   return (
     <section className="panel">
       <h2>✦ AI로 세계관 만들기</h2>

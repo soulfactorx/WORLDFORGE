@@ -29,6 +29,8 @@ import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { RELATION_KIND_LABEL, STAGES } from '../engine/relationship';
 import { STD_ITEMS } from '../data/items';
 import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
+import { deleteEditorDraft, type EditorDraft, getEditorDraft, saveEditorDraft } from '../storage/drafts';
+import { useLeaveGuard } from './leaveGuard';
 import { MATURE_NOTE, shareBlocked } from '../engine/rating';
 import { confirmAdult } from './adult';
 import { AssetGallery } from './AssetGallery';
@@ -101,8 +103,12 @@ function tabForPath(path: string): Tab {
 
 // ---------------------------------------------------------------- 편집기
 
-export function WorldEditor({ initial, onDone, settings: baseSettings, draftNotes, initialCard, alreadySaved, openLibrary }: {
+export function WorldEditor({ initial, onDone, settings: baseSettings, draftNotes, initialCard, alreadySaved, openLibrary, draftKey, restored }: {
   initial: WorldPackage | null; onDone: () => void; settings?: LlmSettings | null; draftNotes?: string[];
+  /** 초안 열쇠 (v0.126): 홈에서 초안을 이어 열 때 그 초안의 열쇠 */
+  draftKey?: string;
+  /** 저장하지 않은 초안을 이어 연 것 (처음부터 "저장 안 됨") */
+  restored?: boolean;
   /** 이미 라이브러리에 저장된 AI 결과 (카드로 만든 세계) */
   alreadySaved?: boolean;
   /** 이 카드 파일로 새 세계를 만든다 (인물 탭에서 가져오기 창을 바로 연다) */
@@ -167,17 +173,35 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
   const [library, setLibrary] = useState(!!openLibrary);
   const [auditing, setAuditing] = useState(false);
   // 저장 안 된 변경 (v0.82): 처음 열었을 때 이후로 바뀌면 표시하고, 닫을 때 확인한다
-  const [dirty, setDirty] = useState(false);
+  // AI 초안(아직 저장 안 됨)도 처음부터 지킨다
+  const [dirty, setDirty] = useState(!!restored || (!!draftNotes && !alreadySaved));
   const [savedFlash, setSavedFlash] = useState(false);
   const firstW = useRef(true);
   useEffect(() => { if (firstW.current) { firstW.current = false; return; } setDirty(true); }, [w]);
+  // 초안 저절로 보관 (v0.126): 바뀌면 잠시 뒤 IndexedDB에, 앱이 가려지거나 꺼질 때는 바로. 저장하면 지운다
+  const keyRef = useRef(draftKey ?? (initial && alreadySaved !== false && !draftNotes ? initial.manifest.id : `new.${Date.now().toString(36)}`));
+  const key = keyRef.current;
+  const latest = useRef({ w, notes: draftNotes as string[] | undefined, dirty });
+  latest.current = { w, notes: notes ?? undefined, dirty };
+  const [draftAt, setDraftAt] = useState(0);
+  const flush = () => { const l = latest.current; if (l.dirty) void saveEditorDraft(keyRef.current, l.w, l.notes).then(() => setDraftAt(Date.now())).catch(() => undefined); };
   useEffect(() => {
     if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
-  const close = () => { if (!dirty || confirm('저장하지 않은 변경이 있습니다. 저장하지 않고 닫을까요?')) onDone(); };
+    const t = setTimeout(flush, 800);
+    return () => clearTimeout(t);
+  }, [w, dirty]);
+  useEffect(() => {
+    const hide = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush); document.addEventListener('visibilitychange', hide);
+    return () => { window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', hide); flush(); };
+  }, []);
+  // 이 세계에 지난번 저장하지 않은 초안이 있으면 알린다 (홈에서 이어 연 것이 아니면)
+  const [olderDraft, setOlderDraft] = useState<EditorDraft | null>(null);
+  // 고르기 전에 편집을 시작해도 지난 초안을 덮어쓰지 않게, 이번 편집은 다른 열쇠로 보관한다
+  useEffect(() => { if (!restored && !draftKey) void getEditorDraft(key).then((d) => { if (d) { setOlderDraft(d); keyRef.current = `${key}.${Date.now().toString(36)}`; } }); }, []);
+  // 뒤로 가기·닫기: 초안을 보관해 두므로 묻지 않고 닫는다 (홈에서 이어서 편집)
+  useLeaveGuard(() => { flush(); return true; });
+  const close = () => { flush(); onDone(); };
   const [packUi, setPackUi] = useState<null | 'import' | 'character' | 'rules'>(null);
 
   const scenarioGen = useGenProgress();
@@ -207,6 +231,10 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
       if (pruneOnSave.length) { await deleteAssets(w.manifest.id, pruneOnSave.filter((id) => !(w.assets ?? []).some((a) => a.id === id))); setPruneOnSave([]); }
       setApproved(true);
       setDirty(false);
+      latest.current.dirty = false;
+      await deleteEditorDraft(keyRef.current);
+      if (keyRef.current !== key) await deleteEditorDraft(key); // 저장했으니 이 세계의 지난 초안도 소용없다
+      setOlderDraft(null);
       setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000);
       setStatus(`✔ 저장했습니다 (${w.manifest.id}@${w.manifest.version}).${hasErrors(issues) ? ' 오류를 고쳐야 플레이할 수 있습니다.' : ''}`);
     } catch (e) {
@@ -227,7 +255,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
         <button type="button" className="editor-close" onClick={close} title="닫기" aria-label="닫기">←</button>
         <div className="editor-title">
           <b title={w.manifest.name}>{w.manifest.name || '새 세계'}</b>
-          <span className="small muted">세계관 제작{w.manifest.crossover?.length ? ` · 🌌 ${w.manifest.crossover.map((c) => c.name).join('·')}` : ''}{dirty ? <span className="editor-dirty"> · ● 저장 안 됨</span> : ''}</span>
+          <span className="small muted">세계관 제작{w.manifest.crossover?.length ? ` · 🌌 ${w.manifest.crossover.map((c) => c.name).join('·')}` : ''}{dirty ? <span className="editor-dirty" title="저장하지 않은 내용은 초안으로 저절로 보관됩니다. 앱이 꺼져도 홈에서 이어서 편집할 수 있습니다."> · ● 저장 안 됨{draftAt ? ' (초안 보관됨)' : ''}</span> : ''}</span>
         </div>
         <button type="button" className={`editor-tool${auditing ? ' on' : ''}`} onClick={() => setAuditing((v) => !v)} title="빈칸·잘못 채운 칸·빠진 설정을 찾고 AI로 채운다" aria-label="AI 점검·마무리">🩺<span className="tool-label"> AI 점검</span></button>
         <button type="button" className={`editor-tool${library ? ' on' : ''}`} onClick={() => setLibrary((v) => !v)} title="만들어 둔 다른 세계의 인물·장소·임무·이미지 등을 AI 없이 불러온다" aria-label="만계서고에서 불러오기">🌌<span className="tool-label"> 만계서고</span></button>
@@ -236,6 +264,15 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
           : <button type="button" className="editor-tool" onClick={exportFile} title=".wpk 파일로 내보내기" aria-label=".wpk 내보내기">⤓<span className="tool-label"> 내보내기</span></button>}
         <button type="button" className={`primary editor-save${savedFlash ? ' saved' : ''}`} onClick={() => void save()}>{savedFlash ? '✔ 저장됨' : '저장'}</button>
       </div>
+      {olderDraft && (
+        <div className="draft-banner small" role="status">
+          <span>✎ 이 세계에 <b>저장하지 않은 초안</b>이 있습니다 ({new Date(olderDraft.savedAt).toLocaleString()}).</span>
+          <span className="row">
+            <button type="button" className="small primary" onClick={() => { void deleteEditorDraft(keyRef.current); keyRef.current = olderDraft.id; setW(olderDraft.world); if (olderDraft.notes) setNotes(olderDraft.notes); setOlderDraft(null); setStatus('초안을 불러왔습니다. 저장을 눌러야 반영됩니다.'); }}>초안 불러오기</button>
+            <button type="button" className="small" onClick={() => { if (confirm('저장하지 않은 초안을 버릴까요? 되돌릴 수 없습니다.')) { void deleteEditorDraft(key); setOlderDraft(null); } }}>버리기</button>
+          </span>
+        </div>
+      )}
       {library && (
         <WorldLibrary target={w} onClose={() => setLibrary(false)} onApply={(nw, notes) => {
           setW(nw);

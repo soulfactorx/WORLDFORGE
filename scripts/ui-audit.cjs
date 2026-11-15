@@ -184,6 +184,12 @@ const SCREENS = [
     const f = p.locator('.struct-field', { hasText: '갈래 카드' }).first();
     await f.locator('button:has-text("＋ 갈래 카드 추가")').click();
   }],
+  ['홈: 이어서 만들기 (v0.126)', async (p) => {
+    await wizard(p);
+    await p.fill('label:has-text("세계 이름") input', '만들던 세계');
+    await p.click('.wiz-nav button:has-text("나가기")');
+    await p.waitForSelector('.draft-list');
+  }],
   ['마법사: 시작 (빈 초안)', (p) => wizard(p)],
   ['마법사: 장소', (p) => wizard(p, 2)],
   ['마법사: 인물', (p) => wizard(p, 3)],
