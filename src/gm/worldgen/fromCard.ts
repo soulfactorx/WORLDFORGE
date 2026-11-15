@@ -30,6 +30,7 @@ import { generateScenario, type SummaryLevel, worldSummary } from './generate';
 import { generateSpine } from './spine';
 import { generateScenes } from './scenes';
 import { generateRules, mergeRules } from './rules';
+import { generateGimmicks, mergeGimmicks } from './gimmicks';
 import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
 import { translateToKorean } from './translate';
@@ -143,6 +144,8 @@ export interface CardWorldOptions {
   summaryLevel?: SummaryLevel;
   /** 세계 규칙까지 만들기 (v0.83, 기본 예) — 원작의 법칙·금기를 규칙으로 옮긴다 */
   withRules?: boolean;
+  /** 함정·퍼즐까지 만들기 (v0.130, 기본 끔 — 원작에 없는 것을 더하므로) */
+  withGimmicks?: boolean;
   /** 규칙이 놓친 인물을 AI가 로어북에서 찾기 (기본 켬) */
   aiFindCharacters?: boolean;
   /** 외국어 인물·설정 글을 한국어로 번역 (기본 켬) */
@@ -504,6 +507,9 @@ export async function cardToWorld(
       return { world: null, notes: [`세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`] };
     }
   })() : null;
+  // 함정·퍼즐 (v0.130, 선택): 원작의 장소·설정에 어울리게 — 규칙·임무와 동시에
+  const gimmickTrack = opts.withGimmicks ? generateGimmicks(llm, world, () => { /* 진행 표시는 임무 쪽이 한다 */ }, signal, '원작 카드를 바탕으로 한 세계다. 원작의 장소·설정·비밀에 어울리는 기믹으로.', undefined, sum)
+    .then((r) => ({ world: r.world as WorldPackage | null, notes: r.notes }), (e) => ({ world: null, notes: signal?.aborted ? [] : [`함정·퍼즐 생성에 실패했습니다 (편집기 함정·퍼즐 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`] })) : null;
   // 5) 임무·결말 (기존 시나리오 생성기 재사용)
   if (opts.withScenario) {
     try {
@@ -522,6 +528,12 @@ export async function cardToWorld(
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
     if (r?.world) world = mergeRules(world, r.world);
     if (r) notes.push(...r.notes);
+  }
+  if (gimmickTrack) {
+    const r = await gimmickTrack;
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    if (r.world) world = mergeGimmicks(world, r.world);
+    notes.push(...r.notes);
   }
   // 이미지 쪽 결과를 합친다 (이야기 쪽이 인물 객체를 새로 만들었을 수 있으므로 ID로 붙인다)
   onStage('이미지 정리를 마무리하는 중…', 94, 95);

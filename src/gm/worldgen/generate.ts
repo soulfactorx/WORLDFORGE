@@ -11,6 +11,7 @@ import { assignStockImages } from './stock';
 import { imageNeeds } from './imageNeeds';
 import { generateScenes } from './scenes';
 import { generateRules, mergeRules } from './rules';
+import { generateGimmicks, mergeGimmicks } from './gimmicks';
 import { generateSpine, spineOf } from './spine';
 import { linkWarnings } from '../../engine/package/flow';
 import { sceneEntry } from '../../engine/scene';
@@ -81,6 +82,8 @@ export interface GenerateOptions {
   withRules?: boolean;
   /** 국면·갈래 카드까지 만들기 (v0.116, 설계 v6 — 기본 예) */
   withDeck?: boolean;
+  /** 함정·퍼즐까지 만들기 (v0.130, 기본 예) */
+  withGimmicks?: boolean;
   author?: string;
   /** 장르 프로필 ID (설계 v3 2장) */
   genre?: string;
@@ -200,6 +203,9 @@ export async function generateWorld(
   const base = world;
   const rulesTrack = opts.withRules !== false ? generateRules(llm, base, () => { /* 진행 표시는 임무 쪽이 한다 */ }, signal, opts.prompt.slice(0, 1500))
     .then((r) => ({ world: r.world as WorldPackage | null, notes: r.notes }), (e) => ({ world: null, notes: signal?.aborted ? [] : [`세계 규칙 생성에 실패했습니다 (편집기 세계 규칙 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`] })) : null;
+  // 함정·퍼즐 (v0.130): 장소·장면이 생긴 뒤, 규칙·임무와 동시에
+  const gimmickTrack = opts.withGimmicks !== false ? generateGimmicks(llm, base, () => { /* 진행 표시는 임무 쪽이 한다 */ }, signal, opts.prompt.slice(0, 800))
+    .then((r) => ({ world: r.world as WorldPackage | null, notes: r.notes }), (e) => ({ world: null, notes: signal?.aborted ? [] : [`함정·퍼즐 생성에 실패했습니다 (편집기 함정·퍼즐 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`] })) : null;
   if (opts.withScenario) {
     const r = await generateScenario(llm, world, (st) => onStage(st, scenes ? scenesEnd - (scenEnd - worldEnd) : worldEnd + 4, scenesEnd), signal);
     world = r.world;
@@ -210,6 +216,12 @@ export async function generateWorld(
     const r = await rulesTrack;
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
     if (r.world) world = mergeRules(world, r.world);
+    notes = [...notes, ...r.notes];
+  }
+  if (gimmickTrack) {
+    const r = await gimmickTrack;
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    if (r.world) world = mergeGimmicks(world, r.world);
     notes = [...notes, ...r.notes];
   }
   // 국면·갈래 카드 (v0.116): 세계의 방향 → 국면 → 국면마다의 카드. 임무·장면·규칙이 다 생긴 뒤라 그것들을 이어 쓸 수 있다
