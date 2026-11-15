@@ -7,7 +7,7 @@
  *
  * 엔진은 표시를 글에서 지우고, 실제 이미지(같은 뜻의 태그 포함)로 바꾼다. 없는 인물·태그는 가장 가까운 것으로.
  */
-import { expressionTags, paragraphsOf, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
+import { expressionTags, paragraphsOf, pickCharacterImage, pickSceneImage, sceneTags, tagCombos } from '../engine/assets';
 import { displayName } from '../engine/names';
 import type { Character, WorldPackage } from '../engine/schema';
 import type { NarrationImage } from '../engine/state/events';
@@ -50,9 +50,12 @@ export function marksToImages(world: WorldPackage, s: GameState, raw: string, sa
       if (img && !out.some((o) => o.bg)) out.push({ id: img.id, caption: loc?.name ?? '', bg: 'new' });
       continue;
     }
-    const c = find(m.id ?? '');
+    // 인물: ID · 이름 (이름에 띄어쓰기가 있으면 앞 낱말들을 이어 붙여 본다 — [[그림 왕 주모 웃음]])
+    const words = [m.id ?? '', ...m.tag.split(/\s+/)].filter(Boolean);
+    let c: Character | undefined, k = 1;
+    for (let n = Math.min(words.length, 4); n >= 1 && !c; n--) { c = find(words.slice(0, n).join(' ')); if (c) k = n; }
     if (!c) continue;
-    const img = pickCharacterImage(world, c.id, m.tag, `${salt}|${m.para}`);
+    const img = pickCharacterImage(world, c.id, words.slice(k).join(' '), `${salt}|${m.para}`);
     if (img && !out.some((o) => o.id === img.id)) out.push({ id: img.id, caption: c.name, para: m.para });
   }
   return out;
@@ -76,15 +79,17 @@ export function imageMenu(world: WorldPackage, s: GameState, people: Character[]
   const rows = people.flatMap((c) => {
     const has = world.assets!.some((a) => a.kind === 'character' && a.characterId === c.id);
     if (!has) return [];
-    const tags = expressionTags(world, c.id).slice(0, 40);
-    return [`- ${c.id} (${displayName(s, c)}): ${tags.length ? tags.join(', ') : '(기본 모습만)'}`];
+    // v0.138: 낱개 태그가 아니라 그림마다의 태그 조합을 보여 준다 — 어떤 태그가 한 그림에 함께 있는지 알아야 맞는 그림을 고른다
+    const combos = tagCombos(world, c.id, 40).map((x) => x.split(' ').slice(0, 4).join('+'));
+    const more = expressionTags(world, c.id).filter((t) => !combos.some((x) => x.split('+').includes(t))).slice(0, 20);
+    return [`- ${c.id} (${displayName(s, c)}): ${combos.length ? combos.join(' · ') : '(기본 모습만)'}${more.length ? ` · 그 밖의 태그: ${more.join(', ')}` : ''}`];
   });
   const bg = sceneTags(world, s.player.locationId).filter((t) => t !== 'default').slice(0, 20);
   if (!rows.length && !bg.length) return '';
   return `\n\n## 그림 (서술 속에 넣을 수 있다 — 선택)
 그림이 어울리는 문단 바로 앞 줄에 표시를 쓴다. 표시는 화면에서 그 그림으로 바뀐다.
-- [[그림 인물ID 태그]] — 그 문단에서 그 인물이 짓는 표정·하는 행동에 가장 맞는 태그를 아래 목록에서 고른다 (맞는 것이 없으면 태그를 비운다).
+- [[그림 인물ID 태그 태그]] — 그 문단에서 그 인물의 표정·행동·차림·상황에 가장 맞는 **그림 하나의 태그 조합**을 아래 목록에서 골라 띄어 쓴다 (예: 목록의 "smile+uniform"이면 [[그림 npc/lia smile uniform]]). 목록에 있는 낱말 그대로 쓴다. 맞는 것이 없으면 태그를 비운다.
 - [[배경 태그]] — 장면의 분위기가 크게 바뀔 때만 (예: 밤이 됨, 싸움이 시작됨).
 - 한 턴에 인물 그림 1~3장. 인물이 처음 등장하거나 표정·행동이 크게 바뀌는 문단에. 같은 인물을 같은 태그로 되풀이하지 않는다.
-${rows.length ? `인물별 태그:\n${rows.join('\n')}` : ''}${bg.length ? `\n이 장소의 장면 태그: ${bg.join(', ')}` : ''}`;
+${rows.length ? `인물별 그림 (그림마다의 태그 조합, · 로 나눔):\n${rows.join('\n')}` : ''}${bg.length ? `\n이 장소의 장면 태그: ${bg.join(', ')}` : ''}`;
 }

@@ -68,15 +68,82 @@ export const EXPRESSIONS: { key: string; words: string[]; cues: RegExp }[] = [
   { key: 'blush', words: ['blush', 'blushing', 'shy', 'love', 'flirt', '부끄', '수줍', '홍조'], cues: /붉어|부끄|수줍|얼굴이 달아|홍조|설레/ },
   { key: 'tired', words: ['tired', 'sleepy', 'exhausted', 'bored', '피곤', '졸림', '지침'], cues: /하품|졸린|졸음|지친|피곤|나른/ },
   { key: 'hurt', words: ['hurt', 'injured', 'wounded', 'pain', '부상', '고통'], cues: /다친|피를 흘|상처|신음|고통|비틀/ },
+  // v0.138: 카드에 흔한 표정 더
+  { key: 'pout', words: ['pout', 'pouting', 'sulk', 'sulky', 'grumpy', 'displeased', 'huff', '삐짐', '뾰로통', '토라짐', '시무룩'], cues: /삐졌|뾰로통|토라|입을 삐죽|볼을 부풀|시무룩/ },
+  { key: 'smug', words: ['smug', 'proud', 'confident', 'tease', 'teasing', 'mischievous', 'grin', 'smirk', '의기양양', '우쭐', '장난', '능글'], cues: /의기양양|우쭐|능글|짓궂|씩 웃|피식|입꼬리를 올/ },
+  { key: 'excited', words: ['excited', 'excite', 'eager', 'thrilled', 'energetic', '신남', '흥분', '들뜸'], cues: /신이 나|들떠|흥분|눈을 반짝|설레/ },
+  { key: 'wink', words: ['wink', 'winking', '윙크'], cues: /윙크|한쪽 눈을 찡긋/ },
+  { key: 'love', words: ['love', 'heart', 'adoring', 'lovestruck', 'affection', '사랑', '하트', '애정'], cues: /사랑스럽|애정|하트|넋을 잃고|황홀/ },
+  { key: 'disgust', words: ['disgust', 'disgusted', 'contempt', 'scorn', '경멸', '혐오', '질색'], cues: /경멸|혐오|질색|역겨|눈살/ },
+  { key: 'sleep', words: ['sleep', 'sleeping', 'asleep', 'nap', '잠', '수면', '잠든'], cues: /잠들|곤히|새근|코를 골/ },
 ];
+
+/** 태그 비교용 꼴 (v0.138): 소문자 · 숫자·기호 빼기 (smile02 → smile, 웃음_2 → 웃음) */
+export const normTag = (t: string) => t.toLowerCase().replace(/[^\p{L}]+/gu, '');
+/** 차림·때·상황 낱말의 같은 뜻 무리 (v0.138, 맞추기에만 — 표정 짐작에는 쓰지 않는다) */
+const TAG_GROUPS: string[][] = [
+  ['night', 'nighttime', 'midnight', '밤', '야간', '한밤'], ['day', 'daytime', 'noon', '낮', '한낮'], ['morning', 'dawn', '아침', '새벽'], ['evening', 'sunset', 'dusk', '저녁', '노을', '해질녘'],
+  ['rain', 'rainy', '비', '빗속'], ['snow', 'snowy', '눈', '설경'], ['battle', 'fight', 'combat', 'war', '전투', '싸움', '결투'],
+  ['uniform', 'schooluniform', '교복', '제복'], ['swimsuit', 'bikini', '수영복', '비키니'], ['pajamas', 'pyjamas', 'nightwear', '잠옷'], ['armor', 'armour', '갑옷'],
+  ['dress', 'gown', '드레스'], ['casual', '사복', '평상복'], ['maid', '메이드'], ['kimono', 'yukata', '기모노', '유카타'], ['hanbok', '한복'], ['apron', '앞치마'],
+  ['bed', 'bedroom', '침대', '침실'], ['bath', 'bathroom', 'shower', '목욕', '욕실', '샤워'], ['kiss', '키스', '입맞춤'], ['hug', '포옹', '안기'],
+  ['eat', 'eating', 'food', '식사', '먹는'], ['drink', 'drinking', '술', '음주'], ['walk', 'walking', '산책', '걷는'], ['read', 'reading', 'book', '독서', '책'],
+];
+const groupKey = (t: string) => {
+  const n = normTag(t);
+  return EXPRESSIONS.find((g) => g.key === n || g.words.some((w) => normTag(w) === n))?.key ?? TAG_GROUPS.find((g) => g.some((w) => normTag(w) === n))?.[0];
+};
+/** 원하는 것을 낱말로: "웃음 교복", "smile+blush", "angry, night" */
+export const wantedTags = (tag: string) => [...new Set(tag.split(/[\s,+/|·]+/).map((x) => x.trim().toLowerCase()).filter((x) => x && x !== 'default' && x !== '기본'))];
+
+/**
+ * 원하는 낱말 하나가 이미지 태그 하나와 얼마나 맞나 (v0.138): 같음 3 · 같은 뜻 무리 2 · 한쪽이 다른 쪽을 품음(3글자 이상) 1
+ */
+function tagMatch(wanted: string, tag: string): number {
+  const w = normTag(wanted), t = normTag(tag);
+  if (!w || !t) return 0;
+  if (w === t) return 3;
+  const gw = groupKey(w);
+  if (gw && gw === groupKey(t)) return 2;
+  const short = w.length <= t.length ? w : t, long = short === w ? t : w;
+  return short.length >= 3 && long.includes(short) ? 1 : 0;
+}
+
+export interface TagScore { score: number; matched: string[]; extra: number }
+/** 이미지 하나가 원하는 낱말들과 얼마나 맞나: 낱말마다 가장 잘 맞는 태그의 점수를 더한다. extra = 원하지 않은 태그 수 (적을수록 그 표정에 가까운 그림) */
+export function scoreImage(tags: string[], wanted: string[]): TagScore {
+  let score = 0;
+  const matched: string[] = [];
+  const used = new Set<string>();
+  for (const w of wanted) {
+    let best = 0, by = '';
+    for (const t of tags) { const m = tagMatch(w, t); if (m > best) { best = m; by = t; } }
+    if (best) { score += best; matched.push(by === w ? w : `${w}→${by}`); used.add(by); }
+  }
+  return { score, matched, extra: tags.filter((t) => t !== 'default' && !used.has(t)).length };
+}
+
+/** 가장 잘 맞는 이미지들 (점수 높은 것 → 군더더기 태그가 적은 것). 아무것도 안 맞으면 [] */
+export function bestMatches(list: AssetMeta[], wanted: string[]): { best: AssetMeta[]; top?: TagScore } {
+  if (!wanted.length) return { best: [] };
+  const scored = list.map((a) => ({ a, s: scoreImage(a.tags, wanted) })).filter((x) => x.s.score > 0);
+  if (!scored.length) return { best: [] };
+  const top = Math.max(...scored.map((x) => x.s.score));
+  const lvl = scored.filter((x) => x.s.score === top);
+  const least = Math.min(...lvl.map((x) => x.s.extra));
+  const best = lvl.filter((x) => x.s.extra === least);
+  return { best: best.map((x) => x.a), top: best[0]!.s };
+}
 
 /** 원하는 태그를 그 인물이 가진 태그 중 같은 뜻의 것으로 바꾼다 (없으면 '') */
 export function resolveTag(available: string[], wanted: string): string {
   const t = wanted.trim().toLowerCase();
   if (!t) return '';
   if (available.includes(t)) return t;
-  const group = EXPRESSIONS.find((g) => g.key === t || g.words.includes(t));
-  return group ? available.find((a) => a === group.key || group.words.includes(a)) ?? '' : '';
+  // 같은 뜻 무리 · 비슷한 꼴 (v0.138: smile02 = smile, 웃는 = 웃음)
+  let best = '', score = 0;
+  for (const a of available) { const m = tagMatch(t, a); if (m > score) { score = m; best = a; } }
+  return best;
 }
 
 /** 서술에서 그 인물이 나온 문장(과 다음 문장)을 보고 표정을 짐작한다 */
@@ -106,24 +173,43 @@ export function contextExpression(text: string, names: string[], available: stri
   return '';
 }
 
-/** 인물 이미지 하나: 태그가 맞는 것(같은 뜻 포함) → 기본 모습 → 아무거나 */
+/**
+ * 인물 이미지 하나 (v0.138): 원하는 낱말(여러 개 가능)과 가장 잘 맞는 이미지 → 기본 모습 → 아무거나.
+ * 맞추기: 같은 태그 · 같은 뜻 무리(웃음=smile=happy…) · 비슷한 꼴(smile02=smile, 웃는=웃음). 같은 점수면 군더더기 태그가 적은 것, 그래도 여럿이면 턴마다 돌려 가며.
+ */
 export function pickCharacterImage(world: WorldPackage, npcId: EntityId, tag: string, salt: string): AssetMeta | undefined {
   const c = world.characters.find((x) => x.id === npcId);
   if (!c) return undefined;
   const list = characterAssets(world, c);
-  const t = resolveTag([...new Set(list.flatMap((a) => a.tags))], tag);
-  const tagged = t ? list.filter((a) => a.tags.includes(t)) : [];
-  if (tagged.length) {
-    const r = pickOne(tagged, `${npcId}|${t}|${salt}`);
-    note({ step: '인물 이미지', target: `${c.name} (${npcId})`, ...(tag ? { wanted: tag } : {}), resolved: t, rule: `태그 "${t}"가 붙은 이미지 ${tagged.length}장 중 턴마다 돌려 가며 하나`, candidates: tagged.length, ...(r ? { chosen: r.id } : {}) });
+  const wanted = wantedTags(tag);
+  const { best, top } = bestMatches(list, wanted);
+  if (best.length && top) {
+    const r = pickOne(best, `${npcId}|${wanted.join('+')}|${salt}`);
+    note({ step: '인물 이미지', target: `${c.name} (${npcId})`, wanted: tag, resolved: top.matched.join(', '),
+      rule: `원한 "${wanted.join(' ')}" — 맞춘 태그 ${top.matched.map((m) => `"${m}"`).join(', ')} (점수 ${top.score}${top.extra ? `, 다른 태그 ${top.extra}개` : ''})인 이미지 ${best.length}장 중${best.length > 1 ? ' 턴마다 돌려 가며' : ''} 하나`,
+      candidates: best.length, ...(r ? { chosen: r.id } : {}) });
     return r;
   }
   const def = list.filter((a) => a.tags.includes('default') || a.tags.length === 0);
   const r = pickOne(def.length ? def : list, `${npcId}|${salt}`);
   note({ step: '인물 이미지', target: `${c.name} (${npcId})`, ...(tag ? { wanted: tag } : {}),
-    rule: `${tag ? `원한 태그 "${tag}"와 맞는 이미지가 없어 ` : '원한 표정 없음 — '}${def.length ? `기본 이미지(default 또는 태그 없음) ${def.length}장 중` : list.length ? `이 인물의 이미지 전체 ${list.length}장 중` : '이 인물의 이미지가 없음'}`,
+    rule: `${wanted.length ? `원한 "${wanted.join(' ')}"와 맞는 태그(같은 뜻·비슷한 꼴 포함)가 없어 ` : '원한 표정 없음 — '}${def.length ? `기본 이미지(default 또는 태그 없음) ${def.length}장 중` : list.length ? `이 인물의 이미지 전체 ${list.length}장 중` : '이 인물의 이미지가 없음'}`,
     candidates: def.length || list.length, ...(r ? { chosen: r.id } : {}) });
   return r;
+}
+
+/** 이 인물의 이미지 태그 조합 (v0.138, AI에게 주는 그림 목록): 이미지마다의 태그 묶음을 겹치지 않게, 많이 쓰인 순 */
+export function tagCombos(world: WorldPackage, npcId: EntityId, max = 50): string[] {
+  const c = world.characters.find((x) => x.id === npcId);
+  if (!c) return [];
+  const n = new Map<string, number>();
+  for (const a of characterAssets(world, c)) {
+    const tags = a.tags.filter((t) => t !== 'default');
+    if (!tags.length) continue;
+    const k = tags.join(' ');
+    n.set(k, (n.get(k) ?? 0) + 1);
+  }
+  return [...n].sort((x, y) => y[1] - x[1]).slice(0, max).map(([k]) => k);
 }
 
 function sceneAssets(world: WorldPackage, locationId: EntityId): AssetMeta[] {
@@ -140,12 +226,14 @@ export function pickSceneImage(world: WorldPackage, locationId: EntityId, tag: s
   const list = sceneAssets(world, locationId);
   const t = tag.trim().toLowerCase();
   const target = world.locations.find((l) => l.id === locationId)?.name ?? locationId;
-  if (t) {
-    const tagged = list.filter((a) => a.tags.includes(t));
-    const here = tagged.filter((a) => a.locationId === locationId);
-    if (tagged.length) {
-      const r = pickOne(here.length ? here : tagged, `${locationId}|${t}|${salt}`);
-      note({ step: '장소 이미지', target, wanted: t, resolved: t, rule: here.length ? `이 장소의 "${t}" 태그 이미지 ${here.length}장 중` : `이 장소엔 "${t}" 태그가 없어 다른 장면 이미지 ${tagged.length}장 중`, candidates: here.length || tagged.length, ...(r ? { chosen: r.id } : {}) });
+  const wanted = wantedTags(t);
+  if (wanted.length) {
+    // 이 장소의 이미지에서 먼저, 없으면 모든 장소용 장면 이미지에서 (v0.138: 여러 낱말·비슷한 꼴도 맞춘다)
+    const here = bestMatches(list.filter((a) => a.locationId === locationId), wanted);
+    const any = here.best.length ? here : bestMatches(list, wanted);
+    if (any.best.length && any.top) {
+      const r = pickOne(any.best, `${locationId}|${wanted.join('+')}|${salt}`);
+      note({ step: '장소 이미지', target, wanted: t, resolved: any.top.matched.join(', '), rule: `${here.best.length ? '이 장소의' : '이 장소엔 맞는 것이 없어 다른 장면'} 이미지 중 맞춘 태그 ${any.top.matched.map((m) => `"${m}"`).join(', ')} (점수 ${any.top.score})인 ${any.best.length}장 중`, candidates: any.best.length, ...(r ? { chosen: r.id } : {}) });
       return r;
     }
   }
