@@ -1316,3 +1316,4 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .nameless-bar p { margin: 0 0 6px; }
 .nameless-bar .row input { flex: 1 1 180px; min-width: 0; }
 .lib-select-all { gap: 6px; flex-wrap: wrap; }
+.asset-select-bar { gap: 6px; align-items: center; flex-wrap: wrap; }

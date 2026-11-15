@@ -12,6 +12,7 @@ import { db } from '../storage/db';
 import { applyUserArt, imageNeeds, needsText, targetTag } from '../gm/worldgen/imageNeeds';
 import { addUserArt, listUserArt } from '../storage/userart';
 import { AssetTools } from './AssetTools';
+import { assetRefs, ownFiles } from '../gm/assetRefs';
 import { ImageFileButtons } from './ImageFiles';
 import { AssetFilterBar } from './AssetFilterBar';
 import { type AssetFilter, EMPTY_FILTER, filterAssets } from '../gm/assetFilter';
@@ -20,7 +21,8 @@ const KIND = [['character', '인물'], ['scene', '장면'], ['map', '지도'], [
 const PAGE = 60;
 
 /** 세계관 이미지 목록: 종류·인물·장소·태그를 고친다 (이미지 파일 자체는 브라우저 저장소에 있다) */
-export function AssetGallery({ world, onChange, settings }: { world: WorldPackage; onChange: (assets: AssetMeta[]) => void; settings?: LlmSettings | null }) {
+export function AssetGallery({ world, onChange, settings, onPrune }: { world: WorldPackage; onChange: (assets: AssetMeta[]) => void; settings?: LlmSettings | null;
+  /** 지운 이미지의 파일은 저장할 때 지운다 (v0.136) */ onPrune?: (ids: string[]) => void }) {
   const assets = world.assets ?? [];
   const [target, setTarget] = useState(() => world.characters[0] ? `c:${world.characters[0].id}` : world.locations[0] ? `l:${world.locations[0].id}` : '');
   const [busy, setBusy] = useState('');
@@ -77,6 +79,18 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
   const shown = list.slice(page * PAGE, (page + 1) * PAGE);
   const up = (id: string, patch: Partial<AssetMeta>) => onChange(assets.map((a) => (a.id === id ? { ...a, ...patch } : a)));
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
+  const [deleted, setDeleted] = useState<{ n: number; before: AssetMeta[] } | null>(null);
+  function removeSelected() {
+    const ids = assets.filter((a) => selected.has(a.id)).map((a) => a.id);
+    if (!ids.length) return;
+    const refs = assetRefs(world, ids);
+    const used = [...refs.keys()];
+    if (!confirm(`이미지 ${ids.length}장을 지울까요?${used.length ? `\n\n⚠ 그 가운데 ${used.length}장은 장면·카드 등 세계의 다른 곳에서 쓰고 있습니다 (예: ${used.slice(0, 3).map((id) => assets.find((a) => a.id === id)?.name ?? id).join(', ')}). 지우면 그곳에는 그림이 비어 보입니다.` : ''}\n\n저장하기 전에는 되돌릴 수 있고, 이미지 파일은 저장할 때 지워집니다.`)) return;
+    setDeleted({ n: ids.length, before: assets });
+    onChange(assets.filter((a) => !selected.has(a.id)));
+    onPrune?.(ownFiles(ids));
+    setSelected(new Set());
+  }
   const toggle = (id: string) => { const n = new Set(selected); if (n.has(id)) n.delete(id); else n.add(id); setSelected(n); };
   return (
     <div>
@@ -152,6 +166,18 @@ export function AssetGallery({ world, onChange, settings }: { world: WorldPackag
         <span className="small">{page + 1} / {pages} 쪽 · {list.length}장</span>
         <button disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} aria-label="뒤 쪽">▶</button>
       </div>
+      {/* 고르기·지우기 (v0.136): 거른 것 모두 고르기 → 한 번에 지우기 */}
+      <div className="row asset-select-bar">
+        {(() => { const allOn = list.length > 0 && list.every((a) => selected.has(a.id)); return (
+          <button type="button" className="small" disabled={!list.length} onClick={() => setSelected(allOn ? new Set([...selected].filter((id) => !list.some((a) => a.id === id))) : new Set([...selected, ...list.map((a) => a.id)]))}>
+            {allOn ? `거른 ${list.length}장 선택 해제` : `☑ 거른 ${list.length}장 모두 선택`}
+          </button>); })()}
+        {selected.size > 0 && <button type="button" className="small" onClick={() => setSelected(new Set())}>선택 해제</button>}
+        <span className="small muted">선택 {selected.size}장</span>
+        <span className="spacer" />
+        <button type="button" className="small danger" disabled={!selected.size} onClick={removeSelected}>🗑 선택한 {selected.size}장 삭제</button>
+      </div>
+      {deleted && <p className="small status">{deleted.n}장을 지웠습니다. 저장해야 반영되고, 이미지 파일은 저장할 때 지워집니다. <button type="button" className="small" onClick={() => { onChange(deleted.before); setDeleted(null); }}>↶ 삭제 되돌리기</button></p>}
       <AssetTools world={world} assets={assets} onChange={onChange} settings={settings} selected={selected} setSelected={setSelected} visible={list} />
       {!list.length && assets.length > 0 && <p className="small muted">이 조건에 맞는 그림이 없습니다. <button type="button" className="small" onClick={() => setFilter(EMPTY_FILTER)}>조건 지우기</button></p>}
       <div className="gallery">

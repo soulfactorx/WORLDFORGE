@@ -249,6 +249,10 @@ const SCREENS = [
     const boxes = p.locator('.asset-pick input[type=checkbox]');
     if (await boxes.count()) await boxes.first().check();
   }],
+  ['편집: 이미지 거른 것 모두 선택 (v0.136)', async (p) => {
+    await editorTab(p, '이미지');
+    await p.locator('.asset-select-bar button').first().click();
+  }],
   ['편집: 이미지 거르기 (v0.122)', async (p) => {
     await editorTab(p, '이미지');
     const chips = p.locator('.asset-tags .tag-chip');

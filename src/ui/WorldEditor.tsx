@@ -947,7 +947,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
         </>
       )}
 
-      {tab === 'images' && <AssetGallery world={w} settings={settings} onChange={(assets) => set({ assets })} />}
+      {tab === 'images' && <AssetGallery world={w} settings={settings} onChange={(assets) => set({ assets })} onPrune={(ids) => setPruneOnSave((p) => [...new Set([...p, ...ids])])} />}
       {tab === 'json' && !shareBlocked(w) && <JsonField label="패키지 전체 (world.json)" value={w} onChange={(v) => setW(v)} rows={30} />}
       {tab === 'json' && shareBlocked(w) && (
         <>
