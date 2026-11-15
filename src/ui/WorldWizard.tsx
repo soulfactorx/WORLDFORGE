@@ -20,6 +20,7 @@ import { loadWizard, storeWizard } from '../storage/drafts';
 import { confirmAdult } from './adult';
 import { GenrePicker } from './GenrePicker';
 import { ModelPicker } from './ModelPicker';
+import { ImprovFields } from './ImprovFields';
 
 const load = loadWizard;
 const store = (s: { draft: WizDraft; step: number } | null) => storeWizard(s);
@@ -148,6 +149,7 @@ export function WorldWizard({ settings, onDone, onCancel }: {
             <label>서술 문체 <span className="small muted">— 선택</span>
               <textarea rows={2} value={d.style} placeholder="예: 조용하고 으스스하게. 짧은 문장, 소리와 냄새를 자주 묘사한다." onChange={(e) => set({ style: e.target.value })} />
             </label>
+            <ImprovFields value={d.improv} genreHint={d.genre.id} onChange={(improv) => set({ improv })} />
           </>
         )}
         {cur.id === 'places' && <Places d={d} set={set} />}

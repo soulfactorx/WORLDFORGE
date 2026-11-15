@@ -205,6 +205,12 @@ const SCREENS = [
     await p.waitForSelector('.draft-list');
   }],
   ['마법사: 시작 (빈 초안)', (p) => wizard(p)],
+  ['마법사: 배경 (돌발 사건)', (p) => wizard(p, 1)],
+  ['편집: 장소 (한쪽만 이어진 길)', async (p) => {
+    await editorTab(p, '장소');
+    const box = p.locator('.item-form input[type=checkbox]').first();
+    await box.check(); await box.uncheck();
+  }],
   ['마법사: 장소', (p) => wizard(p, 2)],
   ['마법사: 인물', (p) => wizard(p, 3)],
   ['마법사: 비밀', (p) => wizard(p, 4)],

@@ -6,6 +6,7 @@ import { SKILL_IDS } from '../engine/character/rules';
 import { SceneForms } from './SceneForms';
 import { PortraitPicker } from './PortraitPicker';
 import { EntityImages } from './EntityImages';
+import { makeTwoWay, oneWayLinks, setLink, tidyLinks } from '../engine/locationLinks';
 import { deleteAssets, storeAssets } from '../storage/assets';
 import { addSource, removeSource, sourcesOf } from '../engine/sources';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
@@ -54,6 +55,7 @@ import { WorldAudit } from './WorldAudit';
 import { Toast } from './Toast';
 import { GenrePicker } from './GenrePicker';
 import { GmStylePicker } from './GmStylePicker';
+import { ImprovFields } from './ImprovFields';
 import { epithetOf } from '../engine/names';
 import { GenProgress, useGenProgress } from './GenProgress';
 import { NpcStatsEditor } from './NpcStatsEditor';
@@ -427,13 +429,20 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
           <Area label="세계 개요 — 플레이어도 아는 배경·분위기·규칙 (모든 AI가 참고하고, 수첩 맨 위 '세계 소개'에 보인다 · 2500자까지)" value={w.overview} rows={6} onChange={(overview) => set({ overview: overview || undefined })} />
           <Area label="GM 메모 — 숨은 설정·연출 지침 (Director만 참고하고 플레이어에게 직접 말하지 않는다 · 2500자까지)" value={w.gmNotes} rows={4} onChange={(gmNotes) => set({ gmNotes: gmNotes || undefined })} />
           <GmStylePicker w={w} onChange={(gmStyle) => set({ gmStyle })} />
+          <ImprovFields value={w.improv} genreHint={w.genre?.id} onChange={(improv) => set({ improv })} />
           <Area label="서술 문체 참고 (선택, 1500자까지)" value={w.style} rows={4} onChange={(style) => set({ style: style || undefined })} />
           <StructField w={w} spec={{ list: SPEC.starts }} label="시작 방식 선택지 (선택: [{ id, name, description, locationId, openingScene, knows }])" value={w.starts ?? []} rows={8} onChange={(starts) => set({ starts: starts.length ? starts : undefined })} />
         </div>
       )}
 
+      {tab === 'locations' && oneWayLinks(w.locations).length > 0 && (
+        <div className="draft-banner small" role="status">
+          <span>↔ 한쪽만 이어진 길이 {oneWayLinks(w.locations).length}개 있습니다 (그쪽에서는 돌아올 수 없습니다).</span>
+          <button type="button" className="small primary" onClick={() => set({ locations: makeTwoWay(w.locations) })}>모두 양쪽으로 잇기</button>
+        </div>
+      )}
       {tab === 'locations' && (
-        <ItemList<Location> title="장소" items={w.locations} onChange={(locations) => set({ locations })}
+        <ItemList<Location> title="장소" items={w.locations} onChange={(locations) => set({ locations: tidyLinks(w.locations, locations) })}
           make={(n) => ({ id: `loc/new-${n}`, name: '새 장소', description: '', connections: [] })}
           render={(l, up) => (
             <div className="form-grid">
@@ -442,12 +451,15 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
               <Area label="묘사 (플레이어가 감각으로 알 수 있는 것)" value={l.description} onChange={(description) => up({ description })} />
               <EntityImages w={w} target={{ kind: 'location', id: l.id, name: l.name }} onChange={(assets) => set({ assets })} />
               <Select label="AI 즉흥 설정" value={l.improvisation ?? 'minor'} options={IMPROV} onChange={(improvisation) => up({ improvisation })} />
-              <fieldset><legend>연결된 장소</legend>
+              <fieldset><legend>연결된 장소 <span className="small muted">— 체크하면 그 장소에서도 이곳으로 이어지고, 끄면 양쪽 모두 끊긴다</span></legend>
                 <div className="skill-grid">
-                  {w.locations.filter((x) => x.id !== l.id).map((x) => (
-                    <label key={x.id} className="check"><input type="checkbox" checked={l.connections.includes(x.id)}
-                      onChange={(e) => up({ connections: e.target.checked ? [...l.connections, x.id] : l.connections.filter((c) => c !== x.id) })} /> {x.name}</label>
-                  ))}
+                  {w.locations.filter((x) => x.id !== l.id).map((x) => {
+                    const to = l.connections.includes(x.id), back = x.connections.includes(l.id);
+                    return (
+                      <label key={x.id} className="check"><input type="checkbox" checked={to || back}
+                        onChange={(e) => set({ locations: setLink(w.locations, l.id, x.id, e.target.checked) })} /> {x.name}{to !== back && <span className="small warn-text" title="체크를 껐다 켜면 양쪽으로 이어집니다"> (한쪽만)</span>}</label>
+                    );
+                  })}
                 </div>
               </fieldset>
               <StructField w={w} spec={{ list: SPEC.discoveries }} label="발견할 수 있는 것" value={l.discoveries ?? []} onChange={(discoveries) => up({ discoveries })} rows={6}

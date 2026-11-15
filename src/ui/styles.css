@@ -1275,3 +1275,6 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .entity-img.editing > img, .entity-img.editing > .asset-ph { grid-row: span 3; }
 .entity-img.editing > .entity-tag-edit { grid-column: 1 / -1; }
 .entity-tag-input button { white-space: nowrap; flex: 0 0 auto; }
+
+/* GM 즉흥 등장 (v0.128) */
+.improv-fields label:not(.check) { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
