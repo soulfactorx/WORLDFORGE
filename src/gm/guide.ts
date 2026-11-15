@@ -213,18 +213,54 @@ export function withChoiceTail<T extends { system: string; user: string }>(world
   return { ...req, system: `${req.system}\n\n${choiceTailRules()}\n${guideRules(world)}`, user: `${req.user}\n\n# 선택지 꼬리의 재료 (서술 뒤 ${TAIL_MARK} 아래 JSON에만 쓴다)\n${guideMaterials(world, s)}` };
 }
 
-/** 서술 글에서 선택지 꼬리를 떼어 낸다. 꼬리가 없으면 tail = null */
-export function splitTail(text: string): { narration: string; tail: GuideOutput | null } {
+/** 꼬리를 읽은 결과 (v0.139, 디버그용) */
+export interface TailReport { status: 'none' | 'ok' | 'repaired' | 'salvaged' | 'failed'; error?: string; snippet?: string }
+
+/**
+ * 꼬리 JSON을 너그럽게 읽는다 (v0.139): 코드 블록 표시 · 굽은 따옴표 · 끝 쉼표 · 주석을 고치고,
+ * 길이 제한으로 잘린 JSON은 마지막으로 끝난 선택지까지 살려 닫는다. 그래도 안 되면 선택지 글만 건진다.
+ */
+export function parseTailJson(rest: string): { out: GuideOutput | null; report: TailReport } {
+  const body = rest.replace(/```(?:json)?/gi, '').trim();
+  const a = body.indexOf('{');
+  if (a < 0) return { out: null, report: { status: 'failed', error: 'JSON이 없다', snippet: body.slice(0, 200) } };
+  const b = body.lastIndexOf('}');
+  const raw = b > a ? body.slice(a, b + 1) : body.slice(a);
+  const tryParse = (t: string) => { try { const o = JSON.parse(t) as GuideOutput; return o && typeof o === 'object' ? o : null; } catch { return null; } };
+  let out = tryParse(raw);
+  if (out) return { out, report: { status: 'ok' } };
+  let err = '';
+  try { JSON.parse(raw); } catch (e) { err = (e as Error).message; }
+  const fixed = raw.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/\/\/[^\n"]*$/gm, '').replace(/,(\s*[}\]])/g, '$1');
+  out = tryParse(fixed);
+  if (out) return { out, report: { status: 'repaired', error: err } };
+  // 잘린 JSON: 마지막으로 닫힌 선택지 객체까지 남기고 괄호를 닫는다
+  const ci = fixed.indexOf('"choices"');
+  if (ci >= 0) {
+    const lastObj = fixed.lastIndexOf('}');
+    for (let k = lastObj; k > ci; k = fixed.lastIndexOf('}', k - 1)) {
+      const head = fixed.slice(0, k + 1);
+      const opens = (head.match(/\[/g) ?? []).length - (head.match(/\]/g) ?? []).length;
+      const braces = (head.match(/{/g) ?? []).length - (head.match(/}/g) ?? []).length;
+      if (opens < 0 || braces < 0) continue;
+      const o = tryParse(head + ']'.repeat(opens) + '}'.repeat(braces));
+      if (o && Array.isArray(o.choices) && o.choices.length) return { out: o, report: { status: 'repaired', error: `${err} — 잘린 JSON을 닫아 읽음` } };
+    }
+  }
+  // 마지막: 선택지 글만 건진다
+  const texts = [...fixed.matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.){2,200})"/g)].map((m) => m[1]!.replace(/\\"/g, '"'));
+  const summary = /"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(fixed)?.[1] ?? '';
+  if (texts.length) return { out: { summary, suggestion: '', choices: texts.map((text) => ({ text, skill: '', kind: '' })) } as unknown as GuideOutput, report: { status: 'salvaged', error: err, snippet: raw.slice(0, 300) } };
+  return { out: null, report: { status: 'failed', error: err, snippet: raw.slice(0, 300) } };
+}
+
+/** 서술 글에서 선택지 꼬리를 떼어 낸다. 꼬리가 없으면 tail = null. report: 꼬리를 어떻게 읽었나 (디버그) */
+export function splitTail(text: string): { narration: string; tail: GuideOutput | null; report: TailReport } {
   const i = text.indexOf(TAIL_MARK);
-  if (i < 0) return { narration: text.trimEnd(), tail: null };
+  if (i < 0) return { narration: text.trimEnd(), tail: null, report: { status: 'none' } };
   const narration = text.slice(0, i).trimEnd();
-  const rest = text.slice(i + TAIL_MARK.length);
-  const a = rest.indexOf('{'), b = rest.lastIndexOf('}');
-  if (a < 0 || b <= a) return { narration, tail: null };
-  try {
-    const out = JSON.parse(rest.slice(a, b + 1)) as GuideOutput;
-    return { narration, tail: out && typeof out === 'object' ? out : null };
-  } catch { return { narration, tail: null }; }
+  const { out, report } = parseTailJson(text.slice(i + TAIL_MARK.length));
+  return { narration, tail: out, report };
 }
 
 /**
@@ -246,10 +282,18 @@ export function tailFilter(onText: (delta: string) => void): (delta: string) => 
 }
 
 /** 안내 출력(안내 호출이든 서술 꼬리든)을 검증해 gm_guide 이벤트로. 쓸 수 없으면 null */
-export function guideEvent(world: WorldPackage, s: GameState, out: GuideOutput | null | undefined): GameEvent | null {
+/** log: 엔진이 AI의 선택지를 어떻게 바꿨는지 적는다 (v0.139, 디버그) */
+export function guideEvent(world: WorldPackage, s: GameState, out: GuideOutput | null | undefined, log: string[] = []): GameEvent | null {
   const open = new Set(availableScenes(world, s, { auto: false }).map((d) => d.id));
   const raw = (Array.isArray(out?.choices) ? out!.choices : []).map((c) => (typeof c === 'string' ? { text: c, skill: '', kind: '' } : c))
-    .map((c) => ({ text: cut(String(c?.text ?? '').trim(), 60), skill: SKILL_IDS.includes(c?.skill as SkillId) ? c.skill : '', kind: c?.kind && c.kind in CHOICE_KINDS ? c.kind : '', scene: open.has(String(c?.scene ?? '')) ? String(c.scene) : '', stake: String((c as { stake?: string })?.stake ?? ''), option: String((c as { option?: string })?.option ?? '') })).filter((c) => c.text).slice(0, 4);
+    .map((c) => {
+      const full = String(c?.text ?? '').trim();
+      if (full.length > 60) log.push(`잘림 (60자): "${full}"`);
+      if (c?.scene && !open.has(String(c.scene))) log.push(`지금 열 수 없는 장면이라 장면 연결을 뺌: ${c.scene}`);
+      return { text: cut(full, 60), skill: SKILL_IDS.includes(c?.skill as SkillId) ? c.skill : '', kind: c?.kind && c.kind in CHOICE_KINDS ? c.kind : '', scene: open.has(String(c?.scene ?? '')) ? String(c.scene) : '', stake: String((c as { stake?: string })?.stake ?? ''), option: String((c as { option?: string })?.option ?? '') };
+    }).filter((c) => c.text);
+  if (raw.length > 4) log.push(`선택지가 ${raw.length}개라 앞의 4개만: 뺀 것 ${raw.slice(4).map((c) => `"${c.text}"`).join(', ')}`);
+  raw.splice(4);
   // 장면 선택지는 하나만
   raw.forEach((c, i) => { if (c.scene && raw.findIndex((x) => x.scene) !== i) c.scene = ''; });
   // 걸린 것 (v0.114): 지금 유효하고, 선택지끼리 겹치지 않는 것만
@@ -259,17 +303,25 @@ export function guideEvent(world: WorldPackage, s: GameState, out: GuideOutput |
   const choiceOptions = raw.map((c) => { const k = c.option; const hit = card && k ? parseOptionKey(world, k) : null; if (!hit || hit.card.id !== card!.id || usedOpt.has(k)) return ''; usedOpt.add(k); return k; });
   raw.forEach((c, i) => { const hit = parseOptionKey(world, choiceOptions[i]); if (hit) { c.stake = hit.option.stake ?? ''; if (hit.option.check) c.skill = hit.option.check.skill; } });
   // 카드의 갈림길을 선택지가 빠뜨렸으면 뒤에 붙인다 (갈림길은 다 보여야 한다)
-  if (card) for (const o of card.options) { const k = optionKey(card.id, o.id); if (!usedOpt.has(k)) { raw.push({ text: cut(o.label, 60), skill: o.check?.skill ?? '', kind: '', scene: '', stake: o.stake ?? '', option: k }); choiceOptions.push(k); } }
+  if (card) for (const o of card.options) { const k = optionKey(card.id, o.id); if (!usedOpt.has(k)) { raw.push({ text: cut(o.label, 60), skill: o.check?.skill ?? '', kind: '', scene: '', stake: o.stake ?? '', option: k }); choiceOptions.push(k); log.push(`펼쳐진 갈래 카드 「${card.title ?? card.id}」의 갈림길을 AI가 빠뜨려 더함: "${cut(o.label, 60)}"`); } }
   // 카드가 펼쳐져 있으면 선택지는 다섯까지 — 갈림길을 남기고 나머지를 줄인다
-  while (raw.length > 5) { const i = choiceOptions.findLastIndex((x) => !x); if (i < 0) break; raw.splice(i, 1); choiceOptions.splice(i, 1); }
+  while (raw.length > 5) { const i = choiceOptions.findLastIndex((x) => !x); if (i < 0) break; log.push(`갈림길을 남기려고 뺌 (선택지는 다섯까지): "${raw[i]!.text}"`); raw.splice(i, 1); choiceOptions.splice(i, 1); }
   const seen = new Set<string>();
   const choiceStakes = raw.map((c, i) => { const st = c.stake; if (!st || (seen.has(st) && !choiceOptions[i]) || !stakeValid(world, s, st)) return ''; seen.add(st); return st; });
-  if (!out?.summary || !raw.length) return null;
-  const summary = cut(String(out.summary).trim(), 500), suggestion = cut(String(out.suggestion ?? '').trim(), 200);
+  if (!raw.length) { log.push(out ? 'AI가 낸 선택지가 없어 엔진 기본 안내로 바꿈' : '읽을 수 있는 꼬리가 없어 엔진 기본 안내로 바꿈'); return null; }
+  // v0.139: 요약이 비어도 AI의 선택지를 버리지 않는다 (전에는 요약이 없으면 선택지까지 통째로 기본 안내로 바뀌었다)
+  if (!String(out?.summary ?? '').trim()) log.push('AI가 상황 요약(summary)을 비워 제안·첫 선택지로 대신함 (선택지는 그대로)');
+  const summary = cut(String(out?.summary ?? '').trim() || String(out?.suggestion ?? '').trim() || '다음에 할 일을 고르세요.', 500), suggestion = cut(String(out?.suggestion ?? '').trim(), 200);
   const images = guideImages(world, `${summary} ${suggestion} ${raw.map((c) => c.text).join(' ')}`, `guide${s.turn}`, 'AI 안내');
   // 장소 이동 선택지 (v0.82.1): AI가 고른 곳이 실제로 갈 수 있는 곳이면 그대로, 아니면 엔진이 고른다
   const mv = moveChoice(world, s, out?.move);
-  if (mv) { raw.push({ text: mv, skill: '', kind: 'move', scene: '', stake: '', option: '' }); choiceStakes.push(''); choiceOptions.push(''); }
+  if (mv) {
+    raw.push({ text: mv, skill: '', kind: 'move', scene: '', stake: '', option: '' }); choiceStakes.push(''); choiceOptions.push('');
+    const ai = out?.move?.text?.trim();
+    if (!ai) log.push(`이동 선택지는 엔진이 고름 (AI가 비움): "${mv}"`);
+    else if (mv !== cut(ai, 60)) log.push(`이동 선택지 고침: AI "${ai}"${out?.move?.location ? ` (장소 ${out.move.location})` : ''} → "${mv}"${out?.move?.location && !(world.locations.find((l) => l.id === s.player.locationId)?.connections ?? []).includes(out.move.location) ? ' — 바로 갈 수 없는 곳이라 엔진이 고름' : ''}`);
+  }
+  raw.forEach((c, i) => { if (c.stake && !choiceStakes[i] && !choiceOptions[i]) log.push(`걸 수 없는 것이라 표지를 뺌: "${c.text}" (${c.stake})`); });
   return { type: 'gm_guide', summary, suggestion, choices: raw.map((c) => c.text), ...(raw.some((c) => c.skill) ? { choiceSkills: raw.map((c) => c.skill) } : {}), ...(raw.some((c) => c.kind) ? { choiceKinds: raw.map((c) => c.kind) } : {}), ...(raw.some((c) => c.scene) ? { choiceScenes: raw.map((c) => c.scene) } : {}), ...(choiceStakes.some(Boolean) ? { choiceStakes } : {}), ...(choiceOptions.some(Boolean) ? { choiceOptions } : {}), ...(images.length ? { images } : {}) };
 }
 
@@ -280,6 +332,25 @@ export async function gmGuide(llm: LlmClient, world: WorldPackage, s: GameState,
     maxTokens: 1500, // 평가에서 한도(1200)에 닿은 적이 있다 — 잘리면 기본 안내로 떨어지므로 여유를 둔다
   }, GUIDE_SCHEMA, signal);
   return guideEvent(world, s, out) ?? basicGuide(world, s);
+}
+
+/**
+ * 서술 꼬리 → 화면의 선택지 (v0.139): 엔진이 무엇을 바꿨는지 디버그에 남긴다 — 디버그의 AI 응답과 화면이 왜 다른지 보이게.
+ * fallback: 꼬리를 못 읽었을 때 (기본: 엔진 기본 안내)
+ */
+export function guideFromTail(world: WorldPackage, s: GameState, tail: GuideOutput | null, report: TailReport): GameEvent | null {
+  const log: string[] = [];
+  const ev = tail ? guideEvent(world, s, tail, log) : null;
+  const shown = ev && ev.type === 'gm_guide' ? ev.choices : null;
+  debugNote('선택지 — AI가 낸 것 → 화면', {
+    '꼬리 읽기': ({ none: `${TAIL_MARK} 표시가 없음 (AI가 선택지를 쓰지 않음)`, ok: '정상', repaired: `고쳐서 읽음 — ${report.error ?? ''}`, salvaged: `JSON이 깨져 선택지 글만 건짐 — ${report.error ?? ''}`, failed: `읽지 못함 — ${report.error ?? ''}` } as const)[report.status],
+    ...(report.snippet ? { '꼬리 앞부분': report.snippet } : {}),
+    'AI가 낸 선택지': (Array.isArray(tail?.choices) ? tail!.choices : []).map((c) => (typeof c === 'string' ? c : String(c?.text ?? ''))),
+    'AI가 낸 이동': tail?.move ? `${tail.move.text ?? ''}${tail.move.location ? ` (${tail.move.location})` : ''}` : '(없음)',
+    '화면에 보이는 선택지': shown ?? '(엔진 기본 안내로 바뀜 — 아래 까닭)',
+    '엔진이 바꾼 것': log.length ? log : '(바꾼 것 없음)',
+  });
+  return ev;
 }
 
 /** GM 안내 이미지: 안내 글에 이름·직함이 나온 인물 (디버그에 근거를 남긴다, v0.57.4) */

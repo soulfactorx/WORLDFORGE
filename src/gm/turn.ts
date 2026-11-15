@@ -48,7 +48,7 @@ import { ambushEnemies, rollRandomEvent } from '../engine/randomEvents';
 import { rollLoot } from '../engine/items';
 import { currentDay } from '../engine/world';
 import { contextExpression, expressionTags, mentionedImages, pickCharacterImage, pickSceneImage, sceneTags } from '../engine/assets';
-import { basicGuide, choiceTailRules, gmGuide, guideEvent, guideMaterials, guideRules, pacing, splitTail, tailFilter } from './guide';
+import { basicGuide, choiceTailRules, gmGuide, guideEvent, guideFromTail, guideMaterials, guideRules, pacing, splitTail, tailFilter } from './guide';
 import { type Lead, rollLeads } from '../engine/leads';
 import { withDcMod } from '../engine/difficulty';
 import { activeGoals, buildActorContext, buildDirectorContext, buildNarratorContext, presentCharacters, sceneSubjects, storyThread } from './context';
@@ -754,7 +754,7 @@ export async function runTurn(
     },
     wantChoices ? tailFilter(onNarration) : onNarration, signal,
   );
-  const { narration, tail } = wantChoices ? splitTail(raw) : { narration: raw, tail: null };
+  const { narration, tail, report: tailReport } = wantChoices ? splitTail(raw) : { narration: raw, tail: null, report: { status: 'none' as const } };
   const images = sticky.place(narration, true);
   debugNote('이미지 선택 — 서술', sticky.note({ 'GM 판단 장면 태그(scene_image)': d.scene_image ?? '', '말한 인물 표정(Actor expression)': actorResults.map((r) => `${r.npc.name}: ${r.out.expression || '(없음)'}`).join(', ') || '(말한 인물 없음)', '장소 이동': moving ? '예' : '아니오' }));
   debugNote('연출 지시 · 이야기 전환', { '연출 지시(beat)': beat ?? '(없음)', '서술 앞에 확정된 전환': transitions.length ? transitions : '(없음)' });
@@ -777,7 +777,7 @@ export async function runTurn(
   // 이 턴에 전투·장면이 시작됐으면 선택지를 만들지 않는다 (v0.86): 화면에 보이지도 않는 안내에 AI 호출을 쓰지 않는다.
   // 전투·장면이 끝나면 그 결과에서 이어지는 안내를 새로 만든다 (PlayScreen)
   // 서술 꼬리로 받은 선택지가 쓸 만하면 그대로, 아니면(꼬리가 없거나 깨졌으면) 예전처럼 안내를 따로 부른다
-  const fromTail = tail ? guideEvent(world, guideState, tail) : null;
+  const fromTail = wantChoices ? guideFromTail(world, guideState, tail, tailReport) : null;
   if (tail && !fromTail) rejected.push('서술 끝의 선택지 꼬리를 쓸 수 없어 안내를 따로 불렀다');
   const guideP: Promise<GameEvent | null> = guideState.combat || guideState.scene || guideState.playerDead ? Promise.resolve(null)
     : fromTail ? Promise.resolve(fromTail)

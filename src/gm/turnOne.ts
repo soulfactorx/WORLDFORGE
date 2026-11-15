@@ -50,7 +50,7 @@ import { costOf, failForwardOf, type TierOutcome } from './tiers';
 import { falloutEvents, stakeEvents } from './stakes';
 import { phaseBlock, phaseEvents, phaseTransitionLines } from './phase';
 import { chooseOptionEvents, openedLines, openStoryletEvents } from './storylets';
-import { basicGuide, CHOICE_TAIL_SCHEMA_TEXT, guideEvent, guideFieldRules, type GuideOutput, guideMaterials, guideRules, pacing, splitTail, tailFilter, TAIL_MARK } from './guide';
+import { basicGuide, CHOICE_TAIL_SCHEMA_TEXT, guideEvent, guideFromTail, guideFieldRules, type GuideOutput, guideMaterials, guideRules, pacing, splitTail, tailFilter, TAIL_MARK } from './guide';
 import { imageMenu, marksToImages, readMarks, stripMarks } from './imageMarks';
 import { stickyImages } from './stickyImages';
 import { debugNote } from '../debug/trace';
@@ -303,7 +303,7 @@ export async function runTurnOne(
   });
   try { play.onImages?.((text) => sticky.place(text)); } catch { /* 무시 */ }
   const raw = await llm.stream({ system: sys, user, maxTokens: 6000 }, tailFilter(onNarration), signal);
-  const { narration: rawNarration, tail } = splitTail(raw);
+  const { narration: rawNarration, tail, report: tailReport } = splitTail(raw);
   const narration = stripMarks(rawNarration).trim();
   const out = (tail ?? {}) as OneOutput;
   if (!tail) rejected.push('서술 끝의 JSON이 없거나 깨져 엔진 요청 없이 처리했다');
@@ -444,7 +444,7 @@ export async function runTurnOne(
   push({ type: 'narration', text: narration, ...(images.length ? { images } : {}) });
   try { play.onNarrated?.(); } catch { /* 무시 */ }
   post.forEach(push);
-  if (!s.combat && !s.scene && !s.playerDead) push((tail ? guideEvent(world, s, tail) : null) ?? basicGuide(world, s));
+  if (!s.combat && !s.scene && !s.playerDead) push(guideFromTail(world, s, tail, tailReport) ?? basicGuide(world, s));
   for (const e of await recorderEvents(llm, world, s, narration, turn, rejected, signal)) push(e);
   return { events, state: s, rejected };
 }
