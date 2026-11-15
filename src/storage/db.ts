@@ -14,6 +14,15 @@ export interface UserArt {
   createdAt: number;
 }
 
+export interface EditorDraft {
+  /** 편집을 시작할 때의 세계 ID (편집 중에 ID를 바꿔도 같은 초안) */
+  id: string;
+  name: string;
+  world: import('../engine/schema').WorldPackage;
+  notes?: string[];
+  savedAt: number;
+}
+
 export interface SaveMeta {
   id: string;
   name: string;
@@ -41,6 +50,8 @@ class WorldforgeDB extends Dexie {
   genCache!: EntityTable<{ key: string; ns: string; value: unknown; at: number }, 'key'>;
   /** 디버그 기록 (v0.57) */
   debug!: EntityTable<DebugEntry, 'id'>;
+  /** 저장하지 않은 세계관 편집 초안 (v0.126): 앱이 꺼지거나 뒤로 가도 이어서 편집 */
+  drafts!: EntityTable<EditorDraft, 'id'>;
   /** AI 사용량 (v0.76) */
   usage!: EntityTable<UsageRow, 'id'>;
   constructor() {
@@ -111,6 +122,19 @@ class WorldforgeDB extends Dexie {
       genCache: 'key, ns, at',
       debug: 'id, saveId, at',
       usage: '++id, at, world, role',
+    });
+    // v0.126: 저장하지 않은 편집 초안
+    this.version(9).stores({
+      saves: 'id, updatedAt',
+      events: '[saveId+seq], saveId',
+      packages: 'key, id, updatedAt',
+      imports: 'id, importedAt',
+      assets: 'key, pkg',
+      userArt: 'id, kind, createdAt',
+      genCache: 'key, ns, at',
+      debug: 'id, saveId, at',
+      usage: '++id, at, world, role',
+      drafts: 'id, savedAt',
     });
   }
 }
