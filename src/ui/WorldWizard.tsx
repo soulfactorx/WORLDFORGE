@@ -11,6 +11,7 @@ import {
   STAGE_KINDS, STEPS, type StepId, suggestStep, type SuggestStep, type WizDraft, type WizEnding, type WizPerson, type WizPlace, type WizSecret, type WizStage,
 } from '../gm/wizard';
 import { assignStockImages } from '../gm/worldgen/stock';
+import { generateGimmicks, gimmickCount } from '../gm/worldgen/gimmicks';
 import { createLlmClient } from '../llm';
 import { type RouteOverrides, withRoutes } from '../llm/override';
 import type { LlmSettings } from '../llm/types';
@@ -83,6 +84,7 @@ export function WorldWizard({ settings, onDone, onCancel }: {
   // 완성
   const [busy, setBusy] = useState('');
   const [withImages, setWithImages] = useState(true);
+  const [withGimmicks, setWithGimmicks] = useState(false);
   async function finish(mode: 'editor' | 'save') {
     setBusy(mode === 'save' ? '저장하는 중…' : '세계를 만드는 중…');
     try {
@@ -91,6 +93,15 @@ export function WorldWizard({ settings, onDone, onCancel }: {
       if (withImages) {
         const st = await assignStockImages(world).catch(() => null);
         if (st?.added) { world = { ...world, assets: st.assets }; out.push(`인물·장소에 기본 이미지 ${st.added}장을 붙였습니다 (편집기 「자료 › 이미지」에서 바꿀 수 있습니다).`); }
+      }
+      if (withGimmicks && settings) {
+        setBusy('AI가 함정·퍼즐을 짓는 중…');
+        const run = beginRun('마법사 함정·퍼즐');
+        try {
+          const r = await generateGimmicks(createLlmClient(withRoutes(settings, models)), world, () => {}, undefined, '', gimmickCount(world));
+          world = r.world; out.push(...r.notes);
+        } catch (e) { out.push(`함정·퍼즐을 만들지 못했습니다 (편집기 「함정·퍼즐」 탭에서 다시 만들 수 있습니다): ${(e as Error).message}`); }
+        finally { endRun(run); }
       }
       if (mode === 'save') {
         await savePackage(world, 'created');
@@ -213,6 +224,7 @@ export function WorldWizard({ settings, onDone, onCancel }: {
       {cur.id === 'review' && (
         <div className="wiz-finish">
           <label className="check"><input type="checkbox" checked={withImages} onChange={(e) => setWithImages(e.target.checked)} /> 인물·장소에 앱의 기본 이미지 붙이기</label>
+          {settings && <label className="check"><input type="checkbox" checked={withGimmicks} onChange={(e) => setWithGimmicks(e.target.checked)} /> ✦ AI로 함정·퍼즐 자동 생성 ({gimmickCount(buildWorld(d))}개 — 장소·이야기에 어울리게, AI 호출 1회)</label>}
           <div className="row">
             <button type="button" className="primary" disabled={!!busy || notes.some((n) => n.level === 'need')} onClick={() => void finish('editor')}>편집기에서 다듬고 저장</button>
             <button type="button" disabled={!!busy || notes.some((n) => n.level === 'need')} onClick={() => void finish('save')}>바로 저장</button>

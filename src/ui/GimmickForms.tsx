@@ -7,6 +7,10 @@ import { SKILLS, SKILL_IDS } from '../engine/character/rules';
 import { GIMMICK_KINDS, gimmickScene } from '../engine/gimmick';
 import type { Gimmick, Rewards, SceneDef, StoryEffect, WorldPackage } from '../engine/schema';
 import { Area, ItemList, Num, Select, Text } from './form';
+import { GenProgress, useGenProgress } from './GenProgress';
+import { generateGimmicks, gimmickCount } from '../gm/worldgen/gimmicks';
+import { createLlmClient } from '../llm';
+import type { LlmSettings } from '../llm/types';
 
 type Set = (patch: Partial<WorldPackage>) => void;
 
@@ -20,8 +24,20 @@ const DEFAULTS: Record<Gimmick['kind'], { name: string; g: Gimmick }> = {
 
 const rebuild = (d: SceneDef, g: Gimmick): SceneDef => gimmickScene({ id: d.id, name: d.name, ...(d.locationId ? { locationId: d.locationId } : {}), ...(d.image ? { image: d.image } : {}), ...(d.narration ? { narration: d.narration } : {}) }, g);
 
-export function GimmickForms({ w, set }: { w: WorldPackage; set: Set }) {
+export function GimmickForms({ w, set, settings, onStatus }: { w: WorldPackage; set: Set; settings?: LlmSettings | null; onStatus?: (s: string) => void }) {
   const all = w.scenes ?? [];
+  const gen = useGenProgress();
+  const [request, setRequest] = useState('');
+  const [count, setCount] = useState(() => gimmickCount(w));
+  async function aiAdd() {
+    if (!settings) return;
+    try {
+      const r = await gen.run('세계 요약을 보내는 중…', (on, sig) => generateGimmicks(createLlmClient(settings), w, on, sig, request, count));
+      if (!r) { onStatus?.('함정·퍼즐 만들기를 중단했습니다.'); return; }
+      set({ scenes: r.world.scenes });
+      onStatus?.(`${r.notes.join(' ')} 저장을 눌러야 반영됩니다.`);
+    } catch (e) { onStatus?.(`❌ 함정·퍼즐 생성 실패: ${(e as Error).message}`); }
+  }
   const mine = all.filter((d) => d.gimmick);
   const [kind, setKind] = useState<Gimmick['kind']>('trap');
   const save = (list: SceneDef[]) => { const rest = all.filter((d) => !d.gimmick); const next = [...rest, ...list]; set({ scenes: next.length ? next : undefined }); };
@@ -31,6 +47,16 @@ export function GimmickForms({ w, set }: { w: WorldPackage; set: Set }) {
         <b>함정·퍼즐</b>은 장소에 놓는 기믹입니다. 판정은 엔진(d20 + 기술)이 하고, AI는 결과를 서술만 합니다. <b>막는 길</b>을 정하면 그 기믹을 지나가기(함정) · 풀기(퍼즐) 전에는 그쪽으로 갈 수 없습니다.
         함정은 그 장소에 들어서면 저절로 시작되고, 퍼즐은 플레이어가 살피거나 건드리면 GM이 엽니다 (🎭 버튼으로도). 실패하거나 그만두면 나중에 다시 해 볼 수 있습니다.
       </p>
+      <fieldset className="gimmick-ai"><legend>✦ AI로 자동 생성</legend>
+        <p className="small muted">이 세계의 장소·이야기·장르에 어울리는 함정·퍼즐을 AI가 짓고, 엔진이 검사해 넣습니다 (기술·난이도·막는 길·보상은 이 세계에 있는 것만). 종류는 섞어서 만듭니다.</p>
+        <div className="row">
+          <input value={request} placeholder="(선택) 원하는 것 — 예: 지하 묘지에 수수께끼 하나, 성문 앞에 함정" disabled={gen.busy} onChange={(e) => setRequest(e.target.value)} />
+          <label>개수 <select value={count} disabled={gen.busy} onChange={(e) => setCount(Number(e.target.value))}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}개</option>)}</select></label>
+          <button type="button" disabled={!settings || gen.busy} onClick={() => void aiAdd()}>{gen.busy ? '만드는 중…' : '✦ AI로 함정·퍼즐 추가'}</button>
+        </div>
+        {!settings && <p className="small muted">AI 설정을 하면 쓸 수 있습니다.</p>}
+        <GenProgress stage={gen.stage} pct={gen.pct} onCancel={gen.cancel} steps={['세계 요약 보내기', 'AI가 기믹 짓기', '검사·넣기']} />
+      </fieldset>
       <div className="row gimmick-add">
         <label>종류
           <select value={kind} onChange={(e) => setKind(e.target.value as Gimmick['kind'])}>

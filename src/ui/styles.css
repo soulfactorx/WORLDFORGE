@@ -1284,3 +1284,5 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .scene-answer { display: flex; gap: 6px; flex-wrap: nowrap; }
 .scene-answer input { flex: 1 1 auto; min-width: 0; }
 .scene-answer button { flex: 0 0 auto; white-space: nowrap; }
+.gimmick-ai { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.gimmick-ai .row input { flex: 1 1 200px; min-width: 0; }

@@ -693,7 +693,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
 
       {tab === 'classes' && <ClassEditor world={w} onChange={(classes) => set({ classes })} />}
       {tab === 'player' && <ProfileEditor world={w} onChange={(playerProfile) => set({ playerProfile })} onTraits={(traits) => set({ traits })} />}
-      {tab === 'gimmicks' && <GimmickForms w={w} set={set} />}
+      {tab === 'gimmicks' && <GimmickForms w={w} set={set} settings={settings} onStatus={setStatus} />}
       {tab === 'scenes' && (
         <>
           <p className="muted small">
