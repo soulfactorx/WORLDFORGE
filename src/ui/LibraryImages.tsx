@@ -118,6 +118,18 @@ export function LibraryImages({ target, kind, onAdd, onClose }: {
       </div>
       {hidden > 0 && <p className="small muted">성인 등급·개인용(남의 캐릭터 카드로 만든) 세계의 그림 {hidden}장은 이 세계에 넣을 수 없어 숨겼습니다.</p>}
       <p className="small muted">{hits.length}장{hits.length > limit ? ` 중 ${limit}장` : ''} · 누르면 고르고 다시 누르면 빼기 · 고른 {picked.size}장</p>
+      {hits.length > 0 && (() => {
+        // 거른 것 모두 고르기 (v0.135): 화면에 아직 안 보이는 것(더 보기)까지 — 찾기·출처·종류로 거른 결과 전부
+        const allOn = hits.every((i) => picked.has(i.key));
+        return (
+          <div className="row lib-select-all">
+            <button type="button" className="small" onClick={() => setPicked((s) => { const n = new Set(s); for (const i of hits) { if (allOn) n.delete(i.key); else n.add(i.key); } return n; })}>
+              {allOn ? `거른 ${hits.length}장 고르기 해제` : `☑ 거른 ${hits.length}장 모두 고르기`}
+            </button>
+            {picked.size > 0 && <button type="button" className="small" onClick={() => setPicked(new Set())}>고르기 모두 취소</button>}
+          </div>
+        );
+      })()}
       <div className="lib-grid">
         {hits.slice(0, limit).map((i) => (
           <button key={i.key} type="button" className={`lib-cell${picked.has(i.key) ? ' on' : ''}`} aria-pressed={picked.has(i.key)} onClick={() => toggle(i.key)} title={`${i.name}\n${i.sub}`}>
@@ -133,7 +145,6 @@ export function LibraryImages({ target, kind, onAdd, onClose }: {
         {busy && <p className="small status">{busy}</p>}
         <div className="row">
           <button type="button" className="primary" disabled={!picked.size || busy.endsWith('…') || busy.includes('…')} onClick={() => void add()}>고른 {picked.size}장 넣기</button>
-          {picked.size > 0 && <button type="button" className="small" onClick={() => setPicked(new Set())}>고르기 취소</button>}
         </div>
       </div>
     </div>
