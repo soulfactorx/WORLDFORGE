@@ -67,6 +67,8 @@ export type GameEvent =
   | { type: 'npc_relation_changed'; key: string; kind: import('../schema').NpcRelationKind | 'none'; note?: string; text?: string }
   /** 돌발 사건 (v0.42, 설계 v4 E5) */
   | { type: 'random_event'; eventId: EntityId; name: string; kind: 'ambush' | 'meeting' | 'news' | 'opportunity'; text: string; day: number }
+  /** 다음 턴 서술이 이어받을 일 (v0.128: 도착하자마자 일어난 돌발 사건 등). 빈 글이면 지운다 */
+  | { type: 'gm_note'; text: string }
   /** 칭호를 얻음 (v0.41, 설계 v4 E4) */
   | { type: 'title_earned'; titleId: EntityId; name: string; desc: string }
   /** 플레이어가 인물의 이름을 알게 됨 (v0.37.5) */

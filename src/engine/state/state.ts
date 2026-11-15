@@ -144,6 +144,8 @@ export interface GameState {
   /** 돌발 사건이 마지막으로 일어난 날 (사건별) · 마지막 돌발 사건 턴 (v0.42) */
   randomEvents?: Record<EntityId, number>;
   lastRandomTurn?: number;
+  /** 다음 턴 서술이 이어받을 일 (v0.128) */
+  gmNote?: string;
   /** 얻은 칭호 (v0.41) */
   titles?: string[];
   /** 조우의 가장 최근 결과 (v0.85): 진 뒤·달아난 뒤 쉬는 턴, 조건 encounter */
@@ -347,6 +349,8 @@ export function applyEvent(s: GameState, e: GameEvent, turn: number): GameState 
     case 'npc_relation_changed':
       return { ...s, npcRelations: { ...(s.npcRelations ?? {}), [e.key]: e.kind === 'none' ? null : { kind: e.kind, ...(e.note ? { note: e.note } : {}) } },
         log: e.text ? [...s.log, { turn, kind: 'relation', text: e.text }] : s.log };
+    case 'gm_note':
+      return { ...s, gmNote: e.text || undefined };
     case 'random_event':
       return { ...s, randomEvents: { ...(s.randomEvents ?? {}), [e.eventId]: e.day }, lastRandomTurn: turn, log: [...s.log, { turn, kind: 'omen', text: `✦ ${e.text}` }] };
     case 'title_earned':

@@ -32,6 +32,7 @@ import { newRun, offerableScenes } from '../engine/scene';
 import { focusLines, focusTargets, sceneLines, storyBrief, transitionLines } from './brief';
 import { activeChapters, pacingHint, pendingChoice, upcomingWorldEvents } from '../engine/story';
 import { effectEvents } from './story';
+import { applyRandomEvent } from './randomEvent';
 import { actionRuleList, actionRulesHit, fireRule, ruleNotesText, ruleReady, stateRuleEvents, type RuleNote } from './rules';
 import { gainEvent, inventoryLine, moneyEvent, pendingGifts, pendingPickups } from './economy';
 import { itemDef } from '../engine/items';
@@ -674,31 +675,9 @@ export async function runTurn(
   const trigger = !enc && (moving ? 'move' : d.rest === 'long' || d.rest === 'short' ? 'rest' : quiet && !cardsWaiting && !d.start_scene && !d.attack_npc ? 'quiet' : null);
   const rev = trigger ? rollRandomEvent(world, s, createRng((s.rngState ^ Math.imul(turn + 1, 2654435761)) >>> 0), trigger) : null;
   if (rev) {
-    const rrng = createRng((s.rngState + Math.imul(turn + 7, 40503)) >>> 0);
-    push({ type: 'random_event', eventId: rev.id, name: rev.name, kind: rev.kind, text: rev.text, day: currentDay(s) });
-    effectEvents(world, s, rev.effects ?? [], rev.name).forEach(push);
-    if (rev.kind === 'ambush') {
-      const enemies = rev.enemies?.length ? rev.enemies : ambushEnemies(world, s, rrng);
-      if (enemies.length) {
-        beginAdhocEncounter(world, s, { id: `${rev.id}#${turn}`, enemies }, turn).forEach(push);
-        ambushed = true;
-        outcomes.push(`돌발 사건 — 기습 (엔진 확정): ${rev.text} 전투가 시작된다. 서술은 적이 나타나는 순간에서 멈춘다 (결과를 서술하지 않는다).`);
-      }
-    } else {
-      if (rev.kind === 'opportunity' && !rev.effects?.length) {
-        const found = rollLoot(world, rrng, { level: s.player.sheet.level, threatXp: 0, levelSpan: 1, boss: true });
-        if (found) { push({ type: 'item_gained', itemId: found.id, name: found.name, n: 1, reason: rev.name }); outcomes.push(`돌발 사건 (엔진 확정): ${rev.text} — ${found.name}을(를) 얻었다`); }
-      } else if (rev.kind === 'news' && !rev.effects?.length) {
-        const known = new Set(s.beliefs.filter((b) => b.holder === 'player').map((b) => b.claim));
-        const rumors = world.beliefs.filter((b) => b.holder !== 'player' && b.state === 'rumor' && !known.has(b.claim));
-        const pick = rumors[Math.floor(rrng.next() * rumors.length)];
-        const claim = pick && world.claims.find((c) => c.id === pick.claim);
-        if (claim) { push({ type: 'knowledge_revealed', belief: { holder: 'player', claim: claim.id, state: 'rumor', source: 'rumor' }, statement: claim.statement }); outcomes.push(`돌발 사건 (엔진 확정): ${rev.text} — 들린 소문: "${claim.statement}" (소문일 뿐 사실인지 모른다)`); }
-        else outcomes.push(`돌발 사건 (엔진 확정): ${rev.text} (특별한 내용은 없다 — 분위기만)`);
-      } else {
-        outcomes.push(`돌발 사건 (엔진 확정): ${rev.text}${rev.kind === 'meeting' ? ' — 이름 없는 행인은 자유롭게 연출해도 되지만, 세계의 중요한 사실을 새로 만들지 않는다.' : ''}`);
-      }
-    }
+    const r = applyRandomEvent(world, s, rev, turn, push);
+    outcomes.push(...r.lines);
+    ambushed = r.ambushed;
   }
   // 선언되지 않은 전투 (v0.85): 조우 목록에 없는 이 자리의 인물을 공격했다 — 그 인물의 시트로 즉석 전투
   let brawl = false;

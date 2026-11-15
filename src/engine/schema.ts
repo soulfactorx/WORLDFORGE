@@ -398,6 +398,19 @@ export interface ItemDef {
 }
 
 /** 돌발 사건 (설계 v4 E5) */
+export interface ImprovSettings {
+  /** 얼마나 자주 (기본 normal) */
+  level?: 'off' | 'rare' | 'normal' | 'often';
+  /** 이름 없는 엑스트라 인물(행인·상인·여행자…)이 즉흥으로 나타나 말을 걸고 일을 꾸민다 (기본 예) */
+  extras?: boolean;
+  /** 몬스터·적의 즉흥 기습: 위험한 곳(조우가 정해진 곳)만 · 어디서나 · 없음 (기본 danger) */
+  monsters?: 'off' | 'danger' | 'anywhere';
+  /** 이 세계에 흔한 사람들 — GM이 엑스트라를 지어낼 때 참고 (예: "순례자, 밀수꾼, 경비병") */
+  cast?: string;
+  /** 이 세계에 흔한 적 — 기습을 묘사할 때 참고 (예: "늑대 무리, 산적") */
+  foes?: string;
+}
+
 export interface RandomEvent {
   id: EntityId;
   name: string;
@@ -987,6 +1000,11 @@ export interface WorldPackage {
   scenes?: SceneDef[];
   /** 돌발 사건 표 (설계 v4 E5): 이동·휴식 때 엔진이 굴린다. 없으면 기본 표, []면 끔 */
   randomEvents?: RandomEvent[];
+  /**
+   * GM 즉흥 등장 (v0.128): 정해 둔 주요 인물·조우 밖에서, GM이 세계관에 맞는 엑스트라 인물·몬스터를 즉흥으로 내보내 돌발 사건을 만든다.
+   * 언제·무엇이(만남·기습·소문·발견)는 엔진이 굴리고, 누가·어떻게는 서술 AI가 세계에 맞게 지어낸다. 비우면 보통.
+   */
+  improv?: ImprovSettings;
   /** 이 세계만의 칭호 (설계 v4 E4): 조건을 채우면 엔진이 준다. renown 기본 5 */
   titles?: { id: EntityId; name: string; desc?: string; renown?: number; condition: Condition }[];
   /** 지속되는 세계 (설계 v3 7장): 소문 전파 (기본 켜짐) */

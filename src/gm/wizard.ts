@@ -3,7 +3,7 @@
  * 마법사는 쉬운 말로 된 "초안"(WizDraft)만 다루고, 끝에 엔진의 세계(WorldPackage)로 바꾼다.
  * 연결(장소 길·비밀을 아는 인물·임무 단계 조건)은 이름이 아니라 key로 가리켜, 이름을 고쳐도 끊어지지 않는다.
  */
-import type { Character, Condition, Ending, Quest, WorldPackage } from '../engine/schema';
+import type { Character, Condition, Ending, ImprovSettings, Quest, WorldPackage } from '../engine/schema';
 import type { LlmClient } from '../llm/types';
 
 export type Attitude = 'friendly' | 'neutral' | 'wary' | 'hostile';
@@ -23,6 +23,8 @@ export interface WizDraft {
   genre: NonNullable<WorldPackage['genre']>;
   rating: WorldPackage['manifest']['contentRating'];
   overview: string; style: string;
+  /** GM 즉흥 등장 (v0.128) */
+  improv?: ImprovSettings;
   places: WizPlace[];
   people: WizPerson[];
   secrets: WizSecret[];
@@ -226,6 +228,7 @@ export function buildWorld(d: WizDraft, now = Date.now()): WorldPackage {
     genre: d.genre,
     ...(overview ? { overview: overview.slice(0, 2500) } : {}),
     ...(d.style.trim() ? { style: d.style.trim().slice(0, 1500) } : {}),
+    ...(d.improv ? { improv: d.improv } : {}),
   };
 }
 

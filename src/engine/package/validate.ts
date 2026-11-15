@@ -861,6 +861,16 @@ export function validateWorld(input: unknown): Issue[] {
   }));
 
   // ---- 돌발 사건 표 (설계 v4 E5)
+  // GM 즉흥 등장 (v0.128)
+  const im = (input as { improv?: unknown }).improv;
+  if (im !== undefined) {
+    if (!isObj(im)) err('improv', '객체여야 합니다.');
+    else {
+      if (im.level !== undefined && !['off', 'rare', 'normal', 'often'].includes(String(im.level))) err('improv.level', 'off / rare / normal / often 중 하나입니다.');
+      if (im.monsters !== undefined && !['off', 'danger', 'anywhere'].includes(String(im.monsters))) err('improv.monsters', 'off / danger / anywhere 중 하나입니다.');
+      if (im.extras !== undefined && typeof im.extras !== 'boolean') err('improv.extras', '참/거짓이어야 합니다.');
+    }
+  }
   arr<NonNullable<WorldPackage['randomEvents']>[number]>('randomEvents', false).forEach((e, i) => {
     const p = `randomEvents[${i}]`;
     text(e.name, `${p}.name`); text(e.text, `${p}.text`);

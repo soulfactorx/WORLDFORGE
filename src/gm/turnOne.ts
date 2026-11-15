@@ -39,6 +39,7 @@ import type { LlmClient } from '../llm/types';
 import { buildNarratorContext, presentCharacters } from './context';
 import { focusTargets, storyBrief, transitionLines } from './brief';
 import { effectEvents } from './story';
+import { applyRandomEvent } from './randomEvent';
 import { scenarioEvents } from './scenario';
 import { progressEvents } from './progression';
 import { relationshipEvents } from './relationship';
@@ -224,14 +225,14 @@ export async function runTurnOne(
       else if (l.kind === 'notice') outcomes.push(`실마리 — 눈썰미 (엔진 확정): 무언가가 눈에 걸린다 — 무엇이 이상한지 감각으로 구체적으로, 뜻은 쓰지 않는다. (답을 쓰지 않는다: ${l.detail})`);
     }
   }
+  // 지난 턴 끝(이동해 도착한 직후)에 일어난 일 — 이번 서술이 이어받는다 (v0.128)
+  if (s.gmNote) { outcomes.push(`지난 턴 끝에 일어난 일 (이번 서술에서 이어서 그린다): ${s.gmNote}`); push({ type: 'gm_note', text: '' }); }
   const quiet = pacing(s).quiet >= 3 && !opt;
-  if (quiet && !world.storylets?.length) {
+  // 잔잔함이 길면 돌발 사건 (v0.128: 기습·소문·발견까지 — GM 즉흥 등장 설정을 따른다)
+  let ambushed = false;
+  if (quiet && !world.storylets?.length && !s.combat && !s.scene) {
     const rev = rollRandomEvent(world, s, createRng((s.rngState ^ Math.imul(turn + 1, 2654435761)) >>> 0), 'quiet');
-    if (rev && rev.kind !== 'ambush') {
-      push({ type: 'random_event', eventId: rev.id, name: rev.name, kind: rev.kind, text: rev.text, day: currentDay(s) });
-      effectEvents(world, s, rev.effects ?? [], rev.name).forEach(push);
-      outcomes.push(`돌발 사건 (엔진 확정): ${rev.text}`);
-    }
+    if (rev) { const r = applyRandomEvent(world, s, rev, turn, push); outcomes.push(...r.lines); ambushed = r.ambushed; }
   }
   for (const n of ruleNotes) outcomes.push(`세계 규칙 발동: ${n.name}${n.outcome ? ` — ${n.outcome}` : ''}`);
 
@@ -385,7 +386,8 @@ export async function runTurnOne(
   if (tm.minutes > 0) queue({ type: 'time_advanced', minutes: tm.minutes });
   const enc = (out.start_encounter && availableEncounters(world, ahead).find((e) => e.id === out.start_encounter)) || (failEncounter ? availableEncounters(world, ahead).find((e) => e.id === failEncounter) : undefined);
   if (out.start_encounter && !enc) rejected.push(`시작할 수 없는 조우: ${out.start_encounter}`);
-  if (enc) beginEncounter(world, ahead, enc.id, turn).forEach(queue);
+  if (ambushed || ahead.combat) { if (out.start_encounter || out.attack_npc || out.start_scene) rejected.push('이미 기습으로 전투가 시작됨'); }
+  else if (enc) beginEncounter(world, ahead, enc.id, turn).forEach(queue);
   else if (out.attack_npc) {
     const foe = present.find((c) => c.id === out.attack_npc);
     if (!foe || ahead.party[foe.id] || improvisationOf(world, foe.id) === 'none') rejected.push(`공격할 수 없는 상대: ${out.attack_npc}`);
@@ -395,7 +397,16 @@ export async function runTurnOne(
     if (!scd) rejected.push(`열 수 없는 장면: ${out.start_scene}`);
     else queue({ type: 'scene_started', sceneId: scd.id, name: scd.name, run: newRun(scd), ...(scd.intro ? { intro: scd.intro } : {}) });
   } else if (out.rest === 'long' || out.rest === 'short') queue({ type: 'rested', kind: out.rest });
-  if (moving && !ahead.combat && !ahead.scene) queue({ type: 'moved', to: goTo });
+  if (moving && !ahead.combat && !ahead.scene) {
+    queue({ type: 'moved', to: goTo });
+    // 도착하자마자 돌발 사건 (v0.128): 이동은 서술 뒤에 일어나므로, 일어난 일은 기록에 남고 다음 턴 서술이 이어받는다
+    const rev = !enc ? rollRandomEvent(world, ahead, createRng((ahead.rngState ^ Math.imul(turn + 3, 2654435761)) >>> 0), 'move') : null;
+    if (rev) {
+      const r = applyRandomEvent(world, ahead, rev, turn, queue);
+      // 기습이면 전투 창이 이어받는다 — 그 밖의 일은 다음 서술이 그린다
+      if (!r.ambushed && r.lines.length) queue({ type: 'gm_note', text: r.lines.join(' ') });
+    }
+  }
   // 이 일들로 바뀐 임무 · 긴장 · 국면
   scenarioEvents(world, ahead).events.forEach(queue);
   phaseEvents(world, ahead, post).forEach(queue);

@@ -7,7 +7,7 @@
 import { encounterDifficulty, monstersOfWorld, monsterTable } from './combat/monsters';
 import type { Rng } from './dice/rng';
 import { evalCondition } from './scenario';
-import type { EntityId, RandomEvent, WorldPackage } from './schema';
+import type { EntityId, ImprovSettings, RandomEvent, WorldPackage } from './schema';
 import type { GameState } from './state/state';
 import { currentDay } from './world';
 
@@ -20,6 +20,13 @@ export const BUILTIN_EVENTS: RandomEvent[] = [
 ];
 
 export const eventTable = (world: WorldPackage) => world.randomEvents ?? BUILTIN_EVENTS;
+
+/** GM 즉흥 등장 설정 (v0.128) — 비운 칸은 기본값 */
+export function improvOf(world: WorldPackage): Required<Pick<ImprovSettings, 'level' | 'extras' | 'monsters'>> & ImprovSettings {
+  const i = world.improv ?? {};
+  return { ...i, level: i.level ?? 'normal', extras: i.extras ?? true, monsters: i.monsters ?? 'danger' };
+}
+const LEVEL_MUL = { off: 0, rare: 0.5, normal: 1, often: 1.8 } as const;
 
 /** 이 장소가 위험한 곳인가 (조우가 정해진 곳 — 기본 기습은 여기서만) */
 const dangerousHere = (world: WorldPackage, state: GameState) => (world.encounters ?? []).some((e) => e.locationId === state.player.locationId);
@@ -34,9 +41,14 @@ export function monotonous(state: GameState, turns = 5): boolean {
 export function eligibleEvents(world: WorldPackage, state: GameState): RandomEvent[] {
   const day = currentDay(state);
   const loc = state.player.locationId;
+  const im = improvOf(world);
+  const builtin = !world.randomEvents;
   return eventTable(world).filter((e) => {
     if (e.where?.length && !e.where.includes(loc)) return false;
-    if (e.dangerous && !e.where?.length && !dangerousHere(world, state)) return false;
+    // 즉흥 등장 설정은 기본 표(GM이 지어내는 사건)에만 — 제작자가 직접 정한 사건은 그대로
+    if (builtin && e.kind === 'meeting' && !im.extras) return false;
+    if (builtin && e.kind === 'ambush' && im.monsters === 'off') return false;
+    if (e.dangerous && !e.where?.length && !(builtin && im.monsters === 'anywhere') && !dangerousHere(world, state)) return false;
     const last = state.randomEvents?.[e.id];
     if (last !== undefined && day - last < (e.cooldownDays ?? 1)) return false;
     return !e.condition || evalCondition(world, state, e.condition);
@@ -47,8 +59,10 @@ export function eligibleEvents(world: WorldPackage, state: GameState): RandomEve
 export function rollRandomEvent(world: WorldPackage, state: GameState, rng: Rng, trigger: 'move' | 'rest' | 'quiet'): RandomEvent | null {
   if (state.combat || state.lastRandomTurn !== undefined && state.turn - state.lastRandomTurn < 3) return null;
   // quiet (v0.113): 잔잔함이 길어 엔진이 직접 일을 꺼낸다 — 쿨다운만 지키고 반드시 굴린다
+  const mul = LEVEL_MUL[improvOf(world).level];
+  if (!mul) return null;
   const base = trigger === 'quiet' ? 1 : trigger === 'rest' ? 0.25 : 0.2;
-  const chance = Math.min(0.6, base * (monotonous(state) ? 2 : 1));
+  const chance = Math.min(trigger === 'quiet' ? 1 : 0.6, base * mul * (monotonous(state) ? 2 : 1));
   if (rng.next() >= chance) return null;
   const list = eligibleEvents(world, state);
   const total = list.reduce((s, e) => s + (e.weight ?? 1), 0);

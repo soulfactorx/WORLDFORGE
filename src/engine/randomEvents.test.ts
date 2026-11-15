@@ -72,3 +72,25 @@ describe('돌발 사건 · 템포 · 적응 난이도 (설계 v4 E5)', () => {
     expect(fought).toBe(1);
   });
 });
+
+describe('GM 즉흥 등장 (v0.128)', () => {
+  it('엑스트라·몬스터 켜고 끄기, 어디서나 기습', () => {
+    const s = start();
+    const ids = (w: WorldPackage, loc = 'loc/inn') => eligibleEvents(w, at(s, loc)).map((e) => e.id);
+    expect(ids(sampleWorld)).toContain('rand/traveler');
+    expect(ids({ ...sampleWorld, improv: { extras: false } })).not.toContain('rand/traveler');
+    expect(ids({ ...sampleWorld, improv: { monsters: 'anywhere' } })).toContain('rand/ambush');
+    expect(ids({ ...sampleWorld, improv: { monsters: 'off' } }, 'loc/forest-clearing')).not.toContain('rand/ambush');
+    // 제작자가 직접 정한 표에는 설정이 끼어들지 않는다
+    const own = { ...sampleWorld, randomEvents: [{ id: 'rand/x', name: 'x', text: 'x', kind: 'meeting' as const }], improv: { extras: false } };
+    expect(ids(own)).toEqual(['rand/x']);
+  });
+  it('빈도: 끔이면 일어나지 않고, 자주면 더 자주', () => {
+    const s = { ...start(), turn: 10 };
+    const count = (w: WorldPackage) => { let n = 0; for (let i = 0; i < 400; i++) if (rollRandomEvent(w, s, createRng(i + 1), 'move')) n++; return n; };
+    expect(count({ ...sampleWorld, improv: { level: 'off' } })).toBe(0);
+    const rare = count({ ...sampleWorld, improv: { level: 'rare' } }), normal = count(sampleWorld), often = count({ ...sampleWorld, improv: { level: 'often' } });
+    expect(rare).toBeLessThan(normal);
+    expect(often).toBeGreaterThan(normal);
+  });
+});
