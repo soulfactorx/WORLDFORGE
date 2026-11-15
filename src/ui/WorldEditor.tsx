@@ -31,7 +31,8 @@ import { QUEST_TYPE_LABEL } from '../engine/scenario';
 import { RELATION_KIND_LABEL, STAGES } from '../engine/relationship';
 import { STD_ITEMS } from '../data/items';
 import { blankWorld, exportWpk, PRIVATE_NOTE, savePackage } from '../storage/packages';
-import { deleteEditorDraft, type EditorDraft, getEditorDraft, saveEditorDraft } from '../storage/drafts';
+import { deleteEditorDraft, type EditorDraft, getEditorDraft, pruneDraftsFor, saveEditorDraft } from '../storage/drafts';
+import { DraftMerge } from './DraftMerge';
 import { useLeaveGuard } from './leaveGuard';
 import { MATURE_NOTE, shareBlocked } from '../engine/rating';
 import { confirmAdult } from './adult';
@@ -107,12 +108,14 @@ function tabForPath(path: string): Tab {
 
 // ---------------------------------------------------------------- 편집기
 
-export function WorldEditor({ initial, onDone, settings: baseSettings, draftNotes, initialCard, alreadySaved, openLibrary, draftKey, restored }: {
+export function WorldEditor({ initial, onDone, settings: baseSettings, draftNotes, initialCard, alreadySaved, openLibrary, draftKey, restored, origin }: {
   initial: WorldPackage | null; onDone: () => void; settings?: LlmSettings | null; draftNotes?: string[];
   /** 초안 열쇠 (v0.126): 홈에서 초안을 이어 열 때 그 초안의 열쇠 */
   draftKey?: string;
   /** 저장하지 않은 초안을 이어 연 것 (처음부터 "저장 안 됨") */
   restored?: boolean;
+  /** 이어 연 초안이 시작한 때의 저장본 (v0.131, 합치기용) */
+  origin?: WorldPackage;
   /** 이미 라이브러리에 저장된 AI 결과 (카드로 만든 세계) */
   alreadySaved?: boolean;
   /** 이 카드 파일로 새 세계를 만든다 (인물 탭에서 가져오기 창을 바로 연다) */
@@ -185,10 +188,12 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
   // 초안 저절로 보관 (v0.126): 바뀌면 잠시 뒤 IndexedDB에, 앱이 가려지거나 꺼질 때는 바로. 저장하면 지운다
   const keyRef = useRef(draftKey ?? (initial && alreadySaved !== false && !draftNotes ? initial.manifest.id : `new.${Date.now().toString(36)}`));
   const key = keyRef.current;
+  // 편집을 시작한 때의 저장본 (v0.131): 초안과 함께 보관해, 나중에 합칠 때 초안이 무엇을 바꿨는지 가려낸다
+  const originRef = useRef<WorldPackage | undefined>(restored ? origin : keyRef.current === initial?.manifest.id ? structuredClone(initial) : undefined);
   const latest = useRef({ w, notes: draftNotes as string[] | undefined, dirty });
   latest.current = { w, notes: notes ?? undefined, dirty };
   const [draftAt, setDraftAt] = useState(0);
-  const flush = () => { const l = latest.current; if (l.dirty) void saveEditorDraft(keyRef.current, l.w, l.notes).then(() => setDraftAt(Date.now())).catch(() => undefined); };
+  const flush = () => { const l = latest.current; if (l.dirty) void saveEditorDraft(keyRef.current, l.w, l.notes, originRef.current).then(() => setDraftAt(Date.now())).catch(() => undefined); };
   useEffect(() => {
     if (!dirty) return;
     const t = setTimeout(flush, 800);
@@ -201,6 +206,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
   }, []);
   // 이 세계에 지난번 저장하지 않은 초안이 있으면 알린다 (홈에서 이어 연 것이 아니면)
   const [olderDraft, setOlderDraft] = useState<EditorDraft | null>(null);
+  const [merging, setMerging] = useState(false);
   // 고르기 전에 편집을 시작해도 지난 초안을 덮어쓰지 않게, 이번 편집은 다른 열쇠로 보관한다
   useEffect(() => { if (!restored && !draftKey) void getEditorDraft(key).then((d) => { if (d) { setOlderDraft(d); keyRef.current = `${key}.${Date.now().toString(36)}`; } }); }, []);
   // 뒤로 가기·닫기: 초안을 보관해 두므로 묻지 않고 닫는다 (홈에서 이어서 편집)
@@ -237,10 +243,11 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
       setDirty(false);
       latest.current.dirty = false;
       await deleteEditorDraft(keyRef.current);
-      if (keyRef.current !== key) await deleteEditorDraft(key); // 저장했으니 이 세계의 지난 초안도 소용없다
-      setOlderDraft(null);
+      originRef.current = structuredClone(w);
+      // 같은 세계의 다른 초안: 저장본과 같아진 것만 지운다. 다른 곳이 남은 초안은 지키고 알린다 (홈에서 합칠 수 있다) — v0.131
+      const pr = await pruneDraftsFor(w, keyRef.current);
       setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000);
-      setStatus(`✔ 저장했습니다 (${w.manifest.id}@${w.manifest.version}).${hasErrors(issues) ? ' 오류를 고쳐야 플레이할 수 있습니다.' : ''}`);
+      setStatus(`✔ 저장했습니다 (${w.manifest.id}@${w.manifest.version}).${hasErrors(issues) ? ' 오류를 고쳐야 플레이할 수 있습니다.' : ''}${pr.kept ? ` 이 세계에 저장본과 다른 초안 ${pr.kept}개가 남아 있습니다 — 위의 「합치기」나 홈의 「이어서 만들기」에서 골라 가져오거나 버릴 수 있습니다.` : ''}`);
     } catch (e) {
       setStatus(`❌ ${(e as Error).message}`);
     }
@@ -272,10 +279,20 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
         <div className="draft-banner small" role="status">
           <span>✎ 이 세계에 <b>저장하지 않은 초안</b>이 있습니다 ({new Date(olderDraft.savedAt).toLocaleString()}).</span>
           <span className="row">
-            <button type="button" className="small primary" onClick={() => { void deleteEditorDraft(keyRef.current); keyRef.current = olderDraft.id; setW(olderDraft.world); if (olderDraft.notes) setNotes(olderDraft.notes); setOlderDraft(null); setStatus('초안을 불러왔습니다. 저장을 눌러야 반영됩니다.'); }}>초안 불러오기</button>
+            <button type="button" className="small primary" onClick={() => { if (dirty && !confirm('지금 편집한 내용 대신 초안으로 바꿀까요? (지금 내용을 살리려면 「골라서 합치기」를 쓰세요)')) return; void deleteEditorDraft(keyRef.current); keyRef.current = olderDraft.id; setW(olderDraft.world); if (olderDraft.notes) setNotes(olderDraft.notes); setOlderDraft(null); setStatus('초안을 불러왔습니다. 저장을 눌러야 반영됩니다.'); }}>초안으로 바꾸기</button>
+            <button type="button" className="small" onClick={() => setMerging(true)} title="초안에서 가져올 것을 항목마다 고른다">🔀 골라서 합치기</button>
             <button type="button" className="small" onClick={() => { if (confirm('저장하지 않은 초안을 버릴까요? 되돌릴 수 없습니다.')) { void deleteEditorDraft(key); setOlderDraft(null); } }}>버리기</button>
           </span>
         </div>
+      )}
+      {merging && olderDraft && (
+        <DraftMerge base={w} draft={olderDraft.world} origin={olderDraft.origin} draftAt={olderDraft.savedAt} onClose={() => setMerging(false)}
+          onApply={(merged, n) => {
+            // 합친 내용은 지난 초안 자리에 이어서 보관한다 (이번 편집의 임시 초안은 지운다) — 잃는 것이 없다
+            void deleteEditorDraft(keyRef.current); keyRef.current = olderDraft.id;
+            setW(merged); setOlderDraft(null); setMerging(false);
+            setStatus(`초안에서 ${n}곳을 합쳤습니다. 저장을 눌러야 반영됩니다.`);
+          }} />
       )}
       {library && (
         <WorldLibrary target={w} onClose={() => setLibrary(false)} onApply={(nw, notes) => {

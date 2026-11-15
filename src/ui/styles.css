@@ -1286,3 +1286,13 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .scene-answer button { flex: 0 0 auto; white-space: nowrap; }
 .gimmick-ai { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
 .gimmick-ai .row input { flex: 1 1 200px; min-width: 0; }
+
+/* 초안 합치기 (v0.131) */
+.draft-merge { max-height: 80vh; overflow: auto; }
+.merge-groups { display: flex; flex-direction: column; gap: 8px; }
+.merge-row { display: flex; align-items: center; gap: 8px; min-height: 36px; min-width: 0; }
+.merge-label { min-width: 0; word-break: break-word; }
+.merge-kind { flex: 0 0 auto; font-size: .72rem; padding: 1px 6px; border-radius: 10px; border: 1px solid var(--border); color: var(--muted); }
+.merge-kind.added { border-color: var(--accent); color: var(--accent); }
+.merge-foot { position: sticky; bottom: 0; background: var(--surface); padding-top: 6px; }
+.merge-kind.changed { border-color: var(--accent); color: var(--accent); }
