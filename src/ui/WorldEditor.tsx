@@ -110,7 +110,7 @@ function tabForPath(path: string): Tab {
 
 // ---------------------------------------------------------------- 편집기
 
-export function WorldEditor({ initial, onDone, settings: baseSettings, draftNotes, initialCard, alreadySaved, openLibrary, draftKey, restored, origin }: {
+export function WorldEditor({ initial, onDone, settings: baseSettings, draftNotes, initialCard, alreadySaved, openLibrary, draftKey, restored, origin, initialTab }: {
   initial: WorldPackage | null; onDone: () => void; settings?: LlmSettings | null; draftNotes?: string[];
   /** 초안 열쇠 (v0.126): 홈에서 초안을 이어 열 때 그 초안의 열쇠 */
   draftKey?: string;
@@ -124,6 +124,8 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
   initialCard?: File;
   /** 자료실을 바로 연다 (v0.63: 여러 세계에서 골라 새 세계 만들기) */
   openLibrary?: boolean;
+  /** 처음 열 탭 (v0.146: 흐름도에서 빈 세계 만들기) */
+  initialTab?: 'flow';
 }) {
   // 편집기의 AI 버튼에 쓸 모델 (v0.119): 설정대로 보여 주고, 이 편집기에서만 바꾼다
   const [aiModels, setAiModels] = useState<RouteOverrides>({});
@@ -173,7 +175,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
   // 시험실 (v0.84): 각 탭의 🧪 버튼이 이 항목을 상태 시험대에서 연다
   const [labFocus, setLabFocus] = useState<{ kind: string; id: string; n: number } | null>(null);
   const openLab = (kind: string, id: string) => { setLabFocus((f) => ({ kind, id, n: (f?.n ?? 0) + 1 })); setTab('lab'); };
-  const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : 'basic');
+  const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : initialTab ?? 'basic');
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
   const [approved, setApproved] = useState(!draftNotes || !!alreadySaved);

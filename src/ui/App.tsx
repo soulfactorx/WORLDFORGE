@@ -21,7 +21,7 @@ import { UserArtManager } from './UserArtManager';
 import type { WorldPackage } from '../engine/schema';
 import { blankWorld } from '../storage/packages';
 
-type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean; library?: boolean; draftKey?: string; restored?: boolean; origin?: WorldPackage } | { name: 'worldgen' } | { name: 'wizard' } | { name: 'cardworld'; file: File; extras?: File[] } | { name: 'userart' } | { name: 'usage' } | { name: 'storage' };
+type View = { name: 'saves' } | { name: 'settings' } | { name: 'play'; saveId: string } | { name: 'editor'; world: WorldPackage | null; notes?: string[]; card?: File; saved?: boolean; library?: boolean; tab?: 'flow'; draftKey?: string; restored?: boolean; origin?: WorldPackage } | { name: 'worldgen' } | { name: 'wizard' } | { name: 'cardworld'; file: File; extras?: File[] } | { name: 'userart' } | { name: 'usage' } | { name: 'storage' };
 
 export function App() {
   const [settings, setSettings] = useState<LlmSettings | null>(loadSettings);
@@ -100,7 +100,7 @@ export function App() {
           </>
         )}
         {view.name === 'saves' && <DraftBanner onEditor={(d) => setView({ name: 'editor', world: d.world, ...(d.notes ? { notes: d.notes } : {}), draftKey: d.id, restored: true, ...(d.origin ? { origin: d.origin } : {}) })} onWizard={() => setView({ name: 'wizard' })} />}
-        {view.name === 'saves' && <SaveList noAi={!settings} onConnect={() => setView({ name: 'settings' })} onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world, library) => setView({ name: 'editor', world, ...(library ? { library: true } : {}) })} onGenerate={() => setView({ name: 'worldgen' })} onWizard={() => setView({ name: 'wizard' })} onUserArt={() => setView({ name: 'userart' })}
+        {view.name === 'saves' && <SaveList noAi={!settings} onConnect={() => setView({ name: 'settings' })} onOpen={(saveId) => setView({ name: 'play', saveId })} onEdit={(world, library, tab) => setView({ name: 'editor', world, ...(library ? { library: true } : {}), ...(tab ? { tab } : {}) })} onGenerate={() => setView({ name: 'worldgen' })} onWizard={() => setView({ name: 'wizard' })} onUserArt={() => setView({ name: 'userart' })}
           onCard={(file, extras) => setView({ name: 'cardworld', file, ...(extras?.length ? { extras } : {}) })} />}
         {view.name === 'storage' && <StoragePanel onClose={() => setView({ name: 'saves' })} />}
         {view.name === 'usage' && <UsagePanel onClose={() => setView({ name: 'saves' })} />}
@@ -108,7 +108,7 @@ export function App() {
         {view.name === 'cardworld' && <CardWorldPanel file={view.file} {...(view.extras ? { extraFiles: view.extras } : {})} settings={settings} onCancel={() => setView({ name: 'saves' })}
           onDone={(world, notes) => setView({ name: 'editor', world, notes, saved: true })}
           onCharactersOnly={(card) => setView({ name: 'editor', world: { ...blankWorld(), manifest: { ...blankWorld().manifest, id: `card.${Date.now().toString(36)}` } }, card })} />}
-        {view.name === 'editor' && <WorldEditor key={view.draftKey ?? view.world?.manifest.id ?? 'new'} initial={view.world} draftNotes={view.notes} alreadySaved={view.saved} draftKey={view.draftKey} restored={view.restored} origin={view.origin} initialCard={view.card} openLibrary={view.library} settings={settings} onDone={() => setView({ name: 'saves' })} />}
+        {view.name === 'editor' && <WorldEditor key={view.draftKey ?? view.world?.manifest.id ?? 'new'} initial={view.world} draftNotes={view.notes} alreadySaved={view.saved} draftKey={view.draftKey} restored={view.restored} origin={view.origin} initialCard={view.card} openLibrary={view.library} {...(view.tab ? { initialTab: view.tab } : {})} settings={settings} onDone={() => setView({ name: 'saves' })} />}
         {view.name === 'wizard' && <WorldWizard settings={settings} onCancel={() => setView({ name: 'saves' })} onDone={(world, notes) => setView({ name: 'editor', world, notes })} />}
         {view.name === 'worldgen' && <WorldGenPanel settings={settings} onCancel={() => setView({ name: 'saves' })} onDraft={(world, notes) => setView({ name: 'editor', world, notes })} />}
         {view.name === 'play' && (

@@ -158,9 +158,11 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
     if (n.kind === 'quest' && !edges.some((e) => e.to === n.key && e.kind === 'start') && !(w.quests ?? []).find((q) => q.id === n.id)?.start) n.warn ??= '시작 조건이 없다';
   }
   // ▶ 시작 (v0.143): 들어오는 화살표가 없는 이야기 덩어리는 플레이어가 시작할 때부터 열려 있다 (또는 장소·날짜 같은 다른 조건으로 열린다)
-  const roots = [...nodes.values()].filter((n) => ROOT_KINDS.includes(n.kind) && !edges.some((e) => e.to === n.key));
-  if (roots.length) {
-    nodes.set(START_KEY, { key: START_KEY, kind: 'start', id: 'begin', name: '플레이 시작', sub: `처음부터 열리는 것 ${roots.length}` });
+  // 여는 화살표(시작·일으킴)가 없는 것 — 끝·실패 조건으로만 이어진 것도 처음부터 열린다
+  const roots = [...nodes.values()].filter((n) => ROOT_KINDS.includes(n.kind) && !edges.some((e) => e.to === n.key && (e.kind === 'start' || e.kind === 'effect' || e.kind === 'ending')));
+  // 시작 상자는 늘 있다 (v0.146) — 빈 세계도 흐름도에서 만들기 시작한다
+  nodes.set(START_KEY, { key: START_KEY, kind: 'start', id: 'begin', name: '플레이 시작', sub: roots.length ? `처음부터 열리는 것 ${roots.length}` : '눌러서 첫 이야기 만들기' });
+  {
     for (const r of roots) {
       const c = openCondition(w, r);
       edges.push({ from: START_KEY, to: r.key, kind: 'start', label: isEmptyCond(c) ? '처음부터 열림' : '처음부터 · 다른 조건(장소·관계·날짜 등)이 맞으면' });
@@ -224,7 +226,7 @@ export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right', pinned?: Reco
     return d;
   };
   ids.forEach((k) => depth(k));
-  const lonely = ids.filter((k) => !out.get(k)!.length && !inn.get(k)!.length);
+  const lonely = ids.filter((k) => k !== START_KEY && !out.get(k)!.length && !inn.get(k)!.length);
   const linked = ids.filter((k) => !lonely.includes(k));
   // 결말은 맨 끝 단
   const isEnd = (k: string) => byKey.get(k)!.kind === 'ending' && !out.get(k)!.length;

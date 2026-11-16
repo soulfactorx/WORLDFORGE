@@ -27,7 +27,9 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   const counts = useMemo(() => { const m = new Map<NodeKind, number>(); for (const n of graph.nodes) m.set(n.kind, (m.get(n.kind) ?? 0) + 1); return m; }, [graph]);
   const [hidden, setHidden] = useState<globalThis.Set<NodeKind>>(() => new globalThis.Set<NodeKind>(['claim', 'phase']));
   const [q, setQ] = useState('');
-  const [sel, setSel] = useState<string | null>(null);
+  const empty = graph.nodes.every((n) => n.kind === 'start');
+  // 빈 세계: 시작 상자를 골라 둔다 — 옆 창에 「처음부터 열리는 …」 만들기가 바로 보인다
+  const [sel, setSel] = useState<string | null>(() => (empty && typeof window !== 'undefined' && window.matchMedia?.('(min-width: 901px)').matches ? START_KEY : null)); // 휴대폰은 아래 창이 화면을 덮으므로 안내 카드만
   const [focus, setFocus] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [dir, setDir] = useState<FlowDir>(() => { try { return localStorage.getItem(DIR_KEY) === 'down' ? 'down' : 'right'; } catch { return 'right'; } });
@@ -152,6 +154,18 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
           <span className="lg start">— 시작·열림</span> <span className="lg complete">— 끝·결말</span> <span className="lg fail">- - 실패·막힘</span> <span className="lg effect">··· 일으킴(플래그·장면·카드)</span>
           {warns > 0 && <span className="warn-text"> · ⚠ 살펴볼 곳 {warns}</span>}
         </p>
+        {empty && (
+          <div className="flow-empty" role="note">
+            <b>🗺 흐름도에서 이야기 만들기</b>
+            <ol className="small">
+              <li><b>▶ 플레이 시작</b>에서 처음 열릴 것을 만드세요 — 첫 임무·갈래 카드·결정적 선택.</li>
+              <li>만든 상자를 고르고 <b>「＋ 이것 다음에 열리는 임무」</b>로 이야기를 이어 가고, 갈라지는 곳은 선택지·카드의 갈림길로 만드세요.</li>
+              <li>끝에는 <b>「＋ 이것으로 이르는 결말」</b>. 상자의 ● 손잡이를 끌어 잇고, 화살표를 눌러 조건을 고칩니다.</li>
+              <li>다 되면 <b>🧪 시뮬레이션</b>으로 끝까지 가 보세요. 장소·인물은 「세계」「인물」 탭에서 채웁니다.</li>
+            </ol>
+            <div className="row flow-empty-actions">{startCreators(w, set, setSel).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}</div>
+          </div>
+        )}
         {sim && (
           <div className="flow-sim" role="region" aria-label="시뮬레이션">
             <p className="small"><b>🧪 시뮬레이션</b> — 진행 {sim.path.length}번 · {sim.state.ending ? <b>🏁 결말: {w.endings?.find((e) => e.id === sim.state.ending)?.name ?? sim.state.ending}</b> : simOpen ? <>할 수 있는 상자 <b>{simOpen}</b>개 (🟢·▶ 상자를 눌러 진행)</> : <span className="warn-text">⚠ 더 할 수 있는 일이 없습니다 — 결말 없이 막혔습니다</span>}
@@ -348,14 +362,21 @@ function Edge({ e, a, b, active, dim, down, onPick }: { e: GEdge; a?: { x: numbe
   if (down) {
     const x1 = a.x + NODE_W / 2, y1 = a.y + NODE_H, x2 = b.x + NODE_W / 2, y2 = b.y;
     const backward = y2 <= y1;
-    d = backward ? `M${x1},${y1} C${x1 - 90},${y1 + 60} ${x2 - 90},${y2 - 60} ${x2},${y2}` : `M${x1},${y1} C${x1},${y1 + (y2 - y1) / 2} ${x2},${y1 + (y2 - y1) / 2} ${x2},${y2}`;
+    // 여러 단을 건너는 화살표는 옆으로 휘어 사이의 상자를 비켜 간다
+    const bow = backward ? 0 : Math.min(150, Math.max(0, Math.round((y2 - y1) / (NODE_H + 56))) * 120);
+    d = backward ? `M${x1},${y1} C${x1 - 90},${y1 + 60} ${x2 - 90},${y2 - 60} ${x2},${y2}` : `M${x1},${y1} C${x1 - bow},${y1 + (y2 - y1) / 2} ${x2 - bow},${y1 + (y2 - y1) / 2} ${x2},${y2}`;
     lx = (x1 + x2) / 2 - (backward ? 60 : 0); ly = (y1 + y2) / 2;
   } else {
     const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
     // 뒤로 가는 화살표(같은 단·앞 단)는 위로 크게 돌아간다
     const backward = x2 <= x1;
-    d = backward ? `M${x1},${y1} C${x1 + 60},${y1 - 70} ${x2 - 60},${y2 - 70} ${x2},${y2}` : `M${x1},${y1} C${x1 + (x2 - x1) / 2},${y1} ${x1 + (x2 - x1) / 2},${y2} ${x2},${y2}`;
-    lx = (x1 + x2) / 2; ly = (y1 + y2) / 2 - (backward ? 52 : 6);
+    // 여러 단을 건너는 화살표는 위로 휘어 사이의 상자를 비켜 간다 (v0.146)
+    const bow = backward ? 0 : Math.min(110, Math.max(0, Math.round((x2 - x1) / (NODE_W + 70))) * 58);
+    const top = Math.min(y1, y2) - bow;
+    d = backward ? `M${x1},${y1} C${x1 + 60},${y1 - 70} ${x2 - 60},${y2 - 70} ${x2},${y2}`
+      : bow ? `M${x1},${y1} C${x1 + 50},${top} ${x2 - 50},${top} ${x2},${y2}`
+      : `M${x1},${y1} C${x1 + (x2 - x1) / 2},${y1} ${x1 + (x2 - x1) / 2},${y2} ${x2},${y2}`;
+    lx = (x1 + x2) / 2; ly = bow ? top + 10 : (y1 + y2) / 2 - (backward ? 52 : 6);
   }
   const cls = e.kind === 'fail' ? 'fail' : e.kind === 'effect' ? 'effect' : e.kind === 'start' ? 'start' : 'complete';
   return (
@@ -405,24 +426,10 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
 
       <div className="flow-actions">
         <button type="button" onClick={onLink} title="상자의 ● 손잡이를 다른 상자로 끌어도 됩니다">🔗 {n.kind === 'start' ? '다른 상자를 처음부터 열리게' : '다른 상자와 잇기'}</button>
-        {n.kind === 'start' && <>
-          <button type="button" onClick={() => {
-            const id = newId('quest/new-', w.quests ?? []);
-            set({ quests: [...(w.quests ?? []), { id, name: '새 임무', kind: 'main', start: { all: [] }, stages: [{ objective: '할 일을 적어 주세요', hint: '', complete: { all: [] } }] }] }); onPick(`quest:${id}`);
-          }}>＋ 처음부터 열리는 임무</button>
-          <button type="button" onClick={() => {
-            const id = newId('card/new-', w.storylets ?? []);
-            set({ storylets: [...(w.storylets ?? []), { id, title: '새 갈래 카드', situation: '상황을 적어 주세요', tags: ['main'], options: [{ id: 'a', label: '첫째 길' }, { id: 'b', label: '둘째 길' }] }] }); onPick(`card:${id}`);
-          }}>＋ 처음부터 펼쳐지는 갈래 카드</button>
-          <button type="button" onClick={() => {
-            const id = newId('choice/new-', w.choices ?? []);
-            set({ choices: [...(w.choices ?? []), { id, name: '새 결정적 선택', prompt: '무엇을 할까?', when: { all: [] }, options: [{ id: 'a', text: '이쪽', effects: [] }, { id: 'b', text: '저쪽', effects: [] }] }] }); onPick(`choice:${id}`);
-          }}>＋ 처음부터 열리는 결정적 선택</button>
-        </>}
+        {n.kind === 'start' && startCreators(w, set, onPick).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}
         {after && <button type="button" onClick={() => {
           const id = newId('quest/next-', w.quests ?? []);
-          const q: Quest = { id, name: `${n.name} 다음`, kind: 'side', start: after, stages: [{ objective: '할 일을 적어 주세요', hint: '', complete: { all: [] } }] };
-          set({ quests: [...(w.quests ?? []), q] }); onPick(`quest:${id}`);
+          set(newQuest(w, id, `${n.name} 다음`, 'side', after)); onPick(`quest:${id}`);
         }}>＋ 이것 다음에 열리는 임무</button>}
         {after && <button type="button" onClick={() => {
           const id = newId('ending/', w.endings ?? []);
@@ -433,6 +440,38 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
       </div>
     </aside>
   );
+}
+
+/**
+ * 새 임무 (v0.146): 단계의 끝 조건을 비워 두면 시작하자마자 끝나 버린다 — 대신 「할 일을 해냈다」 플래그를 만들어
+ * GM이 그 설명대로 세우게 한다 (시뮬레이션에서는 「단계 끝내기」나 플래그 「세우기」로 진행).
+ */
+function newQuest(w: WorldPackage, id: string, name: string, kind: Quest['kind'], start: Condition): Partial<WorldPackage> {
+  let flag = `${id.replace(/[^A-Za-z0-9]+/g, '_')}_done`;
+  while ((w.flags ?? []).some((f) => f.id === flag)) flag += '_';
+  return {
+    quests: [...(w.quests ?? []), { id, name, kind, start, stages: [{ objective: '할 일을 적어 주세요', hint: '', complete: { flag } }] }],
+    flags: [...(w.flags ?? []), { id: flag, when: `「${name}」의 할 일을 플레이어가 해냈을 때` }],
+  };
+}
+
+/** ▶ 시작에서 새 흐름 만들기 (v0.145, v0.146: 빈 세계 안내에서도) */
+function nextId(prefix: string, list: { id: string }[]) { let i = list.length + 1; while (list.some((x) => x.id === `${prefix}${i}`)) i++; return `${prefix}${i}`; }
+function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void): { label: string; run: () => void }[] {
+  return [
+    { label: '＋ 처음부터 열리는 임무', run: () => {
+      const id = nextId('quest/new-', w.quests ?? []);
+      set(newQuest(w, id, (w.quests ?? []).length ? '새 임무' : '첫 임무', 'main', { all: [] })); onPick(`quest:${id}`);
+    } },
+    { label: '＋ 처음부터 펼쳐지는 갈래 카드', run: () => {
+      const id = nextId('card/new-', w.storylets ?? []);
+      set({ storylets: [...(w.storylets ?? []), { id, title: '새 갈래 카드', situation: '상황을 적어 주세요', tags: ['main'], options: [{ id: 'a', label: '첫째 길' }, { id: 'b', label: '둘째 길' }] }] }); onPick(`card:${id}`);
+    } },
+    { label: '＋ 처음부터 열리는 결정적 선택', run: () => {
+      const id = nextId('choice/new-', w.choices ?? []);
+      set({ choices: [...(w.choices ?? []), { id, name: '새 결정적 선택', prompt: '무엇을 할까?', when: { all: [] }, options: [{ id: 'a', text: '이쪽', effects: [] }, { id: 'b', text: '저쪽', effects: [] }] }] }); onPick(`choice:${id}`);
+    } },
+  ];
 }
 
 /** Esc로 닫기 */

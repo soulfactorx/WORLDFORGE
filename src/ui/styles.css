@@ -1395,6 +1395,9 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-drag-line { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; pointer-events: none; }
 .flow-linking { margin: 0; padding: 6px 10px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--surface); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .flow-cut { margin-left: auto; }
+.flow-empty { border: 1px dashed var(--accent); border-radius: 10px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+.flow-empty ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 3px; }
+.flow-empty-actions { flex-wrap: wrap; gap: 6px; }
 .flow-edge-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
 .flow-edge:hover path:first-child { stroke-width: 3; opacity: 1; }
 .flow-edge-btn { max-width: 100%; white-space: normal; text-align: left; overflow-wrap: anywhere; }
