@@ -268,7 +268,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
 
   return (
     <LabLink.Provider value={openLab}>
-    <section className="panel editor">
+    <section className={`panel editor${tab === 'flow' ? ' editor-wide' : ''}`}>
       {/* 편집기 상단 바 (v0.82): 닫기 · 제목·저장 상태 · 도구 · 저장 — 스크롤해도 붙어 있다 */}
       <div className="editor-bar">
         <button type="button" className="editor-close" onClick={close} title="닫기" aria-label="닫기">←</button>

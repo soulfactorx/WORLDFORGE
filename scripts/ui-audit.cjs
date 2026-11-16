@@ -230,8 +230,15 @@ const SCREENS = [
   }],
   ['편집: 흐름도 · 고른 노드 (v0.142)', async (p) => {
     await editorTab(p, '🗺 흐름도');
-    await p.locator('.flow-node.k-quest').first().click();
+    await p.locator('.flow-node.k-quest .flow-box').first().click();
     await p.waitForSelector('.flow-panel');
+  }],
+  ['편집: 흐름도 · 잇기 창 (v0.143)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.locator('.flow-node.k-quest .flow-box').first().click();
+    await p.click('.flow-actions button:has-text("다른 상자와 잇기")');
+    await p.locator('.flow-node.k-ending .flow-box').first().click();
+    await p.waitForSelector('.flow-dialog');
   }],
   ['홈: 이어서 만들기 (v0.126)', async (p) => {
     await wizard(p);

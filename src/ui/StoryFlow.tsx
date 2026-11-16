@@ -1,9 +1,10 @@
 /**
  * 이야기 흐름도 (v0.142): 임무·분기·조건으로 열리는 것을 한 장의 그림으로. 누르면 옆(휴대폰은 아래)에서 자세히 보고 바로 고친다.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Condition, Ending, Quest, StoryEffect, WorldPackage } from '../engine/schema';
-import { buildStoryGraph, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
+import { buildStoryGraph, type FlowDir, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
+import { type LinkOption, linkOptions, unlink } from '../gm/flowLink';
 import { ConditionField } from './ConditionEditor';
 import { Area, Text } from './form';
 import { EffectsEditor } from './WorldForms';
@@ -14,6 +15,7 @@ export type FlowTab = 'quests' | 'story' | 'scenes' | 'gimmicks' | 'encounters' 
 const TAB_OF: Partial<Record<NodeKind, FlowTab>> = { quest: 'quests', ending: 'quests', flag: 'quests', card: 'story', choice: 'story', arc: 'story', event: 'story', clock: 'story', phase: 'story', scene: 'scenes', gimmick: 'gimmicks', encounter: 'encounters', rule: 'rules', claim: 'knowledge' };
 const TAB_NAME: Record<FlowTab, string> = { quests: '임무·플래그·결말', story: '이야기 흐름', scenes: '장면', gimmicks: '함정·퍼즐', encounters: '조우', rules: '세계 규칙', knowledge: '지식' };
 const MAIN_KINDS: NodeKind[] = ['quest', 'ending', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock', 'rule', 'flag', 'claim', 'phase'];
+const DIR_KEY = 'worldforge.flow.dir';
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab: (t: FlowTab) => void }) {
@@ -24,8 +26,17 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   const [sel, setSel] = useState<string | null>(null);
   const [focus, setFocus] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [dir, setDir] = useState<FlowDir>(() => { try { return localStorage.getItem(DIR_KEY) === 'down' ? 'down' : 'right'; } catch { return 'right'; } });
+  /** 잇기: 끄는 중 · 누를 상자를 기다리는 중 · 방법 고르기 */
+  const [drag, setDrag] = useState<{ from: string; x: number; y: number } | null>(null);
+  const [linking, setLinking] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ from: string; to: string } | null>(null);
+  const [note, setNote] = useState('');
+  const svgRef = useRef<SVGSVGElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const selNode = sel ? graph.nodes.find((n) => n.key === sel) ?? null : null;
   useEffect(() => { if (sel && !selNode) setSel(null); }, [selNode]);
+  useEffect(() => { try { localStorage.setItem(DIR_KEY, dir); } catch { /* 저장 못 해도 괜찮다 */ } }, [dir]);
 
   // 보이는 것: 종류 거르기 · (고른 것의 이웃만) — 거른 뒤 다시 배치해 빈칸 없이
   const shown: StoryGraph = useMemo(() => {
@@ -34,21 +45,42 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
     const keys = new globalThis.Set(nodes.map((n) => n.key));
     return { nodes, edges: graph.edges.filter((e) => keys.has(e.from) && keys.has(e.to)) };
   }, [graph, hidden, focus, sel]);
-  const lay = useMemo(() => layoutGraph(shown), [shown]);
+  const lay = useMemo(() => layoutGraph(shown, dir), [shown, dir]);
   const pos = useMemo(() => new Map(lay.nodes.map((n) => [n.key, n])), [lay]);
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const hit = (n: GNode) => !words.length || words.every((t) => `${n.name} ${n.id} ${n.sub ?? ''} ${NODE_LABEL[n.kind]}`.toLowerCase().includes(t));
   const near1 = sel ? neighbors(shown, sel, 1) : null;
   const warns = graph.nodes.filter((n) => n.warn).length;
+  const down = dir === 'down';
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSel(null); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || pending) return; // 방법 고르기 창은 스스로 닫는다
+      if (linking || drag) { setLinking(null); setDrag(null); } else setSel(null);
+    };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [linking, drag, pending]);
+
+  const toSvg = (e: { clientX: number; clientY: number }) => { const r = svgRef.current!.getBoundingClientRect(); return { x: (e.clientX - r.left) / zoom, y: (e.clientY - r.top) / zoom }; };
+  const nodeAt = (x: number, y: number) => lay.nodes.find((n) => x >= n.x && x <= n.x + NODE_W && y >= n.y && y <= n.y + NODE_H);
+  const dropTarget = drag ? nodeAt(drag.x, drag.y) : undefined;
+  const fit = () => { const c = canvasRef.current; if (c) setZoom(Math.max(0.3, Math.min(1, +((c.clientWidth - 4) / lay.width).toFixed(2)))); };
+  const pick = (k: string) => {
+    if (linking) { if (k !== linking) setPending({ from: linking, to: k }); setLinking(null); return; }
+    setSel(k === sel ? null : k);
+  };
+  const byKey = (k: string) => graph.nodes.find((n) => n.key === k);
+  // 처음 열 때 · 방향을 바꿀 때: ▶ 시작이 보이게 굴린다
+  const startY = pos.get(START_KEY)?.y, startX = pos.get(START_KEY)?.x;
+  useEffect(() => {
+    const c = canvasRef.current; if (!c || startY === undefined || startX === undefined) return;
+    c.scrollTop = Math.max(0, startY * zoom - c.clientHeight / 3);
+    c.scrollLeft = Math.max(0, startX * zoom - 20);
+  }, [dir, startY === undefined]);
 
   return (
     <div className="story-flow">
-      <p className="muted small">세계의 <b>임무·결말·갈래 카드·장면·함정·전투·결정적 선택·사건</b>이 어떤 조건으로 이어지는지 그린 지도입니다. 화살표 <b>A → B</b>는 "A가 끝나거나(고르거나 · 세우면) B가 열린다(시작 · 끝 · 실패)"는 뜻입니다. 상자를 누르면 자세히 보고 바로 고칠 수 있습니다.</p>
+      <p className="muted small">세계의 <b>임무·결말·갈래 카드·장면·함정·전투·결정적 선택·사건</b>이 어떤 조건으로 이어지는지 그린 지도입니다. <b>▶ 플레이 시작</b>에서 출발해 {down ? '아래로' : '오른쪽으로'} 흘러가 맨 끝의 <b>◆ 결말</b>에 이릅니다. 화살표 <b>A → B</b>는 "A가 끝나거나(고르거나 · 세우면) B가 열린다"는 뜻입니다. 상자를 누르면 자세히 보고 고치며, 상자의 <b>●</b> 손잡이를 다른 상자로 끌면 둘을 잇습니다.</p>
       <div className="flow-toolbar">
         <div className="flow-kinds">
           {MAIN_KINDS.filter((k) => counts.get(k)).map((k) => {
@@ -59,70 +91,164 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
         <div className="row flow-tools">
           <input type="search" placeholder="🔍 이름으로 찾기" value={q} onChange={(e) => setQ(e.target.value)} />
           <label className="check"><input type="checkbox" checked={focus} disabled={!sel} onChange={(e) => setFocus(e.target.checked)} /> 고른 것과 이어진 것만</label>
+          <button type="button" className="small" onClick={() => setDir(down ? 'right' : 'down')} title="흐름 방향 바꾸기">{down ? '↓ 위에서 아래로' : '→ 왼쪽에서 오른쪽으로'}</button>
           <span className="row flow-zoom">
-            <button type="button" className="small" aria-label="작게" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.15).toFixed(2)))}>−</button>
-            <button type="button" className="small" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+            <button type="button" className="small" aria-label="작게" onClick={() => setZoom((z) => Math.max(0.3, +(z - 0.15).toFixed(2)))}>−</button>
+            <button type="button" className="small" onClick={() => setZoom(1)} title="100%로">{Math.round(zoom * 100)}%</button>
             <button type="button" className="small" aria-label="크게" onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.15).toFixed(2)))}>＋</button>
+            <button type="button" className="small" onClick={fit} title="화면 폭에 맞추기">⤢ 맞춤</button>
           </span>
         </div>
         <p className="small muted flow-legend">
           <span className="lg start">— 시작·열림</span> <span className="lg complete">— 끝·결말</span> <span className="lg fail">- - 실패·막힘</span> <span className="lg effect">··· 일으킴(플래그·장면·카드)</span>
           {warns > 0 && <span className="warn-text"> · ⚠ 살펴볼 곳 {warns}</span>}
         </p>
+        {linking && <p className="flow-linking small" role="status">🔗 「{byKey(linking)?.name}」과(와) 이을 상자를 누르세요 <button type="button" className="small" onClick={() => setLinking(null)}>그만두기</button></p>}
+        {note && <p className="small status" role="status">{note} <button type="button" className="small" onClick={() => setNote('')} aria-label="알림 닫기">✕</button></p>}
       </div>
 
       {!shown.nodes.length ? <p className="muted">그릴 것이 없습니다. 임무·결말·갈래 카드 등을 만들면 여기에 이어진 모습이 나타납니다.</p> : (
-        <div className={`flow-wrap${selNode ? ' with-panel' : ''}`}>
-          <div className="flow-canvas" role="region" aria-label="이야기 흐름도">
-            <svg width={lay.width * zoom} height={lay.height * zoom} viewBox={`0 0 ${lay.width} ${lay.height}`} role="img" aria-label={`노드 ${shown.nodes.length}개, 화살표 ${shown.edges.length}개`}>
+        <div className={`flow-wrap${selNode ? ' with-panel' : ''}${linking ? ' linking' : ''}`}>
+          <div ref={canvasRef} className={`flow-canvas${drag ? ' dragging' : ''}${linking ? ' linking' : ''}`} role="region" aria-label="이야기 흐름도">
+            <svg ref={svgRef} width={lay.width * zoom} height={lay.height * zoom} viewBox={`0 0 ${lay.width} ${lay.height}`} role="img" aria-label={`노드 ${shown.nodes.length}개, 화살표 ${shown.edges.length}개`}
+              onPointerMove={(e) => {
+                if (!drag) return;
+                setDrag({ ...drag, ...toSvg(e) });
+                // 가장자리로 끌면 그쪽으로 굴린다
+                const c = canvasRef.current; if (!c) return;
+                const r = c.getBoundingClientRect(), m = 36;
+                if (e.clientX > r.right - m) c.scrollLeft += 14; else if (e.clientX < r.left + m) c.scrollLeft -= 14;
+                if (e.clientY > r.bottom - m) c.scrollTop += 14; else if (e.clientY < r.top + m) c.scrollTop -= 14;
+              }}
+              onPointerUp={(e) => {
+                if (!drag) return;
+                const p = toSvg(e), t = nodeAt(p.x, p.y);
+                if (t && t.key !== drag.from) setPending({ from: drag.from, to: t.key });
+                setDrag(null);
+              }}
+              onPointerCancel={() => setDrag(null)}>
               <defs>
                 {(['start', 'complete', 'fail', 'effect'] as const).map((k) => (
                   <marker key={k} id={`arrow-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" className={`flow-arrow ${k}`} /></marker>
                 ))}
               </defs>
               {lay.nodes.some((n) => n.layer === -1) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -1).map((n) => n.y)) - 12} className="flow-lane">따로 있는 것 (이어진 조건이 없다)</text>}
-              {shown.edges.map((e, i) => <Edge key={i} e={e} a={pos.get(e.from)} b={pos.get(e.to)} active={!!sel && (e.from === sel || e.to === sel)} dim={!!sel && !(e.from === sel || e.to === sel)} />)}
-              {lay.nodes.map((n) => (
-                <g key={n.key} className={`flow-node k-${n.kind}${n.key === sel ? ' sel' : ''}${n.warn ? ' warn' : ''}${(near1 && !near1.has(n.key)) || !hit(n) ? ' dim' : ''}`} transform={`translate(${n.x},${n.y})`}
-                  role="button" tabIndex={0} aria-label={`${NODE_LABEL[n.kind]} ${n.name}${n.warn ? ` — ${n.warn}` : ''}`} aria-pressed={n.key === sel}
-                  onClick={() => setSel(n.key === sel ? null : n.key)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setSel(n.key === sel ? null : n.key); } }}>
-                  <rect width={NODE_W} height={NODE_H} rx={n.kind === 'flag' || n.kind === 'claim' || n.kind === 'phase' ? 28 : 8} />
-                  <text x={10} y={22} className="flow-title">{NODE_ICON[n.kind]} {short(n.name, 13)}{n.warn ? ' ⚠' : ''}</text>
-                  <text x={10} y={42} className="flow-sub">{short(`${NODE_LABEL[n.kind]}${n.sub ? ` · ${n.sub}` : ''}`, 22)}</text>
-                  <title>{`${n.name}\n${n.id}${n.warn ? `\n⚠ ${n.warn}` : ''}`}</title>
-                </g>
-              ))}
+              {shown.edges.map((e, i) => <Edge key={i} e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={!!sel && (e.from === sel || e.to === sel)} dim={!!sel && !(e.from === sel || e.to === sel)} />)}
+              {lay.nodes.map((n) => {
+                const canFrom = n.kind !== 'start';
+                const hx = down ? NODE_W / 2 : NODE_W, hy = down ? NODE_H : NODE_H / 2;
+                return (
+                  <g key={n.key} className={`flow-node k-${n.kind}${n.key === sel ? ' sel' : ''}${n.warn ? ' warn' : ''}${dropTarget?.key === n.key && drag?.from !== n.key ? ' drop' : ''}${linking === n.key || drag?.from === n.key ? ' src' : ''}${(near1 && !near1.has(n.key)) || !hit(n) ? ' dim' : ''}`} transform={`translate(${n.x},${n.y})`}>
+                    <g className="flow-box" role="button" tabIndex={0} aria-label={`${NODE_LABEL[n.kind]} ${n.name}${n.warn ? ` — ${n.warn}` : ''}`} aria-pressed={n.key === sel}
+                      onClick={() => pick(n.key)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(n.key); } }}>
+                      <rect width={NODE_W} height={NODE_H} rx={n.kind === 'flag' || n.kind === 'claim' || n.kind === 'phase' || n.kind === 'start' ? 28 : 8} />
+                      <text x={10} y={22} className="flow-title">{NODE_ICON[n.kind]} {short(n.name, 13)}{n.warn ? ' ⚠' : ''}</text>
+                      <text x={10} y={42} className="flow-sub">{short(`${NODE_LABEL[n.kind]}${n.sub ? ` · ${n.sub}` : ''}`, 22)}</text>
+                      <title>{`${n.name}\n${n.id}${n.warn ? `\n⚠ ${n.warn}` : ''}`}</title>
+                    </g>
+                    {canFrom && (
+                      <g className="flow-handle" transform={`translate(${hx},${hy})`} aria-hidden="true"
+                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); (e.currentTarget as Element).setPointerCapture?.(e.pointerId); setDrag({ from: n.key, ...toSvg(e) }); }}>
+                        <circle r={18} className="flow-handle-hit" />
+                        <circle r={7} className="flow-handle-dot" />
+                        <title>끌어서 다른 상자와 잇기</title>
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+              {drag && (() => {
+                const a = pos.get(drag.from); if (!a) return null;
+                const x1 = down ? a.x + NODE_W / 2 : a.x + NODE_W, y1 = down ? a.y + NODE_H : a.y + NODE_H / 2;
+                return <line x1={x1} y1={y1} x2={drag.x} y2={drag.y} className="flow-drag-line" markerEnd="url(#arrow-start)" />;
+              })()}
             </svg>
           </div>
-          {selNode && <NodePanel w={w} set={set} g={graph} n={selNode} onPick={setSel} onClose={() => setSel(null)} onTab={onTab} />}
+          {selNode && <NodePanel w={w} set={set} g={graph} n={selNode} onPick={setSel} onClose={() => setSel(null)} onTab={onTab} onLink={() => { setLinking(selNode.key); setNote(''); }} onNote={setNote} />}
         </div>
+      )}
+      {pending && byKey(pending.from) && byKey(pending.to) && (
+        <LinkDialog w={w} a={byKey(pending.from)!} b={byKey(pending.to)!} onSwap={() => setPending({ from: pending.to, to: pending.from })} onClose={() => setPending(null)}
+          onLink={(opt) => { set(opt.apply(w)); setPending(null); setNote(`🔗 이었습니다: ${opt.label}`); setSel(pending.to); }} />
       )}
     </div>
   );
 }
 
-function Edge({ e, a, b, active, dim }: { e: GEdge; a?: { x: number; y: number }; b?: { x: number; y: number }; active: boolean; dim: boolean }) {
+/** 잇는 방법 고르기 */
+function LinkDialog({ w, a, b, onLink, onSwap, onClose }: { w: WorldPackage; a: GNode; b: GNode; onLink: (o: LinkOption) => void; onSwap: () => void; onClose: () => void }) {
+  const opts = useMemo(() => linkOptions(w, a, b), [w, a.key, b.key]);
+  const reverse = useMemo(() => linkOptions(w, b, a).length, [w, a.key, b.key]);
+  const [i, setI] = useState(0);
+  useEffect(() => { setI(0); }, [a.key, b.key]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const conds = opts.map((o, k) => [o, k] as const).filter(([o]) => o.group === 'cond'), fxs = opts.map((o, k) => [o, k] as const).filter(([o]) => o.group === 'effect');
+  return (
+    <div className="flow-dialog-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="flow-dialog" role="dialog" aria-modal="true" aria-label="상자 잇기">
+        <b>🔗 잇기</b>
+        <p className="flow-pair"><span>{NODE_ICON[a.kind]} {a.name}</span> <span aria-hidden="true">→</span> <span>{NODE_ICON[b.kind]} {b.name}</span></p>
+        {opts.length ? (
+          <>
+            <label>어떻게 이을까
+              <select value={i} onChange={(e) => setI(Number(e.target.value))}>
+                {conds.length > 0 && <optgroup label={`「${b.name}」의 조건에 넣기`}>{conds.map(([o, k]) => <option key={k} value={k}>{o.label}</option>)}</optgroup>}
+                {fxs.length > 0 && <optgroup label={`「${a.name}」의 효과로 일으키기`}>{fxs.map(([o, k]) => <option key={k} value={k}>{o.label}</option>)}</optgroup>}
+              </select>
+            </label>
+            <p className="small muted">{opts[i]?.group === 'effect' ? '앞 상자의 효과에 더합니다 — 그 일이 일어나면 바로 뒤 상자가 일어납니다.' : '뒤 상자의 조건에 「그리고」로 더합니다 — 원래 있던 조건도 함께 맞아야 합니다. 「또는」로 바꾸려면 상자를 눌러 조건 칸에서 고치세요.'}</p>
+          </>
+        ) : <p className="small">이 둘은 이 방향으로 이을 수 없습니다 (예: 결말에서는 아무것도 이어지지 않고, 「플레이 시작」은 조건이 없는 상자에 저절로 이어집니다).</p>}
+        <div className="row flow-dialog-actions">
+          {opts.length > 0 && <button type="button" className="primary" onClick={() => onLink(opts[i]!)}>잇기</button>}
+          {reverse > 0 && <button type="button" onClick={onSwap}>⇄ 방향 바꾸기</button>}
+          <button type="button" onClick={onClose}>취소</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Edge({ e, a, b, active, dim, down }: { e: GEdge; a?: { x: number; y: number }; b?: { x: number; y: number }; active: boolean; dim: boolean; down: boolean }) {
   if (!a || !b) return null;
-  const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
-  // 뒤로 가는 화살표(같은 단·앞 단)는 위로 크게 돌아간다
-  const backward = x2 <= x1;
-  const d = backward
-    ? `M${x1},${y1} C${x1 + 60},${y1 - 70} ${x2 - 60},${y2 - 70} ${x2},${y2}`
-    : `M${x1},${y1} C${x1 + (x2 - x1) / 2},${y1} ${x1 + (x2 - x1) / 2},${y2} ${x2},${y2}`;
+  let d: string, lx: number, ly: number;
+  if (down) {
+    const x1 = a.x + NODE_W / 2, y1 = a.y + NODE_H, x2 = b.x + NODE_W / 2, y2 = b.y;
+    const backward = y2 <= y1;
+    d = backward ? `M${x1},${y1} C${x1 - 90},${y1 + 60} ${x2 - 90},${y2 - 60} ${x2},${y2}` : `M${x1},${y1} C${x1},${y1 + (y2 - y1) / 2} ${x2},${y1 + (y2 - y1) / 2} ${x2},${y2}`;
+    lx = (x1 + x2) / 2 - (backward ? 60 : 0); ly = (y1 + y2) / 2;
+  } else {
+    const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
+    // 뒤로 가는 화살표(같은 단·앞 단)는 위로 크게 돌아간다
+    const backward = x2 <= x1;
+    d = backward ? `M${x1},${y1} C${x1 + 60},${y1 - 70} ${x2 - 60},${y2 - 70} ${x2},${y2}` : `M${x1},${y1} C${x1 + (x2 - x1) / 2},${y1} ${x1 + (x2 - x1) / 2},${y2} ${x2},${y2}`;
+    lx = (x1 + x2) / 2; ly = (y1 + y2) / 2 - (backward ? 52 : 6);
+  }
   const cls = e.kind === 'fail' ? 'fail' : e.kind === 'effect' ? 'effect' : e.kind === 'start' ? 'start' : 'complete';
   return (
     <g className={`flow-edge ${cls}${active ? ' active' : ''}${dim ? ' dim' : ''}`}>
       <path d={d} markerEnd={`url(#arrow-${cls})`} />
-      {active && <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - (backward ? 52 : 6)} className="flow-label" textAnchor="middle">{short(e.label.replace(/^→ /, ''), 26)}</text>}
+      {active && <text x={lx} y={ly} className="flow-label" textAnchor="middle">{short(e.label.replace(/^→ /, ''), 26)}</text>}
     </g>
   );
 }
 
 /** 고른 노드: 이어진 것 · 바로 고치기 · 다음 것 만들기 */
-function NodePanel({ w, set, g, n, onPick, onClose, onTab }: { w: WorldPackage; set: SetW; g: StoryGraph; n: GNode; onPick: (k: string) => void; onClose: () => void; onTab: (t: FlowTab) => void }) {
+function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote }: { w: WorldPackage; set: SetW; g: StoryGraph; n: GNode; onPick: (k: string) => void; onClose: () => void; onTab: (t: FlowTab) => void; onLink: () => void; onNote: (s: string) => void }) {
   const ins = g.edges.filter((e) => e.to === n.key), outs = g.edges.filter((e) => e.from === n.key);
   const nameOf = (k: string) => { const x = g.nodes.find((y) => y.key === k); return x ? `${NODE_ICON[x.kind]} ${x.name}` : k; };
   const tab = TAB_OF[n.kind];
+  const node = (k: string) => g.nodes.find((y) => y.key === k);
+  const cut = (e: GEdge) => {
+    const a = node(e.from), b = node(e.to); if (!a || !b) return;
+    const r = unlink(w, e, a, b);
+    if (r.patch) set(r.patch);
+    onNote(r.patch ? `✂ ${r.note}` : `ℹ ${r.note}`);
+  };
+  const cutBtn = (e: GEdge) => e.from !== START_KEY && e.kind !== 'stage' && <button type="button" className="small flow-cut" onClick={() => cut(e)} title="이 연결을 설정에서 뺍니다">✂ 끊기</button>;
   // 다음 것 만들기: 이것이 끝나면 열리는 임무 · 이것으로 끝나는 결말
   const after: Condition | null = n.kind === 'quest' ? { questDone: n.id } : n.kind === 'scene' || n.kind === 'gimmick' ? { sceneEnd: n.id, outcome: 'success' } : n.kind === 'encounter' ? { cleared: n.id } : n.kind === 'card' ? { storylet: n.id } : n.kind === 'choice' ? { choice: n.id } : n.kind === 'flag' ? { flag: n.id } : n.kind === 'claim' ? { knows: n.id } : null;
   const newId = (prefix: string, list: { id: string }[]) => { let i = list.length + 1; while (list.some((x) => x.id === `${prefix}${i}`)) i++; return `${prefix}${i}`; };
@@ -135,10 +261,10 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab }: { w: WorldPackage; 
       <p className="small muted">{NODE_LABEL[n.kind]} · <code>{n.id}</code></p>
       {n.warn && <p className="small warn-text">⚠ {n.warn}</p>}
       <details open><summary className="small"><b>이것을 여는 것 {ins.length}</b></summary>
-        {ins.length ? <ul className="flow-links">{ins.map((e, i) => <li key={i}><button type="button" className="small" onClick={() => onPick(e.from)}>{nameOf(e.from)}</button> <span className="small muted">{e.label.replace(/^→ /, '')}</span></li>)}</ul> : <p className="small muted">없음 — 처음부터 열려 있거나 조건이 다른 것(장소·관계·날짜 등)이다.</p>}
+        {ins.length ? <ul className="flow-links">{ins.map((e, i) => <li key={i}><button type="button" className="small" onClick={() => onPick(e.from)}>{nameOf(e.from)}</button> <span className="small muted">{e.label.replace(/^→ /, '')}</span>{cutBtn(e)}</li>)}</ul> : <p className="small muted">없음 — 처음부터 열려 있거나 조건이 다른 것(장소·관계·날짜 등)이다.</p>}
       </details>
       <details open><summary className="small"><b>이것이 여는 것 {outs.length}</b></summary>
-        {outs.length ? <ul className="flow-links">{outs.map((e, i) => <li key={i}><button type="button" className="small" onClick={() => onPick(e.to)}>{nameOf(e.to)}</button> <span className="small muted">{e.label.replace(/^→ /, '')}</span></li>)}</ul> : <p className="small muted">없음</p>}
+        {outs.length ? <ul className="flow-links">{outs.map((e, i) => <li key={i}><button type="button" className="small" onClick={() => onPick(e.to)}>{nameOf(e.to)}</button> <span className="small muted">{e.label.replace(/^→ /, '')}</span>{cutBtn(e)}</li>)}</ul> : <p className="small muted">없음</p>}
       </details>
 
       <div className="flow-edit">
@@ -146,6 +272,7 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab }: { w: WorldPackage; 
       </div>
 
       <div className="flow-actions">
+        {n.kind !== 'start' && <button type="button" onClick={onLink} title="상자의 ● 손잡이를 다른 상자로 끌어도 됩니다">🔗 다른 상자와 잇기</button>}
         {after && <button type="button" onClick={() => {
           const id = newId('quest/next-', w.quests ?? []);
           const q: Quest = { id, name: `${n.name} 다음`, kind: 'side', start: after, stages: [{ objective: '할 일을 적어 주세요', hint: '', complete: { all: [] } }] };
@@ -267,6 +394,7 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
         </>
       );
     }
+    case 'start': return <p className="small muted">플레이어가 게임을 시작할 때의 자리입니다. 여기서 이어지는 상자는 다른 상자에 걸린 조건이 없어 처음부터 열려 있거나(장소·관계·날짜 같은 조건만 있는 것 포함) 그런 것들입니다. 순서를 만들려면 그 상자의 ● 손잡이를 끌거나, 앞 상자를 골라 「🔗 다른 상자와 잇기」를 누르세요.</p>;
     case 'flag': return <p className="small muted">플래그는 효과(「세움」)로 세우고 조건(「섬」)으로 읽는 표시입니다. 위의 「여는 것 · 열리는 것」에서 세우는 곳과 읽는 곳을 보고, 그 상자를 눌러 고치세요.</p>;
     case 'claim': return <p className="small">{w.claims.find((c) => c.id === n.id)?.statement ?? n.id}</p>;
     default: return <p className="small muted">이 종류는 전체 편집 탭에서 고칩니다.</p>;
