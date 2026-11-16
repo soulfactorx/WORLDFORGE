@@ -5,6 +5,9 @@ import { addUsage, type LlmClient, LlmHttpError, LlmJsonError, type LlmRequest, 
  * OpenAI 호환 Chat Completions 엔드포인트 어댑터 (OpenAI, OpenRouter, Ollama, LM Studio 등).
  * 로컬 모델은 브라우저 요청(CORS)을 허용하도록 설정해야 한다. 예: OLLAMA_ORIGINS=*
  */
+/** 캐시에서 읽은 입력 토큰 (v0.141): OpenAI·호환 제공자는 앞부분이 같은 프롬프트를 저절로 캐시한다 — 제공자마다 칸 이름이 다르다 */
+const cachedOf = (u: unknown) => { const x = u as { prompt_tokens_details?: { cached_tokens?: number }; prompt_cache_hit_tokens?: number } | undefined; return x?.prompt_tokens_details?.cached_tokens ?? x?.prompt_cache_hit_tokens ?? 0; };
+
 export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
   const url = `${(s.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '')}/chat/completions`;
   const headers: Record<string, string> = { 'content-type': 'application/json' };
@@ -37,7 +40,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
       let finish: unknown;
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
       let buf = '', full = '';
-      let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
+      let usage: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; prompt_cache_hit_tokens?: number } | undefined;
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -54,7 +57,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
           if (delta) { full += delta; onText(delta); }
         }
       }
-      addUsage(req.meter, usage?.prompt_tokens, usage?.completion_tokens, { inChars: req.system.length + req.user.length, outChars: full.length });
+      addUsage(req.meter, usage?.prompt_tokens, usage?.completion_tokens, { inChars: req.system.length + req.user.length, outChars: full.length }, undefined, { read: cachedOf(usage) });
       finishAttempt(at, { status: res.status, meta: { finish_reason: finish, usage }, raw: full });
       return full;
     },
@@ -83,7 +86,7 @@ export function createOpenAiCompatibleClient(s: LlmSettings): LlmClient {
       const body = await res.json();
       const text: string = body.choices?.[0]?.message?.content ?? '';
       finishAttempt(at, { status: res.status, meta: { id: body.id, model: body.model, finish_reason: body.choices?.[0]?.finish_reason, usage: body.usage }, raw: text });
-      addUsage(req.meter, body.usage?.prompt_tokens, body.usage?.completion_tokens, { inChars: req.system.length + req.user.length + JSON.stringify(schema).length, outChars: text.length }, body.usage?.completion_tokens_details?.reasoning_tokens);
+      addUsage(req.meter, body.usage?.prompt_tokens, body.usage?.completion_tokens, { inChars: req.system.length + req.user.length + JSON.stringify(schema).length, outChars: text.length }, body.usage?.completion_tokens_details?.reasoning_tokens, { read: cachedOf(body.usage) });
       const start = text.indexOf('{');
       if (body.choices?.[0]?.finish_reason === 'length') throw new LlmTruncatedError(start >= 0 ? text.slice(start) : text);
       const match = text.match(/\{[\s\S]*\}/);

@@ -97,3 +97,16 @@ describe('한 번 호출 턴의 모델', () => {
     expect(groupOf(roleOf(oneSystemPrompt()))).toBe(ONE_CALL_GROUP);
   });
 });
+
+describe('프롬프트 캐싱 (v0.141)', () => {
+  it('턴이 바뀌어도 시스템 프롬프트는 글자 하나까지 같고, 세계 개요를 바뀌지 않는 앞부분으로 알린다', async () => {
+    const llm = one('바람이 분다.', {});
+    const s0 = start(aetheriaWorld, hero());
+    const r1 = await runTurnOne(llm, aetheriaWorld, s0, '둘러본다', () => {});
+    await runTurnOne(llm, aetheriaWorld, r1.state, '북쪽으로 걸어간다', () => {});
+    const [a, b] = llm.reqs.filter((r) => r.stablePrefix !== undefined || r.system.includes(TAIL_MARK));
+    expect(a!.system).toBe(b!.system);
+    expect(a!.stablePrefix).toBeGreaterThan(100);
+    expect(a!.user.slice(0, a!.stablePrefix)).toBe(b!.user.slice(0, b!.stablePrefix));
+  });
+});

@@ -26,7 +26,12 @@ const time = (at: number) => new Date(at).toLocaleString('ko-KR', { month: 'nume
 /** 기록마다 그 모델 단가로 — 단가 없는 모델이 섞이면 아는 부분만 더하고 표시한다 */
 function costOfRows(rows: UsageRow[]): { usd: number; unknown: number } {
   let usd = 0; let unknown = 0;
-  for (const r of rows) { const p = loadPrice(r.model); if (!p || (!p.input && !p.output)) { unknown++; continue; } usd += costOf(r.input, r.output, p); }
+  for (const r of rows) {
+    const p = loadPrice(r.model); if (!p || (!p.input && !p.output)) { unknown++; continue; }
+    usd += costOf(r.input, r.output, p);
+    // 프롬프트 캐시 (v0.141, Claude): 캐시 읽기는 입력 단가의 0.1배, 쓰기는 1.25배 — 다른 제공자는 할인율이 달라 그대로 둔다
+    if (/^claude/i.test(r.model) && (r.cacheRead || r.cacheWrite)) usd += ((r.cacheRead ?? 0) * (0.1 - 1) + (r.cacheWrite ?? 0) * (1.25 - 1)) * p.input / 1_000_000;
+  }
   return { usd, unknown };
 }
 const usd = (c: { usd: number; unknown: number }, n: number) => (c.unknown === n ? '—' : `$${c.usd.toFixed(c.usd >= 1 ? 2 : 4)}${c.unknown ? '+' : ''}`);
@@ -66,14 +71,15 @@ export function UsagePanel({ onClose }: { onClose: () => void }) {
   }, [rows, groupBy]);
   const maxTok = Math.max(1, ...buckets.map((b) => b.input + b.output));
   const maxMs = Math.max(1, ...buckets.map((b) => b.ms));
-  const total = rows ? { n: rows.length, fail: rows.filter((r) => !r.ok).length, input: rows.reduce((s, r) => s + r.input, 0), output: rows.reduce((s, r) => s + r.output, 0), ms: rows.reduce((s, r) => s + r.ms, 0), est: rows.some((r) => r.estimated) } : null;
+  const total = rows ? { n: rows.length, fail: rows.filter((r) => !r.ok).length, input: rows.reduce((s, r) => s + r.input, 0), output: rows.reduce((s, r) => s + r.output, 0), ms: rows.reduce((s, r) => s + r.ms, 0), est: rows.some((r) => r.estimated),
+    cacheRead: rows.reduce((s, r) => s + (r.cacheRead ?? 0), 0), cacheWrite: rows.reduce((s, r) => s + (r.cacheWrite ?? 0), 0) } : null;
   const totalCost = rows ? costOfRows(rows) : { usd: 0, unknown: 0 };
 
   function exportCsv() {
     if (!rows) return;
-    const head = ['시각', '세계관', '세이브', '화면', '기능', '요청 이름', '모델', '입력 토큰', '출력 토큰', '추정', '걸린 ms', 'API 호출', '성공', '오류'];
+    const head = ['시각', '세계관', '세이브', '화면', '기능', '요청 이름', '모델', '입력 토큰', '캐시 읽기', '캐시 쓰기', '출력 토큰', '추정', '걸린 ms', 'API 호출', '성공', '오류'];
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lines = rows.map((r) => [new Date(r.at).toISOString(), r.worldName ?? r.world ?? '', r.saveId ?? '', AREA_LABEL[r.area ?? 'other'], ROLE_LABEL[r.role] ?? r.role, r.label ?? '', r.model, r.input, r.output, r.estimated ? 'Y' : '', r.ms, r.calls, r.ok ? 'Y' : 'N', r.error ?? ''].map(esc).join(','));
+    const lines = rows.map((r) => [new Date(r.at).toISOString(), r.worldName ?? r.world ?? '', r.saveId ?? '', AREA_LABEL[r.area ?? 'other'], ROLE_LABEL[r.role] ?? r.role, r.label ?? '', r.model, r.input, r.cacheRead ?? 0, r.cacheWrite ?? 0, r.output, r.estimated ? 'Y' : '', r.ms, r.calls, r.ok ? 'Y' : 'N', r.error ?? ''].map(esc).join(','));
     const url = URL.createObjectURL(new Blob(['﻿' + [head.map(esc).join(','), ...lines].join('\n')], { type: 'text/csv' }));
     const a = document.createElement('a'); a.href = url; a.download = `worldforge-ai-usage-${dayKey(Date.now())}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -104,6 +110,7 @@ export function UsagePanel({ onClose }: { onClose: () => void }) {
             <div><span className="small muted">출력 토큰</span><b>{total!.est ? '≈' : ''}{tok(total!.output)}</b></div>
             <div><span className="small muted">비용</span><b>{usd(totalCost, rows.length)}</b>{totalCost.unknown > 0 && totalCost.unknown < rows.length && <span className="small muted">단가 없는 {totalCost.unknown}건 제외</span>}</div>
             <div><span className="small muted">평균 응답</span><b>{sec(total!.ms / total!.n)}</b></div>
+            <div title="프롬프트 캐시: 앞부분이 같은 프롬프트(규칙·세계 개요)를 다시 보내지 않고 캐시에서 읽은 입력 토큰 — 싸고 빠르다"><span className="small muted">캐시에서 읽음</span><b>{tok(total!.cacheRead)}</b><span className="small muted">입력의 {total!.input ? Math.round((total!.cacheRead / total!.input) * 100) : 0}%{total!.cacheWrite ? ` · 새로 씀 ${tok(total!.cacheWrite)}` : ''}</span></div>
           </div>
           {(() => {
             const ts = turnStats(metrics.get().turns);
@@ -132,7 +139,7 @@ export function UsagePanel({ onClose }: { onClose: () => void }) {
             <ul className="small">
               {[...rows].sort((a, b) => b.at - a.at).slice(0, 100).map((r) => (
                 <li key={r.id} className={r.ok ? '' : 'err'}>
-                  <span className="muted">{time(r.at)}</span> · {r.worldName ?? '—'} · {ROLE_LABEL[r.role] ?? r.role}{r.label ? ` (${r.label})` : ''} · {r.model} · {tok(r.input)}/{tok(r.output)} · {sec(r.ms)}{!r.ok && ` · ❌ ${r.error ?? ''}`}
+                  <span className="muted">{time(r.at)}</span> · {r.worldName ?? '—'} · {ROLE_LABEL[r.role] ?? r.role}{r.label ? ` (${r.label})` : ''} · {r.model} · {tok(r.input)}{r.cacheRead ? ` (캐시 ${tok(r.cacheRead)})` : ''}/{tok(r.output)} · {sec(r.ms)}{!r.ok && ` · ❌ ${r.error ?? ''}`}
                 </li>
               ))}
             </ul>

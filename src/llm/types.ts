@@ -96,6 +96,11 @@ export interface LlmRequest {
   effort?: 'minimal' | 'low' | 'medium' | 'high';
   /** 함께 보내는 그림 (v0.121): 이미지 인식을 지원하는 모델만. base64(접두사 없이)와 MIME */
   images?: { mime: string; data: string }[];
+  /**
+   * 프롬프트 캐싱 (v0.141): user 글의 앞에서부터 이 길이(글자)까지는 턴마다 바뀌지 않는다 (예: 세계 개요).
+   * 지원하는 제공자는 여기까지를 캐시한다. 시스템 프롬프트는 길면 저절로 캐시한다.
+   */
+  stablePrefix?: number;
   /** 진행 표시용 이름 (예: "번역 3/8") — 재시도 안내에 어느 단계인지 보여 준다 */
   label?: string;
   /** 사용량 기록 (계측 래퍼가 넣고, 어댑터가 채운다. 재시도한 호출도 모두 더한다) */
@@ -118,12 +123,17 @@ export interface Meter {
   reasoning?: number;
   /** 진단 (v0.99): 다시 보낸 까닭 (길이 제한 · JSON 오류 · HTTP 429 …) */
   retryNotes?: string[];
+  /** 프롬프트 캐시 (v0.141): 입력 가운데 캐시에서 읽은 토큰 · 캐시에 새로 쓴 토큰 (input에 포함) */
+  cacheRead?: number;
+  cacheWrite?: number;
 }
 
 /** 사용량이 없으면 글자 수로 추정 (한국어 기준 대략 2글자당 1토큰) */
-export function addUsage(m: Meter | undefined, input: number | undefined, output: number | undefined, fallback: { inChars: number; outChars: number }, reasoning?: number) {
+export function addUsage(m: Meter | undefined, input: number | undefined, output: number | undefined, fallback: { inChars: number; outChars: number }, reasoning?: number, cache?: { read?: number | null; write?: number | null }) {
   if (!m) return;
   m.calls++;
+  if (cache?.read) m.cacheRead = (m.cacheRead ?? 0) + cache.read;
+  if (cache?.write) m.cacheWrite = (m.cacheWrite ?? 0) + cache.write;
   if (reasoning) m.reasoning = (m.reasoning ?? 0) + reasoning;
   if (input === undefined || output === undefined) {
     m.estimated = true;

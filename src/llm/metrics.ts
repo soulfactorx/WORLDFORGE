@@ -26,6 +26,9 @@ export interface CallRecord {
   error?: string;
   /** 요청 이름 (예: "인물 찾기 2/5 묶음") */
   label?: string;
+  /** 프롬프트 캐시 (v0.141): 입력 가운데 캐시에서 읽은 토큰 · 새로 쓴 토큰 */
+  cacheRead?: number;
+  cacheWrite?: number;
   /** 진단 (v0.93): 차례를 기다린 시간(ms) · 보낸 출력 한도 · 추론 노력 */
   waitMs?: number;
   maxTokens?: number;
@@ -101,7 +104,7 @@ export const metrics = {
   subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; },
 };
 
-const diag = (req: LlmRequest, m: Meter) => ({ ...(m.waitMs ? { waitMs: m.waitMs } : {}), maxTokens: m.sentMaxTokens ?? req.maxTokens, ...(req.effort ? { effort: req.effort } : {}), ...(m.reasoning ? { reasoning: m.reasoning } : {}), ...(m.retryNotes?.length ? { retryWhy: [...new Set(m.retryNotes)].join(', ') } : {}) });
+const diag = (req: LlmRequest, m: Meter) => ({ ...(m.cacheRead ? { cacheRead: m.cacheRead } : {}), ...(m.cacheWrite ? { cacheWrite: m.cacheWrite } : {}), ...(m.waitMs ? { waitMs: m.waitMs } : {}), maxTokens: m.sentMaxTokens ?? req.maxTokens, ...(req.effort ? { effort: req.effort } : {}), ...(m.reasoning ? { reasoning: m.reasoning } : {}), ...(m.retryNotes?.length ? { retryWhy: [...new Set(m.retryNotes)].join(', ') } : {}) });
 
 /** 계측 래퍼: 재시도까지 포함한 한 번의 요청을 기록한다 (sink를 주면 거기에도) */
 export function metered(llm: LlmClient, model: string, sink: (r: CallRecord) => void = (r) => metrics.addCall(r)): LlmClient {

@@ -36,7 +36,8 @@ import { rollRandomEvent } from '../engine/randomEvents';
 import { currentDay } from '../engine/world';
 import { traceImages } from '../engine/assets';
 import type { LlmClient } from '../llm/types';
-import { buildNarratorContext, presentCharacters } from './context';
+import { buildNarratorContext, presentCharacters, worldBrief } from './context';
+import { gmStyleText } from '../data/gmStyles';
 import { focusTargets, storyBrief, transitionLines } from './brief';
 import { effectEvents } from './story';
 import { applyRandomEvent } from './randomEvent';
@@ -261,7 +262,9 @@ export async function runTurnOne(
   onStage('장면을 쓰는 중');
   const encs = availableEncounters(world, s);
   const scenes = offerableScenes(world, s);
-  const sys = `${ONE_SYSTEM}${systemExtras(phaseStyled(world, s))}\n\n${tailRules(world)}`;
+  // 프롬프트 캐싱 (v0.141): 시스템 프롬프트는 이 세계에서 늘 같게 — 국면에 따라 바뀌는 연출(GM 스타일)은 아래 바뀌는 부분에 둔다
+  const sys = `${ONE_SYSTEM}${systemExtras(world)}\n\n${tailRules(world)}`;
+  const phaseStyle = phaseStyled(world, s) !== world ? gmStyleText(phaseStyled(world, s), 'narrator') : '';
   const user = [
     buildNarratorContext(world, s),
     phaseBlock(world, s, { director: true, npcIds: present.map((c) => c.id) }),
@@ -277,6 +280,7 @@ export async function runTurnOne(
     ruleNotes.length ? `\n\n## 이번 턴에 발동한 세계 규칙\n${ruleNotesText(ruleNotes)}` : '',
     imageMenu(world, s, [...present, ...world.characters.filter((c) => s.party[c.id] && !present.includes(c))]),
     `\n\n# 선택지 꼬리의 재료 (서술 뒤 ${TAIL_MARK} 아래 JSON에만 쓴다)\n${guideMaterials(world, s)}`,
+    phaseStyle ? `\n\n## 지금 국면의 연출 (시스템의 연출 지시보다 이것을 따른다)${phaseStyle}` : '',
     `\n\n## 플레이어 행동 (데이터)\n${continuing ? '(이어서) 플레이어는 하던 일을 이어 가며 흐름에 맡긴다 — 몽타주로: 흐른 시간을 압축해 건너뛰고(time: stretch), 다시 정해야 할 일이 생기는 순간에서 멈춘다. 플레이어의 새 결정·대사는 지어내지 않는다.' : `<player_input>\n${input}\n</player_input>${opt ? '\n(플레이어가 고른 갈래 카드의 갈림길이다)' : ''}`}`,
   ].join('');
   // 그림 (v0.119): AI가 서술 속 [[그림 …]] 표시로 자리와 표정을 고른다. 표시가 없으면 엔진의 짐작
@@ -302,7 +306,9 @@ export async function runTurnOne(
     return { images, why };
   });
   try { play.onImages?.((text) => sticky.place(text)); } catch { /* 무시 */ }
-  const raw = await llm.stream({ system: sys, user, maxTokens: 6000 }, tailFilter(onNarration), signal);
+  // 세계 개요(user 글의 맨 앞)는 턴마다 같다 — 시스템 프롬프트와 함께 캐시한다
+  const brief = worldBrief(world).join('\n');
+  const raw = await llm.stream({ system: sys, user, maxTokens: 6000, ...(brief && user.startsWith(brief) ? { stablePrefix: brief.length } : {}) }, tailFilter(onNarration), signal);
   const { narration: rawNarration, tail, report: tailReport } = splitTail(raw);
   const narration = stripMarks(rawNarration).trim();
   const out = (tail ?? {}) as OneOutput;
