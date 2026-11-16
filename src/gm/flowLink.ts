@@ -12,7 +12,7 @@ type Any = any;
 
 export interface LinkWay { label: string; cond: Condition }
 export interface Slot { key: string; label: string }
-export interface LinkOption { group: 'cond' | 'effect'; label: string; apply: (w: WorldPackage) => Partial<WorldPackage> }
+export interface LinkOption { group: 'cond' | 'effect' | 'start'; label: string; note?: string; apply: (w: WorldPackage) => Partial<WorldPackage> }
 
 const LIST: Partial<Record<GNode['kind'], keyof WorldPackage>> = {
   quest: 'quests', ending: 'endings', card: 'storylets', scene: 'scenes', gimmick: 'scenes', encounter: 'encounters',
@@ -92,6 +92,8 @@ export function condSlots(w: WorldPackage, n: GNode): Slot[] {
     default: return [];
   }
 }
+/** 이것이 열리는 조건 칸 (▶ 시작과의 연결) */
+export const OPEN_SLOT: Partial<Record<GNode['kind'], string>> = { quest: 'start', card: 'when', scene: 'start', gimmick: 'start', encounter: 'when', choice: 'when', arc: 'start', event: 'when.condition' };
 /** 비면 없애도 되는 칸 (필수 칸은 비면 「항상 참」이 된다) */
 const optional = (n: GNode, slot: string) =>
   (n.kind === 'quest' && slot === 'fail') || (n.kind === 'card' && slot === 'when') || ((n.kind === 'scene' || n.kind === 'gimmick') && slot === 'start')
@@ -162,7 +164,16 @@ export function effectFor(n: GNode): { effect: StoryEffect; label: string } | nu
 
 /** A → B로 이을 수 있는 방법들 */
 export function linkOptions(w: WorldPackage, a: GNode, b: GNode): LinkOption[] {
-  if (a.key === b.key || a.key === START_KEY || b.key === START_KEY) return [];
+  if (a.key === b.key || b.key === START_KEY) return [];
+  // ▶ 시작 → B (v0.145): B를 처음부터 열리게 — 열리는 조건을 비운다
+  if (a.key === START_KEY) {
+    const slot = OPEN_SLOT[b.kind];
+    if (!slot || !entity(w, b)) return [];
+    const cur = getSlot(entity(w, b), slot);
+    const empty = !cur || ('all' in cur && !cur.all.length);
+    return [{ group: 'start', label: `「${b.name}」을(를) 처음부터 열리게`, note: empty ? '이미 조건이 비어 있어 처음부터 열립니다.' : '지금의 열리는 조건을 비웁니다 — 다른 상자와의 연결(이 조건으로 이어진 화살표)이 사라집니다.',
+      apply: (w2) => edit(w2, b, (x) => setSlot(x, slot, optional(b, slot) ? undefined : { all: [] })) }];
+  }
   const out: LinkOption[] = [];
   const slots = condSlots(w, b);
   for (const way of sourceWays(w, a)) for (const s of slots) {
@@ -235,4 +246,46 @@ function effectHits(ef: StoryEffect, b: GNode): boolean {
   const r = ef as Record<string, unknown>;
   return (b.kind === 'flag' && r.setFlag === b.id) || ((b.kind === 'scene' || b.kind === 'gimmick') && r.startScene === b.id) || (b.kind === 'encounter' && r.startEncounter === b.id)
     || (b.kind === 'card' && r.openStorylet === b.id) || (b.kind === 'quest' && r.advanceQuest === b.id) || (b.kind === 'claim' && r.reveal === b.id);
+}
+
+// ---------------------------------------------------------------- 화살표 고치기 (v0.145)
+
+/** 조건 안에 a를 가리키는 잎이 있나 */
+export function condMentions(w: WorldPackage, c: Condition | undefined, a: GNode): boolean {
+  if (!c) return false;
+  return !same(pruneCond(c, (leaf) => leafPoints(w, leaf, a)), c);
+}
+/** 화살표 A → B가 나온 칸들: 조건 화살표면 B의 조건 칸, 효과 화살표면 A의 효과 칸 */
+export function edgeSlots(w: WorldPackage, e: GEdge, a: GNode, b: GNode): { where: 'cond' | 'effect'; node: GNode; slot: Slot }[] {
+  if (e.from === START_KEY) { const k = OPEN_SLOT[b.kind]; const sl = k ? condSlots(w, b).find((x) => x.key === k) : undefined; return sl ? [{ where: 'cond', node: b, slot: sl }] : []; }
+  if (e.kind === 'effect') {
+    const x = entity(w, a); if (!x) return [];
+    return effectSlots(w, a).filter((sl) => effectList(structuredClone(x), sl.key).get().some((ef) => effectHits(ef, b))).map((slot) => ({ where: 'effect' as const, node: a, slot }));
+  }
+  const x = entity(w, b); if (!x) return [];
+  // 단계의 고비: 그 단계의 끝 조건
+  if (e.kind === 'stage') { const m = /^(\d+)단계/.exec(e.label); if (m) { const sl = condSlots(w, b).find((y) => y.key === `stage:${Number(m[1]) - 1}`); return sl ? [{ where: 'cond', node: b, slot: sl }] : []; } return []; }
+  return condSlots(w, b).filter((sl) => condMentions(w, getSlot(x, sl.key), a)).map((slot) => ({ where: 'cond' as const, node: b, slot }));
+}
+export function getCond(w: WorldPackage, n: GNode, slot: string): Condition | undefined { const x = entity(w, n); return x ? getSlot(x, slot) : undefined; }
+export function setCond(w: WorldPackage, n: GNode, slot: string, c: Condition | undefined): Partial<WorldPackage> {
+  return edit(w, n, (x) => setSlot(x, slot, c ?? (optional(n, slot) ? undefined : { all: [] })));
+}
+export function getEffects(w: WorldPackage, n: GNode, slot: string): StoryEffect[] { const x = entity(w, n); return x ? effectList(structuredClone(x), slot).get() : []; }
+export function setEffects(w: WorldPackage, n: GNode, slot: string, list: StoryEffect[]): Partial<WorldPackage> { return edit(w, n, (x) => { effectList(x, slot).set(list); return x; }); }
+
+/** 조건에서 a를 가리키는 첫 잎 */
+export function firstLeaf(w: WorldPackage, c: Condition | undefined, a: GNode): Condition | undefined {
+  if (!c) return undefined;
+  if ('all' in c) { for (const x of c.all) { const f = firstLeaf(w, x, a); if (f) return f; } return undefined; }
+  if ('any' in c) { for (const x of c.any) { const f = firstLeaf(w, x, a); if (f) return f; } return undefined; }
+  if ('not' in c) return firstLeaf(w, c.not, a);
+  return leafPoints(w, c, a) ? c : undefined;
+}
+/** 조건에서 a를 가리키는 잎을 모두 바꾼다 (예: 「완료하면」 → 「실패하면」) */
+export function replaceLeaf(w: WorldPackage, c: Condition, a: GNode, to: Condition): Condition {
+  if ('all' in c) return { all: c.all.map((x) => replaceLeaf(w, x, a, to)) };
+  if ('any' in c) return { any: c.any.map((x) => replaceLeaf(w, x, a, to)) };
+  if ('not' in c) return { not: replaceLeaf(w, c.not, a, to) };
+  return leafPoints(w, c, a) ? to : c;
 }

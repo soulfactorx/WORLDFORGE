@@ -172,6 +172,8 @@ function run(world: WorldPackage, state: GameState, first: (s: GameState) => Gam
   return { state: s, events, lines: events.map((e) => describeEvent(world, e)).filter((x): x is string => !!x) };
 }
 
+/** 사건을 넣고 엔진 단계까지 (흐름도 시뮬레이션이 쓴다) */
+export const labRun = run;
 /** 엔진 한 단계 (이 상태가 된 순간 무엇이 일어나나) */
 export const labStep = (world: WorldPackage, state: GameState) => run(world, state, () => []);
 export const labMove = (world: WorldPackage, state: GameState, to: string) => run(world, state, () => [{ type: 'moved', to }]);

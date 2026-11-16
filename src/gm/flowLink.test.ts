@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { aetheriaWorld } from '../data/official/aetheria';
 import { sampleWorld } from '../data/sample-world';
 import type { WorldPackage } from '../engine/schema';
-import { linkOptions, unlink } from './flowLink';
+import { edgeSlots, getCond, linkOptions, replaceLeaf, setCond, sourceWays, unlink } from './flowLink';
 import { buildStoryGraph, layoutGraph, START_KEY } from './storyGraph';
 
 const base: WorldPackage = { ...sampleWorld,
@@ -73,5 +73,25 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     expect([a.x, a.y]).toEqual([900, 700]);
     expect(lay.width).toBeGreaterThanOrEqual(900 + 176);
     expect(layoutGraph(g, 'down', { 'quest:quest/a': [-50, 10] }).nodes.find((n) => n.key === 'quest:quest/a')!.x).toBe(0);
+  });
+
+  it('▶ 시작에서 잇기: 열리는 조건을 비운다 (v0.145)', () => {
+    const start = node(base, START_KEY), c = node(base, 'choice:choice/c');
+    const opt = linkOptions(base, start, c)[0]!;
+    expect(opt.group).toBe('start');
+    const w2 = { ...base, ...opt.apply(base) };
+    expect(w2.choices![0]!.when).toEqual({ all: [] });
+    expect(buildStoryGraph(w2).edges.some((e) => e.from === START_KEY && e.to === 'choice:choice/c')).toBe(true);
+  });
+  it('화살표 고치기: 그 연결이 적힌 칸을 찾고, 「완료」를 「실패」로 바꾼다 (v0.145)', () => {
+    const g = buildStoryGraph(base);
+    const e = g.edges.find((x) => x.from === 'quest:quest/a' && x.to === 'choice:choice/c')!;
+    const a = node(base, 'quest:quest/a'), c = node(base, 'choice:choice/c');
+    const slots = edgeSlots(base, e, a, c);
+    expect(slots.map((x) => x.slot.key)).toEqual(['when']);
+    const failWay = sourceWays(base, a).find((x) => x.label === '실패하면')!;
+    const w2 = { ...base, ...setCond(base, c, 'when', replaceLeaf(base, getCond(base, c, 'when')!, a, failWay.cond)) };
+    expect(w2.choices![0]!.when).toEqual({ questFailed: 'quest/a' });
+    expect(buildStoryGraph(w2).edges.find((x) => x.from === 'quest:quest/a' && x.to === 'choice:choice/c')!.kind).toBe('start');
   });
 });
