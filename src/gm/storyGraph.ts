@@ -7,13 +7,13 @@
 import { stageGates } from '../engine/encounter';
 import type { Condition, StoryEffect, WorldPackage } from '../engine/schema';
 
-export type NodeKind = 'quest' | 'ending' | 'card' | 'scene' | 'gimmick' | 'encounter' | 'choice' | 'arc' | 'event' | 'clock' | 'rule' | 'flag' | 'claim' | 'phase';
+export type NodeKind = 'start' | 'quest' | 'ending' | 'card' | 'scene' | 'gimmick' | 'encounter' | 'choice' | 'arc' | 'event' | 'clock' | 'rule' | 'flag' | 'claim' | 'phase';
 export const NODE_LABEL: Record<NodeKind, string> = {
-  quest: '임무', ending: '결말', card: '갈래 카드', scene: '장면', gimmick: '함정·퍼즐', encounter: '전투', choice: '결정적 선택',
+  start: '시작', quest: '임무', ending: '결말', card: '갈래 카드', scene: '장면', gimmick: '함정·퍼즐', encounter: '전투', choice: '결정적 선택',
   arc: '줄기', event: '연표 사건', clock: '진행 시계', rule: '세계 규칙', flag: '플래그', claim: '지식', phase: '국면',
 };
 export const NODE_ICON: Record<NodeKind, string> = {
-  quest: '🎯', ending: '◆', card: '🃏', scene: '🎭', gimmick: '🧩', encounter: '⚔', choice: '⚖', arc: '📖', event: '📅', clock: '⏳', rule: '⚙', flag: '🏳', claim: '💡', phase: '🌗',
+  start: '▶', quest: '🎯', ending: '◆', card: '🃏', scene: '🎭', gimmick: '🧩', encounter: '⚔', choice: '⚖', arc: '📖', event: '📅', clock: '⏳', rule: '⚙', flag: '🏳', claim: '💡', phase: '🌗',
 };
 
 export interface GNode { key: string; kind: NodeKind; id: string; name: string; sub?: string; warn?: string }
@@ -21,6 +21,7 @@ export type EdgeKind = 'start' | 'complete' | 'fail' | 'effect' | 'ending' | 'st
 export interface GEdge { from: string; to: string; kind: EdgeKind; label: string }
 export interface StoryGraph { nodes: GNode[]; edges: GEdge[] }
 
+export const START_KEY = 'start:begin';
 const key = (kind: NodeKind, id: string) => `${kind}:${id}`;
 
 /** 조건이 가리키는 것: (노드, 그 뜻) */
@@ -156,55 +157,112 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   for (const n of nodes.values()) {
     if (n.kind === 'quest' && !edges.some((e) => e.to === n.key && e.kind === 'start') && !(w.quests ?? []).find((q) => q.id === n.id)?.start) n.warn ??= '시작 조건이 없다';
   }
+  // ▶ 시작 (v0.143): 들어오는 화살표가 없는 이야기 덩어리는 플레이어가 시작할 때부터 열려 있다 (또는 장소·날짜 같은 다른 조건으로 열린다)
+  const roots = [...nodes.values()].filter((n) => ROOT_KINDS.includes(n.kind) && !edges.some((e) => e.to === n.key));
+  if (roots.length) {
+    nodes.set(START_KEY, { key: START_KEY, kind: 'start', id: 'begin', name: '플레이 시작', sub: `처음부터 열리는 것 ${roots.length}` });
+    for (const r of roots) {
+      const c = openCondition(w, r);
+      edges.push({ from: START_KEY, to: r.key, kind: 'start', label: isEmptyCond(c) ? '처음부터 열림' : '처음부터 · 다른 조건(장소·관계·날짜 등)이 맞으면' });
+    }
+  }
   return { nodes: [...nodes.values()], edges };
+}
+const ROOT_KINDS: NodeKind[] = ['quest', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event'];
+export const isEmptyCond = (c: Condition | undefined) => !c || (typeof c === 'object' && 'all' in c && !c.all.length);
+/** 이것이 열리는 조건 (임무 시작 · 카드 덱에 들어옴 · 장면 열림 …) */
+export function openCondition(w: WorldPackage, n: GNode): Condition | undefined {
+  switch (n.kind) {
+    case 'quest': return w.quests?.find((x) => x.id === n.id)?.start;
+    case 'ending': return w.endings?.find((x) => x.id === n.id)?.condition;
+    case 'card': return w.storylets?.find((x) => x.id === n.id)?.when;
+    case 'scene': case 'gimmick': return w.scenes?.find((x) => x.id === n.id)?.start;
+    case 'encounter': return w.encounters?.find((x) => x.id === n.id)?.when;
+    case 'choice': return w.choices?.find((x) => x.id === n.id)?.when;
+    case 'arc': return w.arcs?.find((x) => x.id === n.id)?.start;
+    case 'event': return w.events?.find((x) => x.id === n.id)?.when.condition;
+    default: return undefined;
+  }
 }
 
 export interface Placed extends GNode { x: number; y: number; layer: number }
 export const NODE_W = 176, NODE_H = 58, GAP_X = 70, GAP_Y = 18;
+/** 흐름 방향: 가로(왼쪽 → 오른쪽) · 세로(위 → 아래) */
+export type FlowDir = 'right' | 'down';
+const V_GAP_X = 16, V_GAP_Y = 56;
+const KIND_ORDER: NodeKind[] = ['start', 'quest', 'arc', 'choice', 'card', 'scene', 'gimmick', 'encounter', 'event', 'clock', 'rule', 'flag', 'claim', 'phase', 'ending'];
 
-/** 단 나누기: 들어오는 화살표를 따라 가장 긴 길 (돌아오는 화살표는 무시), 이어진 것이 없는 노드는 맨 아래 따로 */
-export function layoutGraph(g: StoryGraph): { nodes: Placed[]; width: number; height: number } {
+/**
+ * 단 나누기 (v0.143 손봄):
+ *  - ▶ 시작이 맨 앞(왼쪽·위), 들어오는 화살표를 따라 가장 긴 길로 단을 정한다 (돌아오는 화살표는 무시)
+ *  - 결말은 모두 맨 끝 단에 — 이야기가 어디로 흘러가 끝나는지 한눈에
+ *  - 같은 단의 줄 순서: 앞뒤 이웃의 자리 평균으로 여러 번 고쳐 교차를 줄인다 (메인 임무가 먼저)
+ *  - 이어진 것이 없는 노드는 맨 아래 따로
+ */
+export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right'): { nodes: Placed[]; width: number; height: number; dir: FlowDir } {
   const ids = g.nodes.map((n) => n.key);
+  const byKey = new Map(g.nodes.map((n) => [n.key, n]));
   const out = new Map<string, string[]>(ids.map((k) => [k, []]));
   const inn = new Map<string, string[]>(ids.map((k) => [k, []]));
   for (const e of g.edges) { if (out.has(e.from) && inn.has(e.to)) { out.get(e.from)!.push(e.to); inn.get(e.to)!.push(e.from); } }
-  // DFS로 돌아오는 화살표를 찾는다
+  // DFS로 돌아오는 화살표를 찾는다 (시작에서 먼저 — 시작 쪽이 앞이 되게)
   const state = new Map<string, number>();
   const back = new Set<string>();
   const dfs = (k: string) => { state.set(k, 1); for (const t of out.get(k)!) { const s = state.get(t); if (s === 1) back.add(`${k}>${t}`); else if (!s) dfs(t); } state.set(k, 2); };
-  for (const k of ids) if (!state.get(k)) dfs(k);
+  const firstOrder = [...ids].sort((a, b) => (a === START_KEY ? -1 : b === START_KEY ? 1 : inn.get(a)!.length - inn.get(b)!.length));
+  for (const k of firstOrder) if (!state.get(k)) dfs(k);
   const layer = new Map<string, number>();
+  const hasStart = byKey.has(START_KEY);
   const depth = (k: string, seen = new Set<string>()): number => {
     if (layer.has(k)) return layer.get(k)!;
     if (seen.has(k)) return 0;
     seen.add(k);
     const preds = inn.get(k)!.filter((p) => !back.has(`${p}>${k}`));
-    const d = preds.length ? Math.max(...preds.map((p) => depth(p, seen) + 1)) : 0;
+    // 시작이 있으면 맨 앞 단은 시작만 — 고리로만 이어진 것(카드 ↔ 플래그)도 그 다음 단부터
+    const d = preds.length ? Math.max(...preds.map((p) => depth(p, seen) + 1)) : hasStart && k !== START_KEY ? 1 : 0;
     layer.set(k, d);
     return d;
   };
   ids.forEach((k) => depth(k));
   const lonely = ids.filter((k) => !out.get(k)!.length && !inn.get(k)!.length);
   const linked = ids.filter((k) => !lonely.includes(k));
+  // 결말은 맨 끝 단
+  const isEnd = (k: string) => byKey.get(k)!.kind === 'ending' && !out.get(k)!.length;
+  const lastBody = Math.max(0, ...linked.filter((k) => !isEnd(k)).map((k) => layer.get(k)!));
+  for (const k of linked) if (isEnd(k)) layer.set(k, lastBody + 1);
   const layers: string[][] = [];
   for (const k of linked) (layers[layer.get(k)!] ??= []).push(k);
-  // 같은 단: 앞 단 이웃의 자리 평균으로 정렬 (교차를 줄인다)
+  for (let i = 0; i < layers.length; i++) layers[i] ??= [];
+  const rank = (k: string) => { const n = byKey.get(k)!; return KIND_ORDER.indexOf(n.kind) * 2 + (n.kind === 'quest' && n.sub?.startsWith('메인') ? 0 : 1); };
+  layers.forEach((col) => col.sort((a, b) => rank(a) - rank(b)));
+  // 앞뒤 이웃 자리 평균 — 몇 번 오가며 다듬는다
   const pos = new Map<string, number>();
-  layers.forEach((col, li) => {
-    if (li > 0) col.sort((a, b) => avg(a) - avg(b));
-    col.forEach((k, i) => pos.set(k, i));
-    function avg(k: string) { const ps = inn.get(k)!.filter((p) => pos.has(p)); return ps.length ? ps.reduce((s, p) => s + pos.get(p)!, 0) / ps.length : 1e9; }
-  });
-  const placed: Placed[] = [];
-  const byKey = new Map(g.nodes.map((n) => [n.key, n]));
-  layers.forEach((col, li) => col.forEach((k, i) => placed.push({ ...byKey.get(k)!, layer: li, x: 20 + li * (NODE_W + GAP_X), y: 40 + i * (NODE_H + GAP_Y) })));
+  const setPos = () => layers.forEach((col) => col.forEach((k, i) => pos.set(k, i)));
+  setPos();
+  const bary = (k: string, nb: string[]) => { const ps = nb.filter((p) => pos.has(p)); return ps.length ? ps.reduce((s, p) => s + pos.get(p)!, 0) / ps.length : pos.get(k)!; };
+  for (let it = 0; it < 4; it++) {
+    for (let li = 1; li < layers.length; li++) { layers[li]!.sort((a, b) => bary(a, inn.get(a)!) - bary(b, inn.get(b)!) || rank(a) - rank(b)); layers[li]!.forEach((k, i) => pos.set(k, i)); }
+    for (let li = layers.length - 2; li >= 0; li--) { layers[li]!.sort((a, b) => bary(a, out.get(a)!) - bary(b, out.get(b)!) || rank(a) - rank(b)); layers[li]!.forEach((k, i) => pos.set(k, i)); }
+  }
   const tallest = Math.max(0, ...layers.map((c) => c.length));
-  const lonelyTop = 40 + tallest * (NODE_H + GAP_Y) + (lonely.length ? 50 : 0);
-  const perRow = Math.max(4, layers.length || 4);
-  lonely.forEach((k, i) => placed.push({ ...byKey.get(k)!, layer: -1, x: 20 + (i % perRow) * (NODE_W + GAP_X), y: lonelyTop + Math.floor(i / perRow) * (NODE_H + GAP_Y) }));
+  const placed: Placed[] = [];
+  const down = dir === 'down';
+  const stepL = down ? NODE_H + V_GAP_Y : NODE_W + GAP_X; // 단과 단 사이
+  const stepI = down ? NODE_W + V_GAP_X : NODE_H + GAP_Y; // 한 단 안에서
+  layers.forEach((col, li) => {
+    const off = ((tallest - col.length) / 2) * stepI; // 단마다 가운데 맞춤
+    col.forEach((k, i) => {
+      const a = 20 + li * stepL, b = 40 + off + i * stepI;
+      placed.push({ ...byKey.get(k)!, layer: li, x: down ? b - 20 : a, y: down ? a + 20 : b });
+    });
+  });
+  const bodyEnd = down ? 40 + layers.length * stepL : 40 + tallest * stepI;
+  const lonelyTop = bodyEnd + (lonely.length ? 50 : 0);
+  const perRow = Math.max(4, down ? tallest : layers.length || 4);
+  lonely.forEach((k, i) => placed.push({ ...byKey.get(k)!, layer: -1, x: 20 + (i % perRow) * (NODE_W + (down ? V_GAP_X : GAP_X)), y: lonelyTop + Math.floor(i / perRow) * (NODE_H + GAP_Y) }));
   const width = Math.max(...placed.map((p) => p.x + NODE_W), 400) + 20;
   const height = Math.max(...placed.map((p) => p.y + NODE_H), 200) + 20;
-  return { nodes: placed, width, height };
+  return { nodes: placed, width, height, dir };
 }
 
 /** 한 노드와 이어진 것 (depth 걸음까지) */
