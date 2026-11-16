@@ -59,6 +59,7 @@ import { GenrePicker } from './GenrePicker';
 import { GmStylePicker } from './GmStylePicker';
 import { ImprovFields } from './ImprovFields';
 import { GimmickForms } from './GimmickForms';
+import { StoryFlow } from './StoryFlow';
 import { epithetOf } from '../engine/names';
 import { GenProgress, useGenProgress } from './GenProgress';
 import { NpcStatsEditor } from './NpcStatsEditor';
@@ -69,16 +70,16 @@ import type { LlmSettings } from '../llm/types';
  * 프로그래밍 없이 장소·인물·지식을 만들고, 조우·임무 같은 구조는 JSON으로 편집한다.
  */
 
-type Tab = 'basic' | 'rules' | 'lab' | 'autoplay' | 'player' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'gimmicks' | 'quests' | 'story' | 'images' | 'json';
+type Tab = 'basic' | 'rules' | 'lab' | 'autoplay' | 'player' | 'classes' | 'tools' | 'locations' | 'characters' | 'relations' | 'knowledge' | 'items' | 'encounters' | 'scenes' | 'gimmicks' | 'flow' | 'quests' | 'story' | 'images' | 'json';
 const TABS: [Tab, string][] = [
   ['basic', '기본'], ['rules', '⚖ 세계 규칙'], ['player', '주인공'], ['classes', '직업'], ['tools', '보드·지도·시뮬레이터'], ['lab', '상태 시험대'], ['autoplay', '자동 플레이·전체 점검'], ['locations', '장소'], ['characters', '인물'], ['relations', '관계·세력'], ['knowledge', '지식'], ['items', '아이템·상점'],
-  ['encounters', '조우'], ['scenes', '장면'], ['gimmicks', '함정·퍼즐'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
+  ['encounters', '조우'], ['flow', '🗺 흐름도'], ['scenes', '장면'], ['gimmicks', '함정·퍼즐'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 /** 탭 묶음 (v0.82) */
 const TAB_GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
   { id: 'world', label: '🌍 세계', tabs: ['basic', 'rules', 'locations', 'knowledge', 'relations'] },
   { id: 'people', label: '👥 인물', tabs: ['characters', 'player', 'classes'] },
-  { id: 'story', label: '📜 이야기', tabs: ['quests', 'story', 'scenes', 'gimmicks', 'encounters', 'items'] },
+  { id: 'story', label: '📜 이야기', tabs: ['flow', 'quests', 'story', 'scenes', 'gimmicks', 'encounters', 'items'] },
   { id: 'test', label: '🧪 시험', tabs: ['lab', 'autoplay', 'tools'] },
   { id: 'data', label: '🗂 자료', tabs: ['images', 'json'] },
 ];
@@ -717,6 +718,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
 
       {tab === 'classes' && <ClassEditor world={w} onChange={(classes) => set({ classes })} />}
       {tab === 'player' && <ProfileEditor world={w} onChange={(playerProfile) => set({ playerProfile })} onTraits={(traits) => set({ traits })} />}
+      {tab === 'flow' && <StoryFlow w={w} set={set} onTab={(t) => setTab(t)} />}
       {tab === 'gimmicks' && <GimmickForms w={w} set={set} settings={settings} onStatus={setStatus} />}
       {tab === 'scenes' && (
         <>

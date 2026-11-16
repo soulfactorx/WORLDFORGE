@@ -52,7 +52,7 @@ async function wizard(page, n) {
   await page.click('.wiz-head button:has-text("예시로 채워 보기")');
   await page.click(`.wiz-steps li >> nth=${n} >> button`);
 }
-const TAB_GROUP = { 기본: '세계', '⚖ 세계 규칙': '세계', 장소: '세계', 지식: '세계', '관계·세력': '세계', '보드·지도·시뮬레이터': '시험', '상태 시험대': '시험', '자동 플레이·전체 점검': '시험', 인물: '인물', 주인공: '인물', 직업: '인물', '임무·플래그·결말': '이야기', '함정·퍼즐': '이야기', '이야기 흐름': '이야기', 장면: '이야기', 조우: '이야기', '아이템·상점': '이야기', 이미지: '자료', 'JSON 전체': '자료' };
+const TAB_GROUP = { 기본: '세계', '⚖ 세계 규칙': '세계', 장소: '세계', 지식: '세계', '관계·세력': '세계', '보드·지도·시뮬레이터': '시험', '상태 시험대': '시험', '자동 플레이·전체 점검': '시험', 인물: '인물', 주인공: '인물', 직업: '인물', '임무·플래그·결말': '이야기', '함정·퍼즐': '이야기', '🗺 흐름도': '이야기', '이야기 흐름': '이야기', 장면: '이야기', 조우: '이야기', '아이템·상점': '이야기', 이미지: '자료', 'JSON 전체': '자료' };
 async function editorTab(page, tab) {
   await editor(page);
   await page.click(`.editor-groups button:has-text("${TAB_GROUP[tab]}")`);
@@ -223,6 +223,15 @@ const SCREENS = [
     await p.click('.editor-bar button[aria-label="만계서고에서 불러오기"]');
     await p.click('.library button:has-text("내 이미지 관리")');
     await p.waitForSelector('.lib-art .art-upload');
+  }],
+  ['편집: 흐름도 (v0.142)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.waitForSelector('.flow-canvas svg');
+  }],
+  ['편집: 흐름도 · 고른 노드 (v0.142)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.locator('.flow-node.k-quest').first().click();
+    await p.waitForSelector('.flow-panel');
   }],
   ['홈: 이어서 만들기 (v0.126)', async (p) => {
     await wizard(p);

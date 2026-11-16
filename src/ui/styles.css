@@ -1317,3 +1317,57 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .nameless-bar .row input { flex: 1 1 180px; min-width: 0; }
 .lib-select-all { gap: 6px; flex-wrap: wrap; }
 .asset-select-bar { gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* 이야기 흐름도 (v0.142) */
+.story-flow { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.flow-toolbar { display: flex; flex-direction: column; gap: 6px; }
+.flow-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.flow-tools { flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.flow-tools input[type=search] { flex: 1 1 160px; min-width: 0; }
+.flow-zoom { gap: 4px; flex-wrap: nowrap; }
+.flow-legend { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.flow-legend .lg.start { color: var(--accent); }
+.flow-legend .lg.complete { color: var(--text); }
+.flow-wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.flow-wrap.with-panel { grid-template-columns: minmax(0, 1fr) 360px; }
+.flow-canvas { overflow: auto; max-height: 72vh; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); min-width: 0; -webkit-overflow-scrolling: touch; }
+.flow-canvas svg { display: block; }
+.flow-node { cursor: pointer; }
+.flow-node rect { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+.flow-node:hover rect, .flow-node:focus rect { stroke: var(--accent); }
+.flow-node:focus { outline: none; }
+.flow-node.sel rect { stroke: var(--accent); stroke-width: 3; }
+.flow-node.warn rect { stroke-dasharray: 5 3; stroke: var(--accent); }
+.flow-node.k-quest rect { fill: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.flow-node.k-ending rect { fill: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.flow-node.k-flag rect, .flow-node.k-claim rect, .flow-node.k-phase rect { fill: color-mix(in srgb, var(--text) 5%, var(--bg)); }
+.flow-node.dim { opacity: .3; }
+.flow-title { font-size: 13px; font-weight: 700; fill: var(--text); }
+.flow-sub { font-size: 11px; fill: var(--muted); }
+.flow-lane { font-size: 12px; fill: var(--muted); }
+.flow-edge path { fill: none; stroke-width: 1.6; }
+.flow-edge.start path { stroke: var(--accent); }
+.flow-edge.complete path { stroke: var(--text); opacity: .7; }
+.flow-edge.fail path { stroke: var(--muted); stroke-dasharray: 6 4; }
+.flow-edge.effect path { stroke: var(--muted); stroke-dasharray: 2 4; }
+.flow-edge.active path { stroke-width: 3; opacity: 1; }
+.flow-edge.dim { opacity: .18; }
+.flow-arrow.start { fill: var(--accent); }
+.flow-arrow.complete { fill: var(--text); }
+.flow-arrow.fail, .flow-arrow.effect { fill: var(--muted); }
+.flow-label { font-size: 11px; fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
+.flow-panel { border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; max-height: 72vh; overflow: auto; min-width: 0; }
+.flow-panel-head { align-items: center; gap: 6px; }
+.flow-panel code { word-break: break-all; }
+.flow-links { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.flow-links li { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; min-width: 0; }
+.flow-links button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-edit { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
+.flow-edit > label, .flow-stage label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.flow-actions { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
+@media (max-width: 900px) {
+  .flow-wrap.with-panel { grid-template-columns: minmax(0, 1fr); }
+  .flow-panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; max-height: 62vh; border-radius: 14px 14px 0 0; box-shadow: 0 -6px 20px color-mix(in srgb, var(--text) 18%, transparent); }
+  .flow-canvas { max-height: 60vh; }
+}
+.flow-zoom button { min-width: 40px; }
