@@ -65,4 +65,13 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     // 결말에서는 이어지지 않는다 · 시작은 잇지 않는다
     expect(linkOptions(w, node(w, 'ending:ending/f'), c)).toEqual([]);
   });
+
+  it('손으로 옮긴 자리를 따른다 (v0.144)', () => {
+    const g = buildStoryGraph(base);
+    const lay = layoutGraph(g, 'right', { 'quest:quest/a': [900, 700], 'quest:없음': [1, 1] });
+    const a = lay.nodes.find((n) => n.key === 'quest:quest/a')!;
+    expect([a.x, a.y]).toEqual([900, 700]);
+    expect(lay.width).toBeGreaterThanOrEqual(900 + 176);
+    expect(layoutGraph(g, 'down', { 'quest:quest/a': [-50, 10] }).nodes.find((n) => n.key === 'quest:quest/a')!.x).toBe(0);
+  });
 });

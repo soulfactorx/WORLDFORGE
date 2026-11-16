@@ -862,6 +862,8 @@ export function validateWorld(input: unknown): Issue[] {
 
   // ---- 돌발 사건 표 (설계 v4 E5)
   // GM 즉흥 등장 (v0.128)
+  const fl = (input as { flowLayout?: unknown }).flowLayout;
+  if (fl !== undefined && !isObj(fl)) warn('flowLayout', '객체여야 합니다 — 흐름도 상자 자리를 무시합니다.');
   const im = (input as { improv?: unknown }).improv;
   if (im !== undefined) {
     if (!isObj(im)) err('improv', '객체여야 합니다.');

@@ -45,8 +45,37 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
     const keys = new globalThis.Set(nodes.map((n) => n.key));
     return { nodes, edges: graph.edges.filter((e) => keys.has(e.from) && keys.has(e.to)) };
   }, [graph, hidden, focus, sel]);
-  const lay = useMemo(() => layoutGraph(shown, dir), [shown, dir]);
-  const pos = useMemo(() => new Map(lay.nodes.map((n) => [n.key, n])), [lay]);
+  const pins = w.flowLayout?.[dir];
+  const lay = useMemo(() => layoutGraph(shown, dir, pins), [shown, dir, pins]);
+  /** 상자 옮기기 (v0.144): 마우스는 바로 끌고, 손가락은 길게 눌러서 (그냥 쓸면 화면이 굴러간다) */
+  const moveRef = useRef<{ key: string; ox: number; oy: number; sx: number; sy: number; touch: boolean; started: boolean; timer?: number } | null>(null);
+  const [moving, setMoving] = useState<{ key: string; x: number; y: number } | null>(null);
+  const justMoved = useRef(false);
+  const pos = useMemo(() => {
+    const m = new Map(lay.nodes.map((n) => [n.key, n as { x: number; y: number }]));
+    if (moving) m.set(moving.key, { x: moving.x, y: moving.y });
+    return m;
+  }, [lay, moving]);
+  const savePins = (next: Record<string, [number, number]> | undefined) => {
+    const cur = { ...(w.flowLayout ?? {}) };
+    if (next && Object.keys(next).length) cur[dir] = next; else delete cur[dir];
+    set({ flowLayout: cur.right || cur.down ? cur : undefined });
+  };
+  const pin = (key: string, x: number, y: number) => {
+    const keys = new globalThis.Set(graph.nodes.map((n) => n.key)); // 없어진 상자의 자리는 버린다
+    const kept = Object.fromEntries(Object.entries(pins ?? {}).filter(([k]) => keys.has(k)));
+    savePins({ ...kept, [key]: [Math.max(0, Math.round(x / 10) * 10), Math.max(0, Math.round(y / 10) * 10)] });
+  };
+  const onTop = (k: string) => (moving?.key === k ? 3 : k === sel ? 2 : pins?.[k] ? 1 : 0);
+  const endMove = () => { const m = moveRef.current; if (m?.timer) window.clearTimeout(m.timer); moveRef.current = null; setMoving(null); };
+  // 손가락으로 옮기는 동안은 화면이 굴러가지 않게 (React의 터치 이벤트는 막을 수 없어 직접 단다)
+  const hasSvg = shown.nodes.length > 0;
+  useEffect(() => {
+    const el = svgRef.current; if (!el) return;
+    const h = (e: TouchEvent) => { if (moveRef.current?.started) e.preventDefault(); };
+    el.addEventListener('touchmove', h, { passive: false });
+    return () => el.removeEventListener('touchmove', h);
+  }, [hasSvg]);
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const hit = (n: GNode) => !words.length || words.every((t) => `${n.name} ${n.id} ${n.sub ?? ''} ${NODE_LABEL[n.kind]}`.toLowerCase().includes(t));
   const near1 = sel ? neighbors(shown, sel, 1) : null;
@@ -80,7 +109,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
 
   return (
     <div className="story-flow">
-      <p className="muted small">세계의 <b>임무·결말·갈래 카드·장면·함정·전투·결정적 선택·사건</b>이 어떤 조건으로 이어지는지 그린 지도입니다. <b>▶ 플레이 시작</b>에서 출발해 {down ? '아래로' : '오른쪽으로'} 흘러가 맨 끝의 <b>◆ 결말</b>에 이릅니다. 화살표 <b>A → B</b>는 "A가 끝나거나(고르거나 · 세우면) B가 열린다"는 뜻입니다. 상자를 누르면 자세히 보고 고치며, 상자의 <b>●</b> 손잡이를 다른 상자로 끌면 둘을 잇습니다.</p>
+      <p className="muted small">세계의 <b>임무·결말·갈래 카드·장면·함정·전투·결정적 선택·사건</b>이 어떤 조건으로 이어지는지 그린 지도입니다. <b>▶ 플레이 시작</b>에서 출발해 {down ? '아래로' : '오른쪽으로'} 흘러가 맨 끝의 <b>◆ 결말</b>에 이릅니다. 화살표 <b>A → B</b>는 "A가 끝나거나(고르거나 · 세우면) B가 열린다"는 뜻입니다. 상자를 누르면 자세히 보고 고치며, 상자의 <b>●</b> 손잡이를 다른 상자로 끌면 둘을 잇습니다. 상자를 끌면(휴대폰은 길게 누른 뒤 끌면) 자리를 옮기고, 옮긴 자리는 세계와 함께 저장됩니다.</p>
       <div className="flow-toolbar">
         <div className="flow-kinds">
           {MAIN_KINDS.filter((k) => counts.get(k)).map((k) => {
@@ -98,6 +127,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
             <button type="button" className="small" aria-label="크게" onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.15).toFixed(2)))}>＋</button>
             <button type="button" className="small" onClick={fit} title="화면 폭에 맞추기">⤢ 맞춤</button>
           </span>
+          {pins && Object.keys(pins).length > 0 && <button type="button" className="small" onClick={() => { if (confirm(`옮긴 상자 ${Object.keys(pins).length}개를 자동 배치 자리로 되돌릴까요? (${down ? '세로' : '가로'} 방향만)`)) savePins(undefined); }} title="손으로 옮긴 자리를 지우고 자동으로 다시 놓는다">↺ 자동 배치로</button>}
         </div>
         <p className="small muted flow-legend">
           <span className="lg start">— 시작·열림</span> <span className="lg complete">— 끝·결말</span> <span className="lg fail">- - 실패·막힘</span> <span className="lg effect">··· 일으킴(플래그·장면·카드)</span>
@@ -112,21 +142,42 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
           <div ref={canvasRef} className={`flow-canvas${drag ? ' dragging' : ''}${linking ? ' linking' : ''}`} role="region" aria-label="이야기 흐름도">
             <svg ref={svgRef} width={lay.width * zoom} height={lay.height * zoom} viewBox={`0 0 ${lay.width} ${lay.height}`} role="img" aria-label={`노드 ${shown.nodes.length}개, 화살표 ${shown.edges.length}개`}
               onPointerMove={(e) => {
-                if (!drag) return;
-                setDrag({ ...drag, ...toSvg(e) });
+                const m = moveRef.current;
+                if (m) {
+                  const dist = Math.hypot(e.clientX - m.sx, e.clientY - m.sy);
+                  if (!m.started) {
+                    if (m.touch) { if (dist > 8) endMove(); return; } // 길게 누르기 전에 움직이면 화면 굴리기
+                    if (dist < 5) return;
+                    m.started = true;
+                  }
+                  const p = toSvg(e);
+                  setMoving({ key: m.key, x: Math.max(0, p.x - m.ox), y: Math.max(0, p.y - m.oy) });
+                } else if (!drag) return;
+                else setDrag({ ...drag, ...toSvg(e) });
                 // 가장자리로 끌면 그쪽으로 굴린다
                 const c = canvasRef.current; if (!c) return;
-                const r = c.getBoundingClientRect(), m = 36;
-                if (e.clientX > r.right - m) c.scrollLeft += 14; else if (e.clientX < r.left + m) c.scrollLeft -= 14;
-                if (e.clientY > r.bottom - m) c.scrollTop += 14; else if (e.clientY < r.top + m) c.scrollTop -= 14;
+                const r = c.getBoundingClientRect(), edge = 36;
+                if (e.clientX > r.right - edge) c.scrollLeft += 14; else if (e.clientX < r.left + edge) c.scrollLeft -= 14;
+                if (e.clientY > r.bottom - edge) c.scrollTop += 14; else if (e.clientY < r.top + edge) c.scrollTop -= 14;
               }}
               onPointerUp={(e) => {
+                const m = moveRef.current;
+                if (m) {
+                  if (m.started) {
+                    const p = toSvg(e);
+                    pin(m.key, p.x - m.ox, p.y - m.oy);
+                    justMoved.current = true; window.setTimeout(() => { justMoved.current = false; }, 0); // 놓을 때 바로 따라오는 클릭만 고르기가 아니다 (상자를 위로 다시 그리면 클릭이 안 올 수도 있다)
+                  }
+                  endMove();
+                  return;
+                }
                 if (!drag) return;
                 const p = toSvg(e), t = nodeAt(p.x, p.y);
                 if (t && t.key !== drag.from) setPending({ from: drag.from, to: t.key });
                 setDrag(null);
               }}
-              onPointerCancel={() => setDrag(null)}>
+              onPointerCancel={() => { setDrag(null); endMove(); }}
+              onContextMenu={(e) => { if (moveRef.current) e.preventDefault(); }}>
               <defs>
                 {(['start', 'complete', 'fail', 'effect'] as const).map((k) => (
                   <marker key={k} id={`arrow-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" className={`flow-arrow ${k}`} /></marker>
@@ -134,13 +185,30 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               </defs>
               {lay.nodes.some((n) => n.layer === -1) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -1).map((n) => n.y)) - 12} className="flow-lane">따로 있는 것 (이어진 조건이 없다)</text>}
               {shown.edges.map((e, i) => <Edge key={i} e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={!!sel && (e.from === sel || e.to === sel)} dim={!!sel && !(e.from === sel || e.to === sel)} />)}
-              {lay.nodes.map((n) => {
+              {/* 겹치면 위에: 옮긴 것 < 고른 것 < 끄는 것 */}
+              {[...lay.nodes].sort((x, y) => onTop(x.key) - onTop(y.key)).map((n0) => {
+                const at = pos.get(n0.key)!, n = { ...n0, x: at.x, y: at.y };
                 const canFrom = n.kind !== 'start';
                 const hx = down ? NODE_W / 2 : NODE_W, hy = down ? NODE_H : NODE_H / 2;
                 return (
-                  <g key={n.key} className={`flow-node k-${n.kind}${n.key === sel ? ' sel' : ''}${n.warn ? ' warn' : ''}${dropTarget?.key === n.key && drag?.from !== n.key ? ' drop' : ''}${linking === n.key || drag?.from === n.key ? ' src' : ''}${(near1 && !near1.has(n.key)) || !hit(n) ? ' dim' : ''}`} transform={`translate(${n.x},${n.y})`}>
+                  <g key={n.key} className={`flow-node k-${n.kind}${n.key === sel ? ' sel' : ''}${n.warn ? ' warn' : ''}${dropTarget?.key === n.key && drag?.from !== n.key ? ' drop' : ''}${linking === n.key || drag?.from === n.key ? ' src' : ''}${(near1 && !near1.has(n.key)) || !hit(n) ? ' dim' : ''}${moving?.key === n.key ? ' moving' : ''}${pins?.[n.key] ? ' pinned' : ''}`} transform={`translate(${n.x},${n.y})`}>
                     <g className="flow-box" role="button" tabIndex={0} aria-label={`${NODE_LABEL[n.kind]} ${n.name}${n.warn ? ` — ${n.warn}` : ''}`} aria-pressed={n.key === sel}
-                      onClick={() => pick(n.key)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(n.key); } }}>
+                      onClick={() => { if (justMoved.current) { justMoved.current = false; return; } pick(n.key); }}
+                      onPointerDown={(e) => {
+                        if (e.button !== 0 || linking || drag) return;
+                        const p = toSvg(e), touch = e.pointerType === 'touch';
+                        const m = { key: n.key, ox: p.x - n.x, oy: p.y - n.y, sx: e.clientX, sy: e.clientY, touch, started: false } as NonNullable<typeof moveRef.current>;
+                        const el = e.currentTarget as Element, id = e.pointerId;
+                        if (touch) m.timer = window.setTimeout(() => { if (moveRef.current !== m) return; m.started = true; el.setPointerCapture?.(id); setMoving({ key: n.key, x: n.x, y: n.y }); navigator.vibrate?.(15); }, 350);
+                        else el.setPointerCapture?.(id);
+                        moveRef.current = m;
+                      }}
+                      onKeyDown={(ev) => {
+                        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(n.key); return; }
+                        // 화살표 키로 옮기기 (Shift: 크게)
+                        const d = ev.shiftKey ? 50 : 10, mv = { ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, -d], ArrowDown: [0, d] }[ev.key];
+                        if (mv) { ev.preventDefault(); pin(n.key, n.x + mv[0]!, n.y + mv[1]!); }
+                      }}>
                       <rect width={NODE_W} height={NODE_H} rx={n.kind === 'flag' || n.kind === 'claim' || n.kind === 'phase' || n.kind === 'start' ? 28 : 8} />
                       <text x={10} y={22} className="flow-title">{NODE_ICON[n.kind]} {short(n.name, 13)}{n.warn ? ' ⚠' : ''}</text>
                       <text x={10} y={42} className="flow-sub">{short(`${NODE_LABEL[n.kind]}${n.sub ? ` · ${n.sub}` : ''}`, 22)}</text>

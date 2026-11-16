@@ -1052,6 +1052,8 @@ export interface WorldPackage {
    * 언제·무엇이(만남·기습·소문·발견)는 엔진이 굴리고, 누가·어떻게는 서술 AI가 세계에 맞게 지어낸다. 비우면 보통.
    */
   improv?: ImprovSettings;
+  /** 편집기 흐름도에서 손으로 옮긴 상자 자리 (v0.144): 방향마다 노드 키 → [x, y]. 플레이에는 쓰이지 않는다 */
+  flowLayout?: { right?: Record<string, [number, number]>; down?: Record<string, [number, number]> };
   /** 이 세계만의 칭호 (설계 v4 E4): 조건을 채우면 엔진이 준다. renown 기본 5 */
   titles?: { id: EntityId; name: string; desc?: string; renown?: number; condition: Condition }[];
   /** 지속되는 세계 (설계 v3 7장): 소문 전파 (기본 켜짐) */

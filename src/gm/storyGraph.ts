@@ -199,7 +199,7 @@ const KIND_ORDER: NodeKind[] = ['start', 'quest', 'arc', 'choice', 'card', 'scen
  *  - 같은 단의 줄 순서: 앞뒤 이웃의 자리 평균으로 여러 번 고쳐 교차를 줄인다 (메인 임무가 먼저)
  *  - 이어진 것이 없는 노드는 맨 아래 따로
  */
-export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right'): { nodes: Placed[]; width: number; height: number; dir: FlowDir } {
+export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right', pinned?: Record<string, [number, number]>): { nodes: Placed[]; width: number; height: number; dir: FlowDir } {
   const ids = g.nodes.map((n) => n.key);
   const byKey = new Map(g.nodes.map((n) => [n.key, n]));
   const out = new Map<string, string[]>(ids.map((k) => [k, []]));
@@ -260,6 +260,8 @@ export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right'): { nodes: Pla
   const lonelyTop = bodyEnd + (lonely.length ? 50 : 0);
   const perRow = Math.max(4, down ? tallest : layers.length || 4);
   lonely.forEach((k, i) => placed.push({ ...byKey.get(k)!, layer: -1, x: 20 + (i % perRow) * (NODE_W + (down ? V_GAP_X : GAP_X)), y: lonelyTop + Math.floor(i / perRow) * (NODE_H + GAP_Y) }));
+  // 손으로 옮긴 상자 (v0.144)
+  if (pinned) for (const p of placed) { const at = pinned[p.key]; if (Array.isArray(at) && Number.isFinite(at[0]) && Number.isFinite(at[1])) { p.x = Math.max(0, at[0]); p.y = Math.max(0, at[1]); } }
   const width = Math.max(...placed.map((p) => p.x + NODE_W), 400) + 20;
   const height = Math.max(...placed.map((p) => p.y + NODE_H), 200) + 20;
   return { nodes: placed, width, height, dir };

@@ -23,7 +23,7 @@ const FIELD_LABEL: Record<string, string> = {
   factions: '세력', relations: '인물 관계', relationBeats: '관계 사건', rules: '세계 규칙', vars: '세계 수치', phases: '국면', storylets: '갈래 카드', scenes: '장면·함정·퍼즐',
   randomEvents: '돌발 사건', titles: '칭호', arcs: '이야기 줄기', choices: '결정적 선택', clocks: '진행 시계', events: '연표 사건', items: '아이템', monsters: '적', starts: '시작 방식',
   classes: '직업', traits: '성향 축', assets: '이미지', start: '시작 장소·첫 장면', overview: '세계 개요', gmNotes: 'GM 메모', style: '서술 문체', genre: '장르', calendar: '달력',
-  gmStyle: 'GM 스타일', time: '시간 규칙', playerProfile: '주인공 정보 양식', improv: 'GM 즉흥 등장', simulation: '시뮬레이션', playModels: '추천 AI 모델', autoPhases: '기본 국면',
+  gmStyle: 'GM 스타일', time: '시간 규칙', playerProfile: '주인공 정보 양식', improv: 'GM 즉흥 등장', simulation: '시뮬레이션', playModels: '추천 AI 모델', autoPhases: '기본 국면', flowLayout: '흐름도 상자 위치',
 };
 /** 비교하지 않는 칸 (manifest는 이름만 따로 본다) */
 const SKIP = new Set(['manifest']);

@@ -1379,7 +1379,11 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-node.k-start .flow-title, .flow-node.k-start .flow-sub { fill: var(--bg); }
 .flow-node.drop rect { stroke: var(--accent); stroke-width: 4; stroke-dasharray: none; }
 .flow-node.src rect { stroke: var(--accent); stroke-width: 3; stroke-dasharray: 4 3; }
-.flow-box { cursor: pointer; }
+.flow-box { cursor: grab; }
+.flow-canvas svg { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.flow-node.moving { cursor: grabbing; }
+.flow-node.moving rect { stroke: var(--accent); stroke-width: 3; filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--text) 30%, transparent)); }
+.flow-node.pinned .flow-sub { font-style: italic; }
 .flow-box:focus { outline: none; }
 .flow-box:focus rect { stroke: var(--accent); }
 .flow-handle { cursor: crosshair; touch-action: none; }
