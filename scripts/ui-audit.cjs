@@ -240,6 +240,19 @@ const SCREENS = [
     await p.locator('.flow-node.k-ending .flow-box').first().click();
     await p.waitForSelector('.flow-dialog');
   }],
+  ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.locator('.flow-node.k-ending .flow-box').first().click();
+    await p.locator('.flow-panel .flow-edge-btn').first().click();
+    await p.waitForSelector('.flow-edge-dialog');
+  }],
+  ['편집: 흐름도 · 시뮬레이션 (v0.145)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.click('button:has-text("🧪 시뮬레이션")');
+    const a = p.locator('.flow-node.sim-active .flow-box').first();
+    if (await a.count()) await a.click(); else await p.locator('.flow-node.k-start .flow-box').click();
+    await p.waitForSelector('.flow-panel');
+  }],
   ['홈: 이어서 만들기 (v0.126)', async (p) => {
     await wizard(p);
     await p.fill('label:has-text("세계 이름") input', '만들던 세계');

@@ -1395,6 +1395,32 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-drag-line { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; pointer-events: none; }
 .flow-linking { margin: 0; padding: 6px 10px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--surface); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .flow-cut { margin-left: auto; }
+.flow-edge-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
+.flow-edge:hover path:first-child { stroke-width: 3; opacity: 1; }
+.flow-edge-btn { max-width: 100%; white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.flow-edge-dialog { width: min(640px, 100%); }
+.flow-edge-slot { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border); padding-top: 8px; min-width: 0; }
+.flow-edge-slot > label { display: flex; flex-direction: column; gap: 4px; }
+.flow-edge-slot select { width: 100%; max-width: 100%; }
+.flow-sim { border: 1px solid var(--accent); border-radius: 10px; padding: 8px 10px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.flow-sim p { margin: 0; }
+.flow-sim-tools { flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.flow-sim-place { display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; font-size: .85rem; }
+.flow-sim-place select { width: 100%; max-width: 100%; }
+.flow-sim-log pre { white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; margin: 4px 0 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.flow-report { border-top: 1px dashed var(--border); padding-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.flow-report-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.flow-report-list li { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; min-width: 0; overflow-wrap: anywhere; }
+.flow-trace { border-top: 1px dashed var(--border); padding-top: 6px; overflow-wrap: anywhere; }
+.flow-sim-edit summary { cursor: pointer; }
+.flow-node.sim-locked { opacity: .45; }
+.flow-node.sim-open rect { stroke: var(--accent); stroke-width: 3; }
+.flow-node.sim-active rect { stroke: var(--accent); stroke-width: 3; fill: color-mix(in srgb, var(--accent) 25%, var(--surface)); }
+.flow-node.sim-done rect, .flow-node.sim-on rect { fill: color-mix(in srgb, var(--accent) 12%, var(--bg)); stroke: var(--muted); }
+.flow-node.sim-failed rect { stroke: var(--muted); stroke-dasharray: 6 3; fill: var(--bg); }
+.flow-node.sim-reached rect { fill: var(--accent); stroke: var(--accent); stroke-width: 3; }
+.flow-node.sim-reached .flow-title, .flow-node.sim-reached .flow-sub { fill: var(--bg); }
+.flow-node.never rect { stroke: var(--text); stroke-width: 2.5; stroke-dasharray: 3 3; }
 .flow-dialog-back { position: fixed; inset: 0; z-index: 60; background: color-mix(in srgb, var(--text) 35%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .flow-dialog { width: min(520px, 100%); max-height: 90dvh; overflow: auto; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .flow-dialog label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
