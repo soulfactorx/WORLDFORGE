@@ -9,7 +9,8 @@ import { EntityImages } from './EntityImages';
 import { makeTwoWay, oneWayLinks, setLink, tidyLinks } from '../engine/locationLinks';
 import { deleteAssets, storeAssets } from '../storage/assets';
 import { addSource, sourcesOf } from '../engine/sources';
-import { lockState, personalCount, removeSourceFull, stripPersonal } from '../engine/licensing';
+import { lockState, personalCount, removeSourceFull, setLicense, stripPersonal } from '../engine/licensing';
+import { SourceLicense } from './SourceLicense';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
@@ -349,13 +350,14 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
       {tab === 'basic' && sourcesOf(w).length > 0 && (
         <fieldset className="sources-box">
           <legend>출처 카드 {sourcesOf(w).length}장 — 이 세계에 쓴 다른 사람의 카드 파일</legend>
-          <p className="small muted">다른 기기로 옮길 때 받는 기기에서 <b>이 카드 파일이 모두</b> 있어야 열립니다. 인물 탭에서 가져온 카드는 그 카드에서 온 인물·지식·이미지를 한꺼번에 뺄 수 있습니다.</p>
+          <p className="small muted">라이선스 표시가 없는 카드는 <b>개인용</b>(라이선스 모름 = 모든 권리는 제작자에게)입니다 — 그 카드에서 온 것은 이 브라우저에서만 쓰고, 내보낼 때 빠집니다. 제작자가 라이선스(예: CC BY)로 허락한 카드는 표시하면 잠금이 풀리고 출처 표시가 함께 갑니다. 인물 탭에서 가져온 카드는 그 카드에서 온 것을 한꺼번에 뺄 수 있습니다.</p>
           <ul className="sources-list">
             {sourcesOf(w).map((s) => (
               <li key={s.hash}>
                 <span><b>{s.name}</b>{s.creator && <span className="muted"> · 제작 {s.creator}</span>}
                   <br /><span className="small muted">{s.fileName ?? '(파일 이름 기록 없음)'}{s.format ? ` · ${s.format.toUpperCase()}` : ''}{s.importedAt ? ` · ${new Date(s.importedAt).toLocaleDateString()}` : ''} · 지문 {s.hash.slice(0, 10)}…
                   {' · '}{s.via === 'world' ? '이 카드로 세계 전체를 만듦' : `인물 ${s.ids?.characters.length ?? 0} · 지식 ${s.ids?.claims.length ?? 0} · 이미지 ${s.ids?.assets.length ?? 0}`}</span></span>
+                <SourceLicense src={s} onChange={(license) => { const next = setLicense(w, s.hash, license); setW(next); setStatus(license ? `「${s.name}」을(를) ${license.spdx}(으)로 표시했습니다.${w.manifest.private && !next.manifest.private ? ' 개인용 잠금이 풀렸습니다.' : ''} 저장해야 확정됩니다.` : `「${s.name}」을(를) 개인용(라이선스 모름)으로 되돌렸습니다.`); }} />
                 {s.via === 'import' && (
                   <button type="button" className="small" onClick={() => {
                     if (!confirm(`"${s.name}"에서 온 인물 ${s.ids?.characters.length ?? 0}명·지식 ${s.ids?.claims.length ?? 0}개·이미지 ${s.ids?.assets.length ?? 0}장을 이 세계에서 뺄까요? 이 인물을 쓰는 임무·장면 자리는 비워집니다. 저장해야 확정됩니다.`)) return;

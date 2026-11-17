@@ -1,3 +1,5 @@
+import { lockState, personalSources } from '../engine/licensing';
+import { sourcesOf } from '../engine/sources';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { sampleWorld } from '../data/sample-world';
 import { romanceSample, wuxiaSample } from '../data/sample-genres';
@@ -47,11 +49,21 @@ export async function findWorld(id: string, version: string): Promise<WorldPacka
 
 export async function savePackage(world: WorldPackage, source: StoredPackage['source']): Promise<void> {
   if (BUILTIN.some((b) => packageKey(b) === packageKey(world))) throw new Error('내장 패키지와 같은 ID·버전으로는 저장할 수 없습니다. ID나 버전을 바꿔 주세요.');
-  // 개인용 세계의 표시는 지울 수 없다: 같은 ID의 패키지가 개인용이면 계속 개인용
+  // 개인용 표시는 JSON을 고쳐 지울 수 없다 (v0.157: 정당하게 풀린 것만 풀린 채로 둔다)
+  //  - 아직 개인용(라이선스 모름) 출처가 남아 있으면 다시 잠근다
+  //  - 예전 저장본이 세계 전체를 카드로 만든 것이었는데 그 카드가 「라이선스 표시된 채」 남아 있지 않으면 다시 잠근다
+  //  정당하게 풀리는 길: 출처 카드를 빼기(인물 탭에서 넣은 것) · 라이선스 표시
   const prev = await db.packages.where('id').equals(world.manifest.id).toArray();
   if (!world.manifest.private) {
-    const priv = prev.find((p) => p.world.manifest.private)?.world.manifest.private;
-    if (priv) world = { ...world, manifest: { ...world.manifest, private: priv } };
+    const prevPriv = prev.find((p) => p.world.manifest.private)?.world;
+    if (prevPriv) {
+      const stillPersonal = personalSources(world).length > 0;
+      // 세계 전체가 카드에서 온 것(뺄 수 없음)이었다면: 그 카드들이 모두 라이선스 표시된 채 남아 있어야 풀린다
+      const licensedNow = (hash: string) => sourcesOf(world).some((x) => x.hash === hash && !!x.license);
+      const whole = sourcesOf(prevPriv).filter((x) => !x.license && (x.via === 'world' || !x.ids || ![...x.ids.characters, ...x.ids.facts, ...x.ids.claims, ...x.ids.assets, ...(x.ids.others ?? [])].length));
+      const wholeGone = lockState(prevPriv) === 'world' && (whole.length === 0 ? !sourcesOf(prevPriv).length : !whole.every((x) => licensedNow(x.hash)));
+      if (stillPersonal || wholeGone) world = { ...world, manifest: { ...world.manifest, private: prevPriv.manifest.private! } };
+    }
   }
   // 성인 등급은 한 번 정하면 바꿀 수 없다 (설계 v3 15.1)
   if (world.manifest.contentRating !== 'mature' && prev.some((p) => p.world.manifest.contentRating === 'mature')) {

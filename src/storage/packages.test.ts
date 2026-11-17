@@ -64,6 +64,30 @@ describe('개인용 세계', () => {
   });
 });
 
+describe('개인용 잠금이 정당하게 풀리면 저장해도 풀린 채 (v0.157)', () => {
+  it('라이선스 표시 · 카드 빼기는 풀린 채로, 개인용 출처를 남긴 채 표시만 지우면 다시 잠긴다', async () => {
+    const { savePackage: save } = await import('./packages');
+    const { db } = await import('./db');
+    const { setLicense, stripPersonal } = await import('../engine/licensing');
+    const src = { hash: 'hh', name: '카드', importedAt: '', via: 'import' as const, ids: { characters: ['npc/x'], facts: [], claims: [], assets: [] } };
+    const base = blankWorld();
+    const w = { ...base, characters: [...base.characters, { id: 'npc/x', name: 'x', appearance: '', personality: '', speech: '', locationId: base.start.locationId, improvisation: 'minor' as const }],
+      manifest: { ...base.manifest, id: 'lic.test', private: { source: '카드', note: 'x', cardHash: 'hh' }, sources: [src] } };
+    await save(w, 'created');
+    // 표시만 지우기 (개인용 출처는 그대로) → 다시 잠김
+    await save({ ...w, manifest: { ...w.manifest, private: undefined, version: '0.2.0' } }, 'created');
+    expect((await db.packages.get('lic.test@0.2.0'))!.world.manifest.private).toBeTruthy();
+    // 라이선스 표시 → 풀린 채
+    const lic = { ...setLicense(w, 'hh', { spdx: 'CC-BY-4.0', attribution: 'a', confirmedAt: 'x' }), manifest: { ...setLicense(w, 'hh', { spdx: 'CC-BY-4.0', attribution: 'a', confirmedAt: 'x' }).manifest, version: '0.3.0' } };
+    await save(lic, 'created');
+    expect((await db.packages.get('lic.test@0.3.0'))!.world.manifest.private).toBeUndefined();
+    // 개인용 빼기 → 풀린 채
+    const st = stripPersonal(w).world;
+    await save({ ...st, manifest: { ...st.manifest, version: '0.4.0' } }, 'created');
+    expect((await db.packages.get('lic.test@0.4.0'))!.world.manifest.private).toBeUndefined();
+  });
+});
+
 describe('성인 등급 고정', () => {
   it('한 번 성인 등급으로 저장된 세계는 낮춰서 저장해도 성인 등급으로 남는다', async () => {
     const { savePackage: save } = await import('./packages');

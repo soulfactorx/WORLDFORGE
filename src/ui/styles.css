@@ -508,7 +508,7 @@ img.zoomable { cursor: zoom-in; }
 
 /* 출처 카드 (v0.53) */
 .sources-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.sources-list li { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; border-bottom: 1px dashed var(--border); padding-bottom: 6px; overflow-wrap: anywhere; }
+.sources-list li { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; justify-content: space-between; border-bottom: 1px dashed var(--border); padding-bottom: 6px; overflow-wrap: anywhere; }
 .sources-list li > button { flex: none; }
 .move-cards { list-style: none; padding: 0; margin: 4px 0; }
 .move-cards li.ok { color: var(--accent); }
@@ -1467,3 +1467,10 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-dialog select { width: 100%; max-width: 100%; }
 .flow-pair { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 600; overflow-wrap: anywhere; }
 .flow-dialog-actions { flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+/* 출처 카드 라이선스 (v0.157) */
+.source-license { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1 1 100%; min-width: 0; }
+.source-license-form { display: flex; flex-direction: column; gap: 6px; flex: 1 1 100%; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; min-width: 0; }
+.source-license-form label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.source-license-form label.check { flex-direction: row; align-items: flex-start; gap: 8px; }
+.source-license-form select, .source-license-form input:not([type=checkbox]) { width: 100%; max-width: 100%; }
+

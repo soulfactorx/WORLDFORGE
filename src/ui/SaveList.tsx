@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { sourcesOf } from '../engine/sources';
-import { lockState, personalCount, stripPersonal } from '../engine/licensing';
+import { credits, lockState, personalCount, stripPersonal } from '../engine/licensing';
 import { endingsSeen } from './collection';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { genreOf } from '../data/genres';
@@ -246,6 +246,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
                 {genreOf(world.genre?.id, world.genre?.custom).label} · 등급 {RATING[world.manifest.contentRating]}{world.manifest.author && <> · 제작 {world.manifest.author}</>}{world.manifest.aiAssisted && <> · ✦ AI 보조</>}{world.manifest.private && <> · 🔒 개인용 (원작: {world.manifest.private.source})</>}
               </p>
             )}
+            {world && credits(world).length > 0 && <p className="muted small">📜 출처 표시: {credits(world).join(' · ')}</p>}
             {overview && (
               overview.length > 160
                 ? <details className="world-blurb"><summary>{cutText(overview.replace(/\s+/g, " "), 160)} <span className="more">더 보기</span></summary><p>{overview}</p></details>
