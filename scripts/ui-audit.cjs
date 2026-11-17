@@ -327,6 +327,11 @@ const SCREENS = [
     else { await p.locator('.flow-node.k-start .flow-box').click(); await p.click('.flow-actions button:has-text("처음부터 열리는 결정적 선택")'); }
     await p.waitForSelector('.flow-panel label:has-text("질문")');
   }],
+  ['편집: 흐름도 · 임무 단계 편집 (v0.154)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.locator('.flow-node.k-quest .flow-box').first().click();
+    await p.waitForSelector('.flow-panel .flow-stage-card[open]');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();

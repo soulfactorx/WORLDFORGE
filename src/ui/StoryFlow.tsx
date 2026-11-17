@@ -3,13 +3,14 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Arc, Character, Clock, Condition, CustomMonster, Ending, ItemDef, Location, Quest, StoryEffect, WorldEvent, WorldPackage, WorldRule } from '../engine/schema';
-import { UNSET_CONDITION } from '../engine/scenario';
+import { QUEST_TYPE_LABEL, UNSET_CONDITION } from '../engine/scenario';
+import { QUEST_TYPES, type QuestStage } from '../engine/schema';
 import { SKILLS, SKILL_IDS } from '../engine/character/rules';
 import { STAKE_ICON } from '../engine/stakes';
 import type { Storylet, StoryletOption, DecisiveChoice } from '../engine/schema';
 import { setLink } from '../engine/locationLinks';
-import { buildStoryGraph, type FlowDir, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
-import { edgeSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
+import { buildStoryGraph, type FlowDir, isEmptyCond, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
+import { restageQuest, edgeSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
 import { type ExploreReport, nodeSim, type NodeSim, simActs, simExplore, simIcon, simMove, type SimPath, simReplay, simStart, wantedPlaces } from '../gm/flowSim';
 import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
@@ -750,27 +751,7 @@ function ExploreView({ w, g, r, onPath, onPick, onClose }: { w: WorldPackage; g:
 function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
   const upd = <T extends { id: string }>(list: T[] | undefined, patch: Partial<T>) => (list ?? []).map((x) => (x.id === n.id ? { ...x, ...patch } : x));
   switch (n.kind) {
-    case 'quest': {
-      const q = w.quests?.find((x) => x.id === n.id); if (!q) return null;
-      const up = (p: Partial<Quest>) => set({ quests: upd(w.quests, p) });
-      return (
-        <>
-          <Text label="이름" value={q.name} onChange={(name) => up({ name })} />
-          <label>종류<select value={q.kind} onChange={(e) => up({ kind: e.target.value as Quest['kind'] })}><option value="main">메인</option><option value="side">사이드</option></select></label>
-          <Area label="왜 해야 하나" value={q.motive} onChange={(motive) => up({ motive: motive || undefined })} rows={2} />
-          <ConditionField label="시작 조건" value={q.start} world={w} onChange={(start) => up({ start: start ?? { all: [] } })} />
-          {q.stages.map((st, i) => (
-            <fieldset key={i} className="flow-stage"><legend>{i + 1}단계</legend>
-              <Text label="할 일" value={st.objective} onChange={(objective) => up({ stages: q.stages.map((x, j) => (j === i ? { ...x, objective } : x)) })} />
-              <ConditionField label="끝나는 조건" value={st.complete} world={w} completion onChange={(complete) => up({ stages: q.stages.map((x, j) => (j === i ? { ...x, complete: complete ?? { all: [] } } : x)) })} />
-              {q.stages.length > 1 && <button type="button" className="small" onClick={() => up({ stages: q.stages.filter((_, j) => j !== i) })}>🗑 이 단계 지우기</button>}
-            </fieldset>
-          ))}
-          <button type="button" className="small" onClick={() => up({ stages: [...q.stages, { objective: '새 단계', hint: '', complete: { all: [] } }] })}>＋ 단계 더하기</button>
-          <ConditionField label="실패 조건 (선택)" value={q.fail} world={w} optional onChange={(fail) => up({ fail })} />
-        </>
-      );
-    }
+    case 'quest': return <QuestEditor w={w} set={set} id={n.id} />;
     case 'ending': {
       const e = w.endings?.find((x) => x.id === n.id); if (!e) return null;
       const up = (p: Partial<Ending>) => set({ endings: upd(w.endings, p) });
@@ -1100,6 +1081,92 @@ function ChoiceEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string }
       ))}
       <button type="button" className="small" onClick={() => up({ options: [...c.options, { id: freshId(c.options.map((o) => o.id)), text: '새 선택', effects: [] }] })}>＋ 선택 더하기</button>
       <p className="small muted">한 번 고르면 되돌릴 수 없는 선택입니다. 고른 것은 「고름」 조건으로 다른 상자를 엽니다 — 이 상자의 ● 손잡이를 끌어 이으세요.</p>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- 임무 (v0.154: 단계별로 바로 고친다)
+
+function QuestEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string }) {
+  const q = w.quests?.find((x) => x.id === id);
+  const [openStage, setOpenStage] = useState<number | null>(0);
+  if (!q) return null;
+  const up = (p: Partial<Quest>) => set({ quests: (w.quests ?? []).map((x) => (x.id === id ? { ...x, ...p } : x)) });
+  const upSt = (i: number, p: Partial<QuestStage>) => up({ stages: q.stages.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+  // 순서·더하기·지우기는 「n단계 중이면」 조건 번호도 따라 고친다
+  const restage = (stages: QuestStage[], map: (old: number) => number, open: number | null) => { set(restageQuest(w, id, stages, map)); setOpenStage(open); };
+  const move = (i: number, d: -1 | 1) => { const k = i + d; const st = [...q.stages]; [st[i], st[k]] = [st[k]!, st[i]!]; restage(st, (o) => (o === i ? k : o === k ? i : o), k); };
+  const insert = (i: number) => { const st = [...q.stages]; st.splice(i + 1, 0, { objective: '새 단계', hint: '', complete: { all: [] } }); restage(st, (o) => (o > i ? o + 1 : o), i + 1); };
+  const remove = (i: number) => { const st = q.stages.filter((_, j) => j !== i); restage(st, (o) => (o > i ? o - 1 : o === i ? Math.min(i, st.length - 1) : o), null); };
+  const xp = q.rewards?.xp;
+  const opt = (list: { id: string; name: string }[], none: string) => [<option key="" value="">{none}</option>, ...list.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)];
+  return (
+    <>
+      <Text label="이름" value={q.name} onChange={(name) => up({ name })} />
+      <div className="row flow-nums">
+        <label>종류<select value={q.kind} onChange={(e) => up({ kind: e.target.value as Quest['kind'] })}><option value="main">메인</option><option value="side">사이드</option></select></label>
+        <label>유형<select value={q.type ?? ''} onChange={(e) => up({ type: (e.target.value || undefined) as Quest['type'] })}><option value="">(일반)</option>{QUEST_TYPES.map((t) => <option key={t} value={t}>{QUEST_TYPE_LABEL[t]}</option>)}</select></label>
+      </div>
+      <div className="row flow-nums">
+        <label>의뢰인<select value={q.giver ?? ''} onChange={(e) => up({ giver: e.target.value || undefined })}>{opt(w.characters, '없음')}</select></label>
+        <label>대상 인물 (죽으면 실패)<select value={q.target ?? ''} onChange={(e) => up({ target: e.target.value || undefined })}>{opt(w.characters, '없음')}</select></label>
+      </div>
+      <Area label="왜 해야 하나" value={q.motive} onChange={(motive) => up({ motive: motive || undefined })} rows={2} />
+      <ConditionField label="시작 조건" value={q.start} world={w} onChange={(start) => up({ start: start ?? { all: [] } })} />
+
+      <div className="flow-stages">
+        <b className="small">단계 {q.stages.length}개 — 위에서부터 차례로</b>
+        {q.stages.map((st, i) => (
+          <details key={i} className="flow-stage-card" open={openStage === i} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; if (o) setOpenStage(i); else if (openStage === i) setOpenStage(null); }}>
+            <summary><span className="flow-stage-no">{i + 1}</span> {st.objective || '(할 일 없음)'}{isEmptyCond(st.complete) ? ' ⚠' : ''}</summary>
+            <div className="flow-stage-body">
+              <Text label="할 일 (플레이어 수첩에 보임)" value={st.objective} onChange={(objective) => upSt(i, { objective })} />
+              <Area label="GM 힌트 (플레이어에게 안 보임)" value={st.hint} onChange={(hint) => upSt(i, { hint })} rows={2} />
+              <ConditionField label="끝나는 조건" value={st.complete} world={w} completion onChange={(complete) => upSt(i, { complete: complete ?? { all: [] } })} />
+              <ConditionField label="이 단계에서 실패하는 조건 (선택)" value={st.fail} world={w} optional onChange={(fail) => upSt(i, { fail })} />
+              <div className="row flow-nums">
+                <label>고비 — 장면<select value={st.via?.scene ?? ''} onChange={(e) => { const v = { ...st.via, scene: e.target.value || undefined }; upSt(i, { via: v.scene || v.encounter ? v : undefined }); }}>{opt(w.scenes ?? [], '없음')}</select></label>
+                <label>고비 — 전투<select value={st.via?.encounter ?? ''} onChange={(e) => { const v = { ...st.via, encounter: e.target.value || undefined }; upSt(i, { via: v.scene || v.encounter ? v : undefined }); }}>{opt(w.encounters ?? [], '없음')}</select></label>
+              </div>
+              <div className="row flow-stage-tools">
+                <button type="button" className="small" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`${i + 1}단계를 위로`}>↑ 위로</button>
+                <button type="button" className="small" disabled={i === q.stages.length - 1} onClick={() => move(i, 1)} aria-label={`${i + 1}단계를 아래로`}>↓ 아래로</button>
+                <button type="button" className="small" onClick={() => insert(i)}>＋ 아래에 단계 넣기</button>
+                {q.stages.length > 1 && <button type="button" className="small" onClick={() => { if (confirm(`${i + 1}단계 「${st.objective}」를 지울까요?`)) remove(i); }}>🗑 지우기</button>}
+              </div>
+            </div>
+          </details>
+        ))}
+        <button type="button" className="small" onClick={() => insert(q.stages.length - 1)}>＋ 마지막에 단계 더하기</button>
+        <p className="small muted">순서를 바꾸거나 지우면 다른 곳의 「n단계 중이면」 조건 번호도 따라 고칩니다.</p>
+      </div>
+
+      <ConditionField label="언제든 실패하는 조건 (선택)" value={q.fail} world={w} optional onChange={(fail) => up({ fail })} />
+      <div className="row flow-nums">
+        <label>기한 (날 수, 선택)<input type="number" min={1} value={q.timeLimit?.days ?? ''} placeholder="없음" onChange={(e) => up({ timeLimit: e.target.value ? { days: Math.max(1, Number(e.target.value) || 1) } : undefined })} /></label>
+        <label>경험치<select value={typeof xp === 'number' ? 'n' : xp ?? ''} onChange={(e) => { const v = e.target.value; const r = { ...q.rewards }; if (!v) delete r.xp; else r.xp = v === 'n' ? 100 : (v as 'minor' | 'major'); up({ rewards: Object.keys(r).length ? r : undefined }); }}>
+          <option value="">기본</option><option value="minor">작은 보상</option><option value="major">큰 보상</option><option value="n">숫자로</option>
+        </select></label>
+        {typeof xp === 'number' && <label>경험치 값<input type="number" min={0} value={xp} onChange={(e) => up({ rewards: { ...q.rewards, xp: Math.max(0, Number(e.target.value) || 0) } })} /></label>}
+        <label>돈<input type="number" min={0} value={q.rewards?.money ?? ''} placeholder="0" onChange={(e) => { const r = { ...q.rewards }; if (e.target.value) r.money = Math.max(0, Number(e.target.value) || 0); else delete r.money; up({ rewards: Object.keys(r).length ? r : undefined }); }} /></label>
+      </div>
+
+      <fieldset className="flow-stage"><legend>여러 결과 (선택 — 끝낼 때 위에서부터 처음 맞는 것)</legend>
+        {(q.outcomes ?? []).map((o, i) => {
+          const upO = (p: Partial<NonNullable<Quest['outcomes']>[number]>) => up({ outcomes: q.outcomes!.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+          return (
+            <div key={o.id} className="flow-outcome">
+              <Text label={`결과 ${i + 1} 이름`} value={o.name} onChange={(name) => upO({ name })} />
+              <ConditionField label="이 결과가 되는 조건" value={o.when} world={w} onChange={(when) => upO({ when: when ?? { all: [] } })} />
+              <Text label="플레이어에게 보이는 한 줄 (선택)" value={o.text ?? ''} onChange={(text) => upO({ text: text || undefined })} />
+              <EffectsEditor label="이 결과로 일어나는 일" value={o.effects} w={w} onChange={(effects) => upO({ effects })} />
+              <button type="button" className="small" onClick={() => up({ outcomes: q.outcomes!.filter((_, j) => j !== i).length ? q.outcomes!.filter((_, j) => j !== i) : undefined })}>🗑 이 결과 지우기</button>
+            </div>
+          );
+        })}
+        <button type="button" className="small" onClick={() => up({ outcomes: [...(q.outcomes ?? []), { id: freshId((q.outcomes ?? []).map((o) => o.id)), name: '새 결과', when: { all: [] } }] })}>＋ 결과 더하기</button>
+      </fieldset>
+      <p className="small muted">접근법·단서·숨은 진실·보상 아이템은 「임무·플래그·결말」 탭에서 고칩니다.</p>
     </>
   );
 }

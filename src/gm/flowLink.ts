@@ -4,7 +4,7 @@
  *  - 효과로: A의 효과 칸(장면의 끝·선택지·사건 …)에 "B를 세움·시작·펼침"을 더한다 (B가 플래그·장면·전투·카드·임무·지식일 때)
  * 끊기는 그 반대: 조건에서 A를 가리키는 부분을 빼거나, 효과에서 B를 일으키는 것을 뺀다.
  */
-import type { Condition, StoryEffect, WorldPackage } from '../engine/schema';
+import type { Condition, Quest, QuestStage, StoryEffect, WorldPackage } from '../engine/schema';
 import { setLink } from '../engine/locationLinks';
 import { type GEdge, type GNode, START_KEY } from './storyGraph';
 
@@ -366,3 +366,21 @@ export function replaceLeaf(w: WorldPackage, c: Condition, a: GNode, to: Conditi
   if ('not' in c) return { not: replaceLeaf(w, c.not, a, to) };
   return leafPoints(w, c, a) ? to : c;
 }
+
+// ---------------------------------------------------------------- 임무 단계 바꾸기 (v0.154)
+
+/**
+ * 임무의 단계를 바꾸고(순서·더하기·지우기), 세계 어디든 「이 임무가 n단계 중이면」({ questStage, is }) 조건의 번호를 따라 고친다.
+ * map: 옛 단계 번호 → 새 번호 (지운 단계는 가장 가까운 남은 단계로).
+ */
+export function restageQuest(w: WorldPackage, questId: string, stages: QuestStage[], map: (old: number) => number): Partial<WorldPackage> {
+  const fix = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) && x.questStage === questId && typeof x.is === 'number' ? { ...x, is: Math.max(0, Math.min(stages.length - 1, map(x.is))) } : x));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(w)) {
+    if (k === 'manifest' || v === undefined) continue;
+    const nv = k === 'quests' ? fix((v as Quest[]).map((q) => (q.id === questId ? { ...q, stages } : q))) : fix(v);
+    if (JSON.stringify(nv) !== JSON.stringify(v)) out[k] = nv;
+  }
+  return out as Partial<WorldPackage>;
+}
+

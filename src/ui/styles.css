@@ -1406,6 +1406,15 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-nums label.check { flex: 1 1 100%; flex-direction: row; align-items: center; }
 .flow-nums select { width: 100%; max-width: 100%; min-width: 0; }
 .flow-tags { flex-wrap: wrap; gap: 4px 12px; }
+.flow-stages { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
+.flow-stage-card { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); min-width: 0; }
+.flow-stage-card > summary { cursor: pointer; padding: 8px 10px; min-height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.flow-stage-card[open] > summary { border-bottom: 1px dashed var(--border); font-weight: 600; }
+.flow-stage-no { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 12px; background: var(--accent); color: var(--bg); font-size: .8rem; font-weight: 700; flex: none; }
+.flow-stage-body { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; min-width: 0; }
+.flow-stage-body > label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.flow-stage-tools { flex-wrap: wrap; gap: 6px; }
+.flow-outcome { display: flex; flex-direction: column; gap: 6px; border-bottom: 1px dashed var(--border); padding-bottom: 6px; margin-bottom: 6px; }
 .flow-gimmick-add { flex-wrap: nowrap; gap: 6px; min-width: 0; }
 .flow-gimmick-add select { flex: 0 1 auto; min-width: 0; max-width: 50%; }
 .flow-gimmick-add button { flex: 1 1 auto; min-width: 0; }

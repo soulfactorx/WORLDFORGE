@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { aetheriaWorld } from '../data/official/aetheria';
 import { sampleWorld } from '../data/sample-world';
 import type { WorldPackage } from '../engine/schema';
-import { edgeSlots, getCond, linkOptions, replaceLeaf, setCond, sourceWays, unlink } from './flowLink';
+import { edgeSlots, getCond, linkOptions, replaceLeaf, restageQuest, setCond, sourceWays, unlink } from './flowLink';
 import { buildStoryGraph, layoutGraph, START_KEY } from './storyGraph';
 import { gimmickScene } from '../engine/gimmick';
 
@@ -181,5 +181,22 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     // 규칙의 추가 조건 칸에도 잇는다
     const r = linkOptions(w, node(w, 'quest:quest/a'), node(w, 'rule:rule/r')).find((o) => o.label.includes('추가 조건'))!;
     expect(({ ...w, ...r.apply(w) }).rules![0]!.requires).toEqual({ questDone: 'quest/a' });
+  });
+
+  it('임무 단계 바꾸기 (v0.154): 순서·넣기·지우기에 「n단계 중이면」 조건 번호가 따라간다', () => {
+    const st = (o: string) => ({ objective: o, hint: '', complete: { all: [] } });
+    const w: WorldPackage = { ...base,
+      quests: [{ id: 'quest/a', name: 'A', kind: 'main', start: { all: [] }, stages: [st('하나'), st('둘'), st('셋')] }],
+      endings: [{ id: 'ending/x', name: 'x', condition: { all: [{ questStage: 'quest/a', is: 1 }, { questStage: 'quest/other', is: 1 }] }, epilogue: '' }] };
+    const cond = (p: Partial<WorldPackage>) => (p.endings ?? w.endings)![0]!.condition;
+    // 둘을 위로: 1 → 0
+    const q = w.quests![0]!;
+    const up = restageQuest(w, 'quest/a', [q.stages[1]!, q.stages[0]!, q.stages[2]!], (o) => (o === 1 ? 0 : o === 0 ? 1 : o));
+    expect(cond(up)).toEqual({ all: [{ questStage: 'quest/a', is: 0 }, { questStage: 'quest/other', is: 1 }] });
+    expect(up.quests![0]!.stages.map((x) => x.objective)).toEqual(['둘', '하나', '셋']);
+    // 첫 단계 아래에 넣기: 1 → 2
+    expect(cond(restageQuest(w, 'quest/a', [q.stages[0]!, st('새'), q.stages[1]!, q.stages[2]!], (o) => (o > 0 ? o + 1 : o)))).toEqual({ all: [{ questStage: 'quest/a', is: 2 }, { questStage: 'quest/other', is: 1 }] });
+    // 둘을 지우기: 그 자리를 가리키던 것은 가장 가까운 남은 단계로
+    expect(cond(restageQuest(w, 'quest/a', [q.stages[0]!, q.stages[2]!], (o) => (o > 1 ? o - 1 : o === 1 ? 1 : o)))).toEqual({ all: [{ questStage: 'quest/a', is: 1 }, { questStage: 'quest/other', is: 1 }] });
   });
 });
