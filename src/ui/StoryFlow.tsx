@@ -2,7 +2,7 @@
  * 이야기 흐름도 (v0.142): 임무·분기·조건으로 열리는 것을 한 장의 그림으로. 누르면 옆(휴대폰은 아래)에서 자세히 보고 바로 고친다.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Character, Condition, Ending, Location, Quest, StoryEffect, WorldPackage } from '../engine/schema';
+import type { Character, Condition, CustomMonster, Ending, ItemDef, Location, Quest, StoryEffect, WorldPackage } from '../engine/schema';
 import { setLink } from '../engine/locationLinks';
 import { buildStoryGraph, type FlowDir, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
 import { edgeSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
@@ -16,17 +16,17 @@ import { EffectsEditor } from './WorldForms';
 
 type SetW = (patch: Partial<WorldPackage>) => void;
 /** 전체 편집 탭 */
-export type FlowTab = 'quests' | 'story' | 'scenes' | 'gimmicks' | 'encounters' | 'rules' | 'knowledge' | 'locations' | 'characters';
-const TAB_OF: Partial<Record<NodeKind, FlowTab>> = { quest: 'quests', ending: 'quests', flag: 'quests', card: 'story', choice: 'story', arc: 'story', event: 'story', clock: 'story', phase: 'story', scene: 'scenes', gimmick: 'gimmicks', encounter: 'encounters', rule: 'rules', claim: 'knowledge', location: 'locations', character: 'characters' };
-const TAB_NAME: Record<FlowTab, string> = { quests: '임무·플래그·결말', story: '이야기 흐름', scenes: '장면', gimmicks: '함정·퍼즐', encounters: '조우', rules: '세계 규칙', knowledge: '지식', locations: '장소', characters: '인물' };
-const MAIN_KINDS: NodeKind[] = ['quest', 'ending', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock', 'rule', 'flag', 'claim', 'phase', 'location', 'character'];
+export type FlowTab = 'quests' | 'story' | 'scenes' | 'gimmicks' | 'encounters' | 'rules' | 'knowledge' | 'locations' | 'characters' | 'items';
+const TAB_OF: Partial<Record<NodeKind, FlowTab>> = { quest: 'quests', ending: 'quests', flag: 'quests', card: 'story', choice: 'story', arc: 'story', event: 'story', clock: 'story', phase: 'story', scene: 'scenes', gimmick: 'gimmicks', encounter: 'encounters', rule: 'rules', claim: 'knowledge', location: 'locations', character: 'characters', item: 'items', monster: 'encounters' };
+const TAB_NAME: Record<FlowTab, string> = { quests: '임무·플래그·결말', story: '이야기 흐름', scenes: '장면', gimmicks: '함정·퍼즐', encounters: '조우', rules: '세계 규칙', knowledge: '지식', locations: '장소', characters: '인물', items: '아이템·상점' };
+const MAIN_KINDS: NodeKind[] = ['quest', 'ending', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock', 'rule', 'flag', 'claim', 'phase', 'location', 'character', 'item', 'monster'];
 const DIR_KEY = 'worldforge.flow.dir';
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab: (t: FlowTab) => void }) {
   const graph = useMemo(() => buildStoryGraph(w), [w]);
   const counts = useMemo(() => { const m = new Map<NodeKind, number>(); for (const n of graph.nodes) m.set(n.kind, (m.get(n.kind) ?? 0) + 1); return m; }, [graph]);
-  const [hidden, setHidden] = useState<globalThis.Set<NodeKind>>(() => new globalThis.Set<NodeKind>(graph.nodes.length > 40 ? ['claim', 'phase', 'location', 'character'] : ['claim', 'phase'])); // 큰 세계는 장소·인물을 처음엔 숨긴다
+  const [hidden, setHidden] = useState<globalThis.Set<NodeKind>>(() => new globalThis.Set<NodeKind>(graph.nodes.length > 40 ? ['claim', 'phase', 'location', 'character', 'item', 'monster'] : ['claim', 'phase'])); // 큰 세계는 장소·인물을 처음엔 숨긴다
   const [q, setQ] = useState('');
   const empty = graph.nodes.every((n) => n.kind === 'start' || isLane(n.key)); // 장소·인물만 있으면 아직 이야기는 빈 것
   // 빈 세계: 시작 상자를 골라 둔다 — 옆 창에 「처음부터 열리는 …」 만들기가 바로 보인다
@@ -198,7 +198,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               <li><b>▶ 플레이 시작</b>에서 처음 열릴 것을 만드세요 — 첫 임무·갈래 카드·결정적 선택.</li>
               <li>만든 상자를 고르고 <b>「＋ 이것 다음에 열리는 임무」</b>로 이야기를 이어 가고, 갈라지는 곳은 선택지·카드의 갈림길로 만드세요.</li>
               <li>끝에는 <b>「＋ 이것으로 이르는 결말」</b>. 상자의 ● 손잡이를 끌어 잇고, 화살표를 눌러 조건을 고칩니다.</li>
-              <li><b>＋ 장소 · ＋ 인물</b>은 흐름 아래 띠에 놓입니다. 장소를 이야기 상자로 끌면 「여기 있으면 열림」 「여기서 일어남」이 됩니다.</li>
+              <li><b>＋ 장소 · ＋ 인물 · ＋ 아이템 · ＋ 적</b>은 흐름 아래 띠에 놓입니다. 장소를 이야기 상자로 끌면 「여기 있으면 열림」 「여기서 일어남」이 됩니다.</li>
               <li>다 되면 <b>🧪 시뮬레이션</b>으로 끝까지 가 보세요.</li>
             </ol>
             <div className="row flow-empty-actions">{startCreators(w, set, setSel).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}</div>
@@ -288,7 +288,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               </defs>
               <rect className="flow-bg" x={0} y={0} width={svgW} height={svgH}
                 onPointerDown={(e) => { const c = canvasRef.current; if (e.pointerType !== 'mouse' || e.button !== 0 || !c) return; (e.currentTarget as Element).setPointerCapture?.(e.pointerId); panRef.current = { sx: e.clientX, sy: e.clientY, sl: c.scrollLeft, st: c.scrollTop, moved: false }; }} />
-              {lay.nodes.some((n) => n.layer === -2) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -2).map((n) => n.y)) - 12} className="flow-lane">📍 장소 · 👤 인물 — 눌러서 고치고, 끌어서 이야기 상자와 이으면 「여기 있으면」 「여기서 일어나게」가 됩니다</text>}
+              {lay.nodes.some((n) => n.layer === -2) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -2).map((n) => n.y)) - 12} className="flow-lane">📍 장소 · 👤 인물 · 🎒 아이템 · 👾 적 — 눌러서 고치고, 끌어서 이야기 상자와 이으면 「여기 있으면」 「가지고 있으면」 「쓰러뜨리면」이 됩니다</text>}
               {lay.nodes.some((n) => n.layer === -1) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -1).map((n) => n.y)) - 12} className="flow-lane">따로 있는 것 (이어진 조건이 없다)</text>}
               {shown.edges.map((e, i) => ((isLane(e.from) || isLane(e.to)) && !(sel && (e.from === sel || e.to === sel)) && !(edgeSel?.from === e.from && edgeSel.to === e.to)) ? null : <Edge key={i} e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={(!!sel && (e.from === sel || e.to === sel)) || (edgeSel?.from === e.from && edgeSel.to === e.to)} dim={!!sel && !(e.from === sel || e.to === sel)} onPick={() => { if (!drag && !moveRef.current) setEdgeSel(e); }} />)}
               {/* 겹치면 위에: 옮긴 것 < 고른 것 < 끄는 것 */}
@@ -471,7 +471,19 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
         {n.kind === 'location' && <>
           <button type="button" onClick={() => { const c = newPerson(w, n.id); set({ characters: [...w.characters, c] }); onPick(`character:${c.id}`); }}>＋ 이곳에 있는 인물</button>
           <button type="button" onClick={() => { const l = newPlace(w, n.id); set({ locations: l.locations }); onPick(`location:${l.id}`); }}>＋ 이곳과 길로 이어진 장소</button>
+          <button type="button" onClick={() => { const it = newItem(w); set({ items: [...(w.items ?? []), it], locations: w.locations.map((l) => (l.id === n.id ? { ...l, pickups: [...(l.pickups ?? []), { itemId: it.id, n: 1, hint: '' }] } : l)) }); onPick(`item:${it.id}`); }}>＋ 이곳에서 주울 아이템</button>
         </>}
+        {n.kind === 'encounter' && <button type="button" onClick={() => { const m = newMonster(w); set({ monsters: [...(w.monsters ?? []), m], encounters: (w.encounters ?? []).map((e) => (e.id === n.id ? { ...e, enemies: [...e.enemies, { monsterId: m.id, zone: 3 }] } : e)) }); onPick(`monster:${m.id}`); }}>＋ 이 전투에 나오는 새 적</button>}
+        {n.kind === 'monster' && <button type="button" onClick={() => {
+          const id = newId('enc/new-', w.encounters ?? []);
+          set({ encounters: [...(w.encounters ?? []), { id, name: `${n.name}와(과)의 싸움`, locationId: w.start.locationId || (w.locations[0]?.id ?? ''), enemies: [{ monsterId: n.id, zone: 2 }], trigger: `${n.name}이(가) 길을 막아선다` }] });
+          onPick(`encounter:${id}`);
+        }}>＋ 이 적이 나오는 전투</button>}
+        {(n.kind === 'item' || n.kind === 'monster') && (() => {
+          // 이것을 얻으면/쓰러뜨리면 열리는 임무
+          const cond: Condition = n.kind === 'item' ? { hasItem: n.id } : { defeated: n.id };
+          return <button type="button" onClick={() => { const id = newId('quest/next-', w.quests ?? []); set(newQuest(w, id, `${n.name} ${n.kind === 'item' ? '얻은 뒤' : '쓰러뜨린 뒤'}`, 'side', cond)); onPick(`quest:${id}`); }}>{n.kind === 'item' ? '＋ 이것을 가지면 열리는 임무' : '＋ 이것을 쓰러뜨리면 열리는 임무'}</button>;
+        })()}
         {n.kind === 'start' && startCreators(w, set, onPick).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}
         {after && <button type="button" onClick={() => {
           const id = newId('quest/next-', w.quests ?? []);
@@ -509,6 +521,11 @@ function newPlace(w: WorldPackage, near?: string): { id: string; locations: Loca
   if (to) locations = setLink(locations, id, to, true);
   return { id, locations };
 }
+/** 새 아이템·적 (v0.148): 「아이템·상점」「조우」 탭의 새 항목과 같은 꼴 */
+function newItem(w: WorldPackage): ItemDef { return { id: nextId('item/new-', w.items ?? []), name: '새 물건', description: '', kind: 'misc', price: 10 }; }
+function newMonster(w: WorldPackage): CustomMonster {
+  return { id: nextId('mon/new-', w.monsters ?? []), name: '새 적', look: '', role: 'brute', cr: '1', xp: 200, ac: 13, hp: 30, abilities: { str: 14, dex: 12, con: 14, int: 8, wis: 10, cha: 8 }, attacks: [{ name: '공격', kind: 'melee', toHit: 4, damage: '1d8', bonus: 2, type: '참격' }] };
+}
 function newPerson(w: WorldPackage, at: string): Character {
   return { id: nextId('npc/new-', w.characters), name: '새 인물', appearance: '', personality: '', speech: '', locationId: at, improvisation: 'minor' };
 }
@@ -523,6 +540,8 @@ function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void):
     } },
     { label: '＋ 장소', run: () => { const l = newPlace(w); set({ locations: l.locations }); onPick(`location:${l.id}`); } },
     { label: '＋ 인물', run: () => { const c = newPerson(w, w.start.locationId); set({ characters: [...w.characters, c] }); onPick(`character:${c.id}`); } },
+    { label: '＋ 아이템', run: () => { const it = newItem(w); set({ items: [...(w.items ?? []), it] }); onPick(`item:${it.id}`); } },
+    { label: '＋ 적', run: () => { const m = newMonster(w); set({ monsters: [...(w.monsters ?? []), m] }); onPick(`monster:${m.id}`); } },
     { label: '＋ 처음부터 펼쳐지는 갈래 카드', run: () => {
       const id = nextId('card/new-', w.storylets ?? []);
       set({ storylets: [...(w.storylets ?? []), { id, title: '새 갈래 카드', situation: '상황을 적어 주세요', tags: ['main'], options: [{ id: 'a', label: '첫째 길' }, { id: 'b', label: '둘째 길' }] }] }); onPick(`card:${id}`);
@@ -781,6 +800,42 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
           <Area label="생김새" value={c.appearance} onChange={(appearance) => up({ appearance })} rows={2} />
           <Area label="성격" value={c.personality} onChange={(personality) => up({ personality })} rows={2} />
           <Area label="말투" value={c.speech} onChange={(speech) => up({ speech })} rows={2} />
+        </>
+      );
+    }
+    case 'item': {
+      const it = w.items?.find((x) => x.id === n.id);
+      if (!it) return <p className="small muted">앱의 기본 아이템입니다 — 이 세계의 아이템이 아니어서 여기서는 고치지 않습니다.</p>;
+      const up = (p: Partial<ItemDef>) => set({ items: (w.items ?? []).map((x) => (x.id === it.id ? { ...x, ...p } : x)) });
+      return (
+        <>
+          <Text label="이름" value={it.name} onChange={(name) => up({ name })} />
+          <label>종류<select value={it.kind} onChange={(e) => up({ kind: e.target.value as ItemDef['kind'] })}>
+            {([['consumable', '소모품'], ['weapon', '무기'], ['armor', '갑옷'], ['shield', '방패'], ['trinket', '장신구'], ['scroll', '비급·주문서'], ['key', '열쇠'], ['treasure', '보물'], ['misc', '물건']] as const).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select></label>
+          <Area label="설명" value={it.description} onChange={(description) => up({ description })} rows={2} />
+          <label>값<input type="number" min={0} value={it.price ?? 0} onChange={(e) => up({ price: Math.max(0, Number(e.target.value) || 0) })} /></label>
+          <p className="small muted">무기 보너스·회복·카드 같은 자세한 성능은 「아이템·상점」 탭에서 고칩니다.</p>
+        </>
+      );
+    }
+    case 'monster': {
+      const m = w.monsters?.find((x) => x.id === n.id);
+      if (!m) return <p className="small muted">앱의 기본 적입니다 — 이 세계의 적이 아니어서 여기서는 고치지 않습니다. 「조우」 탭에서 이 세계만의 적을 만들 수 있습니다.</p>;
+      const up = (p: Partial<CustomMonster>) => set({ monsters: (w.monsters ?? []).map((x) => (x.id === m.id ? { ...x, ...p } : x)) });
+      return (
+        <>
+          <Text label="이름" value={m.name} onChange={(name) => up({ name })} />
+          <Area label="외형·성격 (전투 서술에 쓰임)" value={m.look} onChange={(look) => up({ look })} rows={2} />
+          <label>역할<select value={m.role} onChange={(e) => up({ role: e.target.value as CustomMonster['role'] })}>
+            {([['minion', '졸개'], ['brute', '돌격'], ['skirmisher', '유격'], ['artillery', '원거리'], ['controller', '방해'], ['leader', '지휘'], ['boss', '우두머리']] as const).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select></label>
+          <div className="row flow-nums">
+            <label>HP<input type="number" min={1} value={m.hp} onChange={(e) => up({ hp: Math.max(1, Number(e.target.value) || 1) })} /></label>
+            <label>AC<input type="number" min={1} value={m.ac} onChange={(e) => up({ ac: Math.max(1, Number(e.target.value) || 1) })} /></label>
+            <label>경험치<input type="number" min={0} value={m.xp} onChange={(e) => up({ xp: Math.max(0, Number(e.target.value) || 0) })} /></label>
+          </div>
+          <p className="small muted">능력치·공격·기술은 「조우」 탭의 「이 세계만의 적」에서 고칩니다.</p>
         </>
       );
     }
