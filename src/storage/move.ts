@@ -58,7 +58,7 @@ export async function exportMove(world: WorldPackage, card?: CharxBundle, passph
   cards = cards.filter((c, i) => cards.findIndex((x) => x.hash === c.hash) === i);
   const w: WorldPackage = { ...world, manifest: { ...world.manifest, private: { ...world.manifest.private, cardHash: world.manifest.private.cardHash ?? cards[0]!.hash } } };
   const hashes = cards.map((c) => c.hash);
-  return packMove(w, { lock: 'card', cardName: cards.map((c) => c.name).join(' · '), cards, key: (salt) => keyFor(hashes.length === 1 ? hashes[0]! : hashes, salt), withAssets: false });
+  return packMove(w, { lock: 'card', cardName: cards.map((c) => c.name).join(' · '), cards, key: (salt) => keyFor(hashes.length === 1 ? hashes[0]! : hashes, salt), withAssets: true }); // v0.157: 그림도 담는다 (여전히 원본 카드가 있어야 열린다) — 내가 올린 그림이 빠지지 않게
 }
 
 async function packMove(w: WorldPackage, o: { lock: 'card' | 'pass'; cardName: string; cards?: MoveHeader['cards']; key: (salt: Uint8Array) => Promise<CryptoKey>; withAssets: boolean }): Promise<Blob> {
@@ -73,7 +73,7 @@ async function packMove(w: WorldPackage, o: { lock: 'card' | 'pass'; cardName: s
     files[file] = new Uint8Array(await a.blob.arrayBuffer());
     art.push({ id, kind: a.kind, label: a.label, tags: a.tags, ...(a.gender ? { gender: a.gender } : {}), mime: a.blob.type || 'image/webp', file });
   }
-  // 카드가 없는 세계는 저장된 이미지도 담는다
+  // 저장된 이미지를 담는다 (v0.157: 카드로 잠근 파일도 — 카드 그림을 다시 읽지 않아도 되고, 카드에 없는 내 그림도 함께 간다)
   const assets: NonNullable<MovePayload['assets']> = [];
   if (o.withAssets) {
     for (const a of w.assets ?? []) {
@@ -152,6 +152,7 @@ export async function importMove(moveFile: Blob, cardFiles: Blob | null | { blob
 
   const items: { id: string; read: () => Promise<Blob> }[] = [];
   let missing = 0;
+  const packed = new Set((payload.assets ?? []).map((a) => a.id));
   if (bundle) {
     // 카드 이미지는 그 이미지를 가져온 카드 파일에서 다시 읽는다 (이름·크기로 맞춤, v0.53: 카드 여러 장)
     const fileOf = (b: CharxBundle) => [...b.assets.map((a) => ({ name: a.name, size: a.size, read: a.read })), ...(b.cover ? [{ name: 'cover', size: b.cover.size, read: async () => b.cover! }] : [])];
@@ -159,7 +160,7 @@ export async function importMove(moveFile: Blob, cardFiles: Blob | null | { blob
     const owner = new Map<string, string>();
     for (const s of sourcesOf(world)) for (const id of s.ids?.assets ?? []) owner.set(id, s.hash);
     for (const a of world.assets ?? []) {
-      if (a.id.startsWith('stock.') || a.id.startsWith('user.')) continue;
+      if (a.id.startsWith('stock.') || a.id.startsWith('user.') || packed.has(a.id)) continue; // 파일에 담겨 온 것은 그것을 쓴다
       const pool = owner.has(a.id) ? byHash.get(owner.get(a.id)!) ?? [] : [...byHash.values()].flat();
       const src = pool.find((s) => s.name === a.name && s.size === a.size) ?? pool.find((s) => s.name === a.name);
       if (src) items.push({ id: a.id, read: src.read }); else missing++;

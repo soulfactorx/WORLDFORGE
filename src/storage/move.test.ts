@@ -20,12 +20,14 @@ describe('개인 세계 기기 간 이동 (.wfmove)', () => {
         { id: 'a9', name: 'cover', kind: 'cover', tags: [], mime: 'image/jpeg', size: 300 },
         { id: 'stock.knight-m--0', name: 's', kind: 'character', tags: ['default'], mime: 'image/svg+xml', size: 0 },
         { id: 'user.me1--1', name: 'm', kind: 'scene', tags: [], mime: 'image/webp', size: 0 },
+        // v0.157: 카드에 없는 내 그림 (이 세계에 직접 올린 것) — 예전에는 옮길 때 빠졌다
+        { id: 'own1', name: '내가 올린 그림.png', kind: 'scene', tags: [], mime: 'image/png', size: 3 },
       ],
     };
     await db.userArt.put({ id: 'me1', kind: 'scene', label: '내 정원', tags: ['정원'], blob: new Blob([new Uint8Array([5, 5])], { type: 'image/webp' }), createdAt: 1 });
     await db.saves.put({ id: 's1', name: '세이브', packageId: 'card.move', packageVersion: '0.1.0', createdAt: 1, updatedAt: 2 });
     await db.events.bulkPut([{ saveId: 's1', seq: 0, turn: 0, event: { type: 'narration', text: '시작' } }, { saveId: 's1', seq: 1, turn: 1, event: { type: 'narration', text: '다음' } }]);
-    await storeAssets('card.move', [{ id: 'a1', read: () => b.assets[1]!.read() }]);
+    await storeAssets('card.move', [{ id: 'a1', read: () => b.assets[1]!.read() }, { id: 'own1', read: async () => new Blob([new Uint8Array([7, 7, 7])], { type: 'image/png' }) }]);
 
     const file = await exportMove(world);
     expect((await readMoveHeader(file)).worldName).toBe(world.manifest.name);
@@ -34,7 +36,8 @@ describe('개인 세계 기기 간 이동 (.wfmove)', () => {
 
     await expect(importMove(file, makeCharx(0, 2, { lore: [{ comment: '다른', content: '다른 카드' }] }), 'other.charx')).rejects.toThrow('다른 카드');
     const r = await importMove(file, card, 'w.charx');
-    expect(r).toMatchObject({ saves: 1, images: 2 });
+    expect(r).toMatchObject({ saves: 1, images: 3 });
+    expect((await assetBlob('card.move', 'own1'))!.size).toBe(3);
     expect((await db.packages.get('card.move@0.1.0'))!.world.manifest.private!.cardHash).toBe(b.fingerprint);
     expect((await assetBlob('card.move', 'a1'))!.size).toBe(b.assets[1]!.size);
     expect((await assetBlob('card.move', 'a9'))!.size).toBe(300);
