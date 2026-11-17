@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { aetheriaWorld } from '../data/official/aetheria';
 import { sampleWorld } from '../data/sample-world';
 import type { WorldPackage } from '../engine/schema';
-import { nodeSim, previewActs, simActs, simExplore, simReplay, simStart } from './flowSim';
+import { nodeSim, parseSetting, previewActs, settingStep, settingValue, simActs, simExplore, simReplay, simSet, simStart } from './flowSim';
+import { traitsFor } from '../engine/traits';
 import { buildStoryGraph } from './storyGraph';
 
 const w: WorldPackage = { ...sampleWorld,
@@ -71,6 +72,28 @@ describe('흐름도 시뮬레이션 (v0.145)', () => {
     expect(t['opt:light']!.endings['ending:ending/light']).toBe(t['opt:light']!.runs);
     expect(t['opt:dark']!.endings['ending:ending/dark']).toBe(t['opt:dark']!.runs);
     expect(t['opt:light']!.runs + t['opt:dark']!.runs).toBe(30);
+  });
+
+  it('성향·관계·평판·수치를 정해 시험한다 · 다시 돌려도 같고, 자동 탐색은 그 값에서 시작 (v0.161)', async () => {
+    const ax = traitsFor(w)[0]!;
+    const npc = w.characters[0]!;
+    const tw: WorldPackage = { ...w, quests: [], choices: [], endings: [{ id: 'ending/saint', name: '성자', condition: { all: [{ trait: ax.id, gte: 60 }, { relationship: npc.id, axis: 'trust', gte: 50 }] }, epilogue: '' }] };
+    const g = buildStoryGraph(tw);
+    let s = simStart(tw).state;
+    expect(s.ending).toBeUndefined();
+    s = simSet(tw, s, { kind: 'trait', id: ax.id, value: 70 }).state;
+    expect(settingValue(tw, s, { kind: 'trait', id: ax.id })).toBe(70);
+    expect(s.ending).toBeUndefined(); // 관계가 아직
+    const step = settingStep({ kind: 'rel', id: npc.id, axis: 'trust', value: 55 });
+    expect(parseSetting(step)).toEqual({ kind: 'rel', id: npc.id, axis: 'trust', value: 55 });
+    s = simSet(tw, s, parseSetting(step)!).state;
+    expect(settingValue(tw, s, { kind: 'rel', id: npc.id, axis: 'trust' })).toBe(55);
+    expect(s.ending).toBe('ending/saint');
+    const prefix = [settingStep({ kind: 'trait', id: ax.id, value: 70 }), step];
+    expect(simReplay(tw, g, prefix).state.ending).toBe('ending/saint');
+    const r = await simExplore(tw, g, { runs: 5, seed: 1, prefix });
+    expect(r.endings['ending:ending/saint']).toBe(5);
+    expect(r.pathTo['ending:ending/saint']!.slice(0, 2)).toEqual(prefix);
   });
 });
 

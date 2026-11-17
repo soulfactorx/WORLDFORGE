@@ -4,7 +4,9 @@
  *  - 열린 상자를 눌러 "어떻게 되었다"를 고르면(임무 완료·선택지·장면의 끝·전투 승패…) 사건과 효과를 넣고 엔진 한 단계를 돌린다
  *  - 자동 탐색: 무작위로 여러 번 끝까지 해 보고 — 어느 결말에 몇 번 이르는지, 한 번도 열리지 않는 상자, 결말 없이 막히는 길을 찾는다
  */
-import { evalCondition } from '../engine/scenario';
+import { evalCondition, varLabel, varValue } from '../engine/scenario';
+import { relationshipOf, reputationOf } from '../engine/relationship';
+import { traitsFor, traitValue } from '../engine/traits';
 import type { Condition, WorldPackage } from '../engine/schema';
 import type { GameEvent } from '../engine/state/events';
 import type { GameState } from '../engine/state/state';
@@ -237,7 +239,52 @@ export function previewActs(w: WorldPackage, s: GameState, g: StoryGraph, n: GNo
   });
 }
 
-/** 한 일 기록: "상자키|할일id" · "move|장소ID" */
+// ---------------------------------------------------------------- 성향·관계·평판·수치 정하기 (v0.161)
+
+/** 시험으로 정하는 값: 성향 축 · 인물 관계 축 · 세력 평판 · 세계 수치 */
+export interface SimSetting { kind: 'trait' | 'rel' | 'rep' | 'var'; id: string; axis?: string; value: number }
+/** 경로 한 걸음: "set|trait:good_evil=40" · "set|rel:npc/mina:trust=60" · "set|rep:fac/x=-20" · "set|var:security=70" */
+export const settingStep = (st: SimSetting) => `set|${st.kind}:${st.id}${st.axis ? `:${st.axis}` : ''}=${st.value}`;
+/** 같은 값을 다시 정하는 걸음인가 (마지막 걸음을 바꿔 끼우기용) */
+export const settingKey = (step: string) => (step.startsWith('set|') ? step.slice(0, step.lastIndexOf('=')) : null);
+export function parseSetting(step: string): SimSetting | null {
+  const m = /^set\|(trait|rel|rep|var):(.+)=(-?\d+(?:\.\d+)?)$/.exec(step);
+  if (!m) return null;
+  const kind = m[1] as SimSetting['kind'], rest = m[2]!, value = Number(m[3]);
+  if (kind === 'rel') { const i = rest.lastIndexOf(':'); return { kind, id: rest.slice(0, i), axis: rest.slice(i + 1), value }; }
+  return { kind, id: rest, value };
+}
+/** 지금 값 */
+export function settingValue(w: WorldPackage, s: GameState, st: Omit<SimSetting, 'value'>): number {
+  if (st.kind === 'trait') return traitValue(w, s.player.sheet, st.id);
+  if (st.kind === 'rel') return (relationshipOf(w, s.relationships, st.id) as unknown as Record<string, number>)[st.axis!] ?? 0;
+  if (st.kind === 'rep') return reputationOf(w, s.reputation ?? {}, st.id);
+  return varValue(w, s, st.id);
+}
+/** 값을 정한다 (그 값이 되도록 사건을 넣고 엔진 한 단계 — 이 값으로 열리는 것이 있으면 열린다) */
+export function simSet(w: WorldPackage, s: GameState, st: SimSetting): LabResult {
+  return labRun(w, s, (s2) => {
+    const cur = settingValue(w, s2, st);
+    const v = Math.round(st.value);
+    if (v === cur) return [];
+    if (st.kind === 'trait') {
+      const ax = traitsFor(w).find((t) => t.id === st.id);
+      return [{ type: 'trait_changed', trait: st.id, value: v, delta: v - cur, name: ax?.name ?? st.id, label: `${v}`, reason: '시험 설정' }];
+    }
+    if (st.kind === 'rel') {
+      const npc = w.characters.find((c) => c.id === st.id);
+      return [{ type: 'relationship_changed', npcId: st.id, delta: { [st.axis!]: v - cur }, reason: '시험 설정', name: npc?.name ?? st.id, base: relationshipOf(w, s2.relationships, st.id) }];
+    }
+    if (st.kind === 'rep') {
+      const f = w.factions?.find((x) => x.id === st.id);
+      return [{ type: 'reputation_changed', factionId: st.id, name: f?.name ?? st.id, delta: v - cur, reason: '시험 설정' }];
+    }
+    const def = w.vars?.find((x) => x.id === st.id);
+    return def ? [{ type: 'var_changed', varId: st.id, value: v, name: def.name, label: varLabel(def, v) }] : [];
+  });
+}
+
+/** 한 일 기록: "상자키|할일id" · "move|장소ID" · "set|…" (값 정하기) */
 export type SimPath = string[];
 
 export function simReplay(w: WorldPackage, g: StoryGraph, path: SimPath): { state: GameState; lines: string[]; done: number } {
@@ -247,6 +294,7 @@ export function simReplay(w: WorldPackage, g: StoryGraph, path: SimPath): { stat
   for (const step of path) {
     const [k, id] = [step.slice(0, step.lastIndexOf('|')), step.slice(step.lastIndexOf('|') + 1)];
     if (k === 'move') { const r = simMove(w, state, id); if (r.error) break; state = r.state; lines.push(...r.lines); done++; continue; }
+    if (k === 'set') { const st = parseSetting(step); const r = st ? simSet(w, state, st) : null; if (!r || r.error) break; state = r.state; lines.push(...r.lines); done++; continue; }
     const n = g.nodes.find((x) => x.key === k);
     const act = n && simActs(w, state, n).find((a) => a.id === id);
     if (!act) break;
@@ -281,7 +329,7 @@ export interface ExploreReport {
 function rng(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const SKIP_NEVER = new Set(['flag', 'claim', 'phase', 'start', 'rule', 'clock']);
 
-export async function simExplore(w: WorldPackage, g: StoryGraph, opts: { runs?: number; steps?: number; seed?: number; onProgress?: (done: number, total: number) => void; cancelled?: () => boolean } = {}): Promise<ExploreReport> {
+export async function simExplore(w: WorldPackage, g: StoryGraph, opts: { runs?: number; steps?: number; seed?: number; onProgress?: (done: number, total: number) => void; cancelled?: () => boolean; /** 모든 판의 시작에 먼저 하는 걸음 (v0.161: 정해 둔 성향·관계 등) */ prefix?: SimPath } = {}): Promise<ExploreReport> {
   const runs = opts.runs ?? 100, steps = opts.steps ?? 120;
   const rand = rng(opts.seed ?? 7);
   const touched = new Set<string>();
@@ -290,12 +338,13 @@ export async function simExplore(w: WorldPackage, g: StoryGraph, opts: { runs?: 
   let deadEnds = 0, tooLong = 0, totalSteps = 0, finished = 0;
   let deadPath: SimPath | undefined;
   const byChoice: ExploreReport['byChoice'] = {};
-  const start = simStart(w);
+  const prefix = opts.prefix ?? [];
+  const start = prefix.length ? simReplay(w, g, prefix) : simStart(w);
   const mark = (s: GameState) => { for (const n of g.nodes) { const st = nodeSim(w, s, n).st; if (st !== 'locked' && st !== 'off' && st !== 'none') touched.add(n.key); } };
   for (let r = 0; r < runs; r++) {
     if (opts.cancelled?.()) break;
     let s = start.state;
-    const path: SimPath = [];
+    const path: SimPath = [...prefix];
     mark(s);
     let ended = false;
     for (let i = 0; i < steps; i++) {
@@ -313,9 +362,9 @@ export async function simExplore(w: WorldPackage, g: StoryGraph, opts: { runs?: 
       s = res.state; path.push(`${chosen.key}|${chosen.a.id}`);
       mark(s);
     }
-    totalSteps += path.length;
+    totalSteps += path.length - prefix.length;
     // 결정적 선택·갈래 카드의 갈림길을 고른 판마다 그 판의 끝을 센다
-    const outcome = s.ending ? `ending:${s.ending}` : !ended && path.length >= steps ? 'long' : 'dead';
+    const outcome = s.ending ? `ending:${s.ending}` : !ended && path.length - prefix.length >= steps ? 'long' : 'dead';
     for (const st of new Set(path)) {
       const i = st.lastIndexOf('|'), k = st.slice(0, i), id = st.slice(i + 1);
       if (!k.startsWith('choice:') && !k.startsWith('card:')) continue;
@@ -328,7 +377,7 @@ export async function simExplore(w: WorldPackage, g: StoryGraph, opts: { runs?: 
       endings[k] = (endings[k] ?? 0) + 1;
       pathTo[k] ??= path;
       touched.add(k);
-    } else if (!ended && path.length >= steps) tooLong++;
+    } else if (!ended && path.length - prefix.length >= steps) tooLong++;
     else { deadEnds++; deadPath ??= path; }
     finished++;
     if (r % 5 === 4) { opts.onProgress?.(r + 1, runs); await new Promise((ok2) => setTimeout(ok2, 0)); }
