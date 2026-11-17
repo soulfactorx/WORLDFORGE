@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { sourcesOf } from '../engine/sources';
 import { credits, lockState, personalCount, stripPersonal } from '../engine/licensing';
+import { isMyAssets } from '../storage/myAssets';
 import { endingsSeen } from './collection';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { genreOf } from '../data/genres';
@@ -64,6 +65,8 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
 }) {
   const saves = useLiveQuery(() => db.saves.orderBy('updatedAt').reverse().toArray(), []);
   const packages = useLiveQuery(() => listPackages(), []);
+  // 내 에셋 보관함 (v0.158)은 플레이할 세계가 아니다 — 새 게임 목록에서 뺀다
+  const worldsToPlay = packages?.filter((p) => !isMyAssets(p.world));
   const [selectedKey, setSelectedKey] = useState<string>('');
   const [creating, setCreating] = useState(false);
   const [startId, setStartId] = useState('');
@@ -75,7 +78,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
 
   const privateIds = new Set((packages ?? []).filter((p) => shareBlocked(p.world)).map((p) => p.world.manifest.id));
   const matureIds = new Set((packages ?? []).filter((p) => p.world.manifest.contentRating === 'mature').map((p) => p.world.manifest.id));
-  const selected = packages?.find((p) => packageKey(p.world) === selectedKey) ?? packages?.[0];
+  const selected = worldsToPlay?.find((p) => packageKey(p.world) === selectedKey) ?? worldsToPlay?.[0];
   const world = selected?.world;
   const worldIssues = world ? validateWorld(world) : [];
   const playable = !!world && !hasErrors(worldIssues);
@@ -155,6 +158,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
       <li key={packageKey(w)} className={selected && packageKey(selected.world) === packageKey(w) ? 'current' : ''}>
         <span className="grow">
           <b>{w.manifest.name}</b>
+          {isMyAssets(w) && <span className="need-badge" title="어느 세계에도 속하지 않은 재사용 부품을 모아 두는 곳 — 흐름도의 「＋ … 만계서고에서」로 꺼내 쓴다">⭐ 에셋 보관함 {w.characters.length + w.locations.length - 1 + (w.items?.length ?? 0) + (w.monsters?.length ?? 0) + (w.scenes?.length ?? 0) + (w.quests?.length ?? 0) + (w.storylets?.length ?? 0) + (w.endings?.length ?? 0)}개</span>}
           <span className="muted small"> {genreOf(w.genre?.id, w.genre?.custom).label} · {RATING[w.manifest.contentRating]}{endingsLabel(w) ? ` · ${endingsLabel(w)}` : ''}</span>
           <span className="badges">
             {w.manifest.private && (lockState(w) === 'parts'
@@ -176,13 +180,13 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
               copy.manifest = { ...copy.manifest, id: newWorldId(`${copy.manifest.id}-copy`), name: `${copy.manifest.name} (사본)` };
               onEdit(copy);
             }}>✎ {p.builtin ? '복제해서 편집' : '편집'}</button>
-            {w.manifest.private && lockState(w) === 'parts' && w.manifest.contentRating !== 'mature' && (
+            {!isMyAssets(w) && w.manifest.private && lockState(w) === 'parts' && w.manifest.contentRating !== 'mature' && (
               <button onClick={() => {
                 if (!confirm(`다른 사람의 카드에서 온 개인용 리소스 ${personalCount(w)}개를 빼고 패키지로 내보냅니다. 저장된 세계는 그대로 둡니다.`)) return;
                 try { const r = stripPersonal(w); download(exportWpk(r.world), `${safeName(w.manifest.id)}-${w.manifest.version}.wpk`); setMessage({ text: `개인용 ${r.removed}개를 빼고 내보냈습니다.` }); } catch (e) { setMessage({ text: `❌ ${(e as Error).message}` }); }
               }}>⤓ 개인용 빼고 패키지로 내보내기</button>
             )}
-            {w.manifest.private || shareBlocked(w)
+            {isMyAssets(w) ? null : w.manifest.private || shareBlocked(w)
               ? <MoveOutButton world={w} onMessage={(text) => setMessage({ text })} />
               : <button onClick={() => download(exportWpk(w), `${safeName(w.manifest.id)}-${w.manifest.version}.wpk`)}>⤓ 패키지로 내보내기</button>}
             {!p.builtin && <button className="danger" onClick={() => confirm('이 패키지를 삭제할까요? 이 패키지를 쓰는 세이브는 열 수 없게 됩니다.') && deletePackage(p.stored!.key)}>🗑 삭제</button>}
@@ -234,7 +238,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
           <div className="new-game">
             <label>세계관
               <select value={selected ? packageKey(selected.world) : ''} onChange={(e) => setSelectedKey(e.target.value)}>
-                {packages?.map((p) => (
+                {worldsToPlay?.map((p) => (
                   <option key={packageKey(p.world)} value={packageKey(p.world)}>
                     {p.world.manifest.name} v{p.world.manifest.version}{p.builtin ? ' (내장)' : ''}{p.world.manifest.aiAssisted ? ' ✦AI' : ''}{endingsLabel(p.world) ? ` · ${endingsLabel(p.world)}` : ''}
                   </option>

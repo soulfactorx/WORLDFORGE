@@ -15,6 +15,8 @@ import { type ExploreReport, nodeSim, type NodeSim, simActs, simExplore, simIcon
 import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
+import { isMyAssets, keepAsAsset } from '../storage/myAssets';
+import type { BorrowKind } from '../engine/borrow';
 import { GIMMICK_DEFAULTS, GimmickForm } from './GimmickForms';
 import { newSceneDef, SceneForm } from './SceneForms';
 import { SceneTester } from './SceneTester';
@@ -31,6 +33,11 @@ const TAB_OF: Partial<Record<NodeKind, FlowTab>> = { quest: 'quests', ending: 'q
 const TAB_NAME: Record<FlowTab, string> = { quests: '임무·플래그·결말', story: '이야기 흐름', scenes: '장면', gimmicks: '함정·퍼즐', encounters: '조우', rules: '세계 규칙', knowledge: '지식', locations: '장소', characters: '인물', items: '아이템·상점' };
 const MAIN_KINDS: NodeKind[] = ['quest', 'ending', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock', 'rule', 'flag', 'claim', 'phase', 'location', 'character', 'item', 'monster'];
 const DIR_KEY = 'worldforge.flow.dir';
+/** 흐름도 상자 종류 → 만계서고에서 옮기는 종류 (v0.158) */
+export const BORROW_OF: Partial<Record<NodeKind, BorrowKind>> = {
+  quest: 'quest', ending: 'ending', card: 'storylet', scene: 'scene', gimmick: 'scene', encounter: 'encounter', choice: 'choice', arc: 'arc', event: 'event',
+  clock: 'clock', rule: 'rule', flag: 'flag', claim: 'knowledge', location: 'location', character: 'character', item: 'item', monster: 'monster',
+};
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab: (t: FlowTab) => void }) {
@@ -525,6 +532,9 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
           </>;
         })()}
         {n.kind === 'ending' && <button type="button" onClick={() => { const e = newEnding(w, '다른 결말'); set(e.patch); onPick(`ending:${e.id}`); }} title="다른 길의 끝 — GM이 세우는 플래그로 시작하고, 상자를 끌어 조건을 이으세요">＋ 다른 결말</button>}
+        {BORROW_OF[n.kind] && !isMyAssets(w) && <button type="button" className="small" title="이 상자를 (딸린 것·그림과 함께) 내 에셋 보관함에 복사해 둔다 — 다른 세계의 흐름도에서 「만계서고에서」로 꺼내 쓴다" onClick={() => {
+          void keepAsAsset(w, [{ kind: BORROW_OF[n.kind]!, id: n.id }]).then((r) => onNote(`⭐ 「${n.name}」을(를) 내 에셋에 보관했습니다${Object.values(r.added).reduce((a, b) => a + (b ?? 0), 0) > 1 ? ` (딸린 것 포함 ${Object.values(r.added).reduce((a, b) => a + (b ?? 0), 0)}개)` : ''}.`)).catch((e: Error) => onNote(`❌ ${e.message}`));
+        }}>⭐ 에셋으로 보관</button>}
         {tab && <button type="button" className="small" onClick={() => onTab(tab)}>전체 편집 — 「{TAB_NAME[tab]}」 탭</button>}
       </div>
     </aside>
