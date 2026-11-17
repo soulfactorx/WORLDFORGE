@@ -17,6 +17,10 @@ import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
 import { monsterTable } from '../engine/combat/monsters';
 import { traitsFor } from '../engine/traits';
+import { ClassEditor } from './ClassEditor';
+import { SPEC, StructField } from './Struct';
+import { RELATION_KIND_LABEL } from '../engine/relationship';
+import type { Faction, NpcRelationKind, RelationBeat } from '../engine/schema';
 import { STD_ITEMS } from '../data/items';
 import { ProfileEditor } from './ProfileEditor';
 import type { StartOption } from '../engine/schema';
@@ -36,22 +40,22 @@ import { EffectsEditor } from './WorldForms';
 
 type SetW = (patch: Partial<WorldPackage>) => void;
 /** 전체 편집 탭 */
-export type FlowTab = 'quests' | 'story' | 'scenes' | 'gimmicks' | 'encounters' | 'rules' | 'knowledge' | 'locations' | 'characters' | 'items';
-const TAB_OF: Partial<Record<NodeKind, FlowTab>> = { quest: 'quests', ending: 'quests', flag: 'quests', card: 'story', choice: 'story', arc: 'story', event: 'story', clock: 'story', phase: 'story', scene: 'scenes', gimmick: 'gimmicks', encounter: 'encounters', rule: 'rules', claim: 'knowledge', location: 'locations', character: 'characters', item: 'items', monster: 'encounters' };
-const TAB_NAME: Record<FlowTab, string> = { quests: '임무·플래그·결말', story: '이야기 흐름', scenes: '장면', gimmicks: '함정·퍼즐', encounters: '조우', rules: '세계 규칙', knowledge: '지식', locations: '장소', characters: '인물', items: '아이템·상점' };
-const MAIN_KINDS: NodeKind[] = ['quest', 'ending', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock', 'rule', 'flag', 'claim', 'phase', 'location', 'character', 'item', 'monster'];
+export type FlowTab = 'quests' | 'story' | 'scenes' | 'gimmicks' | 'encounters' | 'rules' | 'knowledge' | 'locations' | 'characters' | 'items' | 'relations';
+const TAB_OF: Partial<Record<NodeKind, FlowTab>> = { quest: 'quests', ending: 'quests', flag: 'quests', card: 'story', choice: 'story', arc: 'story', event: 'story', clock: 'story', phase: 'story', scene: 'scenes', gimmick: 'gimmicks', encounter: 'encounters', rule: 'rules', claim: 'knowledge', location: 'locations', character: 'characters', item: 'items', monster: 'encounters', faction: 'relations' };
+const TAB_NAME: Record<FlowTab, string> = { quests: '임무·플래그·결말', story: '이야기 흐름', scenes: '장면', gimmicks: '함정·퍼즐', encounters: '조우', rules: '세계 규칙', knowledge: '지식', locations: '장소', characters: '인물', items: '아이템·상점', relations: '관계·세력' };
+const MAIN_KINDS: NodeKind[] = ['quest', 'ending', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock', 'rule', 'flag', 'claim', 'phase', 'location', 'character', 'faction', 'item', 'monster'];
 const DIR_KEY = 'worldforge.flow.dir';
 /** 흐름도 상자 종류 → 만계서고에서 옮기는 종류 (v0.158) */
 export const BORROW_OF: Partial<Record<NodeKind, BorrowKind>> = {
   quest: 'quest', ending: 'ending', card: 'storylet', scene: 'scene', gimmick: 'scene', encounter: 'encounter', choice: 'choice', arc: 'arc', event: 'event',
-  clock: 'clock', rule: 'rule', flag: 'flag', claim: 'knowledge', location: 'location', character: 'character', item: 'item', monster: 'monster',
+  clock: 'clock', rule: 'rule', flag: 'flag', claim: 'knowledge', location: 'location', character: 'character', item: 'item', monster: 'monster', faction: 'faction',
 };
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab: (t: FlowTab) => void }) {
   const graph = useMemo(() => buildStoryGraph(w), [w]);
   const counts = useMemo(() => { const m = new Map<NodeKind, number>(); for (const n of graph.nodes) m.set(n.kind, (m.get(n.kind) ?? 0) + 1); return m; }, [graph]);
-  const [hidden, setHidden] = useState<globalThis.Set<NodeKind>>(() => new globalThis.Set<NodeKind>(graph.nodes.length > 40 ? ['claim', 'phase', 'location', 'character', 'item', 'monster'] : ['claim', 'phase'])); // 큰 세계는 장소·인물을 처음엔 숨긴다
+  const [hidden, setHidden] = useState<globalThis.Set<NodeKind>>(() => new globalThis.Set<NodeKind>(graph.nodes.length > 40 ? ['claim', 'phase', 'location', 'character', 'faction', 'item', 'monster'] : ['claim', 'phase'])); // 큰 세계는 장소·인물을 처음엔 숨긴다
   const [q, setQ] = useState('');
   const empty = graph.nodes.every((n) => n.kind === 'start' || isLane(n.key)); // 장소·인물만 있으면 아직 이야기는 빈 것
   // 빈 세계: 시작 상자를 골라 둔다 — 옆 창에 「처음부터 열리는 …」 만들기가 바로 보인다
@@ -361,7 +365,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               </defs>
               <rect className="flow-bg" x={0} y={0} width={svgW} height={svgH}
                 onPointerDown={(e) => { const c = canvasRef.current; if (e.pointerType !== 'mouse' || e.button !== 0 || !c) return; (e.currentTarget as Element).setPointerCapture?.(e.pointerId); panRef.current = { sx: e.clientX, sy: e.clientY, sl: c.scrollLeft, st: c.scrollTop, moved: false }; }} />
-              {lay.nodes.some((n) => n.layer === -2) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -2).map((n) => n.y)) - 12} className="flow-lane">📍 장소 · 👤 인물 · 🎒 아이템 · 👾 적 — 눌러서 고치고, 끌어서 이야기 상자와 이으면 「여기 있으면」 「가지고 있으면」 「쓰러뜨리면」이 됩니다</text>}
+              {lay.nodes.some((n) => n.layer === -2) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -2).map((n) => n.y)) - 12} className="flow-lane">📍 장소 · 👤 인물 · ⚑ 세력 · 🎒 아이템 · 👾 적 — 눌러서 고치고, 끌어서 이야기 상자와 이으면 「여기 있으면」 「가지고 있으면」 「쓰러뜨리면」이 됩니다</text>}
               {lay.nodes.some((n) => n.layer === -1) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -1).map((n) => n.y)) - 12} className="flow-lane">따로 있는 것 (이어진 조건이 없다)</text>}
               {shown.edges.map((e, i) => ((isLane(e.from) || isLane(e.to)) && !(sel && (e.from === sel || e.to === sel)) && !(edgeSel?.from === e.from && edgeSel.to === e.to)) ? null : <Edge key={i} e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={(!!sel && (e.from === sel || e.to === sel)) || (edgeSel?.from === e.from && edgeSel.to === e.to)} dim={!!sel && !(e.from === sel || e.to === sel)} onPick={() => { if (!drag && !moveRef.current) setEdgeSel(e); }} />)}
               {/* 겹치면 위에: 옮긴 것 < 고른 것 < 끄는 것 */}
@@ -707,6 +711,7 @@ function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void):
     { label: '＋ 진행 시계', run: () => { const c = newClock(w); set({ clocks: [...(w.clocks ?? []), c] }); onPick(`clock:${c.id}`); } },
     { label: '＋ 장소', run: () => { const l = newPlace(w); set({ locations: l.locations }); onPick(`location:${l.id}`); } },
     { label: '＋ 인물', run: () => { const c = newPerson(w, w.start.locationId); set({ characters: [...w.characters, c] }); onPick(`character:${c.id}`); } },
+    { label: '＋ 세력', run: () => { const f: Faction = { id: nextId('fac/new-', w.factions ?? []), name: '새 세력', description: '' }; set({ factions: [...(w.factions ?? []), f] }); onPick(`faction:${f.id}`); } },
     { label: '＋ 아이템', run: () => { const it = newItem(w); set({ items: [...(w.items ?? []), it] }); onPick(`item:${it.id}`); } },
     { label: '＋ 적', run: () => { const m = newMonster(w); set({ monsters: [...(w.monsters ?? []), m] }); onPick(`monster:${m.id}`); } },
     { label: '＋ 처음부터 펼쳐지는 갈래 카드', run: () => {
@@ -969,9 +974,12 @@ function NodeEditor({ w, set, n, onPick }: { w: WorldPackage; set: SetW; n: GNod
           <Area label="생김새" value={c.appearance} onChange={(appearance) => up({ appearance })} rows={2} />
           <Area label="성격" value={c.personality} onChange={(personality) => up({ personality })} rows={2} />
           <Area label="말투" value={c.speech} onChange={(speech) => up({ speech })} rows={2} />
+          <label>소속 세력<select value={c.faction ?? ''} onChange={(e) => up({ faction: e.target.value || undefined })}><option value="">없음</option>{(w.factions ?? []).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+          <CharacterRelations w={w} set={set} id={c.id} />
         </>
       );
     }
+    case 'faction': return <FactionEditor w={w} set={set} id={n.id} />;
     case 'item': {
       const it = w.items?.find((x) => x.id === n.id);
       if (!it) return <p className="small muted">앱의 기본 아이템입니다 — 이 세계의 아이템이 아니어서 여기서는 고치지 않습니다.</p>;
@@ -1382,7 +1390,7 @@ function FlowSceneForm({ w, set, d }: { w: WorldPackage; set: SetW; d: SceneDef 
 
 // ---------------------------------------------------------------- 목록 (v0.159)
 
-const OUTLINE_ORDER: NodeKind[] = ['quest', 'arc', 'card', 'choice', 'scene', 'gimmick', 'encounter', 'event', 'clock', 'rule', 'ending', 'flag', 'claim', 'location', 'character', 'item', 'monster', 'phase'];
+const OUTLINE_ORDER: NodeKind[] = ['quest', 'arc', 'card', 'choice', 'scene', 'gimmick', 'encounter', 'event', 'clock', 'rule', 'ending', 'flag', 'claim', 'location', 'character', 'faction', 'item', 'monster', 'phase'];
 function FlowOutline({ g, sel, q, simMap, onPick, onNew }: { g: StoryGraph; sel: string | null; q: string; simMap: Map<string, NodeSim> | null; onPick: (k: string) => void; onNew: () => void }) {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const hit = (n: GNode) => !words.length || words.every((t) => `${n.name} ${n.id} ${n.sub ?? ''}`.toLowerCase().includes(t));
@@ -1558,7 +1566,81 @@ function StartEditor({ w, set }: { w: WorldPackage; set: SetW }) {
         <summary className="small"><b>🧑 주인공 설정</b> — 정보 양식·성향 축 (「세계 설정 › 주인공」과 같다)</summary>
         <ProfileEditor world={w} onChange={(playerProfile) => set({ playerProfile })} onTraits={(traits) => set({ traits })} />
       </details>
+      <details className="flow-sim-edit flow-profile">
+        <summary className="small"><b>🎓 직업</b> — 주인공이 고르는 직업 ({(w.classes ?? []).length ? `이 세계만의 직업 ${(w.classes ?? []).length}` : '기본 직업'} · 「세계 설정 › 직업」과 같다)</summary>
+        <ClassEditor world={w} onChange={(classes) => set({ classes })} />
+      </details>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- 세력 · 인물 관계 (v0.163)
+
+function FactionEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string }) {
+  const f = w.factions?.find((x) => x.id === id); if (!f) return null;
+  const up = (p: Partial<Faction>) => set({ factions: (w.factions ?? []).map((x) => (x.id === id ? { ...x, ...p } : x)) });
+  const members = w.characters.filter((c) => c.faction === id);
+  const others = w.characters.filter((c) => c.faction !== id);
+  const setMember = (cid: string, on: boolean) => set({ characters: w.characters.map((c) => (c.id === cid ? (on ? { ...c, faction: id } : (({ faction: _f, ...r }) => r)(c)) : c)) });
+  return (
+    <>
+      <Text label="이름" value={f.name} onChange={(name) => up({ name })} />
+      <Area label="설명 (소속 인물 연기에 쓰임)" value={f.description} onChange={(description) => up({ description })} rows={2} />
+      <label>처음 평판 (-100~100)<input type="number" min={-100} max={100} value={f.reputation ?? 0} onChange={(e) => { const v = Math.max(-100, Math.min(100, Number(e.target.value) || 0)); up({ reputation: v || undefined }); }} /></label>
+      <fieldset className="flow-stage"><legend>소속 인물 {members.length}</legend>
+        {members.map((c) => <div key={c.id} className="row flow-nums"><span className="flow-holder">👤 {c.name}</span><button type="button" className="small" aria-label={`${c.name} 소속 빼기`} onClick={() => setMember(c.id, false)}>빼기</button></div>)}
+        {others.length > 0 && <label>더하기<select value="" onChange={(e) => { if (e.target.value) setMember(e.target.value, true); }}><option value="">인물 고르기…</option>{others.map((c) => <option key={c.id} value={c.id}>{c.name}{c.faction ? ` (지금 ${(w.factions ?? []).find((x) => x.id === c.faction)?.name ?? c.faction})` : ''}</option>)}</select></label>}
+        <span className="small muted">소속 인물과 가까워지면 평판이 오르고, 원한을 사면 떨어진다.</span>
+      </fieldset>
+      <StructField w={w} spec={{ list: SPEC.factionActions }} label="세력 행동 (며칠마다 일어나는 일 — 시간이 흐르면 세계가 움직인다)" value={f.actions ?? []} onChange={(actions) => up({ actions: Array.isArray(actions) && actions.length ? actions as Faction['actions'] : undefined })} rows={6} />
+    </>
+  );
+}
+
+/** 인물 상자 안: 다른 인물과의 관계 · 이 인물의 관계 사건 */
+function CharacterRelations({ w, set, id }: { w: WorldPackage; set: SetW; id: string }) {
+  const rels = (w.relations ?? []).map((r, i) => [r, i] as const).filter(([r]) => r.a === id || r.b === id);
+  const others = w.characters.filter((c) => c.id !== id);
+  const beats = (w.relationBeats ?? []).map((b, i) => [b, i] as const).filter(([b]) => b.npcId === id);
+  const upRel = (i: number, p: Partial<NonNullable<WorldPackage['relations']>[number]>) => set({ relations: (w.relations ?? []).map((x, j) => (j === i ? { ...x, ...p } : x)) });
+  const upBeat = (i: number, p: Partial<RelationBeat>) => set({ relationBeats: (w.relationBeats ?? []).map((x, j) => (j === i ? { ...x, ...p } : x)) });
+  return (
+    <>
+      <fieldset className="flow-stage"><legend>다른 인물과의 관계 {rels.length}</legend>
+        {rels.map(([r, i]) => {
+          const other = r.a === id ? r.b : r.a;
+          return (
+            <div key={i} className="flow-rel">
+              <div className="row flow-nums">
+                <label>누구와<select value={other} onChange={(e) => upRel(i, r.a === id ? { b: e.target.value } : { a: e.target.value })}>{others.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+                <label>관계<select value={r.kind} onChange={(e) => upRel(i, { kind: e.target.value as NpcRelationKind })}>{(Object.entries(RELATION_KIND_LABEL) as [NpcRelationKind, string][]).map(([k, l]) => <option key={k} value={k}>{r.kind === 'master' && k === 'master' && r.b === id ? '제자·부하 (상대가 스승)' : l}</option>)}</select></label>
+              </div>
+              <div className="row flow-nums">
+                <label>한 줄 설명<input value={r.note ?? ''} placeholder="예: 어릴 적 같은 마을" onChange={(e) => upRel(i, { note: e.target.value || undefined })} /></label>
+                <button type="button" className="small" aria-label="이 관계 지우기" onClick={() => set({ relations: (w.relations ?? []).filter((_, j) => j !== i) })}>🗑</button>
+              </div>
+            </div>
+          );
+        })}
+        {others.length > 0 && <button type="button" className="small" onClick={() => set({ relations: [...(w.relations ?? []), { a: id, b: others[0]!.id, kind: 'ally' }] })}>＋ 관계 더하기</button>}
+        <span className="small muted">플레이어가 이 인물과 가까워지면 라이벌·원수는 원한이, 가족·동지·연인·스승은 호감이 오른다. 인물 상자를 다른 인물로 끌어도 잇는다.</span>
+      </fieldset>
+      <fieldset className="flow-stage"><legend>관계 사건 {beats.length} — 조건이 맞으면 열리는 이 인물의 결정적 장면</legend>
+        {beats.map(([b, i]) => (
+          <details key={b.id} className="flow-stage-card">
+            <summary><span className="flow-stage-no">{beats.findIndex(([x]) => x.id === b.id) + 1}</span> {b.name || '(이름 없음)'}</summary>
+            <div className="flow-stage-body">
+              <Text label="이름" value={b.name} onChange={(name) => upBeat(i, { name })} />
+              <ConditionField label="열리는 조건" value={b.condition} world={w} onChange={(condition) => upBeat(i, { condition: condition ?? { all: [] } })} />
+              <Area label="GM·인물에게: 장면 방향" value={b.hint} onChange={(hint) => upBeat(i, { hint })} rows={2} />
+              <label>다른 곳에 있으면<select value={b.approach ?? 'visit'} onChange={(e) => upBeat(i, { approach: e.target.value === 'visit' ? undefined : e.target.value as RelationBeat['approach'] })}><option value="visit">찾아온다</option><option value="message">전갈을 보낸다</option><option value="none">기다린다</option></select></label>
+              <button type="button" className="small" onClick={() => set({ relationBeats: (w.relationBeats ?? []).filter((_, j) => j !== i).length ? (w.relationBeats ?? []).filter((_, j) => j !== i) : undefined })}>🗑 이 사건 지우기</button>
+            </div>
+          </details>
+        ))}
+        <button type="button" className="small" onClick={() => { let n = (w.relationBeats ?? []).length + 1; while ((w.relationBeats ?? []).some((x) => x.id === `beat/new-${n}`)) n++; set({ relationBeats: [...(w.relationBeats ?? []), { id: `beat/new-${n}`, npcId: id, name: '새 관계 사건', condition: { relationship: id, axis: 'affinity', gte: 40 }, hint: '' }] }); }}>＋ 관계 사건 더하기</button>
+      </fieldset>
+    </>
   );
 }
 

@@ -14,10 +14,10 @@ export const COLL_OF: Partial<Record<BorrowKind, string>> = {
 };
 const NODE_OF: Partial<Record<BorrowKind, NodeKind>> = {
   character: 'character', location: 'location', item: 'item', monster: 'monster', knowledge: 'claim', quest: 'quest', arc: 'arc', choice: 'choice', clock: 'clock',
-  event: 'event', ending: 'ending', flag: 'flag', encounter: 'encounter', storylet: 'card', rule: 'rule',
+  event: 'event', ending: 'ending', flag: 'flag', encounter: 'encounter', storylet: 'card', rule: 'rule', faction: 'faction',
 };
 /** 흐름도에 붙일 수 있는 종류 */
-export const FLOW_IMPORT_KINDS: BorrowKind[] = ['quest', 'storylet', 'scene', 'choice', 'encounter', 'ending', 'arc', 'event', 'clock', 'rule', 'flag', 'knowledge', 'location', 'character', 'item', 'monster'];
+export const FLOW_IMPORT_KINDS: BorrowKind[] = ['quest', 'storylet', 'scene', 'choice', 'encounter', 'ending', 'arc', 'event', 'clock', 'rule', 'flag', 'knowledge', 'location', 'character', 'faction', 'item', 'monster'];
 
 export interface FlowImport extends BorrowResult { newKey?: string; newName?: string }
 

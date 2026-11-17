@@ -1531,4 +1531,8 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-profile > summary { cursor: pointer; min-height: 36px; padding: 8px 0; box-sizing: border-box; overflow-wrap: anywhere; }
 .flow-profile { min-width: 0; overflow-wrap: anywhere; }
 .flow-profile .form-grid { grid-template-columns: minmax(0, 1fr); }
+/* 인물 관계 (v0.163) */
+.flow-rel { display: flex; flex-direction: column; gap: 4px; border-bottom: 1px dashed var(--border); padding-bottom: 6px; margin-bottom: 4px; }
+.flow-rel .flow-nums { align-items: flex-end; flex-wrap: nowrap; }
+.flow-rel .flow-nums > button { flex: none; }
 

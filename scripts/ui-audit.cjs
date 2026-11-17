@@ -397,6 +397,20 @@ const SCREENS = [
     await p.waitForSelector('.flow-start-edit');
     await p.click('.flow-profile > summary');
   }],
+  ['편집: 흐름도 · 세력 상자 (v0.163)', async (p) => {
+    await home(p);
+    await p.click('.home-tabs button:has-text("세계관")');
+    await p.click('button:has-text("＋ 만들기")');
+    await p.click('button:has-text("흐름도에서 만들기")');
+    await p.locator('.flow-empty button:text-is("＋ 세력")').click();
+    await p.waitForSelector('.flow-panel');
+  }],
+  ['편집: 흐름도 · 인물 관계 (v0.163)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    if (!(await p.locator('.flow-kinds button.on:has-text("인물")').count())) await p.click('.flow-kinds button:has-text("인물")');
+    await p.locator('.flow-node.k-character .flow-box').first().click();
+    await p.waitForSelector('.flow-panel fieldset:has(legend:has-text("다른 인물과의 관계"))');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();
