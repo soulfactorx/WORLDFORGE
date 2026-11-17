@@ -11,7 +11,9 @@ try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(
 const FILE = 'file://' + path.resolve(__dirname, '../dist-single/index.html');
 const shotDir = (() => { const i = process.argv.indexOf('--shots'); return i > 0 ? process.argv[i + 1] : ''; })();
 const only = (() => { const i = process.argv.indexOf('--only'); return i > 0 ? process.argv[i + 1] : ''; })();
-const VIEWPORTS = [{ name: 'mobile', width: 390, height: 844, mobile: true }, { name: 'pc', width: 1280, height: 900, mobile: false }];
+const VIEWPORTS = [{ name: 'mobile', width: 390, height: 844, mobile: true }, { name: 'pc', width: 1280, height: 900, mobile: false },
+  // v0.164: 휴대폰 가로 — 흐름도 화면만 (상자 창이 오른쪽 절반)
+  { name: 'mobile-land', width: 844, height: 390, mobile: true, filter: (title) => title.includes('흐름도') }];
 
 async function home(page) {
   await page.goto(FILE);
@@ -574,6 +576,7 @@ async function audit(page, vp) {
   for (const vp of VIEWPORTS) {
     for (const [title, go] of SCREENS) {
       if (only && !title.includes(only)) continue;
+      if (vp.filter && !vp.filter(title)) continue;
       const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, isMobile: vp.mobile, hasTouch: vp.mobile });
       const page = await ctx.newPage();
       const errs = []; page.on('pageerror', (e) => errs.push(e.message));

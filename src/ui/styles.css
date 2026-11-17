@@ -765,7 +765,8 @@ label.file-btn input[type='file'] { position: absolute; inset: 0; width: 100%; h
  * PC(≥1100px): 세계관 편집기는 넓게
  * 새 화면은 scripts/ui-audit.cjs로 점검한다 (CLAUDE.md 참고)
  */
-@media (max-width: 600px) {
+/* 터치 크기 (v0.164: 좁은 화면만이 아니라 터치 화면 전체 — 휴대폰을 가로로 들어도 36px·16px) */
+@media (max-width: 600px), (pointer: coarse) {
   input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea { font-size: 16px !important; }
   button, select, [role=button] { min-height: 36px; }
   button.small { padding: 6px 10px; }
@@ -1537,6 +1538,7 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-rel .flow-nums > button { flex: none; }
 /* 흐름도: 화면 넓게 쓰기 (v0.164) */
 .flow-bar { flex-wrap: wrap; gap: 6px; align-items: center; }
+.flow-bar button { min-width: 40px; } /* 아이콘만 보일 때도 누르기 쉽게 */
 @media (max-width: 600px), (max-height: 500px) { .flow-bar { gap: 4px; } .flow-bar .zoom-pct { display: none; } .flow-bar button { padding-left: 8px; padding-right: 8px; } }
 .flow-bar .flow-zoom { gap: 4px; }
 .story-flow.wide { position: fixed; inset: 0; z-index: 40; background: var(--bg); padding: 6px 8px; padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 6px; overflow: auto; }
@@ -1554,7 +1556,11 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 /* 가로 휴대폰: 상자 창은 오른쪽 절반 (흐름도는 왼쪽 절반에 보인다) */
 @media (max-width: 900px) and (orientation: landscape) {
   /* 창이 열려 있으면 위 줄들(도구·시뮬레이션)도 왼쪽 절반에 — 창 밑에 가려지지 않게 */
-  .story-flow.has-panel > :not(.flow-wrap) { max-width: calc(50vw - 16px); }
+  .story-flow.has-panel > :is(.flow-bar, .flow-toolbar, p) { max-width: calc(50vw - 16px); }
+  .flow-panel { z-index: 45; } /* 편집기 위 막대(40)보다 위, 창(60)보다 아래 */
   .flow-panel, .story-flow.wide .flow-panel { left: auto; right: 0; top: 0; bottom: 0; width: 50vw; max-height: none; height: 100vh; height: 100dvh; border-radius: 14px 0 0 14px; box-shadow: -6px 0 20px color-mix(in srgb, var(--text) 18%, transparent); }
 }
+/* 낮은 화면 (휴대폰 가로): 창 안의 칸이 눌려 사라지지 않게 — 창 전체가 굴러간다 (v0.164) */
+.flow-dialog > * { flex-shrink: 0; }
+.flow-lib-list { min-height: 120px; }
 
