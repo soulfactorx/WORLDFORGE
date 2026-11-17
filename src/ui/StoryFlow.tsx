@@ -11,7 +11,7 @@ import type { Storylet, StoryletOption, DecisiveChoice, Claim, KnowledgeState } 
 import { setLink } from '../engine/locationLinks';
 import { buildStoryGraph, type FlowDir, isEmptyCond, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
 import { renameFlag, restageQuest, edgeSlots, effectSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
-import { type ExploreReport, nodeSim, type NodeSim, simActs, simExplore, simIcon, simMove, type SimPath, simReplay, simStart, wantedPlaces } from '../gm/flowSim';
+import { type ActPreview, type ExploreReport, nodeSim, type NodeSim, previewActs, simActs, simExplore, simIcon, simMove, type SimPath, simReplay, simStart, wantedPlaces } from '../gm/flowSim';
 import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
@@ -395,7 +395,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
           </div>
           <MiniMap nodes={lay.nodes} width={lay.width} height={lay.height} zoom={zoom} view={view} sel={sel} onGo={(x, y) => { const c = canvasRef.current; if (c) { c.scrollLeft = Math.max(0, x * zoom - c.clientWidth / 2); c.scrollTop = Math.max(0, y * zoom - c.clientHeight / 2); } }} />
           </div>
-          {selNode && (sim ? <SimPanel w={w} set={set} n={selNode} state={sim.state} info={simMap?.get(selNode.key)} never={neverSet.has(selNode.key)} onClose={() => setSel(null)}
+          {selNode && (sim ? <SimPanel w={w} set={set} g={graph} report={report} n={selNode} state={sim.state} info={simMap?.get(selNode.key)} never={neverSet.has(selNode.key)} onClose={() => setSel(null)}
             onAct={(id, label) => {
               const act = simActs(w, sim.state, selNode).find((a) => a.id === id); if (!act) return;
               const r = act.run(w, sim.state);
@@ -762,8 +762,12 @@ function EdgeDialog({ w, set, g, e, onClose, onNote, onPick }: { w: WorldPackage
 }
 
 /** 시뮬레이션에서 고른 상자: 지금 상태 · 왜 잠겼나 · 할 수 있는 일 · 바로 고치기 */
-function SimPanel({ w, set, n, state, info, never, onAct, onClose }: { w: WorldPackage; set: SetW; n: GNode; state: GameState; info?: NodeSim; never: boolean; onAct: (id: string, label: string) => void; onClose: () => void }) {
+function SimPanel({ w, set, g, report, n, state, info, never, onAct, onClose }: { w: WorldPackage; set: SetW; g: StoryGraph; report: ExploreReport | null; n: GNode; state: GameState; info?: NodeSim; never: boolean; onAct: (id: string, label: string) => void; onClose: () => void }) {
   const acts = simActs(w, state, n);
+  // 갈림길(결정적 선택·갈래 카드)은 고르면 어떻게 되나를 미리 보여 준다 (v0.160)
+  const branching = n.kind === 'choice' || n.kind === 'card';
+  const previews = useMemo(() => (branching && acts.length ? previewActs(w, state, g, n) : []), [w, state, n.key, branching]);
+  const tally = report?.byChoice[n.key];
   const q = n.kind === 'quest' ? w.quests?.find((x) => x.id === n.id) : undefined;
   const p = q ? state.quests[q.id] : undefined;
   // 지금 보여 줄 조건: 진행 중인 임무는 지금 단계의 끝 조건, 아니면 열리는 조건 (결말은 결말 조건)
@@ -778,7 +782,12 @@ function SimPanel({ w, set, n, state, info, never, onAct, onClose }: { w: WorldP
       <p className="small"><b>{info ? `${simIcon(info.st)} ${info.text}` : ''}</b> <span className="muted">· {NODE_LABEL[n.kind]}</span></p>
       {never && <p className="small warn-text">⚠ 자동 탐색에서 한 번도 열리지 않았습니다 — 아래 조건 중 ✗인 것을 채우는 상자가 있는지 보세요.</p>}
       {cond && <div className="flow-trace"><span className="small muted">{condLabel}</span><TraceView t={condTrace(w, state, cond)} w={w} /></div>}
-      {acts.length > 0 ? (
+      {previews.length > 0 ? (
+        <div className="flow-previews">
+          <span className="small muted">🔍 고르면 어떻게 되나 — 지금 상태에서 미리 본 결과 (고르기 전에는 바뀌지 않는다)</span>
+          {previews.map((pv) => <PreviewCard key={pv.id} pv={pv} tally={tally?.[pv.id.replace(/^force:/, 'opt:')]} g={g} onPick={() => onAct(pv.id, pv.label)} />)}
+        </div>
+      ) : acts.length > 0 ? (
         <div className="flow-actions">
           <span className="small muted">무엇이 일어났다고 할까</span>
           {acts.map((a) => <button key={a.id} type="button" className={a.weight ? '' : 'small'} onClick={() => onAct(a.id, a.label)}>{a.label}</button>)}
@@ -792,6 +801,38 @@ function SimPanel({ w, set, n, state, info, never, onAct, onClose }: { w: WorldP
     </aside>
   );
 }
+
+/** 갈림길 하나의 미리 보기 (v0.160) */
+function PreviewCard({ pv, tally, g, onPick }: { pv: ActPreview; tally?: ExploreReport['byChoice'][string][string]; g: StoryGraph; onPick: () => void }) {
+  const names = (list: GNode[]) => list.map((x) => `${NODE_ICON[x.kind]} ${x.name}`).join(', ');
+  return (
+    <div className={`flow-preview${pv.ending ? ' ends' : ''}`}>
+      <b>{pv.label}</b>
+      {pv.error ? <span className="small warn-text">❌ {pv.error}</span> : <>
+        {pv.ending && <span className="small"><b>🏁 결말: {pv.ending.name}</b></span>}
+        {pv.opened.length > 0 && <span className="small">🟢 열림: {names(pv.opened)}</span>}
+        {pv.done.length > 0 && <span className="small">✔ 끝남: {names(pv.done)}</span>}
+        {pv.failed.length > 0 && <span className="small">✗ 막힘·실패: {names(pv.failed)}</span>}
+        {pv.on.length > 0 && <span className="small muted">● {names(pv.on)}</span>}
+        {(() => {
+          const boxes = !!(pv.ending || pv.opened.length || pv.done.length || pv.failed.length || pv.on.length);
+          if (!boxes && !pv.lines.length) return <span className="small muted">바로 바뀌는 것은 없습니다 (나중에 다른 조건과 함께 쓰일 수 있다).</span>;
+          // 흐름도 상자는 그대로라도 성향·관계·수치 등은 바뀔 수 있다 — 그때는 엔진이 적용한 것을 펼쳐 보여 준다
+          return pv.lines.length > 0 && <details open={!boxes}><summary className="small">{boxes ? `엔진이 적용한 것 ${pv.lines.length}` : `흐름도 상자는 그대로 — 바뀌는 것 ${pv.lines.length} (성향·관계·수치 등)`}</summary><pre className="small">{pv.lines.join('\n')}</pre></details>;
+        })()}
+      </>}
+      {tally && <span className="small flow-tally">🎲 자동 탐색: 이 길로 간 {tally.runs}판 → {tallyText(tally, g)}</span>}
+      <button type="button" className={pv.forced ? 'small' : ''} onClick={onPick}>이걸로 고르기</button>
+    </div>
+  );
+}
+const tallyText = (t: ExploreReport['byChoice'][string][string], g: StoryGraph) => {
+  const pct = (n: number) => `${Math.round((n / Math.max(1, t.runs)) * 100)}%`;
+  const parts = Object.entries(t.endings).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${g.nodes.find((x) => x.key === k)?.name ?? k} ${pct(n)}`);
+  if (t.dead) parts.push(`막힘 ${pct(t.dead)}`);
+  if (t.long) parts.push(`끝나지 않음 ${pct(t.long)}`);
+  return parts.join(' · ') || '—';
+};
 
 /** 자동 탐색 결과 */
 function ExploreView({ w, g, r, onPath, onPick, onClose }: { w: WorldPackage; g: StoryGraph; r: ExploreReport; onPath: (p: SimPath) => void; onPick: (k: string) => void; onClose: () => void }) {
@@ -810,6 +851,21 @@ function ExploreView({ w, g, r, onPath, onPick, onClose }: { w: WorldPackage; g:
         {r.tooLong > 0 && <li className="small muted">{r.tooLong}번은 120걸음 안에 끝나지 않았습니다 (반복되는 카드·시계가 많거나 결말 조건이 멀다).</li>}
         {r.never.length > 0 && <li><span className="warn-text">⚠ 한 번도 열리지 않은 상자 {r.never.length}개</span> (흐름도에 굵은 점선) — {r.never.slice(0, 12).map((k) => <button key={k} type="button" className="small" onClick={() => onPick(k)}>{name(k)}</button>)}{r.never.length > 12 ? ` 외 ${r.never.length - 12}개` : ''}</li>}
         {!r.never.length && !unreached.length && !r.deadEnds && <li>✓ 모든 상자가 열리고 모든 결말에 이를 수 있었습니다.</li>}
+        {Object.keys(r.byChoice).some((k) => k.startsWith('choice:')) && (
+          <li className="flow-bychoice"><details open><summary className="small"><b>⚖ 결정적 선택별 결말</b> — 그 선택지를 고른 판이 어디로 갔나</summary>
+            {Object.entries(r.byChoice).filter(([k]) => k.startsWith('choice:')).map(([k, opts]) => {
+              const c = w.choices?.find((x) => `choice:${x.id}` === k);
+              return (
+                <div key={k} className="flow-bychoice-item">
+                  <button type="button" className="small" onClick={() => onPick(k)}>⚖ {c?.name ?? k}</button>
+                  <ul>{Object.entries(opts).map(([id, t]) => (
+                    <li key={id} className="small">「{c?.options.find((o) => `opt:${o.id}` === id)?.text ?? id}」 {t.runs}판 → {tallyText(t, g)} {t.path && <button type="button" className="small" onClick={() => onPath(t.path!)}>이 길 따라가기</button>}</li>
+                  ))}</ul>
+                </div>
+              );
+            })}
+          </details></li>
+        )}
       </ul>
       <p className="small muted">무작위로 고른 길이라 매번 조금 다릅니다. GM이 세우는 플래그는 가끔만 세우고, 조건을 무시하는 「억지로」 일은 하지 않습니다. 잠긴 상자가 바라는 장소(★)로는 옮겨 가 보지만, 관계·성향·날짜 조건은 시작 상태 그대로 봅니다.</p>
     </div>

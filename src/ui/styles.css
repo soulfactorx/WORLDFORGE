@@ -1504,4 +1504,13 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-minimap .mm-node.k-quest { fill: var(--text); opacity: .6; }
 .flow-minimap .mm-view { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-width: 1.5; }
 @media (max-width: 600px) { .flow-minimap { display: none; } }
+/* 갈림길 미리 보기 (v0.160) */
+.flow-previews { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--border); padding-top: 6px; }
+.flow-preview { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--bg); overflow-wrap: anywhere; min-width: 0; }
+.flow-preview.ends { border-color: var(--accent); }
+.flow-preview pre { white-space: pre-wrap; word-break: break-word; margin: 4px 0 0; }
+.flow-tally { color: var(--accent); }
+.flow-bychoice { flex-direction: column; align-items: stretch; }
+.flow-bychoice-item ul { margin: 2px 0 6px; padding-left: 1.2em; }
+.flow-bychoice-item li { display: list-item; overflow-wrap: anywhere; }
 

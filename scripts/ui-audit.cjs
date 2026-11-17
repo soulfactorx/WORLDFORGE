@@ -379,6 +379,12 @@ const SCREENS = [
     else { await p.locator('.flow-node.k-start .flow-box').click(); await p.click('.flow-actions button:text-is("＋ 적")'); await p.click('.flow-actions button:has-text("이 적이 나오는 전투")'); }
     await p.waitForSelector('.flow-panel fieldset:has(legend:has-text("적 "))');
   }],
+  ['편집: 흐름도 · 결정적 선택 미리 보기 (v0.160)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.click('button:has-text("🧪 시뮬레이션")');
+    const c = p.locator('.flow-node.k-choice .flow-box').first();
+    if (await c.count()) { await c.click(); await p.waitForSelector('.flow-sim-panel'); } else await p.waitForSelector('.flow-sim');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();
