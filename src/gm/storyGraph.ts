@@ -207,12 +207,13 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   {
     for (const r of roots) {
       const c = openCondition(w, r);
+      if (r.kind === 'clock') { const ck = w.clocks?.find((x) => x.id === r.id); edges.push({ from: START_KEY, to: r.key, kind: 'start', label: ck?.tick.some((t) => 'every' in t) ? '처음부터 차오름' : '처음부터 (조건이 맞을 때 차오름)' }); continue; }
       edges.push({ from: START_KEY, to: r.key, kind: 'start', label: isEmptyCond(c) ? '처음부터 열림' : '처음부터 · 다른 조건(장소·관계·날짜 등)이 맞으면' });
     }
   }
   return { nodes: [...nodes.values()], edges };
 }
-const ROOT_KINDS: NodeKind[] = ['quest', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event'];
+const ROOT_KINDS: NodeKind[] = ['quest', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock'];
 export const isEmptyCond = (c: Condition | undefined) => !c || (typeof c === 'object' && 'all' in c && !c.all.length);
 /** 이것이 열리는 조건 (임무 시작 · 카드 덱에 들어옴 · 장면 열림 …) */
 export function openCondition(w: WorldPackage, n: GNode): Condition | undefined {

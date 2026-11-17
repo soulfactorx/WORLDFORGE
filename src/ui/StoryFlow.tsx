@@ -2,7 +2,7 @@
  * 이야기 흐름도 (v0.142): 임무·분기·조건으로 열리는 것을 한 장의 그림으로. 누르면 옆(휴대폰은 아래)에서 자세히 보고 바로 고친다.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Character, Condition, CustomMonster, Ending, ItemDef, Location, Quest, StoryEffect, WorldPackage } from '../engine/schema';
+import type { Character, Clock, Condition, CustomMonster, Ending, ItemDef, Location, Quest, StoryEffect, WorldEvent, WorldPackage } from '../engine/schema';
 import { setLink } from '../engine/locationLinks';
 import { buildStoryGraph, type FlowDir, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
 import { edgeSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
@@ -451,7 +451,7 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
   };
   const cutBtn = (e: GEdge) => e.from !== START_KEY && e.kind !== 'stage' && <button type="button" className="small flow-cut" onClick={() => cut(e)} title="이 연결을 설정에서 뺍니다">✂ 끊기</button>;
   // 다음 것 만들기: 이것이 끝나면 열리는 임무 · 이것으로 끝나는 결말
-  const after: Condition | null = n.kind === 'quest' ? { questDone: n.id } : n.kind === 'scene' || n.kind === 'gimmick' ? { sceneEnd: n.id, outcome: 'success' } : n.kind === 'encounter' ? { cleared: n.id } : n.kind === 'card' ? { storylet: n.id } : n.kind === 'choice' ? { choice: n.id } : n.kind === 'flag' ? { flag: n.id } : n.kind === 'claim' ? { knows: n.id } : n.kind === 'location' ? { at: n.id } : null;
+  const after: Condition | null = n.kind === 'quest' ? { questDone: n.id } : n.kind === 'scene' || n.kind === 'gimmick' ? { sceneEnd: n.id, outcome: 'success' } : n.kind === 'encounter' ? { cleared: n.id } : n.kind === 'card' ? { storylet: n.id } : n.kind === 'choice' ? { choice: n.id } : n.kind === 'flag' ? { flag: n.id } : n.kind === 'claim' ? { knows: n.id } : n.kind === 'location' ? { at: n.id } : n.kind === 'clock' ? { clock: n.id, gte: w.clocks?.find((c) => c.id === n.id)?.segments ?? 1 } : null;
   const newId = (prefix: string, list: { id: string }[]) => { let i = list.length + 1; while (list.some((x) => x.id === `${prefix}${i}`)) i++; return `${prefix}${i}`; };
   return (
     <aside className="flow-panel" aria-label={`${n.name} 자세히`}>
@@ -502,6 +502,7 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
           set(newQuest(w, id, `${n.name} 다음`, 'side', after)); onPick(`quest:${id}`);
         }}>{n.kind === 'location' ? '＋ 이곳에 오면 열리는 임무' : '＋ 이것 다음에 열리는 임무'}</button>}
         {after && <button type="button" onClick={() => { const e = newEnding(w, `${n.name}의 끝`, after); set(e.patch); onPick(`ending:${e.id}`); }}>{n.kind === 'location' ? '＋ 이곳에 이르면 맞는 결말' : '＋ 이것으로 이르는 결말'}</button>}
+        {after && <button type="button" onClick={() => { const e = newEvent(w, `${n.name} ${n.kind === 'clock' ? '— 시계가 찼다' : '뒤의 사건'}`, after); set({ events: [...(w.events ?? []), e] }); onPick(`event:${e.id}`); }}>{n.kind === 'clock' ? '＋ 시계가 차면 일어나는 사건' : n.kind === 'location' ? '＋ 이곳에 오면 일어나는 사건' : '＋ 이것 다음에 일어나는 사건'}</button>}
         {n.kind === 'ending' && <button type="button" onClick={() => { const e = newEnding(w, '다른 결말'); set(e.patch); onPick(`ending:${e.id}`); }} title="다른 길의 끝 — GM이 세우는 플래그로 시작하고, 상자를 끌어 조건을 이으세요">＋ 다른 결말</button>}
         {tab && <button type="button" className="small" onClick={() => onTab(tab)}>전체 편집 — 「{TAB_NAME[tab]}」 탭</button>}
       </div>
@@ -543,6 +544,14 @@ function newEnding(w: WorldPackage, name: string, cond?: Condition): { id: strin
     endings: [...(w.endings ?? []), { id, name, condition: { flag }, epilogue: '' }],
     flags: [...(w.flags ?? []), { id: flag, when: `이야기가 「${name}」(으)로 끝날 때가 되었을 때` }],
   } };
+}
+
+/** 새 연표 사건·진행 시계 (v0.151): 「이야기 흐름」 탭의 새 항목과 같은 꼴 — 사건에 조건을 주면 날짜 대신 그 조건으로 */
+function newEvent(w: WorldPackage, name: string, cond?: Condition): WorldEvent {
+  return { id: nextId('event/new-', w.events ?? []), name, when: cond ? { condition: cond } : { day: 3 }, effects: [], announce: '📜 소식이 돈다.' };
+}
+function newClock(w: WorldPackage): Clock {
+  return { id: nextId('clock/new-', w.clocks ?? []), name: '다가오는 위협', segments: 6, tick: [{ every: 'beat', by: 1 }], at: [{ segment: 3, omen: '불길한 소문이 돈다.' }, { segment: 6, effects: [] }] };
 }
 
 /** 새 장면·함정·퍼즐 (v0.149): 「장면」「함정·퍼즐」 탭의 새 항목과 같은 꼴 — start: 열리는 조건, at: 장소 */
@@ -588,6 +597,8 @@ function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void):
       set(newQuest(w, id, (w.quests ?? []).length ? '새 임무' : '첫 임무', 'main', { all: [] })); onPick(`quest:${id}`);
     } },
     { label: '＋ 결말', run: () => { const e = newEnding(w, (w.endings ?? []).length ? '새 결말' : '첫 결말'); set(e.patch); onPick(`ending:${e.id}`); } },
+    { label: '＋ 연표 사건', run: () => { const e = newEvent(w, '새 사건'); set({ events: [...(w.events ?? []), e] }); onPick(`event:${e.id}`); } },
+    { label: '＋ 진행 시계', run: () => { const c = newClock(w); set({ clocks: [...(w.clocks ?? []), c] }); onPick(`clock:${c.id}`); } },
     { label: '＋ 장소', run: () => { const l = newPlace(w); set({ locations: l.locations }); onPick(`location:${l.id}`); } },
     { label: '＋ 인물', run: () => { const c = newPerson(w, w.start.locationId); set({ characters: [...w.characters, c] }); onPick(`character:${c.id}`); } },
     { label: '＋ 아이템', run: () => { const it = newItem(w); set({ items: [...(w.items ?? []), it] }); onPick(`item:${it.id}`); } },
@@ -829,8 +840,13 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
       return (
         <>
           <Text label="이름" value={e.name} onChange={(name) => up({ name })} />
-          <ConditionField label="일어나는 조건 (선택)" value={e.when.condition} world={w} optional onChange={(condition) => up({ when: { ...e.when, ...(condition ? { condition } : { condition: undefined }) } })} />
+          <label>며칠째에 (비우면 날 수와 상관없이)<input type="number" min={0} value={e.when.day ?? ''} placeholder="예: 3" onChange={(ev) => { const v = ev.target.value; const { day: _d, ...rest } = e.when; up({ when: v === '' ? rest : { ...rest, day: Math.max(0, Number(v) || 0) } }); }} /></label>
+          {e.when.date && <p className="small muted">달력 날짜 {e.when.date.year}.{e.when.date.month}.{e.when.date.day}에도 걸려 있습니다 (「이야기 흐름」 탭에서 고칩니다).</p>}
+          <ConditionField label="일어나는 조건 (선택 — 날 수와 함께면 둘 다 맞아야)" value={e.when.condition} world={w} optional onChange={(condition) => { const { condition: _c, ...rest } = e.when; up({ when: condition ? { ...rest, condition } : rest }); }} />
+          <ConditionField label="막히는 조건 (선택 — 참이면 일어나지 않는다)" value={e.unless} world={w} optional onChange={(unless) => up({ unless })} />
+          <Area label="플레이어에게 보이는 소식 (비우면 조용히 일어난다)" value={e.announce ?? ''} onChange={(announce) => up({ announce: announce || undefined })} rows={2} />
           <EffectsEditor label="일어나는 일" value={e.effects} w={w} onChange={(effects) => up({ effects })} />
+          {!e.when.day && !e.when.date && !e.when.condition && <p className="small warn-text">⚠ 날 수·날짜·조건이 모두 비어 있어 시작하자마자 일어납니다.</p>}
         </>
       );
     }
@@ -898,6 +914,42 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
             <label>경험치<input type="number" min={0} value={m.xp} onChange={(e) => up({ xp: Math.max(0, Number(e.target.value) || 0) })} /></label>
           </div>
           <p className="small muted">능력치·공격·기술은 「조우」 탭의 「이 세계만의 적」에서 고칩니다.</p>
+        </>
+      );
+    }
+    case 'clock': {
+      const c = w.clocks?.find((x) => x.id === n.id); if (!c) return null;
+      const up = (p: Partial<Clock>) => set({ clocks: upd(w.clocks, p) });
+      const timeIdx = c.tick.findIndex((t) => 'every' in t);
+      const time = timeIdx >= 0 ? c.tick[timeIdx] as { every: 'day' | 'hour' | 'beat'; by: number } : null;
+      const onCount = c.tick.filter((t) => 'on' in t).length;
+      const setTime = (every: string, by: number) => {
+        const rest = c.tick.filter((t) => !('every' in t));
+        up({ tick: every ? [{ every: every as 'day' | 'hour' | 'beat', by }, ...rest] : rest });
+      };
+      return (
+        <>
+          <Text label="이름" value={c.name} onChange={(name) => up({ name })} />
+          <div className="row flow-nums">
+            <label>칸 수<input type="number" min={1} max={24} value={c.segments} onChange={(e) => { const segments = Math.min(24, Math.max(1, Number(e.target.value) || 1)); up({ segments, at: c.at.map((x) => (x.segment > segments ? { ...x, segment: segments } : x)), ...(c.start && c.start > segments ? { start: segments } : {}) }); }} /></label>
+            <label>처음 칸<input type="number" min={0} max={c.segments} value={c.start ?? 0} onChange={(e) => { const v = Math.max(0, Math.min(c.segments, Number(e.target.value) || 0)); up({ start: v || undefined }); }} /></label>
+          </div>
+          <div className="row flow-nums">
+            <label>저절로 차오름<select value={time?.every ?? ''} onChange={(e) => setTime(e.target.value, time?.by ?? 1)}>
+              <option value="">저절로는 안 참</option><option value="beat">이야기 장면마다</option><option value="hour">한 시간마다</option><option value="day">하루마다</option>
+            </select></label>
+            {time && <label>한 번에<input type="number" min={1} value={time.by} onChange={(e) => setTime(time.every, Math.max(1, Number(e.target.value) || 1))} /></label>}
+          </div>
+          {onCount > 0 && <p className="small muted">조건으로 차오르는 것 {onCount}개 — 위 「이것을 여는 것」에 보입니다 (「이야기 흐름」 탭에서 고칩니다).</p>}
+          {c.at.map((a, i) => (
+            <fieldset key={i} className="flow-stage"><legend>{a.segment}칸에 이르면</legend>
+              <label>칸<input type="number" min={1} max={c.segments} value={a.segment} onChange={(e) => up({ at: c.at.map((x, j) => (j === i ? { ...x, segment: Math.min(c.segments, Math.max(1, Number(e.target.value) || 1)) } : x)) })} /></label>
+              <Text label="징조 (플레이어에게 보이는 한 줄)" value={a.omen ?? ''} onChange={(omen) => up({ at: c.at.map((x, j) => (j === i ? { ...x, omen: omen || undefined } : x)) })} />
+              <EffectsEditor label="일어나는 일" value={a.effects} w={w} onChange={(effects) => up({ at: c.at.map((x, j) => (j === i ? { ...x, effects } : x)) })} />
+              <button type="button" className="small" onClick={() => up({ at: c.at.filter((_, j) => j !== i) })}>🗑 이 지점 지우기</button>
+            </fieldset>
+          ))}
+          <button type="button" className="small" onClick={() => up({ at: [...c.at, { segment: c.segments }] })}>＋ 칸 지점 더하기</button>
         </>
       );
     }
