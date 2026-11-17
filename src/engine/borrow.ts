@@ -403,17 +403,33 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
   // ---- 정리: 가져온 것 안에서 이 세계에 없는 것(임무·조우·선택·플래그…)을 가리키는 부분을 뺀다
   pruneDangling(w, base, notes);
 
-  // ---- 출처: 개인용 세계에서 가져오면 대상도 개인용 + 출처 카드 기록
+  // ---- 출처 (v0.157 리소스별): 가져온 것 중 카드에서 온 것만 그 카드의 것으로 기록한다.
+  //  - 「세계 전체를 카드로 만든」 출처(via world)면 가져온 것 모두가 그 카드에서 온 것
+  //  - 인물 탭에서 넣은 카드(via import)면 그 카드의 목록에 있던 것만
+  //  - 라이선스가 있는(허락된) 카드는 기록만 하고 잠그지 않는다
   let out = w;
   const srcCards = sourcesOf(source);
-  if (source.manifest.private || srcCards.length) {
+  const legacyWhole = !!source.manifest.private && !srcCards.length;
+  if (srcCards.length || legacyWhole) {
     const ids = (list: string[] | undefined) => (list ?? []).map(map).filter((y): y is string => !!y);
-    for (const sc of srcCards) {
-      out = addSource(out, { ...sc, via: 'import', importedAt: new Date().toISOString(), ids: { characters: ids(sc.ids?.characters), facts: ids(sc.ids?.facts), claims: ids(sc.ids?.claims), assets: ids(sc.ids?.assets) } });
+    const lists = w as unknown as Record<string, { id: string }[] | undefined>;
+    const fresh = (coll: string) => (lists[coll] ?? []).slice(base[coll] ?? 0).map((x) => x.id);
+    const everything = () => ({ characters: fresh('characters'), facts: fresh('facts'), claims: fresh('claims'), assets: fresh('assets'),
+      others: COLLS.filter((c) => !['characters', 'facts', 'claims', 'assets'].includes(c)).flatMap((c) => fresh(c).map((id) => `${c}:${id}`)) });
+    const cards = legacyWhole ? [{ hash: '', name: source.manifest.private!.source, importedAt: '', via: 'world' as const }] : srcCards;
+    let tainted = false;
+    for (const sc of cards) {
+      const got = sc.via === 'world' ? everything() : { characters: ids(sc.ids?.characters), facts: ids(sc.ids?.facts), claims: ids(sc.ids?.claims), assets: ids(sc.ids?.assets),
+        others: (sc.ids?.others ?? []).map((k) => { const i = k.indexOf(':'); const n = map(k.slice(i + 1)); return n ? `${k.slice(0, i)}:${n}` : ''; }).filter(Boolean) };
+      if (![...got.characters, ...got.facts, ...got.claims, ...got.assets, ...got.others].length) continue; // 이 카드에서 온 것은 가져오지 않았다
+      out = addSource(out, { ...sc, hash: sc.hash || `legacy:${source.manifest.id}`, via: 'import', importedAt: new Date().toISOString(), ids: got });
+      if (!sc.license) tainted = true;
     }
-    const names = sourcesOf(out).map((s) => s.name);
-    out = { ...out, manifest: { ...out.manifest, private: { ...(out.manifest.private ?? { note: source.manifest.private?.note ?? '' }), source: names.join(' · ') || source.manifest.private?.source || source.manifest.name, ...(out.manifest.private?.cardHash ? {} : srcCards[0] ? { cardHash: srcCards[0].hash } : {}) } } };
-    notes.push(`"${source.manifest.name}"은(는) 다른 사람의 작품으로 만든 개인용 세계라, 이 세계도 개인용이 됩니다 (내보내기·공유 불가, 기기 간 이동 때 원본 카드 파일 필요).`);
+    if (tainted) {
+      const names = sourcesOf(out).filter((s2) => !s2.license).map((s2) => s2.name);
+      out = { ...out, manifest: { ...out.manifest, private: { ...(out.manifest.private ?? { note: source.manifest.private?.note ?? '' }), source: names.join(' · ') || source.manifest.private?.source || source.manifest.name, ...(out.manifest.private?.cardHash ? {} : srcCards[0] ? { cardHash: srcCards[0].hash } : {}) } } };
+      notes.push(`"${source.manifest.name}"에서 다른 사람의 카드로 만든 것을 가져와, 그것들은 개인용으로 표시됩니다 — 이 세계를 내보낼 때는 그것만 빼고 내보낼 수 있습니다.`);
+    } else if (out !== w) notes.push(`"${source.manifest.name}"의 카드 출처(허락된 라이선스)를 함께 기록했습니다 — 내보낼 때 출처 표시가 함께 갑니다.`);
   }
   // 크로스오버 기록 (v0.64): 어느 세계에서 왔는가
   if (Object.keys(added).length && source.manifest.id !== out.manifest.id) {
@@ -429,6 +445,9 @@ const COLLS = ['characters', 'locations', 'items', 'monsters', 'scenes', 'factio
 const COLL_LABEL: Record<string, string> = { characters: '인물', locations: '장소', items: '아이템', monsters: '몬스터', scenes: '장면', factions: '세력', classes: '직업', claims: '지식', facts: '지식', assets: '이미지', quests: '임무', arcs: '이야기 줄기', choices: '결정적 선택', clocks: '진행 시계', events: '연표 사건', endings: '결말', flags: '플래그', vars: '세계 수치', encounters: '조우' };
 
 /** 검사기 오류 중 새로 가져온 항목 안의 것: 그 부분(가장 가까운 목록 칸, 없으면 그 속성)을 지운다 */
+/** 세계 전체에서 없는 것을 가리키는 부분을 뺀다 (v0.157: 리소스를 지운 뒤 정리) */
+export function pruneDanglingAll(w: WorldPackage, notes: string[] = []): string[] { pruneDangling(w, {}, notes); return notes; }
+
 function pruneDangling(w: WorldPackage, base: Record<string, number>, notes: string[]) {
   for (let round = 0; round < 6; round++) {
     const errs = validateWorld(w).filter((i) => i.level === 'error');

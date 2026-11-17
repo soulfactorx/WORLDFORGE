@@ -22,7 +22,8 @@ export function addSource(world: WorldPackage, src: SourceCard): WorldPackage {
   if (hit) {
     const ids = hit.ids ?? { characters: [], facts: [], claims: [], assets: [] };
     const add = src.ids ?? { characters: [], facts: [], claims: [], assets: [] };
-    hit.ids = { characters: [...ids.characters, ...add.characters], facts: [...ids.facts, ...add.facts], claims: [...ids.claims, ...add.claims], assets: [...ids.assets, ...add.assets] };
+    hit.ids = { characters: [...ids.characters, ...add.characters], facts: [...ids.facts, ...add.facts], claims: [...ids.claims, ...add.claims], assets: [...ids.assets, ...add.assets],
+      ...(ids.others?.length || add.others?.length ? { others: [...(ids.others ?? []), ...(add.others ?? [])] } : {}) };
     hit.importedAt = src.importedAt;
   } else list.push(src);
   return { ...world, manifest: { ...world.manifest, sources: list } };

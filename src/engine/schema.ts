@@ -42,8 +42,13 @@ export interface SourceCard {
   importedAt: string;
   /** world = 이 카드로 세계 전체를 만듦 (뺄 수 없다) · import = 인물 탭에서 가져옴 */
   via: 'world' | 'import';
-  /** 이 카드에서 온 것 (제거용) */
-  ids?: { characters: string[]; facts: string[]; claims: string[]; assets: string[] };
+  /** 이 카드에서 온 것 (제거용). others: 그 밖의 것 "목록:ID" (예: "quests:quest/x") — v0.157, 카드로 만든 세계에서 가져온 임무·장소 등 */
+  ids?: { characters: string[]; facts: string[]; claims: string[]; assets: string[]; others?: string[] };
+  /**
+   * 라이선스 (v0.157): 없으면 개인용(라이선스 모름 = 모든 권리는 제작자에게) — 이 카드에서 온 것은 내보내기·공유에서 빠진다.
+   * 있으면 제작자가 허락한 조건(spdx, 예: CC-BY-4.0)이고, 내보낼 때 attribution(출처 표시)이 함께 간다.
+   */
+  license?: { spdx: string; attribution: string; confirmedAt: string };
 }
 
 export interface Location {
