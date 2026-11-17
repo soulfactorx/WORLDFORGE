@@ -9,20 +9,20 @@ import { stageGates } from '../engine/encounter';
 import { itemDef } from '../engine/items';
 import type { Condition, StoryEffect, WorldPackage } from '../engine/schema';
 
-export type NodeKind = 'start' | 'location' | 'character' | 'item' | 'monster' | 'quest' | 'ending' | 'card' | 'scene' | 'gimmick' | 'encounter' | 'choice' | 'arc' | 'event' | 'clock' | 'rule' | 'flag' | 'claim' | 'phase';
+export type NodeKind = 'start' | 'location' | 'character' | 'faction' | 'item' | 'monster' | 'quest' | 'ending' | 'card' | 'scene' | 'gimmick' | 'encounter' | 'choice' | 'arc' | 'event' | 'clock' | 'rule' | 'flag' | 'claim' | 'phase';
 export const NODE_LABEL: Record<NodeKind, string> = {
-  start: '시작', location: '장소', character: '인물', item: '아이템', monster: '적', quest: '임무', ending: '결말', card: '갈래 카드', scene: '장면', gimmick: '함정·퍼즐', encounter: '전투', choice: '결정적 선택',
+  start: '시작', location: '장소', character: '인물', faction: '세력', item: '아이템', monster: '적', quest: '임무', ending: '결말', card: '갈래 카드', scene: '장면', gimmick: '함정·퍼즐', encounter: '전투', choice: '결정적 선택',
   arc: '줄기', event: '연표 사건', clock: '진행 시계', rule: '세계 규칙', flag: '플래그', claim: '지식', phase: '국면',
 };
 export const NODE_ICON: Record<NodeKind, string> = {
-  start: '▶', location: '📍', character: '👤', item: '🎒', monster: '👾', quest: '🎯', ending: '◆', card: '🃏', scene: '🎭', gimmick: '🧩', encounter: '⚔', choice: '⚖', arc: '📖', event: '📅', clock: '⏳', rule: '⚙', flag: '🏳', claim: '💡', phase: '🌗',
+  start: '▶', location: '📍', character: '👤', faction: '⚑', item: '🎒', monster: '👾', quest: '🎯', ending: '◆', card: '🃏', scene: '🎭', gimmick: '🧩', encounter: '⚔', choice: '⚖', arc: '📖', event: '📅', clock: '⏳', rule: '⚙', flag: '🏳', claim: '💡', phase: '🌗',
 };
 
 export interface GNode { key: string; kind: NodeKind; id: string; name: string; sub?: string; warn?: string }
 export type EdgeKind = 'start' | 'complete' | 'fail' | 'effect' | 'ending' | 'stage' | 'place';
 /** 장소·인물 (v0.147): 흐름의 단에 넣지 않고 아래 띠에 따로 놓는다 */
-export const LANE_KINDS: NodeKind[] = ['location', 'character', 'item', 'monster'];
-export const isLane = (k: string) => /^(location|character|item|monster):/.test(k);
+export const LANE_KINDS: NodeKind[] = ['location', 'character', 'faction', 'item', 'monster'];
+export const isLane = (k: string) => /^(location|character|faction|item|monster):/.test(k);
 export interface GEdge { from: string; to: string; kind: EdgeKind; label: string }
 export interface StoryGraph { nodes: GNode[]; edges: GEdge[] }
 
@@ -63,6 +63,7 @@ function refsOf(c: Condition | undefined, out: { node: string; label: string }[]
   // 아이템·적 (v0.148)
   if (typeof r.hasItem === 'string') out.push({ node: key('item', r.hasItem), label: `가지고 있으면${Number(r.n ?? 1) > 1 ? ` (${r.n}개)` : ''}` });
   if (typeof r.defeated === 'string') out.push({ node: key('monster', r.defeated), label: `${r.n ?? 1}마리 쓰러뜨리면` });
+  if (typeof r.reputation === 'string') out.push({ node: key('faction', r.reputation), label: `평판 ${r.gte !== undefined ? `≥ ${r.gte}` : r.lte !== undefined ? `≤ ${r.lte}` : ''}` });
   return out;
 }
 
@@ -83,6 +84,7 @@ function effectRefs(list: StoryEffect[] | undefined, world: WorldPackage): { nod
     if (typeof r.relationship === 'string') out.push({ node: key('character', r.relationship), label: '관계 바뀜' });
     if (typeof r.giveItem === 'string') out.push({ node: key('item', r.giveItem), label: '얻음' });
     if (typeof r.takeItem === 'string') out.push({ node: key('item', r.takeItem), label: '잃음' });
+    if (typeof r.reputation === 'string' && typeof r.delta === 'number') out.push({ node: key('faction', r.reputation), label: `평판 ${r.delta > 0 ? '+' : ''}${r.delta}` });
   }
   return out;
 }
@@ -104,6 +106,7 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
 
   for (const l of w.locations) add({ key: key('location', l.id), kind: 'location', id: l.id, name: l.name, sub: `길 ${l.connections.length}${w.start.locationId === l.id ? ' · 시작 장소' : ''}` });
   for (const c of w.characters) add({ key: key('character', c.id), kind: 'character', id: c.id, name: c.name, sub: w.locations.find((l) => l.id === c.locationId)?.name ?? '' });
+  for (const f of w.factions ?? []) add({ key: key('faction', f.id), kind: 'faction', id: f.id, name: f.name, sub: `처음 평판 ${f.reputation ?? 0} · 소속 ${w.characters.filter((c) => c.faction === f.id).length}` });
   for (const it of w.items ?? []) add({ key: key('item', it.id), kind: 'item', id: it.id, name: it.name, sub: ITEM_KIND[it.kind] ?? it.kind });
   for (const m of w.monsters ?? []) add({ key: key('monster', m.id), kind: 'monster', id: m.id, name: m.name, sub: `HP ${m.hp} · AC ${m.ac}` });
   for (const q of w.quests ?? []) add({ key: key('quest', q.id), kind: 'quest', id: q.id, name: q.name, sub: `${q.kind === 'main' ? '메인' : '사이드'} · ${q.stages.length}단계` });
@@ -130,6 +133,10 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
     for (const id of l.shop?.items ?? []) link(key('location', l.id), key('item', id), 'place', '상점에서 팖');
   }
   for (const c of w.characters) for (const g of c.gives ?? []) link(key('character', c.id), key('item', g.itemId), 'place', '줌');
+  // 세력 소속 · 인물 사이 관계 (v0.163)
+  for (const c of w.characters) if (c.faction) link(key('faction', c.faction), key('character', c.id), 'place', '소속');
+  const REL: Record<string, string> = { family: '가족', ally: '동지', rival: '라이벌', lover: '연인', master: '스승·주인', enemy: '원수' };
+  for (const r of w.relations ?? []) link(key('character', r.a), key('character', r.b), 'place', REL[r.kind] ?? r.kind);
   // 조건 (무엇이 열고 · 끝내고 · 실패시키는가)
   for (const q of w.quests ?? []) {
     const me = key('quest', q.id);
@@ -310,7 +317,7 @@ export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right', pinned?: Reco
   // 장소·인물 띠 (v0.147): 흐름 아래에 장소 줄, 그 아래 인물 줄
   let laneTop = bodyEnd + (lane.length ? 50 : 0);
   const perLane = Math.max(5, down ? tallest : layers.length || 5);
-  for (const kind of ['location', 'character', 'item', 'monster'] as NodeKind[]) {
+  for (const kind of ['location', 'character', 'faction', 'item', 'monster'] as NodeKind[]) {
     const row = lane.filter((k) => byKey.get(k)!.kind === kind);
     row.forEach((k, i) => placed.push({ ...byKey.get(k)!, layer: -2, x: 20 + (i % perLane) * (NODE_W + 24), y: laneTop + Math.floor(i / perLane) * (NODE_H + GAP_Y) }));
     if (row.length) laneTop += Math.ceil(row.length / perLane) * (NODE_H + GAP_Y) + 10;

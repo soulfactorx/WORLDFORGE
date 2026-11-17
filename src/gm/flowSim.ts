@@ -99,6 +99,7 @@ export function nodeSim(w: WorldPackage, s: GameState, n: GNode): NodeSim {
     case 'claim': return ok(w, s, { knows: n.id }) ? { st: 'on', text: '앎' } : { st: 'off', text: '모름' };
     case 'phase': return s.phase === n.id ? { st: 'on', text: '지금 국면' } : { st: 'off', text: '' };
     case 'location': return s.player.locationId === n.id ? { st: 'on', text: '지금 여기' } : { st: 'off', text: '' };
+    case 'faction': return { st: 'off', text: `평판 ${reputationOf(w, s.reputation ?? {}, n.id)}` };
     case 'item': { const k = s.inventory?.[n.id] ?? 0; return k > 0 ? { st: 'on', text: `가짐 ${k}개` } : { st: 'off', text: '없음' }; }
     case 'monster': { const k = s.kills?.[n.id] ?? 0; return k > 0 ? { st: 'on', text: `${k}마리 쓰러뜨림` } : { st: 'off', text: '' }; }
     case 'character': return s.deadNpcs.includes(n.id) ? { st: 'failed', text: '죽음' } : s.party[n.id] ? { st: 'on', text: '동료' } : { st: 'none', text: '' };

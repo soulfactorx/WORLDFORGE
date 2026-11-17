@@ -17,7 +17,7 @@ export interface LinkOption { group: 'cond' | 'effect' | 'start' | 'place'; labe
 
 const LIST: Partial<Record<GNode['kind'], keyof WorldPackage>> = {
   quest: 'quests', ending: 'endings', card: 'storylets', scene: 'scenes', gimmick: 'scenes', encounter: 'encounters',
-  choice: 'choices', arc: 'arcs', event: 'events', rule: 'rules', clock: 'clocks', location: 'locations', character: 'characters', item: 'items', monster: 'monsters',
+  choice: 'choices', arc: 'arcs', event: 'events', rule: 'rules', clock: 'clocks', location: 'locations', character: 'characters', item: 'items', monster: 'monsters', faction: 'factions',
 };
 const entity = (w: WorldPackage, n: GNode): Any => { const l = LIST[n.kind]; return l ? ((w[l] as Any[] | undefined) ?? []).find((x) => x.id === n.id) : undefined; };
 function edit(w: WorldPackage, n: GNode, fn: (x: Any) => Any): Partial<WorldPackage> {
@@ -92,6 +92,7 @@ export function sourceWays(w: WorldPackage, n: GNode): LinkWay[] {
       { label: '원한이 50 이상이면', cond: { relationship: n.id, axis: 'grudge', gte: 50 } },
     ];
     case 'item': return [{ label: '가지고 있으면', cond: { hasItem: n.id } }];
+    case 'faction': return [{ label: '평판이 50 이상이면', cond: { reputation: n.id, gte: 50 } }, { label: '평판이 20 이상이면', cond: { reputation: n.id, gte: 20 } }, { label: '평판이 -30 이하면', cond: { reputation: n.id, lte: -30 } }];
     case 'monster': return [{ label: '한 마리 쓰러뜨리면', cond: { defeated: n.id } }, { label: '세 마리 쓰러뜨리면', cond: { defeated: n.id, n: 3 } }];
     default: return [];
   }
@@ -198,6 +199,7 @@ export function effectFor(n: GNode): { effect: StoryEffect; label: string } | nu
     case 'location': return { effect: { moveTo: n.id }, label: '이곳으로 옮김' };
     case 'character': return { effect: { relationship: n.id, delta: { trust: 10 } }, label: '신뢰 +10' };
     case 'item': return { effect: { giveItem: n.id }, label: '얻음' };
+    case 'faction': return { effect: { reputation: n.id, delta: 10 }, label: '평판 +10' };
     default: return null;
   }
 }
@@ -218,6 +220,13 @@ export function linkOptions(w: WorldPackage, a: GNode, b: GNode): LinkOption[] {
     if (b.kind === 'location') place.push({ group: 'place', label: `「${a.name}」 ↔ 「${b.name}」 길로 잇기`, note: '두 장소를 오갈 수 있게 양쪽 모두 잇습니다.', apply: (w2) => ({ locations: setLink(w2.locations, a.id, b.id, true) }) });
   }
   // 적 → 전투: 그 전투에 나오게 · 인물 → 아이템: 그 인물이 주게 (v0.148)
+  if (a.kind === 'faction' && b.kind === 'character' && entity(w, b)) place.push({ group: 'place', label: `「${b.name}」을(를) 「${a.name}」 소속으로`, note: '이 인물과 가까워지면 세력 평판이 오르고, 원한을 사면 떨어진다.', apply: (w2) => edit(w2, b, (x) => { x.faction = a.id; return x; }) });
+  if (a.kind === 'character' && b.kind === 'character' && entity(w, a) && entity(w, b)) {
+    for (const [kind, label] of [['ally', '동지'], ['family', '가족'], ['lover', '연인'], ['master', '스승·주인'], ['rival', '라이벌'], ['enemy', '원수']] as const) {
+      place.push({ group: 'place', label: `「${a.name}」 —${label}→ 「${b.name}」`, note: '플레이어가 한 사람과 가까워지면 그의 라이벌·원수는 원한이, 가족·동지·연인·스승은 호감이 오른다.',
+        apply: (w2) => ({ relations: [...(w2.relations ?? []).filter((r) => !((r.a === a.id && r.b === b.id) || (r.a === b.id && r.b === a.id))), { a: a.id, b: b.id, kind }] }) });
+    }
+  }
   if (a.kind === 'monster' && b.kind === 'encounter' && entity(w, b)) place.push({ group: 'place', label: `「${a.name}」이(가) 「${b.name}」에 나오게`, note: '전투의 적 목록에 더합니다 (먼 칸).', apply: (w2) => edit(w2, b, (x) => { x.enemies = [...(x.enemies ?? []), { monsterId: a.id, zone: 3 }]; return x; }) });
   if (a.kind === 'character' && b.kind === 'item' && entity(w, a)) place.push({ group: 'place', label: `「${a.name}」이(가) 「${b.name}」을(를) 주게`, note: '인물이 주는 물건에 더합니다 (조건은 「인물」 탭에서).', apply: (w2) => edit(w2, a, (x) => { if (!(x.gives ?? []).some((g: { itemId: string }) => g.itemId === b.id)) x.gives = [...(x.gives ?? []), { itemId: b.id, n: 1 }]; return x; }) });
   if (a.key === START_KEY) {
@@ -273,6 +282,7 @@ export function leafPoints(w: WorldPackage, leaf: Condition, a: GNode): boolean 
     case 'location': return r.at === a.id;
     case 'character': return [r.npcAlive, r.inParty, r.relationship, r.stage, r.npcAt].includes(a.id);
     case 'item': return r.hasItem === a.id;
+    case 'faction': return r.reputation === a.id;
     case 'monster': return r.defeated === a.id;
     default: return false;
   }
@@ -287,6 +297,8 @@ export function unlink(w: WorldPackage, e: GEdge, a: GNode, b: GNode): { patch?:
   if (e.kind === 'stage') return { note: '임무 단계의 고비(장면·전투)는 그 단계의 끝 조건에서 고치세요.' };
   if (e.kind === 'place') {
     // 장소 칸: 조우·인물은 장소가 꼭 있어야 한다
+    if (a.kind === 'faction' && b.kind === 'character') return { patch: edit(w, b, (x) => { delete x.faction; return x; }), note: `「${b.name}」을(를) 「${a.name}」 소속에서 뺐습니다.` };
+    if (a.kind === 'character' && b.kind === 'character') return { patch: { relations: (w.relations ?? []).filter((r) => !(r.a === a.id && r.b === b.id)) }, note: `「${a.name}」과(와) 「${b.name}」의 관계를 지웠습니다.` };
     if (a.kind === 'monster' && b.kind === 'encounter') {
       const left = (entity(w, b)?.enemies ?? []).filter((en: { monsterId: string }) => en.monsterId !== a.id);
       if (!left.length) return { note: `「${b.name}」의 적이 「${a.name}」뿐입니다 — 다른 적을 먼저 넣으세요.` };
@@ -322,7 +334,7 @@ function effectHits(ef: StoryEffect, b: GNode): boolean {
   const r = ef as Record<string, unknown>;
   return (b.kind === 'flag' && r.setFlag === b.id) || ((b.kind === 'scene' || b.kind === 'gimmick') && r.startScene === b.id) || (b.kind === 'encounter' && r.startEncounter === b.id)
     || (b.kind === 'card' && r.openStorylet === b.id) || (b.kind === 'quest' && r.advanceQuest === b.id) || (b.kind === 'claim' && r.reveal === b.id)
-    || (b.kind === 'item' && (r.giveItem === b.id || r.takeItem === b.id)) || (b.kind === 'location' && r.moveTo === b.id) || (b.kind === 'character' && (r.relationship === b.id || r.killNpc === b.id || r.moveNpc === b.id));
+    || (b.kind === 'item' && (r.giveItem === b.id || r.takeItem === b.id)) || (b.kind === 'faction' && r.reputation === b.id && typeof r.delta === 'number') || (b.kind === 'location' && r.moveTo === b.id) || (b.kind === 'character' && (r.relationship === b.id || r.killNpc === b.id || r.moveNpc === b.id));
 }
 
 // ---------------------------------------------------------------- 화살표 고치기 (v0.145)

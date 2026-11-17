@@ -216,4 +216,28 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     expect(g.nodes.some((n) => n.key === 'flag:lonely')).toBe(true);
     expect(g.nodes.some((n) => n.key === 'claim:claim/solo')).toBe(true);
   });
+
+  it('세력·인물 관계 (v0.163): 평판 조건·효과·소속·관계가 상자와 화살표로, 끌어 이으면 소속·관계', () => {
+    const [c1, c2] = sampleWorld.characters;
+    const w: WorldPackage = { ...base, factions: [{ id: 'fac/g', name: '길드', description: '' }],
+      characters: sampleWorld.characters.map((c, i) => (i === 0 ? { ...c, faction: 'fac/g' } : c)),
+      relations: [{ a: c1!.id, b: c2!.id, kind: 'rival' }],
+      endings: [{ id: 'ending/r', name: 'r', condition: { reputation: 'fac/g', gte: 40 }, epilogue: '' }],
+      choices: [{ id: 'choice/c', name: 'c', prompt: '?', when: { all: [] }, options: [{ id: 'o', text: 't', effects: [{ reputation: 'fac/g', delta: 15 }] }] }] };
+    const g = buildStoryGraph(w);
+    const has = (a: string, b: string) => g.edges.some((e) => e.from === a && e.to === b);
+    expect(g.nodes.find((n) => n.key === 'faction:fac/g')!.kind).toBe('faction');
+    expect(has('faction:fac/g', 'ending:ending/r')).toBe(true);
+    expect(has('choice:choice/c', 'faction:fac/g')).toBe(true);
+    expect(has('faction:fac/g', `character:${c1!.id}`)).toBe(true);
+    expect(has(`character:${c1!.id}`, `character:${c2!.id}`)).toBe(true);
+    expect(layoutGraph(g).nodes.find((n) => n.key === 'faction:fac/g')!.layer).toBe(-2);
+    const f = node(w, 'faction:fac/g'), n2 = node(w, `character:${c2!.id}`);
+    const w2 = { ...w, ...linkOptions(w, f, n2).find((o) => o.label.includes('소속'))!.apply(w) };
+    expect(w2.characters.find((c) => c.id === c2!.id)!.faction).toBe('fac/g');
+    const w3 = { ...w, ...linkOptions(w, n2, node(w, `character:${c1!.id}`)).find((o) => o.label.includes('동지'))!.apply(w) };
+    expect(w3.relations).toEqual([{ a: c2!.id, b: c1!.id, kind: 'ally' }]);
+    expect(sourceWays(w, f)[0]!.cond).toEqual({ reputation: 'fac/g', gte: 50 });
+  });
 });
+
