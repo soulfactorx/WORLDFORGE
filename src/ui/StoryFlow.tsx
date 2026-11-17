@@ -10,6 +10,10 @@ import { type ExploreReport, nodeSim, type NodeSim, simActs, simExplore, simIcon
 import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
+import { GIMMICK_DEFAULTS, GimmickForm } from './GimmickForms';
+import { newSceneDef } from './SceneForms';
+import { GIMMICK_KINDS, gimmickScene } from '../engine/gimmick';
+import type { Gimmick, SceneDef } from '../engine/schema';
 import { ConditionField } from './ConditionEditor';
 import { Area, Text } from './form';
 import { EffectsEditor } from './WorldForms';
@@ -198,10 +202,12 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               <li><b>▶ 플레이 시작</b>에서 처음 열릴 것을 만드세요 — 첫 임무·갈래 카드·결정적 선택.</li>
               <li>만든 상자를 고르고 <b>「＋ 이것 다음에 열리는 임무」</b>로 이야기를 이어 가고, 갈라지는 곳은 선택지·카드의 갈림길로 만드세요.</li>
               <li>끝에는 <b>「＋ 이것으로 이르는 결말」</b>. 상자의 ● 손잡이를 끌어 잇고, 화살표를 눌러 조건을 고칩니다.</li>
+              <li><b>＋ 장면 · ＋ 함정·퍼즐</b>은 판정으로 풀어 가는 고비입니다 — 성공·실패에 따라 다음이 갈라집니다.</li>
               <li><b>＋ 장소 · ＋ 인물 · ＋ 아이템 · ＋ 적</b>은 흐름 아래 띠에 놓입니다. 장소를 이야기 상자로 끌면 「여기 있으면 열림」 「여기서 일어남」이 됩니다.</li>
               <li>다 되면 <b>🧪 시뮬레이션</b>으로 끝까지 가 보세요.</li>
             </ol>
-            <div className="row flow-empty-actions">{startCreators(w, set, setSel).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}</div>
+            <div className="row flow-empty-actions">{startCreators(w, set, setSel).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}
+              <SceneAdd w={w} set={set} onPick={setSel} scene="＋ 장면" gimmick="＋ 함정·퍼즐" /></div>
           </div>
         )}
         {sim && (
@@ -485,6 +491,9 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
           return <button type="button" onClick={() => { const id = newId('quest/next-', w.quests ?? []); set(newQuest(w, id, `${n.name} ${n.kind === 'item' ? '얻은 뒤' : '쓰러뜨린 뒤'}`, 'side', cond)); onPick(`quest:${id}`); }}>{n.kind === 'item' ? '＋ 이것을 가지면 열리는 임무' : '＋ 이것을 쓰러뜨리면 열리는 임무'}</button>;
         })()}
         {n.kind === 'start' && startCreators(w, set, onPick).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}
+        {n.kind === 'start' && <SceneAdd w={w} set={set} onPick={onPick} scene="＋ 처음부터 열리는 장면" gimmick="＋ 함정·퍼즐" />}
+        {n.kind === 'location' && <SceneAdd w={w} set={set} onPick={onPick} at={n.id} scene="＋ 이곳에서 일어나는 장면" gimmick="＋ 이곳의 함정·퍼즐" />}
+        {after && n.kind !== 'location' && n.kind !== 'start' && <SceneAdd w={w} set={set} onPick={onPick} start={after} scene="＋ 이것 다음에 열리는 장면" gimmick="＋ 다음에 나오는 함정·퍼즐" />}
         {after && <button type="button" onClick={() => {
           const id = newId('quest/next-', w.quests ?? []);
           set(newQuest(w, id, `${n.name} 다음`, 'side', after)); onPick(`quest:${id}`);
@@ -521,6 +530,31 @@ function newPlace(w: WorldPackage, near?: string): { id: string; locations: Loca
   if (to) locations = setLink(locations, id, to, true);
   return { id, locations };
 }
+/** 새 장면·함정·퍼즐 (v0.149): 「장면」「함정·퍼즐」 탭의 새 항목과 같은 꼴 — start: 열리는 조건, at: 장소 */
+function newScene(w: WorldPackage, o: { start?: Condition; at?: string } = {}): SceneDef {
+  return { ...newSceneDef(nextId('scene/new-', w.scenes ?? [])), ...(o.start ? { start: o.start } : {}), ...(o.at ? { locationId: o.at } : {}) };
+}
+function newGimmick(w: WorldPackage, kind: Gimmick['kind'], o: { start?: Condition; at?: string } = {}): SceneDef {
+  const d = GIMMICK_DEFAULTS[kind];
+  return gimmickScene({ id: nextId('scene/gimmick-', w.scenes ?? []), name: d.name, locationId: o.at ?? w.start.locationId, ...(o.start ? { start: o.start } : {}) }, structuredClone(d.g));
+}
+/** 「＋ 장면」 · 종류를 골라 「＋ 함정·퍼즐」 */
+function SceneAdd({ w, set, onPick, start, at, scene, gimmick }: { w: WorldPackage; set: SetW; onPick: (k: string) => void; start?: Condition; at?: string; scene: string; gimmick: string }) {
+  const [kind, setKind] = useState<Gimmick['kind']>('trap');
+  const o = { ...(start ? { start } : {}), ...(at ? { at } : {}) };
+  return (
+    <>
+      <button type="button" onClick={() => { const d = newScene(w, o); set({ scenes: [...(w.scenes ?? []), d] }); onPick(`scene:${d.id}`); }}>{scene}</button>
+      <div className="row flow-gimmick-add">
+        <select aria-label="함정·퍼즐 종류" value={kind} onChange={(e) => setKind(e.target.value as Gimmick['kind'])}>
+          {GIMMICK_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <button type="button" onClick={() => { const d = newGimmick(w, kind, o); set({ scenes: [...(w.scenes ?? []), d] }); onPick(`gimmick:${d.id}`); }}>{gimmick}</button>
+      </div>
+    </>
+  );
+}
+
 /** 새 아이템·적 (v0.148): 「아이템·상점」「조우」 탭의 새 항목과 같은 꼴 */
 function newItem(w: WorldPackage): ItemDef { return { id: nextId('item/new-', w.items ?? []), name: '새 물건', description: '', kind: 'misc', price: 10 }; }
 function newMonster(w: WorldPackage): CustomMonster {
@@ -741,12 +775,24 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
       const up = (p: Partial<typeof s>) => set({ scenes: upd(w.scenes, p) });
       return (
         <>
-          <Text label="이름" value={s.name} onChange={(name) => up({ name })} />
           <ConditionField label="열리는 조건 (선택)" value={s.start} world={w} optional onChange={(start) => up({ start })} />
-          {n.kind === 'scene' && s.ends.map((e, i) => (
-            <EffectsEditor key={e.id} label={`끝 「${e.name}」에 일어나는 일`} value={e.effects} w={w} onChange={(effects) => up({ ends: s.ends.map((x, j) => (j === i ? { ...x, effects } : x)) })} />
-          ))}
-          {n.kind === 'gimmick' && <p className="small muted">함정·퍼즐의 판정·보상은 「함정·퍼즐」 탭에서 고칩니다.</p>}
+          {n.kind === 'gimmick' ? (
+            // 함정·퍼즐: 탭과 같은 양식 (바꿀 때마다 장면을 다시 만든다 — 열리는 조건은 지킨다)
+            <div className="flow-gimmick-form"><GimmickForm w={w} d={s} onChange={(nd) => set({ scenes: (w.scenes ?? []).map((x) => (x.id === s.id ? nd : x)) })} /></div>
+          ) : (
+            <>
+              <Text label="이름" value={s.name} onChange={(name) => up({ name })} />
+              <Area label="설명 (GM용 — 어떤 장면인가)" value={s.description} onChange={(description) => up({ description })} rows={2} />
+              <label>장소<select value={s.locationId ?? ''} onChange={(e) => up({ locationId: e.target.value || undefined })}>
+                <option value="">어디서나</option>
+                {w.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select></label>
+              {s.ends.map((e, i) => (
+                <EffectsEditor key={e.id} label={`끝 「${e.name}」(${{ success: '성공', failure: '실패', neutral: '보통' }[e.outcome]})에 일어나는 일`} value={e.effects} w={w} onChange={(effects) => up({ ends: s.ends.map((x, j) => (j === i ? { ...x, effects } : x)) })} />
+              ))}
+              <p className="small muted">수치·행동·끝나는 때는 「장면」 탭에서 고치고 바로 테스트할 수 있습니다.</p>
+            </>
+          )}
         </>
       );
     }

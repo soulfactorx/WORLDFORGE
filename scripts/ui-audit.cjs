@@ -263,6 +263,15 @@ const SCREENS = [
     await p.locator('.flow-empty button:has-text("＋ 적")').click();
     await p.waitForSelector('.flow-panel');
   }],
+  ['편집: 흐름도 · 함정·퍼즐 상자 (v0.149)', async (p) => {
+    await home(p);
+    await p.click('.home-tabs button:has-text("세계관")');
+    await p.click('button:has-text("＋ 만들기")');
+    await p.click('button:has-text("흐름도에서 만들기")');
+    await p.locator('.flow-empty .flow-gimmick-add select').selectOption('riddle');
+    await p.locator('.flow-empty button:has-text("＋ 함정·퍼즐")').click();
+    await p.waitForSelector('.flow-gimmick-form');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();
