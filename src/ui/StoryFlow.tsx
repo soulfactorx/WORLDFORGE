@@ -16,6 +16,7 @@ import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
 import { isMyAssets, keepAsAsset } from '../storage/myAssets';
+import { FlowLibrary } from './FlowLibrary';
 import type { BorrowKind } from '../engine/borrow';
 import { GIMMICK_DEFAULTS, GimmickForm } from './GimmickForms';
 import { newSceneDef, SceneForm } from './SceneForms';
@@ -56,6 +57,8 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   const [linking, setLinking] = useState<string | null>(null);
   const [pending, setPending] = useState<{ from: string; to: string } | null>(null);
   const [note, setNote] = useState('');
+  /** 만계서고에서 가져오기 (v0.158): 이어 붙일 조건 */
+  const [lib, setLib] = useState<{ after?: Condition; afterName?: string; kind?: BorrowKind } | null>(null);
   /** 화살표 고치기 (v0.145) */
   const [edgeSel, setEdgeSel] = useState<GEdge | null>(null);
   /** 시뮬레이션 (v0.145): 한 일의 경로로 상태를 다시 만든다 (되돌리기 · 세계를 고치면 다시 돌리기) */
@@ -221,7 +224,8 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               <li>다 되면 <b>🧪 시뮬레이션</b>으로 끝까지 가 보세요.</li>
             </ol>
             <div className="row flow-empty-actions">{startCreators(w, set, setSel).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}
-              <SceneAdd w={w} set={set} onPick={setSel} scene="＋ 장면" gimmick="＋ 함정·퍼즐" /></div>
+              <SceneAdd w={w} set={set} onPick={setSel} scene="＋ 장면" gimmick="＋ 함정·퍼즐" />
+              <button type="button" onClick={() => setLib({})}>🌌 만계서고에서 가져오기</button></div>
           </div>
         )}
         {sim && (
@@ -365,9 +369,11 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               if (r.error) { setNote(`❌ ${r.error}`); return; }
               setSim({ path: [...sim.path, `${selNode.key}|${id}`], state: r.state, lines: [...sim.lines, `▸ ${selNode.name}: ${label}`, ...r.lines.map((x) => `   ${x}`)] });
             }} />
-            : <NodePanel w={w} set={set} g={graph} n={selNode} onPick={setSel} onClose={() => setSel(null)} onTab={onTab} onLink={() => { setLinking(selNode.key); setNote(''); }} onNote={setNote} onEdge={setEdgeSel} />)}
+            : <NodePanel w={w} set={set} g={graph} n={selNode} onPick={setSel} onClose={() => setSel(null)} onTab={onTab} onLink={() => { setLinking(selNode.key); setNote(''); }} onNote={setNote} onEdge={setEdgeSel} onLibrary={(after) => setLib(after ? { after, afterName: selNode.name } : {})} />)}
         </div>
       )}
+      {lib && <FlowLibrary w={w} {...(lib.kind ? { kind: lib.kind } : {})} {...(lib.after ? { after: lib.after } : {})} {...(lib.afterName ? { afterName: lib.afterName } : {})} onClose={() => setLib(null)}
+        onApply={(nw, msg, key) => { set(nw); setLib(null); setNote(msg); if (key) setSel(key); }} />}
       {edgeSel && byKey(edgeSel.from) && byKey(edgeSel.to) && (
         <EdgeDialog w={w} set={set} g={graph} e={edgeSel} onClose={() => setEdgeSel(null)} onNote={setNote} onPick={(k) => { setEdgeSel(null); setSel(k); }} />
       )}
@@ -452,7 +458,7 @@ function Edge({ e, a, b, active, dim, down, onPick }: { e: GEdge; a?: { x: numbe
 }
 
 /** 고른 노드: 이어진 것 · 바로 고치기 · 다음 것 만들기 */
-function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdge }: { w: WorldPackage; set: SetW; g: StoryGraph; n: GNode; onPick: (k: string) => void; onClose: () => void; onTab: (t: FlowTab) => void; onLink: () => void; onNote: (s: string) => void; onEdge: (e: GEdge) => void }) {
+function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdge, onLibrary }: { w: WorldPackage; set: SetW; g: StoryGraph; n: GNode; onPick: (k: string) => void; onClose: () => void; onTab: (t: FlowTab) => void; onLink: () => void; onNote: (s: string) => void; onEdge: (e: GEdge) => void; onLibrary: (after?: Condition) => void }) {
   const ins = g.edges.filter((e) => e.to === n.key), outs = g.edges.filter((e) => e.from === n.key);
   const nameOf = (k: string) => { const x = g.nodes.find((y) => y.key === k); return x ? `${NODE_ICON[x.kind]} ${x.name}` : k; };
   const tab = TAB_OF[n.kind];
@@ -508,6 +514,8 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
           </>;
         })()}
         {n.kind === 'start' && startCreators(w, set, onPick).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}
+        {n.kind === 'start' && <button type="button" onClick={() => onLibrary()}>🌌 만계서고에서 가져오기</button>}
+        {after && n.kind !== 'start' && <button type="button" onClick={() => onLibrary(after)}>🌌 이것 다음에 — 만계서고에서 가져오기</button>}
         {n.kind === 'start' && <SceneAdd w={w} set={set} onPick={onPick} scene="＋ 처음부터 열리는 장면" gimmick="＋ 함정·퍼즐" />}
         {n.kind === 'location' && <SceneAdd w={w} set={set} onPick={onPick} at={n.id} scene="＋ 이곳에서 일어나는 장면" gimmick="＋ 이곳의 함정·퍼즐" />}
         {after && n.kind !== 'location' && n.kind !== 'start' && <SceneAdd w={w} set={set} onPick={onPick} start={after} scene="＋ 이것 다음에 열리는 장면" gimmick="＋ 다음에 나오는 함정·퍼즐" />}

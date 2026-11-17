@@ -1473,4 +1473,13 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .source-license-form label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .source-license-form label.check { flex-direction: row; align-items: flex-start; gap: 8px; }
 .source-license-form select, .source-license-form input:not([type=checkbox]) { width: 100%; max-width: 100%; }
+/* 흐름도 ＋ 만계서고에서 (v0.158) */
+.flow-library { width: min(640px, 100%); }
+.flow-library input[type=search] { width: 100%; }
+.flow-lib-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 46vh; max-height: 46dvh; overflow: auto; }
+.flow-lib-item { width: 100%; display: flex; gap: 8px; align-items: center; text-align: left; min-height: 44px; }
+.flow-lib-item.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.flow-lib-thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; flex: none; }
+.flow-lib-text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.flow-lib-deps { flex: 1 1 100%; }
 

@@ -152,7 +152,7 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
 
   const worldRow = (p: NonNullable<typeof packages>[number]) => {
     const w = p.world;
-    const n = !p.builtin ? imageNeeds(w).length : 0;
+    const n = !p.builtin && !isMyAssets(w) ? imageNeeds(w).length : 0;
     const src = sourcesOf(w);
     return (
       <li key={packageKey(w)} className={selected && packageKey(selected.world) === packageKey(w) ? 'current' : ''}>
@@ -166,12 +166,12 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
               : <span className="need-badge" title={PRIVATE_NOTE}>🔒 개인용</span>)}
             {!w.manifest.private && shareBlocked(w) && <span className="need-badge" title={MATURE_NOTE}>🔞 성인</span>}
             {src.length > 0 && <span className="need-badge" title={src.map((x) => x.name).join(' · ')}>출처 카드 {src.length}장</span>}
-            {w.manifest.crossover?.length ? <span className="need-badge" title={`크로스오버: ${w.manifest.crossover.map((c) => c.name).join(' · ')}`}>🌌 크로스오버 {w.manifest.crossover.length}</span> : null}
+            {w.manifest.crossover?.length && !isMyAssets(w) ? <span className="need-badge" title={`크로스오버: ${w.manifest.crossover.map((c) => c.name).join(' · ')}`}>🌌 크로스오버 {w.manifest.crossover.length}</span> : null}
             {n > 0 && <span className="need-badge" title="진짜 이미지가 없는 인물·장소 — 편집 → 이미지 탭, 또는 내 기본 이미지에 추천 파일 이름으로 올리면 자동으로 붙습니다">🖼 이미지 부족 {n}</span>}
           </span>
         </span>
         <span className="row nowrap">
-          <button onClick={() => pickWorld(w)} title="이 세계로 새 게임">▶<span className="wide-only"> 플레이</span></button>
+          {!isMyAssets(w) && <button onClick={() => pickWorld(w)} title="이 세계로 새 게임">▶<span className="wide-only"> 플레이</span></button>}
           <Menu label="⋯" title="편집·내보내기·삭제">
             <button onClick={() => {
               if (!p.builtin) { onEdit(w); return; }
