@@ -126,8 +126,10 @@ export function simActs(w: WorldPackage, s: GameState, n: GNode): SimAct[] {
       return outs;
     }
     case 'choice': {
-      const c = w.choices?.find((x) => x.id === n.id); if (!c || st !== 'open') return [];
-      return c.options.map((o) => ({ id: `opt:${o.id}`, label: `「${o.text}」 고르기`, weight: 2, run: ev((s2) => {
+      const c = w.choices?.find((x) => x.id === n.id); if (!c || (st !== 'open' && st !== 'locked')) return [];
+      // 잠긴 선택도 결과를 볼 수 있게 「조건 무시하고」 고를 수 있다 (v0.160 — 자동 탐색은 고르지 않는다)
+      const forced = st === 'locked';
+      return c.options.map((o) => ({ id: `${forced ? 'force' : 'opt'}:${o.id}`, label: `「${o.text}」 고르기${forced ? ' (조건 무시)' : ''}`, weight: forced ? 0 : 2, run: ev((s2) => {
         const made: GameEvent = { type: 'choice_made', choiceId: c.id, optionId: o.id, text: `${c.name}: ${o.text}` };
         return [made, ...effectEvents(w, { ...s2, choices: { ...s2.choices, [c.id]: { turn: s2.turn, chosen: o.id } } }, o.effects, c.name)];
       }) }));
@@ -204,6 +206,37 @@ export function wantedPlaces(w: WorldPackage, s: GameState, g: StoryGraph): stri
   });
 }
 
+// ---------------------------------------------------------------- 고르면 어떻게 되나 (v0.160)
+
+export interface ActPreview {
+  id: string; label: string; forced: boolean;
+  /** 엔진이 적은 일 (효과·전환) */
+  lines: string[];
+  /** 새로 열리거나 진행이 시작된 상자 · 끝난 상자 · 실패·잠긴 상자 */
+  opened: GNode[]; done: GNode[]; failed: GNode[];
+  /** 섰거나 알게 된 것 (플래그·지식·장소·아이템…) */
+  on: GNode[];
+  ending?: GNode;
+  error?: string;
+}
+/** 이 상자의 할 일마다, 지금 상태에서 하면 무엇이 바뀌는지 (상태는 바꾸지 않는다) */
+export function previewActs(w: WorldPackage, s: GameState, g: StoryGraph, n: GNode): ActPreview[] {
+  const before = new Map(g.nodes.map((x) => [x.key, nodeSim(w, s, x).st]));
+  return simActs(w, s, n).map((a) => {
+    const r = a.run(w, s);
+    const base = { id: a.id, label: a.label, forced: a.weight === 0, lines: r.lines };
+    if (r.error) return { ...base, opened: [], done: [], failed: [], on: [], error: r.error };
+    const ch = g.nodes.map((x) => ({ x, was: before.get(x.key), now: nodeSim(w, r.state, x).st })).filter((c) => c.was !== c.now && c.x.key !== n.key);
+    const end = r.state.ending ? g.nodes.find((x) => x.kind === 'ending' && x.id === r.state.ending) : undefined;
+    return { ...base,
+      opened: ch.filter((c) => (c.now === 'open' || c.now === 'active') && c.was === 'locked').map((c) => c.x),
+      done: ch.filter((c) => c.now === 'done' && c.x.kind !== 'ending').map((c) => c.x),
+      failed: ch.filter((c) => c.now === 'failed' || (c.now === 'locked' && (c.was === 'open' || c.was === 'active'))).map((c) => c.x),
+      on: ch.filter((c) => c.now === 'on').map((c) => c.x),
+      ...(end ? { ending: end } : {}) };
+  });
+}
+
 /** 한 일 기록: "상자키|할일id" · "move|장소ID" */
 export type SimPath = string[];
 
@@ -241,6 +274,8 @@ export interface ExploreReport {
   /** 결말마다 처음 이른 경로 */
   pathTo: Record<string, SimPath>;
   avgSteps: number;
+  /** 갈림길별 결과 (v0.160): 상자키 → 할일id → 그 길로 간 판의 결말 (dead = 결말 없이 막힘, long = 끝나지 않음) */
+  byChoice: Record<string, Record<string, { runs: number; endings: Record<string, number>; dead: number; long: number; path?: SimPath }>>;
 }
 
 function rng(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -254,6 +289,7 @@ export async function simExplore(w: WorldPackage, g: StoryGraph, opts: { runs?: 
   const pathTo: Record<string, SimPath> = {};
   let deadEnds = 0, tooLong = 0, totalSteps = 0, finished = 0;
   let deadPath: SimPath | undefined;
+  const byChoice: ExploreReport['byChoice'] = {};
   const start = simStart(w);
   const mark = (s: GameState) => { for (const n of g.nodes) { const st = nodeSim(w, s, n).st; if (st !== 'locked' && st !== 'off' && st !== 'none') touched.add(n.key); } };
   for (let r = 0; r < runs; r++) {
@@ -278,6 +314,15 @@ export async function simExplore(w: WorldPackage, g: StoryGraph, opts: { runs?: 
       mark(s);
     }
     totalSteps += path.length;
+    // 결정적 선택·갈래 카드의 갈림길을 고른 판마다 그 판의 끝을 센다
+    const outcome = s.ending ? `ending:${s.ending}` : !ended && path.length >= steps ? 'long' : 'dead';
+    for (const st of new Set(path)) {
+      const i = st.lastIndexOf('|'), k = st.slice(0, i), id = st.slice(i + 1);
+      if (!k.startsWith('choice:') && !k.startsWith('card:')) continue;
+      const t = ((byChoice[k] ??= {})[id] ??= { runs: 0, endings: {}, dead: 0, long: 0 });
+      t.runs++;
+      if (outcome === 'dead') t.dead++; else if (outcome === 'long') t.long++; else { t.endings[outcome] = (t.endings[outcome] ?? 0) + 1; t.path ??= path; }
+    }
     if (s.ending) {
       const k = `ending:${s.ending}`;
       endings[k] = (endings[k] ?? 0) + 1;
@@ -292,5 +337,6 @@ export async function simExplore(w: WorldPackage, g: StoryGraph, opts: { runs?: 
     runs: finished, endings, deadEnds, ...(deadPath ? { deadPath } : {}), tooLong, touched: [...touched], pathTo,
     never: g.nodes.filter((n) => !SKIP_NEVER.has(n.kind) && !touched.has(n.key)).map((n) => n.key),
     avgSteps: finished ? Math.round((totalSteps / finished) * 10) / 10 : 0,
+    byChoice,
   };
 }
