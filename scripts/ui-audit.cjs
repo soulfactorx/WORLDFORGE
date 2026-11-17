@@ -367,6 +367,18 @@ const SCREENS = [
     await p.waitForSelector('.flow-lib-item');
     await p.locator('.flow-lib-item').first().click();
   }],
+  ['편집: 흐름도 · 목록 (v0.159)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    if (!(await p.locator('.flow-outline').count())) await p.click('.flow-tools button:has-text("목록")');
+    await p.waitForSelector('.flow-outline');
+  }],
+  ['편집: 흐름도 · 전투 편집 (v0.159)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    const c = p.locator('.flow-node.k-encounter .flow-box').first();
+    if (await c.count()) await c.click();
+    else { await p.locator('.flow-node.k-start .flow-box').click(); await p.click('.flow-actions button:text-is("＋ 적")'); await p.click('.flow-actions button:has-text("이 적이 나오는 전투")'); }
+    await p.waitForSelector('.flow-panel fieldset:has(legend:has-text("적 "))');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();
