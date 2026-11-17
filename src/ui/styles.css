@@ -1513,4 +1513,15 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-bychoice { flex-direction: column; align-items: stretch; }
 .flow-bychoice-item ul { margin: 2px 0 6px; padding-left: 1.2em; }
 .flow-bychoice-item li { display: list-item; overflow-wrap: anywhere; }
+/* 시뮬레이션 값 정하기 (v0.161) */
+.flow-sim-set > summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; }
+.flow-sim-set { display: flex; flex-direction: column; gap: 6px; }
+.flow-slider { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 2px 4px; border-radius: 6px; }
+.flow-slider.set { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.flow-slider > span { display: flex; justify-content: space-between; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.flow-slider input[type=range] { width: 100%; min-height: 36px; accent-color: var(--accent); }
+.flow-sim-set .flow-stage { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 12px; }
+.flow-sim-set .flow-stage > legend { grid-column: 1 / -1; }
+.flow-sim-set .flow-stage > label:not(.flow-slider) { grid-column: 1 / -1; max-width: 420px; }
+.flow-sim-set .flow-stage > label:not(.flow-slider) { display: flex; flex-direction: column; gap: 3px; }
 

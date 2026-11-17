@@ -385,6 +385,12 @@ const SCREENS = [
     const c = p.locator('.flow-node.k-choice .flow-box').first();
     if (await c.count()) { await c.click(); await p.waitForSelector('.flow-sim-panel'); } else await p.waitForSelector('.flow-sim');
   }],
+  ['편집: 흐름도 · 시뮬레이션 값 정하기 (v0.161)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.click('button:has-text("🧪 시뮬레이션")');
+    await p.click('.flow-sim-set > summary');
+    await p.waitForSelector('.flow-sim-set[open]');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();

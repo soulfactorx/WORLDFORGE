@@ -11,11 +11,13 @@ import type { Storylet, StoryletOption, DecisiveChoice, Claim, KnowledgeState } 
 import { setLink } from '../engine/locationLinks';
 import { buildStoryGraph, type FlowDir, isEmptyCond, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
 import { renameFlag, restageQuest, edgeSlots, effectSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
-import { type ActPreview, type ExploreReport, nodeSim, type NodeSim, previewActs, simActs, simExplore, simIcon, simMove, type SimPath, simReplay, simStart, wantedPlaces } from '../gm/flowSim';
+import { type ActPreview, type ExploreReport, nodeSim, type NodeSim, previewActs, settingKey, settingStep, settingValue, type SimSetting, simSet, simActs, simExplore, simIcon, simMove, type SimPath, simReplay, simStart, wantedPlaces } from '../gm/flowSim';
 import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
 import { monsterTable } from '../engine/combat/monsters';
+import { traitsFor } from '../engine/traits';
+import { AXES, AXIS_NAMES } from '../engine/relationship';
 import type { Encounter } from '../engine/schema';
 import { isMyAssets, keepAsAsset } from '../storage/myAssets';
 import { FlowLibrary } from './FlowLibrary';
@@ -271,10 +273,23 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               {exploring ? <button type="button" className="small" onClick={() => { cancelExplore.current = true; }}>그만 ({exploring})</button>
                 : <button type="button" className="small" onClick={() => {
                   cancelExplore.current = false; setExploring('0%');
-                  void simExplore(w, graph, { runs: 100, seed: Date.now() % 100000, onProgress: (d, t) => setExploring(`${Math.round((d / t) * 100)}%`), cancelled: () => cancelExplore.current })
+                  // 정해 둔 성향·관계 등이 있으면 모든 판을 그 값에서 시작한다 (v0.161)
+                  const prefix = sim.path.filter((x) => x.startsWith('set|'));
+                  void simExplore(w, graph, { runs: 100, seed: Date.now() % 100000, prefix, onProgress: (d, t) => setExploring(`${Math.round((d / t) * 100)}%`), cancelled: () => cancelExplore.current })
                     .then((r) => { setReport(r); setExploring(''); });
-                }} title="무작위로 100번 끝까지 해 본다 (AI 없이 엔진만)">🎲 자동 탐색 100번</button>}
+                }} title="무작위로 100번 끝까지 해 본다 (AI 없이 엔진만)">🎲 자동 탐색 100번{sim.path.some((x) => x.startsWith('set|')) ? ` (정한 값 ${new globalThis.Set(sim.path.filter((x) => x.startsWith('set|')).map((x) => settingKey(x))).size}개에서)` : ''}</button>}
             </div>
+            <SimSettings w={w} state={sim.state} path={sim.path}
+              onSet={(st) => {
+                const step = settingStep(st), key = settingKey(step);
+                const last = sim.path.at(-1);
+                const replace = !!last && settingKey(last) === key; // 같은 값을 이어서 끌면 마지막 걸음을 바꿔 끼운다
+                const base = replace ? simReplay(w, graph, sim.path.slice(0, -1)).state : sim.state;
+                const r = simSet(w, base, st);
+                if (r.error) { setNote(`❌ ${r.error}`); return; }
+                setSim({ path: [...(replace ? sim.path.slice(0, -1) : sim.path), step], state: r.state, lines: replace ? sim.lines : [...sim.lines, ...r.lines.map((x) => `▸ ${x}`)] });
+              }}
+              onReset={() => simGo(sim.path.filter((x) => !x.startsWith('set|')))} />
             {sim.lines.length > 0 && (
               <details className="flow-sim-log"><summary className="small">지금까지 일어난 일 ({sim.path.length}걸음)</summary>
                 <pre className="small">{sim.lines.slice(-60).join('\n')}</pre>
@@ -1448,6 +1463,46 @@ function EncounterEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: strin
       </div>
       <p className="small muted">전리품 아이템·밸런스 시험은 「조우」 탭에서 합니다.</p>
     </>
+  );
+}
+
+// ---------------------------------------------------------------- 성향·관계·평판·수치 정하기 (v0.161)
+
+function SimSettings({ w, state, path, onSet, onReset }: { w: WorldPackage; state: GameState; path: string[]; onSet: (st: SimSetting) => void; onReset: () => void }) {
+  const [npc, setNpc] = useState(w.characters[0]?.id ?? '');
+  const traits = traitsFor(w);
+  const set = path.filter((x) => x.startsWith('set|'));
+  const nSet = new globalThis.Set(set.map((x) => settingKey(x))).size;
+  const touched = (st: Omit<SimSetting, 'value'>) => set.some((x) => settingKey(x) === settingKey(settingStep({ ...st, value: 0 })));
+  // 함수로 부른다 (안에서 컴포넌트를 만들면 그릴 때마다 새로 만들어져 끄는 중에 끊긴다)
+  const slider = (key: string, label: string, st: Omit<SimSetting, 'value'>, min = -100, max = 100) => {
+    const v = settingValue(w, state, st);
+    return (
+      <label key={key} className={`flow-slider${touched(st) ? ' set' : ''}`}>
+        <span className="small"><span>{label}</span><b>{v}</b></span>
+        <input type="range" min={min} max={max} step={5} value={v} onChange={(e) => onSet({ ...st, value: Number(e.target.value) })} />
+      </label>
+    );
+  };
+  return (
+    <details className="flow-sim-set">
+      <summary className="small">🎚 성향·관계·평판·수치 정하기{nSet ? ` — ${nSet}개 정함` : ''}</summary>
+      <p className="small muted">이 값에서 무엇이 열리는지 바로 보이고, 「🎲 자동 탐색」도 이 값에서 시작합니다. 정한 것은 걸음으로 남아 되돌리기·처음부터와 함께 움직입니다.</p>
+      {traits.length > 0 && <fieldset className="flow-stage"><legend>주인공 성향</legend>
+        {traits.map((t) => slider(t.id, `${t.name} (${t.low} ↔ ${t.high})`, { kind: 'trait', id: t.id }))}
+      </fieldset>}
+      {w.characters.length > 0 && <fieldset className="flow-stage"><legend>인물과의 관계</legend>
+        <label>누구와<select value={npc} onChange={(e) => setNpc(e.target.value)}>{w.characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+        {npc && AXES.map((a) => slider(a, AXIS_NAMES[a], { kind: 'rel', id: npc, axis: a }))}
+      </fieldset>}
+      {(w.factions ?? []).length > 0 && <fieldset className="flow-stage"><legend>세력 평판</legend>
+        {w.factions!.map((f) => slider(f.id, f.name, { kind: 'rep', id: f.id }))}
+      </fieldset>}
+      {(w.vars ?? []).length > 0 && <fieldset className="flow-stage"><legend>세계 수치</legend>
+        {w.vars!.map((v) => slider(v.id, v.name, { kind: 'var', id: v.id }, v.min ?? 0, v.max ?? 100))}
+      </fieldset>}
+      {nSet > 0 && <button type="button" className="small" onClick={onReset}>정한 값 모두 되돌리기</button>}
+    </details>
   );
 }
 
