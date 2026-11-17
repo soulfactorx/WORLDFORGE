@@ -180,6 +180,9 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   }
   // 이어진 플래그·지식·국면만 노드로
   const used = new Set(edges.flatMap((e) => [e.from, e.to]));
+  // 선언된 플래그 · 모든 지식은 이어진 것이 없어도 상자로 (v0.155 — 흐름도에서 만들고 고친다)
+  for (const f of w.flags ?? []) used.add(key('flag', f.id));
+  for (const c of w.claims) used.add(key('claim', c.id));
   for (const k of used) {
     if (nodes.has(k)) continue;
     const [kind, ...rest] = k.split(':');

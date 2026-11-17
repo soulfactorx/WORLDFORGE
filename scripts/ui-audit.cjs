@@ -332,6 +332,22 @@ const SCREENS = [
     await p.locator('.flow-node.k-quest .flow-box').first().click();
     await p.waitForSelector('.flow-panel .flow-stage-card[open]');
   }],
+  ['편집: 흐름도 · 플래그 상자 (v0.155)', async (p) => {
+    await home(p);
+    await p.click('.home-tabs button:has-text("세계관")');
+    await p.click('button:has-text("＋ 만들기")');
+    await p.click('button:has-text("흐름도에서 만들기")');
+    await p.locator('.flow-empty button:text-is("＋ 플래그")').click();
+    await p.waitForSelector('.flow-panel');
+  }],
+  ['편집: 흐름도 · 지식 상자 (v0.155)', async (p) => {
+    await home(p);
+    await p.click('.home-tabs button:has-text("세계관")');
+    await p.click('button:has-text("＋ 만들기")');
+    await p.click('button:has-text("흐름도에서 만들기")');
+    await p.locator('.flow-empty button:text-is("＋ 지식")').click();
+    await p.waitForSelector('.flow-panel');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();

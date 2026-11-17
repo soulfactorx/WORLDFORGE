@@ -7,10 +7,10 @@ import { QUEST_TYPE_LABEL, UNSET_CONDITION } from '../engine/scenario';
 import { QUEST_TYPES, type QuestStage } from '../engine/schema';
 import { SKILLS, SKILL_IDS } from '../engine/character/rules';
 import { STAKE_ICON } from '../engine/stakes';
-import type { Storylet, StoryletOption, DecisiveChoice } from '../engine/schema';
+import type { Storylet, StoryletOption, DecisiveChoice, Claim, KnowledgeState } from '../engine/schema';
 import { setLink } from '../engine/locationLinks';
 import { buildStoryGraph, type FlowDir, isEmptyCond, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
-import { restageQuest, edgeSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
+import { renameFlag, restageQuest, edgeSlots, effectSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
 import { type ExploreReport, nodeSim, type NodeSim, simActs, simExplore, simIcon, simMove, type SimPath, simReplay, simStart, wantedPlaces } from '../gm/flowSim';
 import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
@@ -474,7 +474,7 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
       </details>
 
       <div className="flow-edit">
-        <NodeEditor w={w} set={set} n={n} />
+        <NodeEditor w={w} set={set} n={n} onPick={onPick} />
       </div>
 
       <div className="flow-actions">
@@ -512,6 +512,16 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
         {after && <button type="button" onClick={() => { const id = newId('choice/new-', w.choices ?? []); set({ choices: [...(w.choices ?? []), { id, name: '새 결정적 선택', prompt: '무엇을 할까?', when: after, options: [{ id: 'a', text: '이쪽', effects: [] }, { id: 'b', text: '저쪽', effects: [] }] }] }); onPick(`choice:${id}`); }}>{n.kind === 'location' ? '＋ 이곳에서 열리는 결정적 선택' : '＋ 이것 다음에 열리는 결정적 선택'}</button>}
         {after && n.kind !== 'location' && <button type="button" onClick={() => { const a = newArc(w, after); set({ arcs: [...(w.arcs ?? []), a] }); onPick(`arc:${a.id}`); }}>{n.kind === 'arc' ? '＋ 이 줄기가 끝나면 시작하는 줄기' : '＋ 이것 다음에 시작하는 줄기'}</button>}
         {after && <button type="button" onClick={() => { const r = newRule(w, after); set({ rules: [...(w.rules ?? []), r] }); onPick(`rule:${r.id}`); }}>{n.kind === 'location' ? '＋ 이곳에서 발동하는 규칙' : '＋ 이것이 되면 발동하는 규칙'}</button>}
+        {(() => {
+          // 이것이 세우는 플래그 · 알려 주는 지식 (v0.155): 이 상자의 첫 효과 칸에 더한다
+          const slot = effectSlots(w, n)[0];
+          if (!slot) return null;
+          const addFx = (fx: StoryEffect, patch: Partial<WorldPackage>, pick: string) => { const w2 = { ...w, ...patch }; set({ ...patch, ...setEffects(w2, n, slot.key, [...getEffects(w2, n, slot.key), fx]) }); onPick(pick); };
+          return <>
+            <button type="button" onClick={() => { const id = nextFlag(w); addFx({ setFlag: id }, {}, `flag:${id}`); }} title={`「${slot.label}」 효과로 세운다`}>＋ 이것이 세우는 플래그</button>
+            <button type="button" onClick={() => { const c = newClaim(w); addFx({ reveal: c.id }, { claims: [...w.claims, c] }, `claim:${c.id}`); }} title={`「${slot.label}」 효과로 알려 준다`}>＋ 이것이 알려 주는 지식</button>
+          </>;
+        })()}
         {n.kind === 'ending' && <button type="button" onClick={() => { const e = newEnding(w, '다른 결말'); set(e.patch); onPick(`ending:${e.id}`); }} title="다른 길의 끝 — GM이 세우는 플래그로 시작하고, 상자를 끌어 조건을 이으세요">＋ 다른 결말</button>}
         {tab && <button type="button" className="small" onClick={() => onTab(tab)}>전체 편집 — 「{TAB_NAME[tab]}」 탭</button>}
       </div>
@@ -562,6 +572,10 @@ function newEvent(w: WorldPackage, name: string, cond?: Condition): WorldEvent {
 function newClock(w: WorldPackage): Clock {
   return { id: nextId('clock/new-', w.clocks ?? []), name: '다가오는 위협', segments: 6, tick: [{ every: 'beat', by: 1 }], at: [{ segment: 3, omen: '불길한 소문이 돈다.' }, { segment: 6, effects: [] }] };
 }
+
+/** 새 플래그·지식 (v0.155) */
+function nextFlag(w: WorldPackage): string { const ids = new globalThis.Set((w.flags ?? []).map((f) => f.id)); let i = 1; while (ids.has(`flag_new_${i}`)) i++; return `flag_new_${i}`; }
+function newClaim(w: WorldPackage): Claim { return { id: nextId('claim/new-', w.claims), statement: '새 지식 — 무엇이 사실(또는 소문)인가', truth: 'true' }; }
 
 /** 새 줄기·세계 규칙 (v0.152): 「이야기 흐름」「세계 규칙」 탭의 새 항목과 같은 꼴 — start: 줄기가 시작하는 조건 · 규칙이 발동하는 상태 */
 function newArc(w: WorldPackage, start?: Condition): Arc {
@@ -614,6 +628,8 @@ function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void):
       set(newQuest(w, id, (w.quests ?? []).length ? '새 임무' : '첫 임무', 'main', { all: [] })); onPick(`quest:${id}`);
     } },
     { label: '＋ 결말', run: () => { const e = newEnding(w, (w.endings ?? []).length ? '새 결말' : '첫 결말'); set(e.patch); onPick(`ending:${e.id}`); } },
+    { label: '＋ 플래그', run: () => { const id = nextFlag(w); set({ flags: [...(w.flags ?? []), { id, when: '언제 세우는지 적어 주세요' }] }); onPick(`flag:${id}`); } },
+    { label: '＋ 지식', run: () => { const c = newClaim(w); set({ claims: [...w.claims, c] }); onPick(`claim:${c.id}`); } },
     { label: '＋ 줄기', run: () => { const a = newArc(w); set({ arcs: [...(w.arcs ?? []), a] }); onPick(`arc:${a.id}`); } },
     { label: '＋ 세계 규칙', run: () => { const r = newRule(w); set({ rules: [...(w.rules ?? []), r] }); onPick(`rule:${r.id}`); } },
     { label: '＋ 연표 사건', run: () => { const e = newEvent(w, '새 사건'); set({ events: [...(w.events ?? []), e] }); onPick(`event:${e.id}`); } },
@@ -748,7 +764,7 @@ function ExploreView({ w, g, r, onPath, onPick, onClose }: { w: WorldPackage; g:
 }
 
 /** 종류마다 자주 고치는 칸 (나머지는 전체 편집 탭에서) */
-function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
+function NodeEditor({ w, set, n, onPick }: { w: WorldPackage; set: SetW; n: GNode; onPick?: (k: string) => void }) {
   const upd = <T extends { id: string }>(list: T[] | undefined, patch: Partial<T>) => (list ?? []).map((x) => (x.id === n.id ? { ...x, ...patch } : x));
   switch (n.kind) {
     case 'quest': return <QuestEditor w={w} set={set} id={n.id} />;
@@ -970,8 +986,8 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
         </>
       );
     }
-    case 'flag': return <p className="small muted">플래그는 효과(「세움」)로 세우고 조건(「섬」)으로 읽는 표시입니다. 위의 「여는 것 · 열리는 것」에서 세우는 곳과 읽는 곳을 보고, 그 상자를 눌러 고치세요.</p>;
-    case 'claim': return <p className="small">{w.claims.find((c) => c.id === n.id)?.statement ?? n.id}</p>;
+    case 'flag': return <FlagEditor w={w} set={set} id={n.id} onRenamed={(to) => onPick?.(`flag:${to}`)} />;
+    case 'claim': return <ClaimEditor w={w} set={set} id={n.id} />;
     default: return <p className="small muted">이 종류는 전체 편집 탭에서 고칩니다.</p>;
   }
 }
@@ -1167,6 +1183,80 @@ function QuestEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string })
         <button type="button" className="small" onClick={() => up({ outcomes: [...(q.outcomes ?? []), { id: freshId((q.outcomes ?? []).map((o) => o.id)), name: '새 결과', when: { all: [] } }] })}>＋ 결과 더하기</button>
       </fieldset>
       <p className="small muted">접근법·단서·숨은 진실·보상 아이템은 「임무·플래그·결말」 탭에서 고칩니다.</p>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- 플래그 · 지식 (v0.155)
+
+function FlagEditor({ w, set, id, onRenamed }: { w: WorldPackage; set: SetW; id: string; onRenamed?: (to: string) => void }) {
+  const decl = (w.flags ?? []).find((f) => f.id === id);
+  const [name, setName] = useState(id);
+  useEffect(() => { setName(id); }, [id]);
+  const clash = name !== id && (w.flags ?? []).some((f) => f.id === name);
+  const valid = /^[A-Za-z0-9_\-가-힣]+$/.test(name);
+  const up = (p: Partial<NonNullable<WorldPackage['flags']>[number]>) => set({ flags: (w.flags ?? []).map((f) => (f.id === id ? { ...f, ...p } : f)) });
+  return (
+    <>
+      <p className="small muted">플래그는 「세움」(효과)으로 서고 「섬」(조건)으로 읽는 표시입니다. 위 목록에서 세우는 곳·읽는 곳을 보세요.</p>
+      <div className="row flow-rename">
+        <label>이름 (ID)<input value={name} onChange={(e) => setName(e.target.value.trim())} /></label>
+        <button type="button" className="small" disabled={name === id || !name || clash || !valid} onClick={() => { set(renameFlag(w, id, name)); onRenamed?.(name); }}>이름 바꾸기</button>
+      </div>
+      {clash && <p className="small warn-text">⚠ 같은 이름의 플래그가 이미 있습니다.</p>}
+      {!valid && name && <p className="small warn-text">⚠ 글자·숫자·_·- 만 쓸 수 있습니다.</p>}
+      {name !== id && !clash && valid && <p className="small muted">바꾸면 이 플래그를 세우는 효과·읽는 조건이 모두 새 이름으로 바뀝니다.</p>}
+      {decl ? (
+        <>
+          <Area label="GM이 언제 세우나 (이 설명대로 GM이 세운다)" value={decl.when} onChange={(when) => up({ when })} rows={2} />
+          <label>이 장소에서만<select value={decl.locationId ?? ''} onChange={(e) => up({ locationId: e.target.value || undefined })}><option value="">어디서나</option>{w.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+          <ConditionField label="이것도 참이어야 세울 수 있다 (선택)" value={decl.requires} world={w} optional onChange={(requires) => up({ requires })} />
+          <button type="button" className="small" onClick={() => { if (confirm('플래그 선언을 지울까요? GM이 더는 이 플래그를 세우지 않습니다 (효과로 세우는 곳은 그대로).')) set({ flags: (w.flags ?? []).filter((f) => f.id !== id) }); }}>선언 지우기 (효과로만 세움)</button>
+        </>
+      ) : (
+        <>
+          <p className="small muted">선언되지 않은 플래그 — 효과(「세움」)로만 섭니다.</p>
+          <button type="button" onClick={() => set({ flags: [...(w.flags ?? []), { id, when: '언제 세우는지 적어 주세요' }] })}>GM이 세울 수 있게 선언하기</button>
+        </>
+      )}
+    </>
+  );
+}
+
+const KNOW_LABEL: [KnowledgeState, string][] = [['rumor', '소문으로'], ['partial', '일부'], ['confirmed', '확실히'], ['mistaken', '잘못 알고'], ['secret', '숨기고']];
+function ClaimEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string }) {
+  const c = w.claims.find((x) => x.id === id);
+  const [holder, setHolder] = useState('player');
+  if (!c) return null;
+  const up = (p: Partial<Claim>) => set({ claims: w.claims.map((x) => (x.id === id ? { ...x, ...p } : x)) });
+  const knows = w.beliefs.map((b, i) => [b, i] as const).filter(([b]) => b.claim === id);
+  const holderName = (h: string) => (h === 'player' ? '주인공' : h.startsWith('group:') ? `무리: ${h.slice(6)}` : w.characters.find((x) => x.id === h)?.name ?? h);
+  const relOpts: [string, string][] = [['', '없음'], ...w.characters.map((x) => [x.id, `👤 ${x.name}`] as [string, string]), ...w.locations.map((x) => [x.id, `📍 ${x.name}`] as [string, string]), ...(w.factions ?? []).map((x) => [x.id, `⚑ ${x.name}`] as [string, string])];
+  return (
+    <>
+      <Area label="내용 (무엇이 사실 · 소문인가)" value={c.statement} onChange={(statement) => up({ statement })} rows={3} />
+      <div className="row flow-nums">
+        <label>참인가<select value={c.truth} onChange={(e) => up({ truth: e.target.value as Claim['truth'] })}><option value="true">참</option><option value="false">거짓 (헛소문)</option><option value="partial">일부만 참</option></select></label>
+        <label>무엇에 관한 것<select value={c.relatesTo ?? ''} onChange={(e) => up({ relatesTo: e.target.value || undefined })}>{relOpts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+      </div>
+      <fieldset className="flow-stage"><legend>처음부터 아는 이</legend>
+        {knows.length === 0 && <p className="small muted">아직 아무도 모릅니다 — 효과(「알려 줌」)로 주인공이 알게 됩니다.</p>}
+        {knows.map(([b, i]) => (
+          <div key={i} className="row flow-nums">
+            <span className="flow-holder">{holderName(b.holder)}</span>
+            <label>어떻게<select value={b.state} onChange={(e) => set({ beliefs: w.beliefs.map((x, j) => (j === i ? { ...x, state: e.target.value as KnowledgeState } : x)) })}>{KNOW_LABEL.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+            <button type="button" className="small" aria-label={`${holderName(b.holder)} 빼기`} onClick={() => set({ beliefs: w.beliefs.filter((_, j) => j !== i) })}>빼기</button>
+          </div>
+        ))}
+        <div className="row flow-nums">
+          <label>더할 사람<select value={holder} onChange={(e) => setHolder(e.target.value)}>
+            <option value="player">주인공</option>
+            {w.characters.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            <option value="group:사람들">무리: 사람들 (소문)</option>
+          </select></label>
+          <button type="button" className="small" disabled={knows.some(([b]) => b.holder === holder)} onClick={() => set({ beliefs: [...w.beliefs, { holder, claim: id, state: holder === 'player' || holder.startsWith('group:') ? 'rumor' : 'confirmed' }] })}>＋ 아는 이 더하기</button>
+        </div>
+      </fieldset>
     </>
   );
 }

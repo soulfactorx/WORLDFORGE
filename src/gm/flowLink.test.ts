@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { aetheriaWorld } from '../data/official/aetheria';
 import { sampleWorld } from '../data/sample-world';
 import type { WorldPackage } from '../engine/schema';
-import { edgeSlots, getCond, linkOptions, replaceLeaf, restageQuest, setCond, sourceWays, unlink } from './flowLink';
+import { edgeSlots, getCond, linkOptions, renameFlag, replaceLeaf, restageQuest, setCond, sourceWays, unlink } from './flowLink';
 import { buildStoryGraph, layoutGraph, START_KEY } from './storyGraph';
 import { gimmickScene } from '../engine/gimmick';
 
@@ -198,5 +198,22 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     expect(cond(restageQuest(w, 'quest/a', [q.stages[0]!, st('새'), q.stages[1]!, q.stages[2]!], (o) => (o > 0 ? o + 1 : o)))).toEqual({ all: [{ questStage: 'quest/a', is: 2 }, { questStage: 'quest/other', is: 1 }] });
     // 둘을 지우기: 그 자리를 가리키던 것은 가장 가까운 남은 단계로
     expect(cond(restageQuest(w, 'quest/a', [q.stages[0]!, q.stages[2]!], (o) => (o > 1 ? o - 1 : o === 1 ? 1 : o)))).toEqual({ all: [{ questStage: 'quest/a', is: 1 }, { questStage: 'quest/other', is: 1 }] });
+  });
+
+  it('플래그·지식 (v0.155): 이름 바꾸기가 선언·조건·효과·상자 자리까지 따라가고, 선언된 플래그·모든 지식은 늘 그린다', () => {
+    const w: WorldPackage = { ...base,
+      flags: [{ id: 'old_flag', when: '문을 열면' }, { id: 'lonely', when: '언젠가' }],
+      endings: [{ id: 'ending/x', name: 'x', condition: { all: [{ flag: 'old_flag' }, { flag: 'other' }] }, epilogue: '' }],
+      choices: [{ id: 'choice/c', name: 'c', prompt: '?', when: { all: [] }, options: [{ id: 'o', text: 't', effects: [{ setFlag: 'old_flag' }] }] }],
+      flowLayout: { right: { 'flag:old_flag': [100, 100] } },
+      claims: [...sampleWorld.claims, { id: 'claim/solo', statement: '아무도 안 쓰는 지식', truth: 'true' }] };
+    const r = { ...w, ...renameFlag(w, 'old_flag', 'door_open') };
+    expect(r.flags!.map((f) => f.id)).toEqual(['door_open', 'lonely']);
+    expect(r.endings![0]!.condition).toEqual({ all: [{ flag: 'door_open' }, { flag: 'other' }] });
+    expect(r.choices![0]!.options[0]!.effects).toEqual([{ setFlag: 'door_open' }]);
+    expect(r.flowLayout!.right!['flag:door_open']).toEqual([100, 100]);
+    const g = buildStoryGraph(w);
+    expect(g.nodes.some((n) => n.key === 'flag:lonely')).toBe(true);
+    expect(g.nodes.some((n) => n.key === 'claim:claim/solo')).toBe(true);
   });
 });

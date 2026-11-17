@@ -384,3 +384,25 @@ export function restageQuest(w: WorldPackage, questId: string, stages: QuestStag
   return out as Partial<WorldPackage>;
 }
 
+// ---------------------------------------------------------------- 플래그 이름 바꾸기 (v0.155)
+
+/** 플래그 ID를 세계 어디서든 바꾼다: 선언 · 「섬」 조건 · 「세움」 효과 · 흐름도 상자 자리 */
+export function renameFlag(w: WorldPackage, from: string, to: string): Partial<WorldPackage> {
+  const fix = (v: unknown): unknown => JSON.parse(JSON.stringify(v), (_k, x) => {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return x;
+    if (x.flag === from && Object.keys(x).length === 1) return { flag: to };
+    if (x.setFlag === from) return { ...x, setFlag: to };
+    return x;
+  });
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(w)) {
+    if (k === 'manifest' || v === undefined) continue;
+    let nv: unknown;
+    if (k === 'flags') nv = (v as { id: string }[]).map((f) => (f.id === from ? { ...f, id: to } : f));
+    else if (k === 'flowLayout') nv = Object.fromEntries(Object.entries(v as Record<string, Record<string, unknown>>).map(([d, pins]) => [d, Object.fromEntries(Object.entries(pins ?? {}).map(([pk, at]) => [pk === `flag:${from}` ? `flag:${to}` : pk, at]))]));
+    else nv = fix(v);
+    if (JSON.stringify(nv) !== JSON.stringify(v)) out[k] = nv;
+  }
+  return out as Partial<WorldPackage>;
+}
+

@@ -1406,6 +1406,9 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-nums label.check { flex: 1 1 100%; flex-direction: row; align-items: center; }
 .flow-nums select { width: 100%; max-width: 100%; min-width: 0; }
 .flow-tags { flex-wrap: wrap; gap: 4px 12px; }
+.flow-rename { flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.flow-rename label { display: flex; flex-direction: column; gap: 3px; flex: 1 1 160px; min-width: 0; }
+.flow-holder { flex: 1 1 100%; font-weight: 600; overflow-wrap: anywhere; }
 .flow-stages { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
 .flow-stage-card { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); min-width: 0; }
 .flow-stage-card > summary { cursor: pointer; padding: 8px 10px; min-height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
