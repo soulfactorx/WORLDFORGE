@@ -201,7 +201,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
             <ol className="small">
               <li><b>▶ 플레이 시작</b>에서 처음 열릴 것을 만드세요 — 첫 임무·갈래 카드·결정적 선택.</li>
               <li>만든 상자를 고르고 <b>「＋ 이것 다음에 열리는 임무」</b>로 이야기를 이어 가고, 갈라지는 곳은 선택지·카드의 갈림길로 만드세요.</li>
-              <li>끝에는 <b>「＋ 이것으로 이르는 결말」</b>. 상자의 ● 손잡이를 끌어 잇고, 화살표를 눌러 조건을 고칩니다.</li>
+              <li>끝에는 <b>「＋ 이것으로 이르는 결말」</b> (또는 <b>＋ 결말</b>로 먼저 만들고 이어도 됩니다). 상자의 ● 손잡이를 끌어 잇고, 화살표를 눌러 조건을 고칩니다.</li>
               <li><b>＋ 장면 · ＋ 함정·퍼즐</b>은 판정으로 풀어 가는 고비입니다 — 성공·실패에 따라 다음이 갈라집니다.</li>
               <li><b>＋ 장소 · ＋ 인물 · ＋ 아이템 · ＋ 적</b>은 흐름 아래 띠에 놓입니다. 장소를 이야기 상자로 끌면 「여기 있으면 열림」 「여기서 일어남」이 됩니다.</li>
               <li>다 되면 <b>🧪 시뮬레이션</b>으로 끝까지 가 보세요.</li>
@@ -488,7 +488,10 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
         {(n.kind === 'item' || n.kind === 'monster') && (() => {
           // 이것을 얻으면/쓰러뜨리면 열리는 임무
           const cond: Condition = n.kind === 'item' ? { hasItem: n.id } : { defeated: n.id };
-          return <button type="button" onClick={() => { const id = newId('quest/next-', w.quests ?? []); set(newQuest(w, id, `${n.name} ${n.kind === 'item' ? '얻은 뒤' : '쓰러뜨린 뒤'}`, 'side', cond)); onPick(`quest:${id}`); }}>{n.kind === 'item' ? '＋ 이것을 가지면 열리는 임무' : '＋ 이것을 쓰러뜨리면 열리는 임무'}</button>;
+          return <>
+            <button type="button" onClick={() => { const id = newId('quest/next-', w.quests ?? []); set(newQuest(w, id, `${n.name} ${n.kind === 'item' ? '얻은 뒤' : '쓰러뜨린 뒤'}`, 'side', cond)); onPick(`quest:${id}`); }}>{n.kind === 'item' ? '＋ 이것을 가지면 열리는 임무' : '＋ 이것을 쓰러뜨리면 열리는 임무'}</button>
+            <button type="button" onClick={() => { const e = newEnding(w, `${n.name}의 끝`, cond); set(e.patch); onPick(`ending:${e.id}`); }}>{n.kind === 'item' ? '＋ 이것을 가지면 이르는 결말' : '＋ 이것을 쓰러뜨리면 이르는 결말'}</button>
+          </>;
         })()}
         {n.kind === 'start' && startCreators(w, set, onPick).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}
         {n.kind === 'start' && <SceneAdd w={w} set={set} onPick={onPick} scene="＋ 처음부터 열리는 장면" gimmick="＋ 함정·퍼즐" />}
@@ -498,11 +501,8 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
           const id = newId('quest/next-', w.quests ?? []);
           set(newQuest(w, id, `${n.name} 다음`, 'side', after)); onPick(`quest:${id}`);
         }}>{n.kind === 'location' ? '＋ 이곳에 오면 열리는 임무' : '＋ 이것 다음에 열리는 임무'}</button>}
-        {after && n.kind !== 'location' && <button type="button" onClick={() => {
-          const id = newId('ending/', w.endings ?? []);
-          const e: Ending = { id, name: `${n.name}의 끝`, condition: after, epilogue: '' };
-          set({ endings: [...(w.endings ?? []), e] }); onPick(`ending:${id}`);
-        }}>＋ 이것으로 이르는 결말</button>}
+        {after && <button type="button" onClick={() => { const e = newEnding(w, `${n.name}의 끝`, after); set(e.patch); onPick(`ending:${e.id}`); }}>{n.kind === 'location' ? '＋ 이곳에 이르면 맞는 결말' : '＋ 이것으로 이르는 결말'}</button>}
+        {n.kind === 'ending' && <button type="button" onClick={() => { const e = newEnding(w, '다른 결말'); set(e.patch); onPick(`ending:${e.id}`); }} title="다른 길의 끝 — GM이 세우는 플래그로 시작하고, 상자를 끌어 조건을 이으세요">＋ 다른 결말</button>}
         {tab && <button type="button" className="small" onClick={() => onTab(tab)}>전체 편집 — 「{TAB_NAME[tab]}」 탭</button>}
       </div>
     </aside>
@@ -530,6 +530,21 @@ function newPlace(w: WorldPackage, near?: string): { id: string; locations: Loca
   if (to) locations = setLink(locations, id, to, true);
   return { id, locations };
 }
+/**
+ * 새 결말 (v0.150): 조건을 주면 그 조건으로, 없으면 「이 결말에 이르렀다」 플래그를 함께 만들어 GM이 설명대로 세우게 한다
+ * (빈 조건의 결말은 시작하자마자 끝나 버린다). 다른 상자를 끌어 이으면 조건이 더해진다.
+ */
+function newEnding(w: WorldPackage, name: string, cond?: Condition): { id: string; patch: Partial<WorldPackage> } {
+  const id = nextId('ending/new-', w.endings ?? []);
+  if (cond) return { id, patch: { endings: [...(w.endings ?? []), { id, name, condition: cond, epilogue: '' }] } };
+  let flag = `${id.replace(/[^A-Za-z0-9]+/g, '_')}_reached`;
+  while ((w.flags ?? []).some((f) => f.id === flag)) flag += '_';
+  return { id, patch: {
+    endings: [...(w.endings ?? []), { id, name, condition: { flag }, epilogue: '' }],
+    flags: [...(w.flags ?? []), { id: flag, when: `이야기가 「${name}」(으)로 끝날 때가 되었을 때` }],
+  } };
+}
+
 /** 새 장면·함정·퍼즐 (v0.149): 「장면」「함정·퍼즐」 탭의 새 항목과 같은 꼴 — start: 열리는 조건, at: 장소 */
 function newScene(w: WorldPackage, o: { start?: Condition; at?: string } = {}): SceneDef {
   return { ...newSceneDef(nextId('scene/new-', w.scenes ?? [])), ...(o.start ? { start: o.start } : {}), ...(o.at ? { locationId: o.at } : {}) };
@@ -572,6 +587,7 @@ function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void):
       const id = nextId('quest/new-', w.quests ?? []);
       set(newQuest(w, id, (w.quests ?? []).length ? '새 임무' : '첫 임무', 'main', { all: [] })); onPick(`quest:${id}`);
     } },
+    { label: '＋ 결말', run: () => { const e = newEnding(w, (w.endings ?? []).length ? '새 결말' : '첫 결말'); set(e.patch); onPick(`ending:${e.id}`); } },
     { label: '＋ 장소', run: () => { const l = newPlace(w); set({ locations: l.locations }); onPick(`location:${l.id}`); } },
     { label: '＋ 인물', run: () => { const c = newPerson(w, w.start.locationId); set({ characters: [...w.characters, c] }); onPick(`character:${c.id}`); } },
     { label: '＋ 아이템', run: () => { const it = newItem(w); set({ items: [...(w.items ?? []), it] }); onPick(`item:${it.id}`); } },

@@ -156,4 +156,16 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     expect(again.ends.find((e) => e.id === 'solved')!.effects).toEqual([{ setFlag: 'opened' }]);
     expect(again.start).toEqual({ questDone: 'quest/a' });
   });
+
+  it('자리 표시 플래그 (v0.150): 혼자 있는 「…_reached」 플래그는 처음 잇는 조건으로 바뀌고, 선언도 빠진다', () => {
+    const w: WorldPackage = { ...base, endings: [{ id: 'ending/new-1', name: '끝', condition: { flag: 'ending_new_1_reached' }, epilogue: '' }], flags: [{ id: 'ending_new_1_reached', when: '끝날 때' }] };
+    const opt = linkOptions(w, node(w, 'quest:quest/a'), node(w, 'ending:ending/new-1'))[0]!;
+    expect(opt.note).toContain('자리 표시 플래그');
+    const w2 = { ...w, ...opt.apply(w) };
+    expect(w2.endings![0]!.condition).toEqual({ questDone: 'quest/a' });
+    expect(w2.flags).toEqual([]);
+    // 다음 연결은 「그리고」로 더한다
+    const w3 = { ...w2, ...linkOptions(w2, node(w2, 'choice:choice/c'), node(w2, 'ending:ending/new-1'))[0]!.apply(w2) };
+    expect(w3.endings![0]!.condition).toEqual({ all: [{ questDone: 'quest/a' }, { choice: 'choice/c' }] });
+  });
 });

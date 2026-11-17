@@ -151,6 +151,17 @@ export function andCond(c: Condition | undefined, add: Condition): Condition {
   return { all: [c, add] };
 }
 
+/**
+ * 자리 표시 플래그 (v0.150): 흐름도가 새 임무·결말과 함께 만든 「…_done」 「…_reached」 플래그가 그 칸에 혼자 있고
+ * 세계의 다른 곳에서 쓰이지 않으면, 처음 잇는 조건이 그것을 대신한다 (「그리고」로 더하면 영영 막힌다).
+ */
+export function placeholderFlag(w: WorldPackage, c: Condition | undefined): string | null {
+  if (!c || !('flag' in c) || Object.keys(c).length !== 1 || !/_(done|reached)_*$/.test(c.flag)) return null;
+  if (!(w.flags ?? []).some((f) => f.id === c.flag)) return null;
+  const uses = JSON.stringify(w).split(`"${c.flag}"`).length - 1; // 선언 하나 + 이 칸 하나
+  return uses === 2 ? c.flag : null;
+}
+
 /** A의 효과 칸 */
 export function effectSlots(w: WorldPackage, n: GNode): Slot[] {
   const x = entity(w, n);
@@ -219,8 +230,13 @@ export function linkOptions(w: WorldPackage, a: GNode, b: GNode): LinkOption[] {
   const out: LinkOption[] = [];
   const slots = condSlots(w, b);
   for (const way of sourceWays(w, a)) for (const s of slots) {
+    const ph = placeholderFlag(w, getSlot(entity(w, b) ?? {}, s.key));
     out.push({ group: 'cond', label: `「${a.name}」 ${way.label} → 「${b.name}」의 ${s.label}`,
-      apply: (w2) => edit(w2, b, (x) => setSlot(x, s.key, andCond(getSlot(x, s.key), way.cond))) });
+      ...(ph ? { note: `지금은 자리 표시 플래그 「${ph}」뿐이라, 그것을 빼고 이 조건으로 바꿉니다.` } : {}),
+      apply: (w2) => {
+        const patch = edit(w2, b, (x) => setSlot(x, s.key, ph ? way.cond : andCond(getSlot(x, s.key), way.cond)));
+        return ph ? { ...patch, flags: (w2.flags ?? []).filter((f) => f.id !== ph) } : patch;
+      } });
   }
   out.unshift(...place);
   const fx = effectFor(b);
