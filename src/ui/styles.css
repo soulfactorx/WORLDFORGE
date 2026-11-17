@@ -1403,6 +1403,9 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-node.k-item rect { fill: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
 .flow-node.k-monster rect { fill: color-mix(in srgb, var(--text) 8%, var(--bg)); }
 .flow-nums { flex-wrap: wrap; gap: 6px; }
+.flow-nums label.check { flex: 1 1 100%; flex-direction: row; align-items: center; }
+.flow-nums select { width: 100%; max-width: 100%; min-width: 0; }
+.flow-tags { flex-wrap: wrap; gap: 4px 12px; }
 .flow-gimmick-add { flex-wrap: nowrap; gap: 6px; min-width: 0; }
 .flow-gimmick-add select { flex: 0 1 auto; min-width: 0; max-width: 50%; }
 .flow-gimmick-add button { flex: 1 1 auto; min-width: 0; }

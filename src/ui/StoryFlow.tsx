@@ -4,6 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Arc, Character, Clock, Condition, CustomMonster, Ending, ItemDef, Location, Quest, StoryEffect, WorldEvent, WorldPackage, WorldRule } from '../engine/schema';
 import { UNSET_CONDITION } from '../engine/scenario';
+import { SKILLS, SKILL_IDS } from '../engine/character/rules';
+import { STAKE_ICON } from '../engine/stakes';
+import type { Storylet, StoryletOption, DecisiveChoice } from '../engine/schema';
 import { setLink } from '../engine/locationLinks';
 import { buildStoryGraph, type FlowDir, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
 import { edgeSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
@@ -504,6 +507,8 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
         }}>{n.kind === 'location' ? '＋ 이곳에 오면 열리는 임무' : '＋ 이것 다음에 열리는 임무'}</button>}
         {after && <button type="button" onClick={() => { const e = newEnding(w, `${n.name}의 끝`, after); set(e.patch); onPick(`ending:${e.id}`); }}>{n.kind === 'location' ? '＋ 이곳에 이르면 맞는 결말' : '＋ 이것으로 이르는 결말'}</button>}
         {after && <button type="button" onClick={() => { const e = newEvent(w, `${n.name} ${n.kind === 'clock' ? '— 시계가 찼다' : '뒤의 사건'}`, after); set({ events: [...(w.events ?? []), e] }); onPick(`event:${e.id}`); }}>{n.kind === 'clock' ? '＋ 시계가 차면 일어나는 사건' : n.kind === 'location' ? '＋ 이곳에 오면 일어나는 사건' : '＋ 이것 다음에 일어나는 사건'}</button>}
+        {after && <button type="button" onClick={() => { const id = newId('card/new-', w.storylets ?? []); set({ storylets: [...(w.storylets ?? []), { id, title: '새 갈래 카드', situation: '상황을 적어 주세요', tags: ['main'], when: after, options: [{ id: 'a', label: '첫째 길' }, { id: 'b', label: '둘째 길' }] }] }); onPick(`card:${id}`); }}>{n.kind === 'location' ? '＋ 이곳에서 펼쳐지는 갈래 카드' : '＋ 이것 다음에 펼쳐지는 갈래 카드'}</button>}
+        {after && <button type="button" onClick={() => { const id = newId('choice/new-', w.choices ?? []); set({ choices: [...(w.choices ?? []), { id, name: '새 결정적 선택', prompt: '무엇을 할까?', when: after, options: [{ id: 'a', text: '이쪽', effects: [] }, { id: 'b', text: '저쪽', effects: [] }] }] }); onPick(`choice:${id}`); }}>{n.kind === 'location' ? '＋ 이곳에서 열리는 결정적 선택' : '＋ 이것 다음에 열리는 결정적 선택'}</button>}
         {after && n.kind !== 'location' && <button type="button" onClick={() => { const a = newArc(w, after); set({ arcs: [...(w.arcs ?? []), a] }); onPick(`arc:${a.id}`); }}>{n.kind === 'arc' ? '＋ 이 줄기가 끝나면 시작하는 줄기' : '＋ 이것 다음에 시작하는 줄기'}</button>}
         {after && <button type="button" onClick={() => { const r = newRule(w, after); set({ rules: [...(w.rules ?? []), r] }); onPick(`rule:${r.id}`); }}>{n.kind === 'location' ? '＋ 이곳에서 발동하는 규칙' : '＋ 이것이 되면 발동하는 규칙'}</button>}
         {n.kind === 'ending' && <button type="button" onClick={() => { const e = newEnding(w, '다른 결말'); set(e.patch); onPick(`ending:${e.id}`); }} title="다른 길의 끝 — GM이 세우는 플래그로 시작하고, 상자를 끌어 조건을 이으세요">＋ 다른 결말</button>}
@@ -777,39 +782,8 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
         </>
       );
     }
-    case 'card': {
-      const c = w.storylets?.find((x) => x.id === n.id); if (!c) return null;
-      const up = (p: Partial<typeof c>) => set({ storylets: upd(w.storylets, p) });
-      return (
-        <>
-          <Text label="제목" value={c.title} onChange={(title) => up({ title })} />
-          <Area label="상황" value={c.situation} onChange={(situation) => up({ situation })} rows={3} />
-          <ConditionField label="덱에 들어오는 조건 (선택)" value={c.when} world={w} optional onChange={(when) => up({ when })} />
-          {c.options.map((o, i) => (
-            <fieldset key={o.id} className="flow-stage"><legend>갈림길 {i + 1}</legend>
-              <Text label="선택지" value={o.label} onChange={(label) => up({ options: c.options.map((x, j) => (j === i ? { ...x, label } : x)) })} />
-              <EffectsEditor label="고르면 (성공)" value={o.success} w={w} onChange={(success) => up({ options: c.options.map((x, j) => (j === i ? { ...x, success } : x)) })} />
-            </fieldset>
-          ))}
-        </>
-      );
-    }
-    case 'choice': {
-      const c = w.choices?.find((x) => x.id === n.id); if (!c) return null;
-      const up = (p: Partial<typeof c>) => set({ choices: upd(w.choices, p) });
-      return (
-        <>
-          <Text label="이름" value={c.name} onChange={(name) => up({ name })} />
-          <ConditionField label="열리는 조건" value={c.when} world={w} onChange={(when) => up({ when: when ?? { all: [] } })} />
-          {c.options.map((o, i) => (
-            <fieldset key={o.id} className="flow-stage"><legend>선택 {i + 1}</legend>
-              <Text label="선택지" value={o.text} onChange={(text) => up({ options: c.options.map((x, j) => (j === i ? { ...x, text } : x)) })} />
-              <EffectsEditor label="고르면" value={o.effects} w={w} onChange={(effects: StoryEffect[]) => up({ options: c.options.map((x, j) => (j === i ? { ...x, effects } : x)) })} />
-            </fieldset>
-          ))}
-        </>
-      );
-    }
+    case 'card': return <CardEditor w={w} set={set} id={n.id} />;
+    case 'choice': return <ChoiceEditor w={w} set={set} id={n.id} />;
     case 'scene': case 'gimmick': {
       const s = w.scenes?.find((x) => x.id === n.id); if (!s) return null;
       const up = (p: Partial<typeof s>) => set({ scenes: upd(w.scenes, p) });
@@ -1020,3 +994,113 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
     default: return <p className="small muted">이 종류는 전체 편집 탭에서 고칩니다.</p>;
   }
 }
+
+// ---------------------------------------------------------------- 갈래 카드 · 결정적 선택 (v0.153: 흐름도에서 바로 다 고친다)
+
+const DC_LABEL: [NonNullable<StoryletOption['check']>['dc'], string][] = [['very_easy', '아주 쉬움'], ['easy', '쉬움'], ['medium', '보통'], ['hard', '어려움'], ['very_hard', '아주 어려움']];
+const TAG_LABEL: [NonNullable<Storylet['tags']>[number], string][] = [['main', '뼈대'], ['side', '곁가지'], ['random', '돌발'], ['twist', '반전'], ['job', '의뢰']];
+const freshId = (ids: string[]) => { let i = ids.length + 1; while (ids.includes(`o${i}`)) i++; return `o${i}`; };
+
+/** 걸린 것 고르기: 종류 + 대상 (세력·인물·명제·수치) — 엔진의 stake 모양으로 적는다 */
+function StakePicker({ w, value, onChange }: { w: WorldPackage; value?: string; onChange: (v: string | undefined) => void }) {
+  const [kind = '', ref = '', dir = ''] = (value ?? '').split(':');
+  const k = kind === 'theme' ? `theme${dir}` : kind;
+  const refs: [string, string][] = kind === 'side' ? (w.factions ?? []).map((f) => [f.id, f.name])
+    : kind === 'bond' || kind === 'betray' ? w.characters.map((c) => [c.id, c.name])
+    : kind === 'expose' ? w.claims.map((c) => [c.id, c.statement.slice(0, 30)])
+    : kind === 'theme' ? (w.vars ?? []).map((v) => [v.id, v.name]) : [];
+  const make = (nk: string, nref: string) => {
+    if (!nk) return undefined;
+    if (nk === 'escalate' || nk === 'defuse') return nk;
+    if (nk === 'theme+' || nk === 'theme-') return nref ? `theme:${nref}:${nk.slice(-1)}` : undefined;
+    return nref ? `${nk}:${nref}` : undefined;
+  };
+  const firstRef = (nk: string) => (nk === 'side' ? w.factions?.[0]?.id : nk === 'bond' || nk === 'betray' ? w.characters[0]?.id : nk === 'expose' ? w.claims[0]?.id : nk.startsWith('theme') ? w.vars?.[0]?.id : '') ?? '';
+  const known = ['', 'escalate', 'defuse', 'side', 'bond', 'betray', 'expose', 'theme+', 'theme-'];
+  return (
+    <div className="row flow-nums">
+      <label>걸린 것<select value={known.includes(k) ? k : '?'} onChange={(e) => { const nk = e.target.value; onChange(make(nk, firstRef(nk))); }}>
+        <option value="">없음</option>
+        <option value="escalate">{STAKE_ICON.escalate} 일이 커진다</option>
+        <option value="defuse">{STAKE_ICON.defuse} 가라앉힌다</option>
+        {(w.factions ?? []).length > 0 && <option value="side">{STAKE_ICON.side} 세력 편들기</option>}
+        {w.characters.length > 0 && <option value="bond">{STAKE_ICON.bond} 인물과 가까워짐</option>}
+        {w.characters.length > 0 && <option value="betray">{STAKE_ICON.betray} 인물을 배신</option>}
+        {w.claims.length > 0 && <option value="expose">{STAKE_ICON.expose} 비밀을 드러냄</option>}
+        {(w.vars ?? []).length > 0 && <option value="theme+">{STAKE_ICON.theme} 세계 수치 올림</option>}
+        {(w.vars ?? []).length > 0 && <option value="theme-">{STAKE_ICON.theme} 세계 수치 내림</option>}
+        {!known.includes(k) && <option value="?">그대로 ({value})</option>}
+      </select></label>
+      {refs.length > 0 && <label>대상<select value={ref} onChange={(e) => onChange(make(k, e.target.value))}>{refs.map(([id, nm]) => <option key={id} value={id}>{nm}</option>)}</select></label>}
+    </div>
+  );
+}
+
+function CardEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string }) {
+  const c = w.storylets?.find((x) => x.id === id); if (!c) return null;
+  const up = (p: Partial<Storylet>) => set({ storylets: (w.storylets ?? []).map((x) => (x.id === id ? { ...x, ...p } : x)) });
+  const upO = (i: number, p: Partial<StoryletOption>) => up({ options: c.options.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+  const tags = c.tags ?? [];
+  return (
+    <>
+      <Text label="제목" value={c.title} onChange={(title) => up({ title })} />
+      <Area label="상황 (서술자가 펼칠 장면 — 누가·어디서·무엇이 걸렸나)" value={c.situation} onChange={(situation) => up({ situation })} rows={3} />
+      <ConditionField label="덱에 들어오는 조건 (선택)" value={c.when} world={w} optional onChange={(when) => up({ when })} />
+      <fieldset className="flow-stage"><legend>종류</legend>
+        <div className="row flow-tags">{TAG_LABEL.map(([t, l]) => (
+          <label key={t} className="check"><input type="checkbox" checked={tags.includes(t)} onChange={(e) => { const next = e.target.checked ? [...tags, t] : tags.filter((x) => x !== t); up({ tags: next.length ? next : undefined }); }} /> {l}</label>
+        ))}</div>
+      </fieldset>
+      <div className="row flow-nums">
+        <label>장소<select value={c.locationId ?? ''} onChange={(e) => up({ locationId: e.target.value || undefined })}><option value="">어디서나</option>{w.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+        <label>무게<input type="number" min={1} value={c.weight ?? 1} onChange={(e) => { const v = Math.max(1, Number(e.target.value) || 1); up({ weight: v === 1 ? undefined : v }); }} /></label>
+      </div>
+      <label>속한 임무<select value={c.quest ?? ''} onChange={(e) => up({ quest: e.target.value || undefined })}><option value="">없음</option>{(w.quests ?? []).map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}</select></label>
+      <div className="row flow-nums">
+        <label className="check"><input type="checkbox" checked={!!c.repeat} onChange={(e) => up({ repeat: e.target.checked ? { after: 5 } : undefined })} /> 다시 나올 수 있다</label>
+        {c.repeat && <label>몇 턴 뒤<input type="number" min={1} value={c.repeat.after} onChange={(e) => up({ repeat: { after: Math.max(1, Number(e.target.value) || 1) } })} /></label>}
+      </div>
+      {c.options.map((o, i) => (
+        <fieldset key={o.id} className="flow-stage"><legend>갈림길 {i + 1}</legend>
+          <Text label="선택지" value={o.label} onChange={(label) => upO(i, { label })} />
+          <StakePicker w={w} value={o.stake} onChange={(stake) => upO(i, { stake })} />
+          <div className="row flow-nums">
+            <label>판정<select value={o.check?.skill ?? ''} onChange={(e) => upO(i, { check: e.target.value ? { skill: e.target.value, dc: o.check?.dc ?? 'medium' } : undefined })}>
+              <option value="">판정 없이 성공</option>
+              {SKILL_IDS.map((sk) => <option key={sk} value={sk}>{SKILLS[sk].name}</option>)}
+            </select></label>
+            {o.check && <label>어려움<select value={o.check.dc} onChange={(e) => upO(i, { check: { ...o.check!, dc: e.target.value as NonNullable<StoryletOption['check']>['dc'] } })}>{DC_LABEL.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>}
+          </div>
+          <EffectsEditor label="성공하면" value={o.success} w={w} onChange={(success) => upO(i, { success })} />
+          {o.check && <EffectsEditor label="실패하면 (비우면 엔진이 고른 전개)" value={o.fail} w={w} onChange={(fail) => upO(i, { fail })} />}
+          {c.options.length > 2 && <button type="button" className="small" onClick={() => up({ options: c.options.filter((_, j) => j !== i) })}>🗑 이 갈림길 지우기</button>}
+        </fieldset>
+      ))}
+      {c.options.length < 4 && <button type="button" className="small" onClick={() => up({ options: [...c.options, { id: freshId(c.options.map((o) => o.id)), label: '새 길' }] })}>＋ 갈림길 더하기 (2~4개)</button>}
+      <p className="small muted">대가 있는 성공·결과 글·후폭풍은 「이야기 흐름」 탭에서 고칩니다.</p>
+    </>
+  );
+}
+
+function ChoiceEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string }) {
+  const c = w.choices?.find((x) => x.id === id); if (!c) return null;
+  const up = (p: Partial<DecisiveChoice>) => set({ choices: (w.choices ?? []).map((x) => (x.id === id ? { ...x, ...p } : x)) });
+  return (
+    <>
+      <Text label="이름" value={c.name} onChange={(name) => up({ name })} />
+      <Area label="플레이어에게 보이는 질문" value={c.prompt} onChange={(prompt) => up({ prompt })} rows={2} />
+      <ConditionField label="열리는 조건" value={c.when} world={w} onChange={(when) => up({ when: when ?? { all: [] } })} />
+      <label>장소<select value={c.locationId ?? ''} onChange={(e) => up({ locationId: e.target.value || undefined })}><option value="">어디서나</option>{w.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+      {c.options.map((o, i) => (
+        <fieldset key={o.id} className="flow-stage"><legend>선택 {i + 1}</legend>
+          <Text label="선택지" value={o.text} onChange={(text) => up({ options: c.options.map((x, j) => (j === i ? { ...x, text } : x)) })} />
+          <EffectsEditor label="고르면" value={o.effects} w={w} onChange={(effects: StoryEffect[]) => up({ options: c.options.map((x, j) => (j === i ? { ...x, effects } : x)) })} />
+          {c.options.length > 2 && <button type="button" className="small" onClick={() => up({ options: c.options.filter((_, j) => j !== i) })}>🗑 이 선택 지우기</button>}
+        </fieldset>
+      ))}
+      <button type="button" className="small" onClick={() => up({ options: [...c.options, { id: freshId(c.options.map((o) => o.id)), text: '새 선택', effects: [] }] })}>＋ 선택 더하기</button>
+      <p className="small muted">한 번 고르면 되돌릴 수 없는 선택입니다. 고른 것은 「고름」 조건으로 다른 상자를 엽니다 — 이 상자의 ● 손잡이를 끌어 이으세요.</p>
+    </>
+  );
+}
+

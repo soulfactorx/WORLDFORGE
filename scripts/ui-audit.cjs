@@ -312,6 +312,21 @@ const SCREENS = [
     await p.locator('.flow-empty button:text-is("＋ 세계 규칙")').click();
     await p.waitForSelector('.flow-panel');
   }],
+  ['편집: 흐름도 · 갈래 카드 편집 (v0.153)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.locator('.flow-kinds button:has-text("갈래 카드")').count();
+    const c = p.locator('.flow-node.k-card .flow-box').first();
+    if (await c.count()) await c.click();
+    else { await p.locator('.flow-node.k-start .flow-box').click(); await p.click('.flow-actions button:has-text("처음부터 펼쳐지는 갈래 카드")'); }
+    await p.waitForSelector('.flow-panel fieldset.flow-stage');
+  }],
+  ['편집: 흐름도 · 결정적 선택 편집 (v0.153)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    const c = p.locator('.flow-node.k-choice .flow-box').first();
+    if (await c.count()) await c.click();
+    else { await p.locator('.flow-node.k-start .flow-box').click(); await p.click('.flow-actions button:has-text("처음부터 열리는 결정적 선택")'); }
+    await p.waitForSelector('.flow-panel label:has-text("질문")');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();
