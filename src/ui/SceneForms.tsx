@@ -229,8 +229,6 @@ export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
   const scenes = w.scenes ?? [];
   const [preset, setPreset] = useState(SCENE_PRESETS[0]!.key);
   const [testing, setTesting] = useState<string | null>(null);
-  const chars = [['', '(없음 — 상대 없는 장면)'], ...w.characters.map((c) => [c.id, c.name] as const)] as const;
-  const locs = [['', '(어디서나)'], ...w.locations.map((l) => [l.id, l.name] as const)] as const;
   const save = (list: SceneDef[]) => set({ scenes: list.length ? list : undefined });
   return (
     <>
@@ -249,103 +247,7 @@ export function SceneForms({ w, set }: { w: WorldPackage; set: Set }) {
       {testing && (w.scenes ?? []).some((s) => s.id === testing) && <SceneTester w={w} sceneId={testing} onClose={() => setTesting(null)} onApply={(d) => save(scenes.map((x) => (x.id === d.id ? d : x)))} />}
       <ItemList<SceneDef> title="장면" testKind="scene" items={scenes} onChange={save}
         make={(n) => newSceneDef(`scene/new-${n}`)}
-        render={(d, up) => (
-          <div className="form-grid scene-form">
-            <div className="row"><button type="button" className="primary" onClick={() => setTesting(d.id)}>▶ 바로 테스트</button><span className="small muted">저장하지 않고 지금 내용 그대로 돌려 보기 · 자동 200회 시뮬레이션</span></div>
-            <Text label="ID" value={d.id} onChange={(id) => up({ id })} />
-            <Text label="이름" value={d.name} onChange={(name) => up({ name })} />
-            <Area label="설명 (GM용 — 어떤 장면인가, 언제 권하나)" value={d.description} onChange={(description) => up({ description })} rows={2} />
-            <Select label="상대 인물 (그 인물이 있어야 열림)" value={d.npcId ?? ''} options={chars} onChange={(npcId) => up({ npcId: npcId || undefined })} />
-            <Select label="장소" value={d.locationId ?? ''} options={locs} onChange={(locationId) => up({ locationId: locationId || undefined })} />
-            <ConditionField label="열리는 조건" value={d.start} world={w} optional onChange={(start) => up({ start })} />
-            <ImagePick label="시작 그림" value={d.image} w={w} onChange={(image) => up({ image })} />
-            <Area label="시작할 때 기록에 남는 글 (선택)" value={d.intro} onChange={(intro) => up({ intro: intro || undefined })} rows={2} />
-            <Select label="장면 서술 (플레이 설정이 우선)" value={d.narration ?? 'end'} options={[['fixed', '정해진 글만 (AI 없음)'], ['end', '끝날 때만 AI 서술 (기본)'], ['ai', '매 차례 AI가 장면 서술']] as const} onChange={(narration) => up({ narration: narration === 'end' ? undefined : narration })} />
-            <div className="row"><button type="button" className="small" onClick={() => up(autoSceneArt(d))}>🖼 빈 그림 자리 자동 채우기</button><span className="small muted">이름·설명·꼬리표의 낱말로 내장 장면 그림을 고른다 (이미 고른 것은 그대로)</span></div>
-            <fieldset className="cond-field">
-              <legend>진입 방식 — 이 장면이 어떻게 열리나</legend>
-              <Select label="설정" value={d.entry ? 'custom' : 'default'} options={[['default', '기본 (상대 인물이 있으면 GM이 흐름에 따라 연다 · 없으면 버튼)'], ['custom', '사용자 정의 (방식과 계기를 직접 정한다)']] as const}
-                onChange={(v) => up(v === 'custom' ? { entry: { mode: sceneEntry(d).mode }, auto: undefined } : { entry: undefined })} />
-              {d.entry ? (
-                <>
-                  <Select label="방식" value={d.entry.mode} options={ENTRY_MODES} onChange={(mode) => up({ entry: { ...d.entry!, mode } })} />
-                  {d.entry.mode === 'offer' && <Area label="계기 (GM용 — 플레이어의 어떤 행동·상황이 이 장면으로 들어가는가)" value={d.entry.trigger ?? ''} rows={2}
-                    onChange={(trigger) => up({ entry: { ...d.entry!, trigger: trigger || undefined } })} />}
-                  <p className="small muted enc-note">열리는 조건은 위의 "열리는 조건"·상대 인물·장소를 그대로 따른다. {d.entry.mode === 'auto' ? '조건이 맞는 순간 저절로 시작한다.' : d.entry.mode === 'offer' ? '🎭 버튼으로도 열 수 있고, 플레이어의 행동이 계기에 해당하면 GM이 연다.' : '플레이어가 🎭 버튼을 눌러야만 열린다.'}</p>
-                </>
-              ) : (
-                <>
-                  <p className="small muted enc-note">지금 방식: <b>{ENTRY_MODES.find((m) => m[0] === sceneEntry(d).mode)?.[1]}</b></p>
-                  <label className="check"><input type="checkbox" checked={!!d.auto} onChange={(e) => up({ auto: e.target.checked || undefined })} /> 조건이 맞으면 저절로 시작</label>
-                </>
-              )}
-            </fieldset>
-            <label className="check"><input type="checkbox" checked={!!d.repeatable} onChange={(e) => up({ repeatable: e.target.checked || undefined })} /> 끝난 뒤 다시 할 수 있음</label>
-            <Text label="상대가 좋아하는 꼬리표 (쉼표 — 판정 이점)" value={(d.likes ?? []).join(', ')} onChange={(v) => up({ likes: csv(v).length ? csv(v) : undefined })} />
-            <Text label="상대가 싫어하는 꼬리표 (쉼표 — 판정 불리)" value={(d.dislikes ?? []).join(', ')} onChange={(v) => up({ dislikes: csv(v).length ? csv(v) : undefined })} />
-            <Rows<SceneGauge> title="수치 (게이지)" items={d.gauges} make={() => ({ id: uniq('gauge', d.gauges.map((g) => g.id)), name: '새 수치', start: 0, min: 0, max: 10 })} onChange={(gauges) => up({ gauges })}
-              render={(g, upG) => <>
-                <input className="id-in" value={g.id} title="ID" onChange={(e) => upG({ id: e.target.value })} />
-                <input value={g.name} title="이름" onChange={(e) => upG({ name: e.target.value })} />
-                <label className="small delta-num">시작<input type="number" className="num" value={g.start} onChange={(e) => upG({ start: Number(e.target.value) })} /></label>
-                <label className="small delta-num">최소<input type="number" className="num" value={g.min ?? 0} onChange={(e) => upG({ min: Number(e.target.value) })} /></label>
-                <label className="small delta-num">최대<input type="number" className="num" value={g.max ?? 100} onChange={(e) => upG({ max: Number(e.target.value) })} /></label>
-                <label className="check small"><input type="checkbox" checked={g.visible !== false} onChange={(e) => upG({ visible: e.target.checked ? undefined : false })} /> 보임</label>
-              </>} />
-            <Rows<SceneStateDef> title="상태" items={d.states ?? []} make={() => ({ id: uniq('state', (d.states ?? []).map((s) => s.id)), name: '새 상태' })} onChange={(states) => up({ states: states.length ? states : undefined })}
-              render={(st, upS) => <>
-                <input className="id-in" value={st.id} title="ID" onChange={(e) => upS({ id: e.target.value })} />
-                <input value={st.name} title="이름" onChange={(e) => upS({ name: e.target.value })} />
-                <select value={String(st.edge ?? 0)} onChange={(e) => upS({ edge: e.target.value === '0' ? undefined : (Number(e.target.value) as 1 | -1) })}>
-                  <option value="0">판정 영향 없음</option><option value="1">판정 이점</option><option value="-1">판정 불리</option>
-                </select>
-              </>} />
-            <Rows<NonNullable<SceneDef['phases']>[number]> title="단계 (첫 단계에서 시작)" items={d.phases ?? []} make={() => ({ id: uniq('phase', (d.phases ?? []).map((p) => p.id)), name: '새 단계' })} onChange={(phases) => up({ phases: phases.length ? phases : undefined })}
-              render={(p, upP) => <>
-                <input className="id-in" value={p.id} title="ID" onChange={(e) => upP({ id: e.target.value })} />
-                <input value={p.name} title="이름" onChange={(e) => upP({ name: e.target.value })} />
-                <input value={p.text ?? ''} placeholder="장면 패널에 보이는 한 줄 (선택)" onChange={(e) => upP({ text: e.target.value || undefined })} />
-                <ImagePick label="그림" value={p.image} w={w} onChange={(image) => upP({ image })} />
-              </>} />
-            <fieldset><legend>행동 카드</legend>
-              {d.actions.map((a, i) => (
-                <details key={i} className="scene-item">
-                  <summary><b>{a.name || '(이름 없음)'}</b> <span className="small muted">{a.check ? CHECKS.find(([k]) => k === a.check)?.[1] : '판정 없음'}{a.dc ? ` · DC ${a.dc}` : ''}</span></summary>
-                  <ActionForm a={a} def={d} w={w} up={(p) => up({ actions: d.actions.map((x, j) => (j === i ? { ...x, ...p } : x)) })} />
-                  <button type="button" className="small" onClick={() => up({ actions: d.actions.filter((_, j) => j !== i) })}>행동 삭제</button>
-                </details>
-              ))}
-              <button type="button" className="small" onClick={() => up({ actions: [...d.actions, { id: uniq('act', d.actions.map((a) => a.id)), name: '새 행동', check: 'skill:persuasion', dc: 12 }] })}>＋ 행동 추가</button>
-            </fieldset>
-            <fieldset><legend>반작용 (내 행동마다, 위에서부터 조건이 맞는 것 모두)</legend>
-              {(d.reactions ?? []).map((r, i) => {
-                const upR = (p: Partial<SceneReaction>) => up({ reactions: (d.reactions ?? []).map((x, j) => (j === i ? { ...x, ...p } : x)) });
-                return (
-                  <details key={i} className="scene-item">
-                    <summary><b>반작용 {i + 1}</b> <span className="small muted">{r.delta.text ?? ''}{r.chance !== undefined ? ` · 확률 ${Math.round(r.chance * 100)}%` : ''}</span></summary>
-                    <SceneCondField label="조건 (없으면 매번)" value={r.when} def={d} optional onChange={(when) => upR({ when })} />
-                    <Num label="확률 (0~1, 비우면 항상)" value={r.chance} onChange={(chance) => upR({ chance })} />
-                    <DeltaEditor label="일어나는 일" value={r.delta} def={d} w={w} onChange={(delta) => upR({ delta: delta ?? {} })} />
-                    <button type="button" className="small" onClick={() => up({ reactions: (d.reactions ?? []).filter((_, j) => j !== i) })}>반작용 삭제</button>
-                  </details>
-                );
-              })}
-              <button type="button" className="small" onClick={() => up({ reactions: [...(d.reactions ?? []), { delta: { gauges: { [d.gauges[0]?.id ?? 'x']: 1 } } }] })}>＋ 반작용 추가</button>
-            </fieldset>
-            <fieldset><legend>끝 (위에서부터 처음 맞는 것)</legend>
-              {d.ends.map((e, i) => (
-                <details key={i} className="scene-item">
-                  <summary><b>{e.name || '(이름 없음)'}</b> <span className="small muted">{{ success: '성공', failure: '실패', neutral: '중립' }[e.outcome]}</span></summary>
-                  <EndForm e={e} def={d} w={w} up={(p) => up({ ends: d.ends.map((x, j) => (j === i ? { ...x, ...p } : x)) })} />
-                  <button type="button" className="small" onClick={() => up({ ends: d.ends.filter((_, j) => j !== i) })}>끝 삭제</button>
-                </details>
-              ))}
-              <button type="button" className="small" onClick={() => up({ ends: [...d.ends, { id: uniq('end', d.ends.map((e) => e.id)), name: '새 끝', when: { round: 99 }, outcome: 'neutral' }] })}>＋ 끝 추가</button>
-            </fieldset>
-            <Num label="차례 한도 (비우면 없음)" value={d.maxRounds} onChange={(maxRounds) => up({ maxRounds })} />
-            <Select label="차례가 다하면 이 끝으로" value={d.timeoutEnd ?? ''} options={[['', '(마지막 끝)'], ...d.ends.map((e) => [e.id, e.name] as const)] as const} onChange={(timeoutEnd) => up({ timeoutEnd: timeoutEnd || undefined })} />
-          </div>
-        )} />
+        render={(d, up) => <SceneForm w={w} d={d} up={up} onTest={() => setTesting(d.id)} />} />
     </>
   );
 }
@@ -355,4 +257,107 @@ export function newSceneDef(id: string): SceneDef {
   return { id, name: '새 장면', description: '', gauges: [{ id: 'progress', name: '진척', start: 0, min: 0, max: 10 }],
     actions: [{ id: 'try', name: '시도', check: 'skill:persuasion', dc: 12, success: { gauges: { progress: 3 } } }],
     ends: [{ id: 'done', name: '성공', when: { gauge: 'progress', gte: 10 }, outcome: 'success' }, { id: 'timeout', name: '시간 초과', when: { round: 99 }, outcome: 'failure' }], maxRounds: 8, timeoutEnd: 'timeout' };
+}
+
+/** 장면 하나의 양식 (v0.156: 「장면」 탭과 흐름도가 같이 쓴다). hideId: 흐름도에서는 ID를 바꾸지 않는다 (이어진 것이 끊어진다) */
+export function SceneForm({ w, d, up, onTest, hideId }: { w: WorldPackage; d: SceneDef; up: (p: Partial<SceneDef>) => void; onTest: () => void; hideId?: boolean }) {
+  const chars = [['', '(없음 — 상대 없는 장면)'], ...w.characters.map((c) => [c.id, c.name] as const)] as const;
+  const locs = [['', '(어디서나)'], ...w.locations.map((l) => [l.id, l.name] as const)] as const;
+  return (
+      <div className="form-grid scene-form">
+        <div className="row"><button type="button" className="primary" onClick={onTest}>▶ 바로 테스트</button><span className="small muted">저장하지 않고 지금 내용 그대로 돌려 보기 · 자동 200회 시뮬레이션</span></div>
+        {!hideId && <Text label="ID" value={d.id} onChange={(id) => up({ id })} />}
+        <Text label="이름" value={d.name} onChange={(name) => up({ name })} />
+        <Area label="설명 (GM용 — 어떤 장면인가, 언제 권하나)" value={d.description} onChange={(description) => up({ description })} rows={2} />
+        <Select label="상대 인물 (그 인물이 있어야 열림)" value={d.npcId ?? ''} options={chars} onChange={(npcId) => up({ npcId: npcId || undefined })} />
+        <Select label="장소" value={d.locationId ?? ''} options={locs} onChange={(locationId) => up({ locationId: locationId || undefined })} />
+        <ConditionField label="열리는 조건" value={d.start} world={w} optional onChange={(start) => up({ start })} />
+        <ImagePick label="시작 그림" value={d.image} w={w} onChange={(image) => up({ image })} />
+        <Area label="시작할 때 기록에 남는 글 (선택)" value={d.intro} onChange={(intro) => up({ intro: intro || undefined })} rows={2} />
+        <Select label="장면 서술 (플레이 설정이 우선)" value={d.narration ?? 'end'} options={[['fixed', '정해진 글만 (AI 없음)'], ['end', '끝날 때만 AI 서술 (기본)'], ['ai', '매 차례 AI가 장면 서술']] as const} onChange={(narration) => up({ narration: narration === 'end' ? undefined : narration })} />
+        <div className="row"><button type="button" className="small" onClick={() => up(autoSceneArt(d))}>🖼 빈 그림 자리 자동 채우기</button><span className="small muted">이름·설명·꼬리표의 낱말로 내장 장면 그림을 고른다 (이미 고른 것은 그대로)</span></div>
+        <fieldset className="cond-field">
+          <legend>진입 방식 — 이 장면이 어떻게 열리나</legend>
+          <Select label="설정" value={d.entry ? 'custom' : 'default'} options={[['default', '기본 (상대 인물이 있으면 GM이 흐름에 따라 연다 · 없으면 버튼)'], ['custom', '사용자 정의 (방식과 계기를 직접 정한다)']] as const}
+            onChange={(v) => up(v === 'custom' ? { entry: { mode: sceneEntry(d).mode }, auto: undefined } : { entry: undefined })} />
+          {d.entry ? (
+            <>
+              <Select label="방식" value={d.entry.mode} options={ENTRY_MODES} onChange={(mode) => up({ entry: { ...d.entry!, mode } })} />
+              {d.entry.mode === 'offer' && <Area label="계기 (GM용 — 플레이어의 어떤 행동·상황이 이 장면으로 들어가는가)" value={d.entry.trigger ?? ''} rows={2}
+                onChange={(trigger) => up({ entry: { ...d.entry!, trigger: trigger || undefined } })} />}
+              <p className="small muted enc-note">열리는 조건은 위의 "열리는 조건"·상대 인물·장소를 그대로 따른다. {d.entry.mode === 'auto' ? '조건이 맞는 순간 저절로 시작한다.' : d.entry.mode === 'offer' ? '🎭 버튼으로도 열 수 있고, 플레이어의 행동이 계기에 해당하면 GM이 연다.' : '플레이어가 🎭 버튼을 눌러야만 열린다.'}</p>
+            </>
+          ) : (
+            <>
+              <p className="small muted enc-note">지금 방식: <b>{ENTRY_MODES.find((m) => m[0] === sceneEntry(d).mode)?.[1]}</b></p>
+              <label className="check"><input type="checkbox" checked={!!d.auto} onChange={(e) => up({ auto: e.target.checked || undefined })} /> 조건이 맞으면 저절로 시작</label>
+            </>
+          )}
+        </fieldset>
+        <label className="check"><input type="checkbox" checked={!!d.repeatable} onChange={(e) => up({ repeatable: e.target.checked || undefined })} /> 끝난 뒤 다시 할 수 있음</label>
+        <Text label="상대가 좋아하는 꼬리표 (쉼표 — 판정 이점)" value={(d.likes ?? []).join(', ')} onChange={(v) => up({ likes: csv(v).length ? csv(v) : undefined })} />
+        <Text label="상대가 싫어하는 꼬리표 (쉼표 — 판정 불리)" value={(d.dislikes ?? []).join(', ')} onChange={(v) => up({ dislikes: csv(v).length ? csv(v) : undefined })} />
+        <Rows<SceneGauge> title="수치 (게이지)" items={d.gauges} make={() => ({ id: uniq('gauge', d.gauges.map((g) => g.id)), name: '새 수치', start: 0, min: 0, max: 10 })} onChange={(gauges) => up({ gauges })}
+          render={(g, upG) => <>
+            <input className="id-in" value={g.id} title="ID" onChange={(e) => upG({ id: e.target.value })} />
+            <input value={g.name} title="이름" onChange={(e) => upG({ name: e.target.value })} />
+            <label className="small delta-num">시작<input type="number" className="num" value={g.start} onChange={(e) => upG({ start: Number(e.target.value) })} /></label>
+            <label className="small delta-num">최소<input type="number" className="num" value={g.min ?? 0} onChange={(e) => upG({ min: Number(e.target.value) })} /></label>
+            <label className="small delta-num">최대<input type="number" className="num" value={g.max ?? 100} onChange={(e) => upG({ max: Number(e.target.value) })} /></label>
+            <label className="check small"><input type="checkbox" checked={g.visible !== false} onChange={(e) => upG({ visible: e.target.checked ? undefined : false })} /> 보임</label>
+          </>} />
+        <Rows<SceneStateDef> title="상태" items={d.states ?? []} make={() => ({ id: uniq('state', (d.states ?? []).map((s) => s.id)), name: '새 상태' })} onChange={(states) => up({ states: states.length ? states : undefined })}
+          render={(st, upS) => <>
+            <input className="id-in" value={st.id} title="ID" onChange={(e) => upS({ id: e.target.value })} />
+            <input value={st.name} title="이름" onChange={(e) => upS({ name: e.target.value })} />
+            <select value={String(st.edge ?? 0)} onChange={(e) => upS({ edge: e.target.value === '0' ? undefined : (Number(e.target.value) as 1 | -1) })}>
+              <option value="0">판정 영향 없음</option><option value="1">판정 이점</option><option value="-1">판정 불리</option>
+            </select>
+          </>} />
+        <Rows<NonNullable<SceneDef['phases']>[number]> title="단계 (첫 단계에서 시작)" items={d.phases ?? []} make={() => ({ id: uniq('phase', (d.phases ?? []).map((p) => p.id)), name: '새 단계' })} onChange={(phases) => up({ phases: phases.length ? phases : undefined })}
+          render={(p, upP) => <>
+            <input className="id-in" value={p.id} title="ID" onChange={(e) => upP({ id: e.target.value })} />
+            <input value={p.name} title="이름" onChange={(e) => upP({ name: e.target.value })} />
+            <input value={p.text ?? ''} placeholder="장면 패널에 보이는 한 줄 (선택)" onChange={(e) => upP({ text: e.target.value || undefined })} />
+            <ImagePick label="그림" value={p.image} w={w} onChange={(image) => upP({ image })} />
+          </>} />
+        <fieldset><legend>행동 카드</legend>
+          {d.actions.map((a, i) => (
+            <details key={i} className="scene-item">
+              <summary><b>{a.name || '(이름 없음)'}</b> <span className="small muted">{a.check ? CHECKS.find(([k]) => k === a.check)?.[1] : '판정 없음'}{a.dc ? ` · DC ${a.dc}` : ''}</span></summary>
+              <ActionForm a={a} def={d} w={w} up={(p) => up({ actions: d.actions.map((x, j) => (j === i ? { ...x, ...p } : x)) })} />
+              <button type="button" className="small" onClick={() => up({ actions: d.actions.filter((_, j) => j !== i) })}>행동 삭제</button>
+            </details>
+          ))}
+          <button type="button" className="small" onClick={() => up({ actions: [...d.actions, { id: uniq('act', d.actions.map((a) => a.id)), name: '새 행동', check: 'skill:persuasion', dc: 12 }] })}>＋ 행동 추가</button>
+        </fieldset>
+        <fieldset><legend>반작용 (내 행동마다, 위에서부터 조건이 맞는 것 모두)</legend>
+          {(d.reactions ?? []).map((r, i) => {
+            const upR = (p: Partial<SceneReaction>) => up({ reactions: (d.reactions ?? []).map((x, j) => (j === i ? { ...x, ...p } : x)) });
+            return (
+              <details key={i} className="scene-item">
+                <summary><b>반작용 {i + 1}</b> <span className="small muted">{r.delta.text ?? ''}{r.chance !== undefined ? ` · 확률 ${Math.round(r.chance * 100)}%` : ''}</span></summary>
+                <SceneCondField label="조건 (없으면 매번)" value={r.when} def={d} optional onChange={(when) => upR({ when })} />
+                <Num label="확률 (0~1, 비우면 항상)" value={r.chance} onChange={(chance) => upR({ chance })} />
+                <DeltaEditor label="일어나는 일" value={r.delta} def={d} w={w} onChange={(delta) => upR({ delta: delta ?? {} })} />
+                <button type="button" className="small" onClick={() => up({ reactions: (d.reactions ?? []).filter((_, j) => j !== i) })}>반작용 삭제</button>
+              </details>
+            );
+          })}
+          <button type="button" className="small" onClick={() => up({ reactions: [...(d.reactions ?? []), { delta: { gauges: { [d.gauges[0]?.id ?? 'x']: 1 } } }] })}>＋ 반작용 추가</button>
+        </fieldset>
+        <fieldset><legend>끝 (위에서부터 처음 맞는 것)</legend>
+          {d.ends.map((e, i) => (
+            <details key={i} className="scene-item">
+              <summary><b>{e.name || '(이름 없음)'}</b> <span className="small muted">{{ success: '성공', failure: '실패', neutral: '중립' }[e.outcome]}</span></summary>
+              <EndForm e={e} def={d} w={w} up={(p) => up({ ends: d.ends.map((x, j) => (j === i ? { ...x, ...p } : x)) })} />
+              <button type="button" className="small" onClick={() => up({ ends: d.ends.filter((_, j) => j !== i) })}>끝 삭제</button>
+            </details>
+          ))}
+          <button type="button" className="small" onClick={() => up({ ends: [...d.ends, { id: uniq('end', d.ends.map((e) => e.id)), name: '새 끝', when: { round: 99 }, outcome: 'neutral' }] })}>＋ 끝 추가</button>
+        </fieldset>
+        <Num label="차례 한도 (비우면 없음)" value={d.maxRounds} onChange={(maxRounds) => up({ maxRounds })} />
+        <Select label="차례가 다하면 이 끝으로" value={d.timeoutEnd ?? ''} options={[['', '(마지막 끝)'], ...d.ends.map((e) => [e.id, e.name] as const)] as const} onChange={(timeoutEnd) => up({ timeoutEnd: timeoutEnd || undefined })} />
+      </div>
+  );
 }

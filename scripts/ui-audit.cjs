@@ -348,6 +348,13 @@ const SCREENS = [
     await p.locator('.flow-empty button:text-is("＋ 지식")').click();
     await p.waitForSelector('.flow-panel');
   }],
+  ['편집: 흐름도 · 장면 수치·행동 (v0.156)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    const c = p.locator('.flow-node.k-scene .flow-box').first();
+    if (await c.count()) await c.click();
+    else { await p.locator('.flow-node.k-start .flow-box').click(); await p.click('.flow-actions button:has-text("처음부터 열리는 장면")'); }
+    await p.waitForSelector('.flow-scene-form .scene-rows');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();

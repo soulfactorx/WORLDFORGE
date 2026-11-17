@@ -16,7 +16,8 @@ import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
 import { GIMMICK_DEFAULTS, GimmickForm } from './GimmickForms';
-import { newSceneDef } from './SceneForms';
+import { newSceneDef, SceneForm } from './SceneForms';
+import { SceneTester } from './SceneTester';
 import { GIMMICK_KINDS, gimmickScene } from '../engine/gimmick';
 import type { Gimmick, SceneDef } from '../engine/schema';
 import { ConditionField } from './ConditionEditor';
@@ -115,6 +116,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || pending || edgeSel) return; // 방법 고르기 · 화살표 창은 스스로 닫는다
+      if (document.querySelector('.scene-tester, .lightbox')) return; // 장면 시험 창·그림 크게 보기가 먼저 닫힌다 (v0.156)
       if (linking || drag) { setLinking(null); setDrag(null); } else setSel(null);
     };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
@@ -786,23 +788,13 @@ function NodeEditor({ w, set, n, onPick }: { w: WorldPackage; set: SetW; n: GNod
       const up = (p: Partial<typeof s>) => set({ scenes: upd(w.scenes, p) });
       return (
         <>
-          <ConditionField label="열리는 조건 (선택)" value={s.start} world={w} optional onChange={(start) => up({ start })} />
+          {n.kind === 'gimmick' && <ConditionField label="열리는 조건 (선택)" value={s.start} world={w} optional onChange={(start) => up({ start })} />}
           {n.kind === 'gimmick' ? (
             // 함정·퍼즐: 탭과 같은 양식 (바꿀 때마다 장면을 다시 만든다 — 열리는 조건은 지킨다)
             <div className="flow-gimmick-form"><GimmickForm w={w} d={s} onChange={(nd) => set({ scenes: (w.scenes ?? []).map((x) => (x.id === s.id ? nd : x)) })} /></div>
           ) : (
-            <>
-              <Text label="이름" value={s.name} onChange={(name) => up({ name })} />
-              <Area label="설명 (GM용 — 어떤 장면인가)" value={s.description} onChange={(description) => up({ description })} rows={2} />
-              <label>장소<select value={s.locationId ?? ''} onChange={(e) => up({ locationId: e.target.value || undefined })}>
-                <option value="">어디서나</option>
-                {w.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select></label>
-              {s.ends.map((e, i) => (
-                <EffectsEditor key={e.id} label={`끝 「${e.name}」(${{ success: '성공', failure: '실패', neutral: '보통' }[e.outcome]})에 일어나는 일`} value={e.effects} w={w} onChange={(effects) => up({ ends: s.ends.map((x, j) => (j === i ? { ...x, effects } : x)) })} />
-              ))}
-              <p className="small muted">수치·행동·끝나는 때는 「장면」 탭에서 고치고 바로 테스트할 수 있습니다.</p>
-            </>
+            // 장면: 「장면」 탭과 같은 양식 (수치·상태·단계·행동·반작용·끝·차례 한도) + 바로 테스트 (v0.156)
+            <FlowSceneForm w={w} set={set} d={s} />
           )}
         </>
       );
@@ -1258,6 +1250,18 @@ function ClaimEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string })
         </div>
       </fieldset>
     </>
+  );
+}
+
+/** 흐름도의 장면 양식 (v0.156): 「장면」 탭과 같은 양식, ID는 고치지 않는다. 「▶ 바로 테스트」는 장면 시험 창을 연다 */
+function FlowSceneForm({ w, set, d }: { w: WorldPackage; set: SetW; d: SceneDef }) {
+  const [testing, setTesting] = useState(false);
+  const save = (nd: SceneDef) => set({ scenes: (w.scenes ?? []).map((x) => (x.id === d.id ? nd : x)) });
+  return (
+    <div className="flow-scene-form">
+      <SceneForm w={w} d={d} hideId up={(p) => save({ ...d, ...p })} onTest={() => setTesting(true)} />
+      {testing && <SceneTester w={w} sceneId={d.id} onClose={() => setTesting(false)} onApply={(nd) => save(nd)} />}
+    </div>
   );
 }
 

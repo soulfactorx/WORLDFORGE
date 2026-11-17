@@ -1424,6 +1424,11 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-empty-actions .flow-gimmick-add { flex: 0 1 auto; }
 .flow-panel .form-grid, .flow-gimmick-form .form-grid { grid-template-columns: minmax(0, 1fr); }
 .flow-gimmick-form { min-width: 0; overflow-wrap: anywhere; }
+.flow-scene-form { min-width: 0; overflow-wrap: anywhere; }
+.flow-scene-form .form-grid { grid-template-columns: minmax(0, 1fr); }
+.flow-scene-form fieldset { min-width: 0; }
+.flow-scene-form .row { flex-wrap: wrap; min-width: 0; }
+.flow-scene-form input:not([type=checkbox]), .flow-scene-form select { min-width: 0; max-width: 100%; }
 .flow-nums label { display: flex; flex-direction: column; gap: 3px; flex: 1 1 90px; min-width: 0; }
 .flow-nums input { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .flow-edge.place path { stroke: var(--muted); stroke-dasharray: 1 5; stroke-linecap: round; }
