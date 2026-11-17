@@ -117,4 +117,28 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     const ch = sampleWorld.characters[0]!;
     expect(sourceWays(w, node(w, `character:${ch.id}`)).map((x) => x.label)).toContain('동료로 함께면');
   });
+
+  it('아이템·적 (v0.148): 가지고 있으면 · 쓰러뜨리면 · 전투에 나오게 · 줍기', () => {
+    const w: WorldPackage = { ...base, items: [{ id: 'item/key', name: '열쇠', description: '', kind: 'key' }], monsters: [],
+      encounters: [{ id: 'enc/x', name: '싸움', locationId: sampleWorld.locations[0]!.id, enemies: [{ monsterId: 'goblin_warrior', zone: 2 }], trigger: '' }] };
+    const g = buildStoryGraph(w);
+    const it = g.nodes.find((n) => n.key === 'item:item/key')!;
+    expect(it.kind).toBe('item');
+    expect(layoutGraph(g).nodes.find((n) => n.key === 'item:item/key')!.layer).toBe(-2);
+    const qa = node(w, 'quest:quest/a');
+    const w2 = { ...w, ...linkOptions(w, it, node(w, 'quest:quest/b')).find((o) => o.label.includes('가지고 있으면') && o.label.includes('시작 조건'))!.apply(w) };
+    expect(w2.quests!.find((q) => q.id === 'quest/b')!.start).toEqual({ all: [{ at: 'loc/y' }, { hasItem: 'item/key' }] });
+    // 선택지 → 아이템: 얻음 효과
+    expect(linkOptions(w, node(w, 'choice:choice/c'), it).some((o) => o.label.includes('얻음'))).toBe(true);
+    // 장소 → 아이템: 줍기
+    const loc = node(w, `location:${sampleWorld.locations[0]!.id}`);
+    const w3 = { ...w, ...linkOptions(w, loc, it).find((o) => o.label.includes('주울 수 있게'))!.apply(w) };
+    expect(w3.locations[0]!.pickups?.some((p) => p.itemId === 'item/key')).toBe(true);
+    // 기본 적도 상자로 (경고 없이) · 전투에 이어짐
+    const gob = g.nodes.find((n) => n.key === 'monster:goblin_warrior');
+    expect(gob?.warn).toBeUndefined();
+    expect(g.edges.some((e) => e.from === 'monster:goblin_warrior' && e.to === 'encounter:enc/x')).toBe(true);
+    expect(sourceWays(w, gob!).map((x) => x.label)).toContain('한 마리 쓰러뜨리면');
+    expect(qa).toBeTruthy();
+  });
 });

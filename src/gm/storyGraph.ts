@@ -4,27 +4,30 @@
  *  - 화살표: A → B = "A가 일어나면(끝나면 · 고르면 · 세우면) B가 열린다(시작 · 끝 · 실패 · 결말)"
  * 레이아웃: 화살표를 따라 단을 나눈다 (가장 긴 길), 같은 단에서는 앞 단의 이웃 자리 평균으로 줄을 세운다.
  */
+import { monsterTable } from '../engine/combat/monsters';
 import { stageGates } from '../engine/encounter';
+import { itemDef } from '../engine/items';
 import type { Condition, StoryEffect, WorldPackage } from '../engine/schema';
 
-export type NodeKind = 'start' | 'location' | 'character' | 'quest' | 'ending' | 'card' | 'scene' | 'gimmick' | 'encounter' | 'choice' | 'arc' | 'event' | 'clock' | 'rule' | 'flag' | 'claim' | 'phase';
+export type NodeKind = 'start' | 'location' | 'character' | 'item' | 'monster' | 'quest' | 'ending' | 'card' | 'scene' | 'gimmick' | 'encounter' | 'choice' | 'arc' | 'event' | 'clock' | 'rule' | 'flag' | 'claim' | 'phase';
 export const NODE_LABEL: Record<NodeKind, string> = {
-  start: '시작', location: '장소', character: '인물', quest: '임무', ending: '결말', card: '갈래 카드', scene: '장면', gimmick: '함정·퍼즐', encounter: '전투', choice: '결정적 선택',
+  start: '시작', location: '장소', character: '인물', item: '아이템', monster: '적', quest: '임무', ending: '결말', card: '갈래 카드', scene: '장면', gimmick: '함정·퍼즐', encounter: '전투', choice: '결정적 선택',
   arc: '줄기', event: '연표 사건', clock: '진행 시계', rule: '세계 규칙', flag: '플래그', claim: '지식', phase: '국면',
 };
 export const NODE_ICON: Record<NodeKind, string> = {
-  start: '▶', location: '📍', character: '👤', quest: '🎯', ending: '◆', card: '🃏', scene: '🎭', gimmick: '🧩', encounter: '⚔', choice: '⚖', arc: '📖', event: '📅', clock: '⏳', rule: '⚙', flag: '🏳', claim: '💡', phase: '🌗',
+  start: '▶', location: '📍', character: '👤', item: '🎒', monster: '👾', quest: '🎯', ending: '◆', card: '🃏', scene: '🎭', gimmick: '🧩', encounter: '⚔', choice: '⚖', arc: '📖', event: '📅', clock: '⏳', rule: '⚙', flag: '🏳', claim: '💡', phase: '🌗',
 };
 
 export interface GNode { key: string; kind: NodeKind; id: string; name: string; sub?: string; warn?: string }
 export type EdgeKind = 'start' | 'complete' | 'fail' | 'effect' | 'ending' | 'stage' | 'place';
 /** 장소·인물 (v0.147): 흐름의 단에 넣지 않고 아래 띠에 따로 놓는다 */
-export const LANE_KINDS: NodeKind[] = ['location', 'character'];
-export const isLane = (k: string) => k.startsWith('location:') || k.startsWith('character:');
+export const LANE_KINDS: NodeKind[] = ['location', 'character', 'item', 'monster'];
+export const isLane = (k: string) => /^(location|character|item|monster):/.test(k);
 export interface GEdge { from: string; to: string; kind: EdgeKind; label: string }
 export interface StoryGraph { nodes: GNode[]; edges: GEdge[] }
 
 export const START_KEY = 'start:begin';
+const ITEM_KIND: Record<string, string> = { consumable: '소모품', weapon: '무기', armor: '갑옷', shield: '방패', trinket: '장신구', scroll: '비급·주문서', key: '열쇠', treasure: '보물', misc: '물건' };
 const key = (kind: NodeKind, id: string) => `${kind}:${id}`;
 
 /** 조건이 가리키는 것: (노드, 그 뜻) */
@@ -57,6 +60,9 @@ function refsOf(c: Condition | undefined, out: { node: string; label: string }[]
   if (typeof r.inParty === 'string') out.push({ node: key('character', r.inParty), label: '동료이면' });
   if (typeof r.relationship === 'string') out.push({ node: key('character', r.relationship), label: `관계 ${r.gte !== undefined ? `≥ ${r.gte}` : r.lte !== undefined ? `≤ ${r.lte}` : ''}` });
   if (typeof r.stage === 'string') out.push({ node: key('character', r.stage), label: '관계 단계' });
+  // 아이템·적 (v0.148)
+  if (typeof r.hasItem === 'string') out.push({ node: key('item', r.hasItem), label: `가지고 있으면${Number(r.n ?? 1) > 1 ? ` (${r.n}개)` : ''}` });
+  if (typeof r.defeated === 'string') out.push({ node: key('monster', r.defeated), label: `${r.n ?? 1}마리 쓰러뜨리면` });
   return out;
 }
 
@@ -75,6 +81,8 @@ function effectRefs(list: StoryEffect[] | undefined, world: WorldPackage): { nod
     if (typeof r.killNpc === 'string') out.push({ node: key('character', r.killNpc), label: '죽음' });
     if (typeof r.moveNpc === 'string') out.push({ node: key('character', r.moveNpc), label: '인물 옮김' });
     if (typeof r.relationship === 'string') out.push({ node: key('character', r.relationship), label: '관계 바뀜' });
+    if (typeof r.giveItem === 'string') out.push({ node: key('item', r.giveItem), label: '얻음' });
+    if (typeof r.takeItem === 'string') out.push({ node: key('item', r.takeItem), label: '잃음' });
   }
   return out;
 }
@@ -96,6 +104,8 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
 
   for (const l of w.locations) add({ key: key('location', l.id), kind: 'location', id: l.id, name: l.name, sub: `길 ${l.connections.length}${w.start.locationId === l.id ? ' · 시작 장소' : ''}` });
   for (const c of w.characters) add({ key: key('character', c.id), kind: 'character', id: c.id, name: c.name, sub: w.locations.find((l) => l.id === c.locationId)?.name ?? '' });
+  for (const it of w.items ?? []) add({ key: key('item', it.id), kind: 'item', id: it.id, name: it.name, sub: ITEM_KIND[it.kind] ?? it.kind });
+  for (const m of w.monsters ?? []) add({ key: key('monster', m.id), kind: 'monster', id: m.id, name: m.name, sub: `HP ${m.hp} · AC ${m.ac}` });
   for (const q of w.quests ?? []) add({ key: key('quest', q.id), kind: 'quest', id: q.id, name: q.name, sub: `${q.kind === 'main' ? '메인' : '사이드'} · ${q.stages.length}단계` });
   for (const e of w.endings ?? []) add({ key: key('ending', e.id), kind: 'ending', id: e.id, name: e.name });
   for (const s of w.storylets ?? []) add({ key: key('card', s.id), kind: 'card', id: s.id, name: s.title, sub: `갈림길 ${s.options.length}${s.tags?.length ? ` · ${s.tags.join('·')}` : ''}` });
@@ -113,6 +123,13 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   for (const c of w.choices ?? []) placeOf(c.locationId, key('choice', c.id));
   for (const c of w.storylets ?? []) placeOf(c.locationId, key('card', c.id));
   for (const c of w.characters) placeOf(c.locationId, key('character', c.id), '여기 있음');
+  // 전투에 나오는 적 · 장소에서 줍는 것·파는 것 · 인물이 주는 것 (v0.148)
+  for (const e of w.encounters ?? []) for (const en of e.enemies ?? []) link(key('monster', en.monsterId), key('encounter', e.id), 'place', '등장');
+  for (const l of w.locations) {
+    for (const pk of l.pickups ?? []) link(key('location', l.id), key('item', pk.itemId), 'place', '주울 수 있음');
+    for (const id of l.shop?.items ?? []) link(key('location', l.id), key('item', id), 'place', '상점에서 팖');
+  }
+  for (const c of w.characters) for (const g of c.gives ?? []) link(key('character', c.id), key('item', g.itemId), 'place', '줌');
   // 조건 (무엇이 열고 · 끝내고 · 실패시키는가)
   for (const q of w.quests ?? []) {
     const me = key('quest', q.id);
@@ -172,7 +189,9 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
       const decl = (w.flags ?? []).find((f) => f.id === id);
       add({ key: k, kind: 'flag', id, name: id, ...(decl?.when?.trim() ? { sub: `GM이 세움: ${decl.when.trim()}` } : {}),
         ...(read && !set && !decl ? { warn: '이 플래그를 세우는 곳이 없다 — 효과로 세우거나 플래그 목록에 「언제 세우는지」를 적어 GM이 세우게 하세요' } : {}) });
-    } else if (kind === 'claim') add({ key: k, kind: 'claim', id, name: w.claims.find((c) => c.id === id)?.statement.slice(0, 40) ?? id });
+    } else if (kind === 'item') { const d = itemDef(w, id); add({ key: k, kind: 'item', id, name: d?.name ?? id, ...(d ? { sub: '기본 아이템' } : { warn: '세계에 없는 아이템을 가리킨다' }) }); }
+    else if (kind === 'monster') { const d = monsterTable(w)[id]; add({ key: k, kind: 'monster', id, name: d?.name ?? id, ...(d ? { sub: '기본 적' } : { warn: '세계에 없는 적을 가리킨다' }) }); }
+    else if (kind === 'claim') add({ key: k, kind: 'claim', id, name: w.claims.find((c) => c.id === id)?.statement.slice(0, 40) ?? id });
     else if (kind === 'phase') add({ key: k, kind: 'phase', id, name: w.phases?.find((p) => p.id === id)?.name ?? id });
     else add({ key: k, kind: kind as NodeKind, id, name: id, warn: '세계에 없는 것을 가리킨다' });
   }
@@ -286,7 +305,7 @@ export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right', pinned?: Reco
   // 장소·인물 띠 (v0.147): 흐름 아래에 장소 줄, 그 아래 인물 줄
   let laneTop = bodyEnd + (lane.length ? 50 : 0);
   const perLane = Math.max(5, down ? tallest : layers.length || 5);
-  for (const kind of ['location', 'character'] as NodeKind[]) {
+  for (const kind of ['location', 'character', 'item', 'monster'] as NodeKind[]) {
     const row = lane.filter((k) => byKey.get(k)!.kind === kind);
     row.forEach((k, i) => placed.push({ ...byKey.get(k)!, layer: -2, x: 20 + (i % perLane) * (NODE_W + 24), y: laneTop + Math.floor(i / perLane) * (NODE_H + GAP_Y) }));
     if (row.length) laneTop += Math.ceil(row.length / perLane) * (NODE_H + GAP_Y) + 10;
