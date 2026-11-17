@@ -391,7 +391,7 @@ export function StoryFlow({ w, set, onTab, onSave, dirty }: { w: WorldPackage; s
                 onPointerDown={(e) => { const c = canvasRef.current; if (e.pointerType !== 'mouse' || e.button !== 0 || !c) return; (e.currentTarget as Element).setPointerCapture?.(e.pointerId); panRef.current = { sx: e.clientX, sy: e.clientY, sl: c.scrollLeft, st: c.scrollTop, moved: false }; }} />
               {lay.nodes.some((n) => n.layer === -2) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -2).map((n) => n.y)) - 12} className="flow-lane">📍 장소 · 👤 인물 · ⚑ 세력 · 🎒 아이템 · 👾 적 — 눌러서 고치고, 끌어서 이야기 상자와 이으면 「여기 있으면」 「가지고 있으면」 「쓰러뜨리면」이 됩니다</text>}
               {lay.nodes.some((n) => n.layer === -1) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -1).map((n) => n.y)) - 12} className="flow-lane">따로 있는 것 (이어진 조건이 없다)</text>}
-              {shown.edges.map((e, i) => ((isLane(e.from) || isLane(e.to)) && !(sel && (e.from === sel || e.to === sel)) && !(edgeSel?.from === e.from && edgeSel.to === e.to)) ? null : <Edge key={i} e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={(!!sel && (e.from === sel || e.to === sel)) || (edgeSel?.from === e.from && edgeSel.to === e.to)} dim={!!sel && !(e.from === sel || e.to === sel)} onPick={() => { if (!drag && !moveRef.current) setEdgeSel(e); }} />)}
+              {shown.edges.map((e, i) => ((isLane(e.from) || isLane(e.to)) && !(sel && (e.from === sel || e.to === sel)) && !(edgeSel?.from === e.from && edgeSel.to === e.to)) ? null : <Edge key={i} part="line" e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={(!!sel && (e.from === sel || e.to === sel)) || (edgeSel?.from === e.from && edgeSel.to === e.to)} dim={!!sel && !(e.from === sel || e.to === sel)} onPick={() => { if (!drag && !moveRef.current) setEdgeSel(e); }} />)}
               {/* 겹치면 위에: 옮긴 것 < 고른 것 < 끄는 것 */}
               {[...lay.nodes].sort((x, y) => onTop(x.key) - onTop(y.key)).map((n0) => {
                 const at = pos.get(n0.key)!, n = { ...n0, x: at.x, y: at.y };
@@ -432,6 +432,8 @@ export function StoryFlow({ w, set, onTab, onSave, dirty }: { w: WorldPackage; s
                   </g>
                 );
               })}
+              {/* 연결선 글자는 선·상자 위에 (v0.165) */}
+              {shown.edges.map((e, i) => ((isLane(e.from) || isLane(e.to)) && !(sel && (e.from === sel || e.to === sel)) && !(edgeSel?.from === e.from && edgeSel.to === e.to)) ? null : <Edge key={`l${i}`} part="label" e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={(!!sel && (e.from === sel || e.to === sel)) || (edgeSel?.from === e.from && edgeSel.to === e.to)} dim={!!sel && !(e.from === sel || e.to === sel)} onPick={() => { if (!drag && !moveRef.current) setEdgeSel(e); }} />)}
               {drag && (() => {
                 const a = pos.get(drag.from); if (!a) return null;
                 const x1 = down ? a.x + NODE_W / 2 : a.x + NODE_W, y1 = down ? a.y + NODE_H : a.y + NODE_H / 2;
@@ -503,7 +505,7 @@ function LinkDialog({ w, a, b, onLink, onSwap, onClose }: { w: WorldPackage; a: 
   );
 }
 
-function Edge({ e, a, b, active, dim, down, onPick }: { e: GEdge; a?: { x: number; y: number }; b?: { x: number; y: number }; active: boolean; dim: boolean; down: boolean; onPick: () => void }) {
+function Edge({ e, a, b, active, dim, down, onPick, part }: { part: 'line' | 'label'; e: GEdge; a?: { x: number; y: number }; b?: { x: number; y: number }; active: boolean; dim: boolean; down: boolean; onPick: () => void }) {
   if (!a || !b) return null;
   let d: string, lx: number, ly: number;
   if (down) {
@@ -512,7 +514,8 @@ function Edge({ e, a, b, active, dim, down, onPick }: { e: GEdge; a?: { x: numbe
     // 여러 단을 건너는 화살표는 옆으로 휘어 사이의 상자를 비켜 간다
     const bow = backward ? 0 : Math.min(150, Math.max(0, Math.round((y2 - y1) / (NODE_H + 56))) * 120);
     d = backward ? `M${x1},${y1} C${x1 - 90},${y1 + 60} ${x2 - 90},${y2 - 60} ${x2},${y2}` : `M${x1},${y1} C${x1 - bow},${y1 + (y2 - y1) / 2} ${x2 - bow},${y1 + (y2 - y1) / 2} ${x2},${y2}`;
-    lx = (x1 + x2) / 2 - (backward ? 60 : 0); ly = (y1 + y2) / 2;
+    // 글자는 받는 상자 바로 위에 — 한 상자에서 여러 갈래가 나가도 겹치지 않는다 (v0.165)
+    lx = x2; ly = y2 - 12;
   } else {
     const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
     // 뒤로 가는 화살표(같은 단·앞 단)는 위로 크게 돌아간다
@@ -523,15 +526,28 @@ function Edge({ e, a, b, active, dim, down, onPick }: { e: GEdge; a?: { x: numbe
     d = backward ? `M${x1},${y1} C${x1 + 60},${y1 - 70} ${x2 - 60},${y2 - 70} ${x2},${y2}`
       : bow ? `M${x1},${y1} C${x1 + 50},${top} ${x2 - 50},${top} ${x2},${y2}`
       : `M${x1},${y1} C${x1 + (x2 - x1) / 2},${y1} ${x1 + (x2 - x1) / 2},${y2} ${x2},${y2}`;
-    lx = (x1 + x2) / 2; ly = bow ? top + 10 : (y1 + y2) / 2 - (backward ? 52 : 6);
+    // 글자는 받는 상자의 화살촉 바로 위에 — 한 상자에서 여러 갈래가 나가도 겹치지 않는다 (v0.165)
+    lx = x2 - 14; ly = y2 - 10;
   }
+  if (part === 'label') return active ? <EdgeLabel x={lx} y={ly} text={short(e.label.replace(/^→ /, ''), down ? 16 : 26)} anchor={down ? 'middle' : 'end'} /> : null;
   const cls = e.kind === 'place' ? 'place' : e.kind === 'fail' ? 'fail' : e.kind === 'effect' ? 'effect' : e.kind === 'start' ? 'start' : 'complete';
   return (
     <g className={`flow-edge ${cls}${active ? ' active' : ''}${dim ? ' dim' : ''}`}>
       <path d={d} markerEnd={`url(#arrow-${cls})`} />
       {/* 누르기 쉽게 넓은 투명 선 (v0.145): 누르면 연결 조건을 고친다 */}
       <path d={d} className="flow-edge-hit" onClick={onPick}><title>{`${e.label.replace(/^→ /, '')}\n누르면 이 연결을 고칩니다`}</title></path>
-      {active && <text x={lx} y={ly} className="flow-label" textAnchor="middle">{short(e.label.replace(/^→ /, ''), 26)}</text>}
+    </g>
+  );
+}
+
+/** 연결선 글자: 바탕 상자 위에 쓴다 (글자 테두리는 일부 휴대폰 브라우저의 강제 어두운 모드에서 글자를 덮는다, v0.165) */
+function EdgeLabel({ x, y, text, anchor }: { x: number; y: number; text: string; anchor: 'middle' | 'end' }) {
+  const width = [...text].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? 11 : 6.5), 0) + 10;
+  const left = anchor === 'end' ? x - width + 5 : x - width / 2;
+  return (
+    <g className="flow-label-g" pointerEvents="none">
+      <rect x={left} y={y - 12} width={width} height={17} rx={4} className="flow-label-bg" />
+      <text x={x} y={y} className="flow-label" textAnchor={anchor}>{text}</text>
     </g>
   );
 }

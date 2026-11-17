@@ -1358,7 +1358,8 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-arrow.start { fill: var(--accent); }
 .flow-arrow.complete { fill: var(--text); }
 .flow-arrow.fail, .flow-arrow.effect, .flow-arrow.place { fill: var(--muted); }
-.flow-label { font-size: 11px; fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
+.flow-label { font-size: 11px; fill: var(--text); stroke: none; }
+.flow-label-bg { fill: var(--surface); stroke: var(--border); stroke-width: 1; opacity: .95; }
 .flow-panel { border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; max-height: calc(100dvh - 260px); min-height: 420px; overflow: auto; min-width: 0; }
 .flow-panel-head { align-items: center; gap: 6px; }
 .flow-panel code { word-break: break-all; }
