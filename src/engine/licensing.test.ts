@@ -54,3 +54,16 @@ describe('리소스별 출처·라이선스 (v0.157)', () => {
     expect(stripPersonal(b).world.characters.some((c) => c.name === '카드 소녀')).toBe(false);
   });
 });
+
+describe('만계서고: 갈래 카드·세계 규칙도 가져온다 (v0.158)', () => {
+  it('카드를 가져오면 그 카드가 가리키는 임무도 따라오고, 규칙도 가져온다', async () => {
+    const { aetheriaWorld } = await import('../data/official/aetheria');
+    const card = aetheriaWorld.storylets!.find((c) => c.quest) ?? aetheriaWorld.storylets![0]!;
+    const target: WorldPackage = { ...sampleWorld, manifest: { ...sampleWorld.manifest, id: 't.w' }, storylets: [], rules: [] };
+    const r = borrow(target, aetheriaWorld, [{ kind: 'storylet', id: card.id }]);
+    expect(r.world.storylets!.some((c) => c.title === card.title)).toBe(true);
+    if (card.quest) expect(r.world.quests!.some((q) => q.name === aetheriaWorld.quests!.find((x) => x.id === card.quest)!.name)).toBe(true);
+    const rule = aetheriaWorld.rules?.[0];
+    if (rule) expect(borrow(target, aetheriaWorld, [{ kind: 'rule', id: rule.id }]).world.rules!.some((x) => x.name === rule.name)).toBe(true);
+  });
+});

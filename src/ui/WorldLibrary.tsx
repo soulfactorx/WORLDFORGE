@@ -19,9 +19,9 @@ import { assetUrl } from '../storage/assets';
 type Src = { key: string; world: WorldPackage; builtin: boolean };
 /** 존재·사물 / 서사·법칙 */
 const BEINGS: BorrowKind[] = ['character', 'location', 'item', 'monster', 'faction', 'class', 'profile', 'knowledge', 'image'];
-const LORE: BorrowKind[] = ['arc', 'quest', 'scene', 'choice', 'ending', 'encounter', 'clock', 'event', 'flag', 'var'];
+const LORE: BorrowKind[] = ['arc', 'quest', 'storylet', 'scene', 'choice', 'ending', 'encounter', 'clock', 'event', 'flag', 'var', 'rule'];
 const PAGE = 60;
-const ICON: Record<BorrowKind, string> = { profile: '🧭', character: '👤', location: '🗺', item: '🎒', monster: '👹', faction: '🏰', class: '🎓', knowledge: '💡', image: '🖼', arc: '📜', quest: '📌', scene: '🎭', choice: '⚖', ending: '🏁', encounter: '⚔', clock: '⏳', event: '📅', flag: '🚩', var: '📊' };
+const ICON: Record<BorrowKind, string> = { profile: '🧭', character: '👤', location: '🗺', item: '🎒', monster: '👹', faction: '🏰', class: '🎓', knowledge: '💡', image: '🖼', arc: '📜', quest: '📌', scene: '🎭', choice: '⚖', ending: '🏁', encounter: '⚔', clock: '⏳', event: '📅', flag: '🚩', var: '📊', storylet: '🃏', rule: '⚙' };
 
 export function WorldLibrary({ target, onApply, onClose, title }: {
   /** 넣을 세계 (편집 중인 것) */

@@ -16,13 +16,13 @@ import { traitsFor } from './traits';
 import { validateWorld } from './package/validate';
 
 export type BorrowKind = 'character' | 'location' | 'item' | 'monster' | 'scene' | 'faction' | 'knowledge' | 'class' | 'image' | 'profile'
-  | 'quest' | 'arc' | 'choice' | 'clock' | 'event' | 'ending' | 'flag' | 'var' | 'encounter';
+  | 'quest' | 'arc' | 'choice' | 'clock' | 'event' | 'ending' | 'flag' | 'var' | 'encounter' | 'storylet' | 'rule';
 export const BORROW_LABEL: Record<BorrowKind, string> = {
   character: '인물', location: '장소', item: '아이템', monster: '몬스터', scene: '장면', faction: '세력', knowledge: '지식', class: '직업', image: '이미지', profile: '주인공 양식·성향',
-  quest: '임무', arc: '이야기 줄기', choice: '결정적 선택', clock: '진행 시계', event: '연표 사건', ending: '결말', flag: '플래그', var: '세계 수치', encounter: '조우',
+  quest: '임무', arc: '이야기 줄기', choice: '결정적 선택', clock: '진행 시계', event: '연표 사건', ending: '결말', flag: '플래그', var: '세계 수치', encounter: '조우', storylet: '갈래 카드', rule: '세계 규칙',
 };
 /** 이야기 장치 (v0.64): 다른 것을 많이 가리키므로, 가리키는 것을 끝까지 따라가 함께 가져온다 */
-const LOGIC = { quest: 'quests', arc: 'arcs', choice: 'choices', clock: 'clocks', event: 'events', ending: 'endings', flag: 'flags', var: 'vars', encounter: 'encounters' } as const;
+const LOGIC = { quest: 'quests', arc: 'arcs', choice: 'choices', clock: 'clocks', event: 'events', ending: 'endings', flag: 'flags', var: 'vars', encounter: 'encounters', storylet: 'storylets', rule: 'rules' } as const;
 type LogicKind = keyof typeof LOGIC;
 const isLogic = (k: BorrowKind): k is LogicKind => k in LOGIC;
 const listOf = (w: WorldPackage, k: LogicKind) => ((w as unknown as Record<string, { id: string }[] | undefined>)[LOGIC[k]] ?? []);
@@ -116,10 +116,12 @@ export function catalogOf(w: WorldPackage): CatalogEntry[] {
     flag: (x) => cut(x.when as string, 50),
     var: (x) => `처음 ${x.initial ?? 0}`,
     encounter: (x) => cut(x.trigger as string, 50),
+    storylet: (x) => `갈림길 ${(x.options as unknown[] | undefined)?.length ?? 0} · ${cut(x.situation as string, 40)}`,
+    rule: (x) => cut(((x.trigger as { describe?: string })?.describe) ?? (x.outcome as string) ?? '', 50),
   };
   for (const k of Object.keys(LOGIC) as LogicKind[]) {
     for (const x of listOf(w, k) as unknown as Record<string, unknown>[]) {
-      const name = String(x.name ?? x.id);
+      const name = String(x.name ?? x.title ?? x.id);
       out.push({ kind: k, id: String(x.id), name, sub: logicSub[k](x), hay: [name, String(x.id), logicSub[k](x)].join(' ') });
     }
   }
@@ -441,8 +443,8 @@ export function borrow(target: WorldPackage, source: WorldPackage, picksIn: Borr
   return { world: out, copies, notes: [...new Set(notes)], added };
 }
 
-const COLLS = ['characters', 'locations', 'items', 'monsters', 'scenes', 'factions', 'classes', 'claims', 'facts', 'assets', 'quests', 'arcs', 'choices', 'clocks', 'events', 'endings', 'flags', 'vars', 'encounters'] as const;
-const COLL_LABEL: Record<string, string> = { characters: '인물', locations: '장소', items: '아이템', monsters: '몬스터', scenes: '장면', factions: '세력', classes: '직업', claims: '지식', facts: '지식', assets: '이미지', quests: '임무', arcs: '이야기 줄기', choices: '결정적 선택', clocks: '진행 시계', events: '연표 사건', endings: '결말', flags: '플래그', vars: '세계 수치', encounters: '조우' };
+const COLLS = ['characters', 'locations', 'items', 'monsters', 'scenes', 'factions', 'classes', 'claims', 'facts', 'assets', 'quests', 'arcs', 'choices', 'clocks', 'events', 'endings', 'flags', 'vars', 'encounters', 'storylets', 'rules'] as const;
+const COLL_LABEL: Record<string, string> = { characters: '인물', locations: '장소', items: '아이템', monsters: '몬스터', scenes: '장면', factions: '세력', classes: '직업', claims: '지식', facts: '지식', assets: '이미지', quests: '임무', arcs: '이야기 줄기', choices: '결정적 선택', clocks: '진행 시계', events: '연표 사건', endings: '결말', flags: '플래그', vars: '세계 수치', encounters: '조우', storylets: '갈래 카드', rules: '세계 규칙' };
 
 /** 검사기 오류 중 새로 가져온 항목 안의 것: 그 부분(가장 가까운 목록 칸, 없으면 그 속성)을 지운다 */
 /** 세계 전체에서 없는 것을 가리키는 부분을 뺀다 (v0.157: 리소스를 지운 뒤 정리) */
