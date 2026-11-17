@@ -15,6 +15,8 @@ import { type ExploreReport, nodeSim, type NodeSim, simActs, simExplore, simIcon
 import { condTrace } from '../gm/lab';
 import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
+import { monsterTable } from '../engine/combat/monsters';
+import type { Encounter } from '../engine/schema';
 import { isMyAssets, keepAsAsset } from '../storage/myAssets';
 import { FlowLibrary } from './FlowLibrary';
 import type { BorrowKind } from '../engine/borrow';
@@ -848,17 +850,7 @@ function NodeEditor({ w, set, n, onPick }: { w: WorldPackage; set: SetW; n: GNod
         </>
       );
     }
-    case 'encounter': {
-      const e = w.encounters?.find((x) => x.id === n.id); if (!e) return null;
-      const up = (p: Partial<typeof e>) => set({ encounters: upd(w.encounters, p) });
-      return (
-        <>
-          <Text label="이름" value={e.name} onChange={(name) => up({ name })} />
-          <Area label="GM에게: 언제 일어나는가" value={e.trigger} onChange={(trigger) => up({ trigger })} rows={2} />
-          <ConditionField label="일어날 수 있는 조건 (선택)" value={e.when} world={w} optional onChange={(when) => up({ when })} />
-        </>
-      );
-    }
+    case 'encounter': return <EncounterEditor w={w} set={set} id={n.id} />;
     case 'event': {
       const e = w.events?.find((x) => x.id === n.id); if (!e) return null;
       const up = (p: Partial<typeof e>) => set({ events: upd(w.events, p) });
@@ -1355,6 +1347,51 @@ function MiniMap({ nodes, width, height, zoom, view, sel, onGo }: { nodes: { key
       {nodes.map((n) => <rect key={n.key} x={n.x * sc} y={n.y * sc} width={Math.max(2, NODE_W * sc)} height={Math.max(2, NODE_H * sc)} className={`mm-node k-${n.kind}${n.key === sel ? ' sel' : ''}`} />)}
       <rect className="mm-view" x={(view.sl / zoom) * sc} y={(view.st / zoom) * sc} width={(view.cw / zoom) * sc} height={(view.ch / zoom) * sc} />
     </svg>
+  );
+}
+
+// ---------------------------------------------------------------- 전투 (v0.159: 적 구성·결과까지 바로 고친다)
+
+function EncounterEditor({ w, set, id }: { w: WorldPackage; set: SetW; id: string }) {
+  const e = w.encounters?.find((x) => x.id === id); if (!e) return null;
+  const up = (p: Partial<Encounter>) => set({ encounters: (w.encounters ?? []).map((x) => (x.id === id ? { ...x, ...p } : x)) });
+  const table = monsterTable(w);
+  const mons = Object.values(table).sort((a, b) => Number(!(w.monsters ?? []).some((m) => m.id === a.id)) - Number(!(w.monsters ?? []).some((m) => m.id === b.id)) || a.name.localeCompare(b.name));
+  const retry = e.retry ?? 3;
+  return (
+    <>
+      <Text label="이름" value={e.name} onChange={(name) => up({ name })} />
+      <label>장소<select value={e.locationId} onChange={(ev) => up({ locationId: ev.target.value })}>{w.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+      <Area label="GM에게: 언제 일어나는가" value={e.trigger} onChange={(trigger) => up({ trigger })} rows={2} />
+      <Text label="전투 직전 한 줄 (플레이어에게 보임, 선택)" value={e.intro ?? ''} onChange={(intro) => up({ intro: intro || undefined })} />
+      <fieldset className="flow-stage"><legend>적 {e.enemies.length}</legend>
+        {e.enemies.map((en, i) => (
+          <div key={i} className="row flow-nums">
+            <label>누구<select value={en.monsterId} onChange={(ev) => up({ enemies: e.enemies.map((x, j) => (j === i ? { ...x, monsterId: ev.target.value } : x)) })}>
+              {!table[en.monsterId] && <option value={en.monsterId}>(없는 적: {en.monsterId})</option>}
+              {mons.map((m) => <option key={m.id} value={m.id}>{(w.monsters ?? []).some((x) => x.id === m.id) ? '★ ' : ''}{m.name}</option>)}
+            </select></label>
+            <label>자리<select value={en.zone} onChange={(ev) => up({ enemies: e.enemies.map((x, j) => (j === i ? { ...x, zone: Number(ev.target.value) as 2 | 3 } : x)) })}><option value={2}>전열</option><option value={3}>후열</option></select></label>
+            {e.enemies.length > 1 && <button type="button" className="small" aria-label={`적 ${i + 1} 빼기`} onClick={() => up({ enemies: e.enemies.filter((_, j) => j !== i) })}>빼기</button>}
+          </div>
+        ))}
+        <button type="button" className="small" onClick={() => up({ enemies: [...e.enemies, { monsterId: e.enemies.at(-1)?.monsterId ?? mons[0]?.id ?? '', zone: 2 }] })}>＋ 적 더하기</button>
+        <p className="small muted">★ = 이 세계만의 적. 능력치는 적 상자나 「조우」 탭에서 고칩니다.</p>
+      </fieldset>
+      <ConditionField label="일어날 수 있는 조건 (선택)" value={e.when} world={w} optional onChange={(when) => up({ when })} />
+      <ConditionField label="반드시 바로 일어나는 조건 (선택 — 매복·결전)" value={e.force} world={w} optional onChange={(force) => up({ force })} />
+      <EffectsEditor label="이기면" value={e.onVictory} w={w} onChange={(onVictory) => up({ onVictory })} />
+      <EffectsEditor label="지면" value={e.onDefeat} w={w} onChange={(onDefeat) => up({ onDefeat })} />
+      <EffectsEditor label="달아나면" value={e.onFlee} w={w} onChange={(onFlee) => up({ onFlee })} />
+      <div className="row flow-nums">
+        <label>이기면 얻는 돈 (비우면 적에 비례)<input type="number" min={0} value={e.loot?.money ?? ''} placeholder="자동" onChange={(ev) => { const v = ev.target.value; const loot = { ...e.loot }; if (v === '') delete loot.money; else loot.money = Math.max(0, Number(v) || 0); up({ loot: Object.keys(loot).length ? loot : undefined }); }} /></label>
+        <label>지거나 달아난 뒤<select value={retry === 'gone' ? 'gone' : retry === 0 ? 'now' : 'wait'} onChange={(ev) => up({ retry: ev.target.value === 'gone' ? 'gone' : ev.target.value === 'now' ? 0 : 3 })}>
+          <option value="wait">몇 턴 쉬었다가 다시</option><option value="now">바로 다시</option><option value="gone">다시 일어나지 않음</option>
+        </select></label>
+        {typeof retry === 'number' && retry > 0 && <label>쉬는 턴<input type="number" min={1} value={retry} onChange={(ev) => up({ retry: Math.max(1, Number(ev.target.value) || 1) })} /></label>}
+      </div>
+      <p className="small muted">전리품 아이템·밸런스 시험은 「조우」 탭에서 합니다.</p>
+    </>
   );
 }
 
