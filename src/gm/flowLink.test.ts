@@ -4,6 +4,7 @@ import { sampleWorld } from '../data/sample-world';
 import type { WorldPackage } from '../engine/schema';
 import { edgeSlots, getCond, linkOptions, replaceLeaf, setCond, sourceWays, unlink } from './flowLink';
 import { buildStoryGraph, layoutGraph, START_KEY } from './storyGraph';
+import { gimmickScene } from '../engine/gimmick';
 
 const base: WorldPackage = { ...sampleWorld,
   quests: [
@@ -140,5 +141,19 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     expect(g.edges.some((e) => e.from === 'monster:goblin_warrior' && e.to === 'encounter:enc/x')).toBe(true);
     expect(sourceWays(w, gob!).map((x) => x.label)).toContain('한 마리 쓰러뜨리면');
     expect(qa).toBeTruthy();
+  });
+
+  it('함정·퍼즐 (v0.149): 흐름도에서 끝에 더한 효과가 gimmick 설정에도 적혀, 다시 만들어도 남는다', () => {
+    const trap = gimmickScene({ id: 'scene/gimmick-1', name: '함정', start: { questDone: 'quest/a' } }, { kind: 'device', intro: '문', check: { check: 'skill:arcana', dc: 12 }, goal: 2, mistakes: 2 });
+    const w: WorldPackage = { ...base, endings: [{ id: 'ending/f', name: 'F', condition: { flag: 'opened' }, epilogue: '' }], scenes: [trap] };
+    const g = node(w, 'gimmick:scene/gimmick-1'), f = node(w, 'flag:opened');
+    const opt = linkOptions(w, g, f).find((o) => o.group === 'effect' && o.label.includes('성공'))!;
+    const w2 = { ...w, ...opt.apply(w) };
+    const d = w2.scenes![0]!;
+    expect(d.gimmick!.onSuccess!.effects).toEqual([{ setFlag: 'opened' }]);
+    // 「함정·퍼즐」 탭처럼 gimmick 설정으로 다시 만들어도 효과·열리는 조건이 남는다
+    const again = gimmickScene({ id: d.id, name: d.name, start: d.start! }, d.gimmick!);
+    expect(again.ends.find((e) => e.id === 'solved')!.effects).toEqual([{ setFlag: 'opened' }]);
+    expect(again.start).toEqual({ questDone: 'quest/a' });
   });
 });

@@ -15,14 +15,15 @@ import type { LlmSettings } from '../llm/types';
 type Set = (patch: Partial<WorldPackage>) => void;
 
 const SKILL_OPTS = SKILL_IDS.map((id) => [`skill:${id}`, SKILLS[id].name] as const);
-const DEFAULTS: Record<Gimmick['kind'], { name: string; g: Gimmick }> = {
+export const GIMMICK_DEFAULTS: Record<Gimmick['kind'], { name: string; g: Gimmick }> = {
   trap: { name: '숨은 함정', g: { kind: 'trap', intro: '발밑의 돌 하나가 다른 돌보다 조금 솟아 있다.', findDc: 13, reveal: '누르면 벽에서 화살이 날아오는 발판이다.', disarm: { check: 'skill:sleight_of_hand', dc: 13 }, avoid: { check: 'skill:acrobatics', dc: 12 }, sprung: '딸깍 — 벽 틈에서 화살이 날아든다!', damage: '2d6' } },
   riddle: { name: '문지기의 수수께끼', g: { kind: 'riddle', intro: '돌문에 글귀가 새겨져 있고, 그 아래 입 모양의 구멍이 있다.', question: '아침에는 네 발, 낮에는 두 발, 저녁에는 세 발로 걷는 것은?', answers: ['사람', '인간'], tries: 3, hint: { check: 'skill:history', dc: 12, text: '옛이야기에서 지팡이를 짚는 노인을 "세 발"이라 불렀다.' } } },
   sequence: { name: '세 개의 레버', g: { kind: 'sequence', intro: '벽에 해·달·별이 새겨진 레버 세 개가 있다.', steps: ['해', '달', '별'], mistakes: 3, hint: { check: 'skill:investigation', dc: 12, text: '벽화 속 하루는 해가 뜨고, 달이 오르고, 별이 남는다.' } } },
   device: { name: '봉인된 문', g: { kind: 'device', intro: '희미하게 빛나는 문양이 문을 가로막고 있다.', check: { check: 'skill:arcana', dc: 13, label: '봉인 풀기' }, alt: { check: 'skill:athletics', dc: 15, label: '힘으로 밀어 열기' }, goal: 3, mistakes: 3, damage: '1d6' } },
 };
 
-const rebuild = (d: SceneDef, g: Gimmick): SceneDef => gimmickScene({ id: d.id, name: d.name, ...(d.locationId ? { locationId: d.locationId } : {}), ...(d.image ? { image: d.image } : {}), ...(d.narration ? { narration: d.narration } : {}) }, g);
+// 열리는 조건(start)도 지킨다 (v0.149 — 흐름도에서 정한다)
+const rebuild = (d: SceneDef, g: Gimmick): SceneDef => gimmickScene({ id: d.id, name: d.name, ...(d.start ? { start: d.start } : {}), ...(d.locationId ? { locationId: d.locationId } : {}), ...(d.image ? { image: d.image } : {}), ...(d.narration ? { narration: d.narration } : {}) }, g);
 
 export function GimmickForms({ w, set, settings, onStatus }: { w: WorldPackage; set: Set; settings?: LlmSettings | null; onStatus?: (s: string) => void }) {
   const all = w.scenes ?? [];
@@ -66,20 +67,20 @@ export function GimmickForms({ w, set, settings, onStatus }: { w: WorldPackage; 
         <button type="button" onClick={() => {
           const n = all.length + 1;
           let id = `scene/gimmick-${n}`; let i = n; while (all.some((d) => d.id === id)) id = `scene/gimmick-${++i}`;
-          const def = DEFAULTS[kind];
+          const def = GIMMICK_DEFAULTS[kind];
           save([...mine, gimmickScene({ id, name: def.name, locationId: w.start.locationId }, structuredClone(def.g))]);
         }}>＋ 예시로 추가</button>
       </div>
       {mine.length === 0 ? <p className="small muted">아직 함정·퍼즐이 없습니다. 종류를 고르고 "예시로 추가"를 누른 뒤 고쳐 보세요.</p> : (
         <ItemList<SceneDef> title="함정·퍼즐" items={mine} testKind="scene" onChange={save}
-          make={(n) => gimmickScene({ id: `scene/gimmick-new-${n}`, name: DEFAULTS[kind].name, locationId: w.start.locationId }, structuredClone(DEFAULTS[kind].g))}
+          make={(n) => gimmickScene({ id: `scene/gimmick-new-${n}`, name: GIMMICK_DEFAULTS[kind].name, locationId: w.start.locationId }, structuredClone(GIMMICK_DEFAULTS[kind].g))}
           render={(d, up) => <GimmickForm w={w} d={d} onChange={(nd) => up(nd)} />} />
       )}
     </>
   );
 }
 
-function GimmickForm({ w, d, onChange }: { w: WorldPackage; d: SceneDef; onChange: (d: SceneDef) => void }) {
+export function GimmickForm({ w, d, onChange }: { w: WorldPackage; d: SceneDef; onChange: (d: SceneDef) => void }) {
   const g = d.gimmick!;
   const setG = (p: Partial<Gimmick>) => onChange(rebuild(d, { ...g, ...p }));
   const setBase = (p: Partial<SceneDef>) => onChange(rebuild({ ...d, ...p }, g));
@@ -96,7 +97,7 @@ function GimmickForm({ w, d, onChange }: { w: WorldPackage; d: SceneDef; onChang
   return (
     <div className="form-grid gimmick-form">
       <Text label="이름" value={d.name} onChange={(name) => setBase({ name })} />
-      <Select label="종류" value={g.kind} options={GIMMICK_KINDS.map(([k, l]) => [k, l] as const)} onChange={(kind) => setG({ ...DEFAULTS[kind].g, intro: g.intro, ...(g.guards ? { guards: g.guards } : {}), onSuccess: g.onSuccess, onFail: g.onFail, kind })} />
+      <Select label="종류" value={g.kind} options={GIMMICK_KINDS.map(([k, l]) => [k, l] as const)} onChange={(kind) => setG({ ...GIMMICK_DEFAULTS[kind].g, intro: g.intro, ...(g.guards ? { guards: g.guards } : {}), onSuccess: g.onSuccess, onFail: g.onFail, kind })} />
       <Select label="장소" value={d.locationId ?? ''} options={w.locations.map((l) => [l.id, l.name] as const)} onChange={(locationId) => onChange(rebuild({ ...d, locationId }, { ...g, guards: undefined }))} />
       <Select label="막는 길 (이 장소에서 그곳으로)" value={g.guards ?? ''} options={[['', '(막지 않음)'], ...(here?.connections ?? []).map((id) => [id, w.locations.find((l) => l.id === id)?.name ?? id] as const)] as const} onChange={(guards) => setG({ guards: guards || undefined })} />
       <Area label={g.kind === 'trap' ? '처음 보이는 낌새 (함정이라고 말하지 않는다)' : '처음 보이는 모습'} value={g.intro} onChange={(intro) => setG({ intro })} rows={2} />

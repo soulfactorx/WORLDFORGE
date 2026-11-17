@@ -22,7 +22,21 @@ const LIST: Partial<Record<GNode['kind'], keyof WorldPackage>> = {
 const entity = (w: WorldPackage, n: GNode): Any => { const l = LIST[n.kind]; return l ? ((w[l] as Any[] | undefined) ?? []).find((x) => x.id === n.id) : undefined; };
 function edit(w: WorldPackage, n: GNode, fn: (x: Any) => Any): Partial<WorldPackage> {
   const l = LIST[n.kind]!;
-  return { [l]: ((w[l] as Any[] | undefined) ?? []).map((x) => (x.id === n.id ? fn(structuredClone(x)) : x)) } as Partial<WorldPackage>;
+  return { [l]: ((w[l] as Any[] | undefined) ?? []).map((x) => (x.id === n.id ? syncGimmick(fn(structuredClone(x))) : x)) } as Partial<WorldPackage>;
+}
+
+/**
+ * 함정·퍼즐 장면 (v0.149): 끝의 효과는 gimmick.onSuccess / onFail에서 다시 만들어진다 — 흐름도에서 끝에 더한 효과를 그쪽에도 적어
+ * 「함정·퍼즐」 탭에서 고쳐도 사라지지 않게 한다.
+ */
+function syncGimmick(x: Any): Any {
+  if (!x?.gimmick || !Array.isArray(x.ends)) return x;
+  const fx = (id: string) => x.ends.find((e: Any) => e.id === id)?.effects as StoryEffect[] | undefined;
+  const ok = fx('solved'), bad = fx('failed');
+  const g = { ...x.gimmick };
+  if (ok !== undefined) g.onSuccess = { ...(g.onSuccess ?? {}), effects: ok };
+  if (bad !== undefined) g.onFail = { ...(g.onFail ?? {}), effects: bad };
+  return { ...x, gimmick: g };
 }
 
 /** A가 "일어났다"를 말하는 조건들 (B의 조건에 넣는다) */
