@@ -8,7 +8,8 @@ import { PortraitPicker } from './PortraitPicker';
 import { EntityImages } from './EntityImages';
 import { makeTwoWay, oneWayLinks, setLink, tidyLinks } from '../engine/locationLinks';
 import { deleteAssets, storeAssets } from '../storage/assets';
-import { addSource, removeSource, sourcesOf } from '../engine/sources';
+import { addSource, sourcesOf } from '../engine/sources';
+import { lockState, personalCount, removeSourceFull, stripPersonal } from '../engine/licensing';
 import { EndingForms, FlagForms, QuestForms } from './StoryForms';
 import { Simulator, StoryBoard, WorldMap } from './StoryTools';
 import { PackExport, PackImport } from './PackDialog';
@@ -262,8 +263,8 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
       setStatus(`❌ ${(e as Error).message}`);
     }
   }
-  function exportFile() {
-    const url = URL.createObjectURL(exportWpk(w));
+  function exportFile(world: WorldPackage = w) {
+    const url = URL.createObjectURL(exportWpk(world));
     Object.assign(document.createElement('a'), { href: url, download: `${w.manifest.id}-${w.manifest.version}.wpk` }).click();
     URL.revokeObjectURL(url);
   }
@@ -280,9 +281,16 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
         </div>
         <button type="button" className={`editor-tool${auditing ? ' on' : ''}`} onClick={() => setAuditing((v) => !v)} title="빈칸·잘못 채운 칸·빠진 설정을 찾고 AI로 채운다" aria-label="AI 점검·마무리">🩺<span className="tool-label"> AI 점검</span></button>
         <button type="button" className={`editor-tool${library ? ' on' : ''}`} onClick={() => setLibrary((v) => !v)} title="만들어 둔 다른 세계의 인물·장소·임무·이미지 등을 AI 없이 불러온다" aria-label="만계서고에서 불러오기">🌌<span className="tool-label"> 만계서고</span></button>
-        {w.manifest.private ? <button type="button" className="editor-tool" disabled title={PRIVATE_NOTE} aria-label="개인용 — 내보내기 불가">🔒</button>
+        {w.manifest.private && lockState(w) === 'parts' && w.manifest.contentRating !== 'mature'
+          // 개인용 리소스만 빼고 내보내기 (v0.157)
+          ? <button type="button" className="editor-tool" title="다른 사람의 카드에서 온 것(개인용)만 빼고 .wpk로 내보낸다" aria-label="개인용 빼고 내보내기" onClick={() => {
+              const n = personalCount(w);
+              if (!confirm(`다른 사람의 카드에서 온 개인용 리소스 ${n}개(인물·지식·그림 등)를 빼고 내보냅니다. 편집 중인 세계는 그대로 둡니다.`)) return;
+              try { const r = stripPersonal(w); exportFile(r.world); setStatus(`⤓ 개인용 ${r.removed}개를 빼고 내보냈습니다.${r.notes.length ? ` (${r.notes.length}곳의 가리킴을 정리)` : ''}`); } catch (e) { setStatus(`❌ ${(e as Error).message}`); }
+            }}>⤓<span className="tool-label"> 개인용 빼고 내보내기</span></button>
+          : w.manifest.private ? <button type="button" className="editor-tool" disabled title={PRIVATE_NOTE} aria-label="개인용 — 내보내기 불가">🔒</button>
           : shareBlocked(w) ? <button type="button" className="editor-tool" disabled title={MATURE_NOTE} aria-label="성인 등급 — 내보내기 불가">🔞</button>
-          : <button type="button" className="editor-tool" onClick={exportFile} title=".wpk 파일로 내보내기" aria-label=".wpk 내보내기">⤓<span className="tool-label"> 내보내기</span></button>}
+          : <button type="button" className="editor-tool" onClick={() => exportFile()} title=".wpk 파일로 내보내기" aria-label=".wpk 내보내기">⤓<span className="tool-label"> 내보내기</span></button>}
         <button type="button" className={`primary editor-save${savedFlash ? ' saved' : ''}`} onClick={() => void save()}>{savedFlash ? '✔ 저장됨' : '저장'}</button>
       </div>
       {olderDraft && (
@@ -335,7 +343,9 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
           <details><summary>정리하면서 알게 된 것 {notes.length}건</summary><ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></details>
         </div>
       )}
-      {w.manifest.private && <div className="private-banner">🔒 {w.manifest.private.note}<br /><span className="muted">원작: {w.manifest.private.source}</span></div>}
+      {w.manifest.private && (lockState(w) === 'parts'
+        ? <div className="private-banner">🔒 다른 사람의 카드에서 온 개인용 리소스 {personalCount(w)}개가 들어 있습니다 — 이 브라우저에서는 그대로 쓰고, 내보낼 때는 그것만 빠집니다 (「⤓ 개인용 빼고 내보내기」). 카드 제작자가 허락한 라이선스가 있으면 「기본」 탭의 출처 카드에서 표시하세요.<br /><span className="muted">원작: {w.manifest.private.source}</span></div>
+        : <div className="private-banner">🔒 {w.manifest.private.note}<br /><span className="muted">원작: {w.manifest.private.source}</span></div>)}
       {tab === 'basic' && sourcesOf(w).length > 0 && (
         <fieldset className="sources-box">
           <legend>출처 카드 {sourcesOf(w).length}장 — 이 세계에 쓴 다른 사람의 카드 파일</legend>
@@ -350,10 +360,11 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
                   <button type="button" className="small" onClick={() => {
                     if (!confirm(`"${s.name}"에서 온 인물 ${s.ids?.characters.length ?? 0}명·지식 ${s.ids?.claims.length ?? 0}개·이미지 ${s.ids?.assets.length ?? 0}장을 이 세계에서 뺄까요? 이 인물을 쓰는 임무·장면 자리는 비워집니다. 저장해야 확정됩니다.`)) return;
                     try {
-                      const r = removeSource(w, s.hash);
+                      const r = removeSourceFull(w, s.hash);
+                      const unlocked = !!w.manifest.private && !r.world.manifest.private;
                       setW(r.world);
                       setPruneOnSave((p) => [...p, ...(s.ids?.assets ?? [])]);
-                      setStatus(`"${s.name}"을(를) 뺐습니다 — 인물 ${r.removed.characters} · 지식 ${r.removed.claims} · 믿음 ${r.removed.beliefs} · 이미지 ${r.removed.assets}.${r.unlocked ? ' 남은 출처 카드가 없어 개인용 잠금을 풀었습니다.' : ''} 저장해야 확정되고, 이미지 파일도 그때 지워집니다.`);
+                      setStatus(`"${s.name}"을(를) 뺐습니다 — 인물 ${w.characters.length - r.world.characters.length} · 지식 ${w.claims.length - r.world.claims.length} · 이미지 ${(w.assets?.length ?? 0) - (r.world.assets?.length ?? 0)}${s.ids?.others?.length ? ` · 그 밖 ${s.ids.others.length}` : ''}.${unlocked ? ' 남은 개인용 출처가 없어 잠금을 풀었습니다.' : ''} 저장해야 확정되고, 이미지 파일도 그때 지워집니다.`);
                     } catch (e) { setStatus(`❌ ${(e as Error).message}`); }
                   }}>이 카드 빼기</button>
                 )}

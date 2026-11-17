@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { sourcesOf } from '../engine/sources';
+import { lockState, personalCount, stripPersonal } from '../engine/licensing';
 import { endingsSeen } from './collection';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { genreOf } from '../data/genres';
@@ -156,7 +157,9 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
           <b>{w.manifest.name}</b>
           <span className="muted small"> {genreOf(w.genre?.id, w.genre?.custom).label} · {RATING[w.manifest.contentRating]}{endingsLabel(w) ? ` · ${endingsLabel(w)}` : ''}</span>
           <span className="badges">
-            {w.manifest.private && <span className="need-badge" title={PRIVATE_NOTE}>🔒 개인용</span>}
+            {w.manifest.private && (lockState(w) === 'parts'
+              ? <span className="need-badge" title="다른 사람의 카드에서 온 것만 개인용 — 빼고 내보낼 수 있다">🔒 개인용 {personalCount(w)}개</span>
+              : <span className="need-badge" title={PRIVATE_NOTE}>🔒 개인용</span>)}
             {!w.manifest.private && shareBlocked(w) && <span className="need-badge" title={MATURE_NOTE}>🔞 성인</span>}
             {src.length > 0 && <span className="need-badge" title={src.map((x) => x.name).join(' · ')}>출처 카드 {src.length}장</span>}
             {w.manifest.crossover?.length ? <span className="need-badge" title={`크로스오버: ${w.manifest.crossover.map((c) => c.name).join(' · ')}`}>🌌 크로스오버 {w.manifest.crossover.length}</span> : null}
@@ -173,6 +176,12 @@ export function SaveList({ onOpen, onEdit, onGenerate, onWizard, onCard, onUserA
               copy.manifest = { ...copy.manifest, id: newWorldId(`${copy.manifest.id}-copy`), name: `${copy.manifest.name} (사본)` };
               onEdit(copy);
             }}>✎ {p.builtin ? '복제해서 편집' : '편집'}</button>
+            {w.manifest.private && lockState(w) === 'parts' && w.manifest.contentRating !== 'mature' && (
+              <button onClick={() => {
+                if (!confirm(`다른 사람의 카드에서 온 개인용 리소스 ${personalCount(w)}개를 빼고 패키지로 내보냅니다. 저장된 세계는 그대로 둡니다.`)) return;
+                try { const r = stripPersonal(w); download(exportWpk(r.world), `${safeName(w.manifest.id)}-${w.manifest.version}.wpk`); setMessage({ text: `개인용 ${r.removed}개를 빼고 내보냈습니다.` }); } catch (e) { setMessage({ text: `❌ ${(e as Error).message}` }); }
+              }}>⤓ 개인용 빼고 패키지로 내보내기</button>
+            )}
             {w.manifest.private || shareBlocked(w)
               ? <MoveOutButton world={w} onMessage={(text) => setMessage({ text })} />
               : <button onClick={() => download(exportWpk(w), `${safeName(w.manifest.id)}-${w.manifest.version}.wpk`)}>⤓ 패키지로 내보내기</button>}
