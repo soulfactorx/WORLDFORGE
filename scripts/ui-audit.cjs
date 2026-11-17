@@ -391,6 +391,12 @@ const SCREENS = [
     await p.click('.flow-sim-set > summary');
     await p.waitForSelector('.flow-sim-set[open]');
   }],
+  ['편집: 흐름도 · 시작·주인공 설정 (v0.162)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.locator('.flow-node.k-start .flow-box').click();
+    await p.waitForSelector('.flow-start-edit');
+    await p.click('.flow-profile > summary');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();

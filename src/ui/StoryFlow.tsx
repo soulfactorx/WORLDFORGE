@@ -17,6 +17,9 @@ import type { GameState } from '../engine/state/state';
 import { TraceView } from './WorldLab';
 import { monsterTable } from '../engine/combat/monsters';
 import { traitsFor } from '../engine/traits';
+import { STD_ITEMS } from '../data/items';
+import { ProfileEditor } from './ProfileEditor';
+import type { StartOption } from '../engine/schema';
 import { AXES, AXIS_NAMES } from '../engine/relationship';
 import type { Encounter } from '../engine/schema';
 import { isMyAssets, keepAsAsset } from '../storage/myAssets';
@@ -387,7 +390,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
                       }}>
                       <rect width={NODE_W} height={NODE_H} rx={n.kind === 'flag' || n.kind === 'claim' || n.kind === 'phase' || n.kind === 'start' ? 28 : 8} />
                       <text x={10} y={22} className="flow-title">{NODE_ICON[n.kind]} {short(n.name, 13)}{n.warn ? ' ⚠' : ''}</text>
-                      <text x={10} y={42} className="flow-sub">{simMap?.get(n.key)?.st && simMap.get(n.key)!.st !== 'none' ? short(`${simIcon(simMap.get(n.key)!.st)} ${simMap.get(n.key)!.text}`, 22) : short(`${NODE_LABEL[n.kind]}${n.sub ? ` · ${n.sub}` : ''}`, 22)}</text>
+                      <text x={10} y={42} className="flow-sub">{simMap?.get(n.key)?.st && simMap.get(n.key)!.st !== 'none' ? short(`${simIcon(simMap.get(n.key)!.st)} ${simMap.get(n.key)!.text}`, 22) : short(n.kind === 'start' ? n.sub ?? '' : `${NODE_LABEL[n.kind]}${n.sub ? ` · ${n.sub}` : ''}`, 22)}</text>
                       <title>{`${n.name}\n${n.id}${n.warn ? `\n⚠ ${n.warn}` : ''}`}</title>
                     </g>
                     {canFrom && (
@@ -938,7 +941,7 @@ function NodeEditor({ w, set, n, onPick }: { w: WorldPackage; set: SetW; n: GNod
         </>
       );
     }
-    case 'start': return <p className="small muted">플레이어가 게임을 시작할 때의 자리입니다. 여기서 이어지는 상자는 다른 상자에 걸린 조건이 없어 처음부터 열려 있는 것들입니다(장소·관계·날짜 같은 조건만 있는 것 포함). 이 상자의 ● 손잡이를 다른 상자로 끌면 그 상자를 처음부터 열리게 하고(열리는 조건을 비운다), 아래 버튼으로 처음부터 열리는 새 임무·카드·선택을 만듭니다.</p>;
+    case 'start': return <><StartEditor w={w} set={set} /><p className="small muted">플레이어가 게임을 시작할 때의 자리입니다. 여기서 이어지는 상자는 다른 상자에 걸린 조건이 없어 처음부터 열려 있는 것들입니다(장소·관계·날짜 같은 조건만 있는 것 포함). 이 상자의 ● 손잡이를 다른 상자로 끌면 그 상자를 처음부터 열리게 하고(열리는 조건을 비운다), 아래 버튼으로 처음부터 열리는 새 임무·카드·선택을 만듭니다.</p></>;
     case 'location': {
       const l = w.locations.find((x) => x.id === n.id); if (!l) return null;
       const up = (p: Partial<Location>) => set({ locations: w.locations.map((x) => (x.id === l.id ? { ...x, ...p } : x)) });
@@ -1503,6 +1506,59 @@ function SimSettings({ w, state, path, onSet, onReset }: { w: WorldPackage; stat
       </fieldset>}
       {nSet > 0 && <button type="button" className="small" onClick={onReset}>정한 값 모두 되돌리기</button>}
     </details>
+  );
+}
+
+// ---------------------------------------------------------------- 시작 · 주인공 (v0.162: ▶ 시작 상자에서 바로)
+
+function StartEditor({ w, set }: { w: WorldPackage; set: SetW }) {
+  const st = w.start;
+  const up = (p: Partial<WorldPackage['start']>) => set({ start: { ...st, ...p } });
+  const items = [...(w.items ?? []), ...STD_ITEMS.filter((i) => !(w.items ?? []).some((x) => x.id === i.id))];
+  const bag = st.items ?? [];
+  const starts = w.starts ?? [];
+  const upS = (i: number, p: Partial<StartOption>) => set({ starts: starts.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+  const locOpts = w.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>);
+  return (
+    <div className="flow-start-edit">
+      <label>시작 장소<select value={st.locationId} onChange={(e) => up({ locationId: e.target.value })}>{locOpts}</select></label>
+      <Area label="첫 장면 (플레이어가 눈을 떴을 때)" value={st.openingScene} onChange={(openingScene) => up({ openingScene })} rows={3} />
+      <fieldset className="flow-stage"><legend>처음 가진 것</legend>
+        <label>소지금<input type="number" min={0} value={st.money ?? ''} placeholder="기본 15" onChange={(e) => up({ money: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0) })} /></label>
+        {bag.map((b, i) => (
+          <div key={i} className="row flow-nums">
+            <label>물건<select value={b.itemId} onChange={(e) => up({ items: bag.map((x, j) => (j === i ? { ...x, itemId: e.target.value } : x)) })}>
+              {!items.some((x) => x.id === b.itemId) && <option value={b.itemId}>{b.itemId}</option>}
+              {items.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select></label>
+            <label>개수<input type="number" min={1} value={b.n ?? 1} onChange={(e) => up({ items: bag.map((x, j) => (j === i ? { ...x, n: Math.max(1, Number(e.target.value) || 1) } : x)) })} /></label>
+            <button type="button" className="small" aria-label={`물건 ${i + 1} 빼기`} onClick={() => up({ items: bag.filter((_, j) => j !== i).length ? bag.filter((_, j) => j !== i) : undefined })}>빼기</button>
+          </div>
+        ))}
+        <button type="button" className="small" onClick={() => up({ items: [...bag, { itemId: items[0]?.id ?? '', n: 1 }] })}>＋ 물건 더하기</button>
+        {!bag.length && <span className="small muted">비우면 치유 물약 1개로 시작합니다.</span>}
+      </fieldset>
+      <fieldset className="flow-stage"><legend>시작 방식 고르기 (선택 — 새 게임에서 고른다)</legend>
+        {starts.map((o, i) => (
+          <details key={o.id} className="flow-stage-card">
+            <summary><span className="flow-stage-no">{i + 1}</span> {o.name || '(이름 없음)'}</summary>
+            <div className="flow-stage-body">
+              <Text label="이름" value={o.name} onChange={(name) => upS(i, { name })} />
+              <Area label="설명 (플레이어에게 보임)" value={o.description} onChange={(description) => upS(i, { description })} rows={2} />
+              <label>시작 장소<select value={o.locationId} onChange={(e) => upS(i, { locationId: e.target.value })}>{locOpts}</select></label>
+              <Area label="첫 장면" value={o.openingScene} onChange={(openingScene) => upS(i, { openingScene })} rows={2} />
+              <button type="button" className="small" onClick={() => set({ starts: starts.filter((_, j) => j !== i).length ? starts.filter((_, j) => j !== i) : undefined })}>🗑 이 방식 지우기</button>
+            </div>
+          </details>
+        ))}
+        <button type="button" className="small" onClick={() => { let n = starts.length + 1; while (starts.some((x) => x.id === `start/${n}`)) n++; set({ starts: [...starts, { id: `start/${n}`, name: `시작 ${n}`, description: '', locationId: st.locationId, openingScene: st.openingScene }] }); }}>＋ 시작 방식 더하기</button>
+        <span className="small muted">{starts.length ? '시작 방식이 있으면 새 게임에서 그중 하나를 고르고, 위의 시작 장소·첫 장면 대신 그것을 쓴다.' : '비우면 위의 시작 장소·첫 장면 하나로 시작한다.'}</span>
+      </fieldset>
+      <details className="flow-sim-edit flow-profile">
+        <summary className="small"><b>🧑 주인공 설정</b> — 정보 양식·성향 축 (「세계 설정 › 주인공」과 같다)</summary>
+        <ProfileEditor world={w} onChange={(playerProfile) => set({ playerProfile })} onTraits={(traits) => set({ traits })} />
+      </details>
+    </div>
   );
 }
 

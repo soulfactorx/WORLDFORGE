@@ -207,7 +207,7 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   // 여는 화살표(시작·일으킴)가 없는 것 — 끝·실패 조건으로만 이어진 것도 처음부터 열린다
   const roots = [...nodes.values()].filter((n) => ROOT_KINDS.includes(n.kind) && !edges.some((e) => e.to === n.key && !isLane(e.from) && (e.kind === 'start' || e.kind === 'effect' || e.kind === 'ending')));
   // 시작 상자는 늘 있다 (v0.146) — 빈 세계도 흐름도에서 만들기 시작한다
-  nodes.set(START_KEY, { key: START_KEY, kind: 'start', id: 'begin', name: '플레이 시작', sub: roots.length ? `처음부터 열리는 것 ${roots.length}` : '눌러서 첫 이야기 만들기' });
+  nodes.set(START_KEY, { key: START_KEY, kind: 'start', id: 'begin', name: '플레이 시작', sub: `📍 ${w.locations.find((l) => l.id === w.start.locationId)?.name ?? '?'} · ${roots.length ? `처음 열림 ${roots.length}` : '눌러서 만들기'}` });
   {
     for (const r of roots) {
       const c = openCondition(w, r);

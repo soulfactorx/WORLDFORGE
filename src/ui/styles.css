@@ -1524,4 +1524,11 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-sim-set .flow-stage > legend { grid-column: 1 / -1; }
 .flow-sim-set .flow-stage > label:not(.flow-slider) { grid-column: 1 / -1; max-width: 420px; }
 .flow-sim-set .flow-stage > label:not(.flow-slider) { display: flex; flex-direction: column; gap: 3px; }
+/* ▶ 시작 상자 편집 (v0.162) */
+.flow-start-edit { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.flow-start-edit > label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.flow-start-edit .flow-stage > label { display: flex; flex-direction: column; gap: 3px; }
+.flow-profile > summary { cursor: pointer; min-height: 36px; padding: 8px 0; box-sizing: border-box; overflow-wrap: anywhere; }
+.flow-profile { min-width: 0; overflow-wrap: anywhere; }
+.flow-profile .form-grid { grid-template-columns: minmax(0, 1fr); }
 
