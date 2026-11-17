@@ -94,4 +94,27 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     expect(w2.choices![0]!.when).toEqual({ questFailed: 'quest/a' });
     expect(buildStoryGraph(w2).edges.find((x) => x.from === 'quest:quest/a' && x.to === 'choice:choice/c')!.kind).toBe('start');
   });
+
+  it('장소·인물 (v0.147): 아래 띠에 놓이고, 끌어 이으면 「여기 있으면」 「여기서 일어나게」 「길」', () => {
+    const loc = sampleWorld.locations[0]!, other = sampleWorld.locations[1]!;
+    const w: WorldPackage = { ...base, scenes: [] };
+    const g = buildStoryGraph(w);
+    const lay = layoutGraph(g);
+    const L = lay.nodes.find((n) => n.key === `location:${loc.id}`)!;
+    expect(L.layer).toBe(-2);
+    const bodyBottom = Math.max(...lay.nodes.filter((n) => n.layer >= 0).map((n) => n.y));
+    expect(L.y).toBeGreaterThan(bodyBottom);
+    // 장소 조건이 있는 임무도 여전히 ▶ 시작에서 열린다
+    expect(g.edges.some((e) => e.from === START_KEY && e.to === 'quest:quest/b')).toBe(true);
+    const ln = node(w, `location:${loc.id}`), qb = node(w, 'quest:quest/b');
+    const opt = linkOptions(w, ln, qb).find((o) => o.label.includes('이곳에 있으면') && o.label.includes('시작 조건'))!;
+    const w2 = { ...w, ...opt.apply(w) };
+    expect(w2.quests!.find((q) => q.id === 'quest/b')!.start).toEqual({ all: [{ at: 'loc/y' }, { at: loc.id }] });
+    const road = linkOptions(w, ln, node(w, `location:${other.id}`)).find((o) => o.group === 'place')!;
+    const w3 = { ...w, ...road.apply(w) };
+    expect(w3.locations.find((l) => l.id === loc.id)!.connections).toContain(other.id);
+    expect(w3.locations.find((l) => l.id === other.id)!.connections).toContain(loc.id);
+    const ch = sampleWorld.characters[0]!;
+    expect(sourceWays(w, node(w, `character:${ch.id}`)).map((x) => x.label)).toContain('동료로 함께면');
+  });
 });

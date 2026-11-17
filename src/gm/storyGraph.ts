@@ -7,17 +7,20 @@
 import { stageGates } from '../engine/encounter';
 import type { Condition, StoryEffect, WorldPackage } from '../engine/schema';
 
-export type NodeKind = 'start' | 'quest' | 'ending' | 'card' | 'scene' | 'gimmick' | 'encounter' | 'choice' | 'arc' | 'event' | 'clock' | 'rule' | 'flag' | 'claim' | 'phase';
+export type NodeKind = 'start' | 'location' | 'character' | 'quest' | 'ending' | 'card' | 'scene' | 'gimmick' | 'encounter' | 'choice' | 'arc' | 'event' | 'clock' | 'rule' | 'flag' | 'claim' | 'phase';
 export const NODE_LABEL: Record<NodeKind, string> = {
-  start: '시작', quest: '임무', ending: '결말', card: '갈래 카드', scene: '장면', gimmick: '함정·퍼즐', encounter: '전투', choice: '결정적 선택',
+  start: '시작', location: '장소', character: '인물', quest: '임무', ending: '결말', card: '갈래 카드', scene: '장면', gimmick: '함정·퍼즐', encounter: '전투', choice: '결정적 선택',
   arc: '줄기', event: '연표 사건', clock: '진행 시계', rule: '세계 규칙', flag: '플래그', claim: '지식', phase: '국면',
 };
 export const NODE_ICON: Record<NodeKind, string> = {
-  start: '▶', quest: '🎯', ending: '◆', card: '🃏', scene: '🎭', gimmick: '🧩', encounter: '⚔', choice: '⚖', arc: '📖', event: '📅', clock: '⏳', rule: '⚙', flag: '🏳', claim: '💡', phase: '🌗',
+  start: '▶', location: '📍', character: '👤', quest: '🎯', ending: '◆', card: '🃏', scene: '🎭', gimmick: '🧩', encounter: '⚔', choice: '⚖', arc: '📖', event: '📅', clock: '⏳', rule: '⚙', flag: '🏳', claim: '💡', phase: '🌗',
 };
 
 export interface GNode { key: string; kind: NodeKind; id: string; name: string; sub?: string; warn?: string }
-export type EdgeKind = 'start' | 'complete' | 'fail' | 'effect' | 'ending' | 'stage';
+export type EdgeKind = 'start' | 'complete' | 'fail' | 'effect' | 'ending' | 'stage' | 'place';
+/** 장소·인물 (v0.147): 흐름의 단에 넣지 않고 아래 띠에 따로 놓는다 */
+export const LANE_KINDS: NodeKind[] = ['location', 'character'];
+export const isLane = (k: string) => k.startsWith('location:') || k.startsWith('character:');
 export interface GEdge { from: string; to: string; kind: EdgeKind; label: string }
 export interface StoryGraph { nodes: GNode[]; edges: GEdge[] }
 
@@ -47,6 +50,13 @@ function refsOf(c: Condition | undefined, out: { node: string; label: string }[]
   if (typeof r.chapter === 'string') out.push({ node: key('arc', r.chapter), label: `${r.gte}장 끝` });
   if (typeof r.clock === 'string') out.push({ node: key('clock', r.clock), label: r.gte !== undefined ? `${r.gte}칸 이상` : '칸' });
   if (typeof r.phase === 'string') out.push({ node: key('phase', r.phase), label: '이 국면' });
+  // 장소·인물 (v0.147)
+  if (typeof r.at === 'string' && typeof r.npcAt !== 'string') out.push({ node: key('location', r.at), label: '이곳에 있으면' });
+  if (typeof r.npcAt === 'string') { out.push({ node: key('character', r.npcAt), label: '그곳에 있으면' }); if (typeof r.at === 'string') out.push({ node: key('location', r.at), label: '인물이 여기 있으면' }); }
+  if (typeof r.npcAlive === 'string') out.push({ node: key('character', r.npcAlive), label: '살아 있으면' });
+  if (typeof r.inParty === 'string') out.push({ node: key('character', r.inParty), label: '동료이면' });
+  if (typeof r.relationship === 'string') out.push({ node: key('character', r.relationship), label: `관계 ${r.gte !== undefined ? `≥ ${r.gte}` : r.lte !== undefined ? `≤ ${r.lte}` : ''}` });
+  if (typeof r.stage === 'string') out.push({ node: key('character', r.stage), label: '관계 단계' });
   return out;
 }
 
@@ -61,6 +71,10 @@ function effectRefs(list: StoryEffect[] | undefined, world: WorldPackage): { nod
     if (typeof r.openStorylet === 'string') out.push({ node: key('card', r.openStorylet), label: '카드 펼침' });
     if (typeof r.advanceQuest === 'string') out.push({ node: key('quest', r.advanceQuest), label: '단계 진행' });
     if (typeof r.reveal === 'string') out.push({ node: key('claim', r.reveal), label: '알려 줌' });
+    if (typeof r.moveTo === 'string') out.push({ node: key('location', r.moveTo), label: '이곳으로 옮김' });
+    if (typeof r.killNpc === 'string') out.push({ node: key('character', r.killNpc), label: '죽음' });
+    if (typeof r.moveNpc === 'string') out.push({ node: key('character', r.moveNpc), label: '인물 옮김' });
+    if (typeof r.relationship === 'string') out.push({ node: key('character', r.relationship), label: '관계 바뀜' });
   }
   return out;
 }
@@ -80,6 +94,8 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   };
   const effects = (list: StoryEffect[] | undefined, from: string, prefix = '') => { for (const r of effectRefs(list, w)) link(from, r.node, 'effect', `${prefix}${r.label}`); };
 
+  for (const l of w.locations) add({ key: key('location', l.id), kind: 'location', id: l.id, name: l.name, sub: `길 ${l.connections.length}${w.start.locationId === l.id ? ' · 시작 장소' : ''}` });
+  for (const c of w.characters) add({ key: key('character', c.id), kind: 'character', id: c.id, name: c.name, sub: w.locations.find((l) => l.id === c.locationId)?.name ?? '' });
   for (const q of w.quests ?? []) add({ key: key('quest', q.id), kind: 'quest', id: q.id, name: q.name, sub: `${q.kind === 'main' ? '메인' : '사이드'} · ${q.stages.length}단계` });
   for (const e of w.endings ?? []) add({ key: key('ending', e.id), kind: 'ending', id: e.id, name: e.name });
   for (const s of w.storylets ?? []) add({ key: key('card', s.id), kind: 'card', id: s.id, name: s.title, sub: `갈림길 ${s.options.length}${s.tags?.length ? ` · ${s.tags.join('·')}` : ''}` });
@@ -90,6 +106,13 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   for (const e of w.events ?? []) add({ key: key('event', e.id), kind: 'event', id: e.id, name: e.name });
   for (const c of w.clocks ?? []) add({ key: key('clock', c.id), kind: 'clock', id: c.id, name: c.name, sub: `${c.segments}칸` });
 
+  // 장소에서 일어나는 것 · 인물이 있는 곳 (v0.147)
+  const placeOf = (loc: string | undefined, to: string, label = '이곳에서') => { if (loc) link(key('location', loc), to, 'place', label); };
+  for (const s of w.scenes ?? []) placeOf(s.locationId, sceneKey(w, s.id));
+  for (const e of w.encounters ?? []) placeOf(e.locationId, key('encounter', e.id));
+  for (const c of w.choices ?? []) placeOf(c.locationId, key('choice', c.id));
+  for (const c of w.storylets ?? []) placeOf(c.locationId, key('card', c.id));
+  for (const c of w.characters) placeOf(c.locationId, key('character', c.id), '여기 있음');
   // 조건 (무엇이 열고 · 끝내고 · 실패시키는가)
   for (const q of w.quests ?? []) {
     const me = key('quest', q.id);
@@ -159,7 +182,7 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   }
   // ▶ 시작 (v0.143): 들어오는 화살표가 없는 이야기 덩어리는 플레이어가 시작할 때부터 열려 있다 (또는 장소·날짜 같은 다른 조건으로 열린다)
   // 여는 화살표(시작·일으킴)가 없는 것 — 끝·실패 조건으로만 이어진 것도 처음부터 열린다
-  const roots = [...nodes.values()].filter((n) => ROOT_KINDS.includes(n.kind) && !edges.some((e) => e.to === n.key && (e.kind === 'start' || e.kind === 'effect' || e.kind === 'ending')));
+  const roots = [...nodes.values()].filter((n) => ROOT_KINDS.includes(n.kind) && !edges.some((e) => e.to === n.key && !isLane(e.from) && (e.kind === 'start' || e.kind === 'effect' || e.kind === 'ending')));
   // 시작 상자는 늘 있다 (v0.146) — 빈 세계도 흐름도에서 만들기 시작한다
   nodes.set(START_KEY, { key: START_KEY, kind: 'start', id: 'begin', name: '플레이 시작', sub: roots.length ? `처음부터 열리는 것 ${roots.length}` : '눌러서 첫 이야기 만들기' });
   {
@@ -202,7 +225,8 @@ const KIND_ORDER: NodeKind[] = ['start', 'quest', 'arc', 'choice', 'card', 'scen
  *  - 이어진 것이 없는 노드는 맨 아래 따로
  */
 export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right', pinned?: Record<string, [number, number]>): { nodes: Placed[]; width: number; height: number; dir: FlowDir } {
-  const ids = g.nodes.map((n) => n.key);
+  const lane = g.nodes.filter((n) => LANE_KINDS.includes(n.kind)).map((n) => n.key);
+  const ids = g.nodes.filter((n) => !LANE_KINDS.includes(n.kind)).map((n) => n.key);
   const byKey = new Map(g.nodes.map((n) => [n.key, n]));
   const out = new Map<string, string[]>(ids.map((k) => [k, []]));
   const inn = new Map<string, string[]>(ids.map((k) => [k, []]));
@@ -259,7 +283,15 @@ export function layoutGraph(g: StoryGraph, dir: FlowDir = 'right', pinned?: Reco
     });
   });
   const bodyEnd = down ? 40 + layers.length * stepL : 40 + tallest * stepI;
-  const lonelyTop = bodyEnd + (lonely.length ? 50 : 0);
+  // 장소·인물 띠 (v0.147): 흐름 아래에 장소 줄, 그 아래 인물 줄
+  let laneTop = bodyEnd + (lane.length ? 50 : 0);
+  const perLane = Math.max(5, down ? tallest : layers.length || 5);
+  for (const kind of ['location', 'character'] as NodeKind[]) {
+    const row = lane.filter((k) => byKey.get(k)!.kind === kind);
+    row.forEach((k, i) => placed.push({ ...byKey.get(k)!, layer: -2, x: 20 + (i % perLane) * (NODE_W + 24), y: laneTop + Math.floor(i / perLane) * (NODE_H + GAP_Y) }));
+    if (row.length) laneTop += Math.ceil(row.length / perLane) * (NODE_H + GAP_Y) + 10;
+  }
+  const lonelyTop = laneTop + (lonely.length ? 40 : 0);
   const perRow = Math.max(4, down ? tallest : layers.length || 4);
   lonely.forEach((k, i) => placed.push({ ...byKey.get(k)!, layer: -1, x: 20 + (i % perRow) * (NODE_W + (down ? V_GAP_X : GAP_X)), y: lonelyTop + Math.floor(i / perRow) * (NODE_H + GAP_Y) }));
   // 손으로 옮긴 상자 (v0.144)

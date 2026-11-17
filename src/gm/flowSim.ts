@@ -96,6 +96,8 @@ export function nodeSim(w: WorldPackage, s: GameState, n: GNode): NodeSim {
     case 'flag': return s.flags.includes(n.id) ? { st: 'on', text: '섰음' } : { st: 'off', text: '안 섬' };
     case 'claim': return ok(w, s, { knows: n.id }) ? { st: 'on', text: '앎' } : { st: 'off', text: '모름' };
     case 'phase': return s.phase === n.id ? { st: 'on', text: '지금 국면' } : { st: 'off', text: '' };
+    case 'location': return s.player.locationId === n.id ? { st: 'on', text: '지금 여기' } : { st: 'off', text: '' };
+    case 'character': return s.deadNpcs.includes(n.id) ? { st: 'failed', text: '죽음' } : s.party[n.id] ? { st: 'on', text: '동료' } : { st: 'none', text: '' };
     default: return { st: 'none', text: '' };
   }
 }
@@ -162,6 +164,7 @@ export function simActs(w: WorldPackage, s: GameState, n: GNode): SimAct[] {
       const decl = (w.flags ?? []).some((f) => f.id === n.id && f.when?.trim());
       return [{ id: 'set', label: decl ? '세우기 (GM이 세우는 때가 됐다)' : '억지로 세우기', weight: decl ? 1 : 0, run: ev(() => [{ type: 'flag_set', flag: n.id }]) }];
     }
+    case 'location': return s.player.locationId === n.id ? [] : [{ id: 'go', label: '이곳으로 옮기기', weight: 0, run: (w2, s2) => simMove(w2, s2, n.id) }];
     case 'claim': {
       if (nodeSim(w, s, n).st === 'on') return [];
       return [{ id: 'know', label: '알게 하기', weight: 0, run: ev((s2) => effectEvents(w, s2, [{ reveal: n.id, state: 'confirmed' }], '시뮬레이션')) }];

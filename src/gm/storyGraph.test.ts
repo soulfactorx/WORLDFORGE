@@ -25,7 +25,7 @@ describe('이야기 흐름도 (v0.142)', () => {
     const x = (k: string) => lay.nodes.find((n) => n.key === k)!.x;
     expect(x('quest:quest/a')).toBeLessThan(x('quest:quest/b'));
     expect(x('quest:quest/b')).toBeLessThan(x('ending:ending/e'));
-    expect([...neighbors(g, 'quest:quest/b')].sort()).toEqual(['ending:ending/e', 'quest:quest/a', 'quest:quest/b']);
+    expect([...neighbors(g, 'quest:quest/b')].sort()).toEqual(['ending:ending/e', 'location:loc/x', 'quest:quest/a', 'quest:quest/b']); // v0.147: 장소도 이어진다
   });
   it('세우는 곳 없는 플래그를 알린다 · 큰 세계도 그린다', () => {
     const g = buildStoryGraph({ ...sampleWorld, endings: [{ id: 'ending/x', name: 'x', condition: { flag: 'nobody_sets' }, epilogue: '' }] });

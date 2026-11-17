@@ -5,6 +5,7 @@
  * 끊기는 그 반대: 조건에서 A를 가리키는 부분을 빼거나, 효과에서 B를 일으키는 것을 뺀다.
  */
 import type { Condition, StoryEffect, WorldPackage } from '../engine/schema';
+import { setLink } from '../engine/locationLinks';
 import { type GEdge, type GNode, START_KEY } from './storyGraph';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -12,11 +13,11 @@ type Any = any;
 
 export interface LinkWay { label: string; cond: Condition }
 export interface Slot { key: string; label: string }
-export interface LinkOption { group: 'cond' | 'effect' | 'start'; label: string; note?: string; apply: (w: WorldPackage) => Partial<WorldPackage> }
+export interface LinkOption { group: 'cond' | 'effect' | 'start' | 'place'; label: string; note?: string; apply: (w: WorldPackage) => Partial<WorldPackage> }
 
 const LIST: Partial<Record<GNode['kind'], keyof WorldPackage>> = {
   quest: 'quests', ending: 'endings', card: 'storylets', scene: 'scenes', gimmick: 'scenes', encounter: 'encounters',
-  choice: 'choices', arc: 'arcs', event: 'events', rule: 'rules', clock: 'clocks',
+  choice: 'choices', arc: 'arcs', event: 'events', rule: 'rules', clock: 'clocks', location: 'locations', character: 'characters',
 };
 const entity = (w: WorldPackage, n: GNode): Any => { const l = LIST[n.kind]; return l ? ((w[l] as Any[] | undefined) ?? []).find((x) => x.id === n.id) : undefined; };
 function edit(w: WorldPackage, n: GNode, fn: (x: Any) => Any): Partial<WorldPackage> {
@@ -68,6 +69,14 @@ export function sourceWays(w: WorldPackage, n: GNode): LinkWay[] {
     case 'flag': return [{ label: '서 있으면', cond: { flag: n.id } }];
     case 'claim': return [{ label: '알고 있으면', cond: { knows: n.id } }];
     case 'phase': return [{ label: '이 국면이면', cond: { phase: n.id } }];
+    case 'location': return [{ label: '이곳에 있으면', cond: { at: n.id } }];
+    case 'character': return [
+      { label: '살아 있으면', cond: { npcAlive: n.id } },
+      { label: '동료로 함께면', cond: { inParty: n.id } },
+      { label: '신뢰가 50 이상이면', cond: { relationship: n.id, axis: 'trust', gte: 50 } },
+      { label: '호감이 50 이상이면', cond: { relationship: n.id, axis: 'affinity', gte: 50 } },
+      { label: '원한이 50 이상이면', cond: { relationship: n.id, axis: 'grudge', gte: 50 } },
+    ];
     default: return [];
   }
 }
@@ -158,6 +167,8 @@ export function effectFor(n: GNode): { effect: StoryEffect; label: string } | nu
     case 'card': return { effect: { openStorylet: n.id }, label: '카드 펼침' };
     case 'quest': return { effect: { advanceQuest: n.id }, label: '단계 진행' };
     case 'claim': return { effect: { reveal: n.id }, label: '알려 줌' };
+    case 'location': return { effect: { moveTo: n.id }, label: '이곳으로 옮김' };
+    case 'character': return { effect: { relationship: n.id, delta: { trust: 10 } }, label: '신뢰 +10' };
     default: return null;
   }
 }
@@ -166,6 +177,13 @@ export function effectFor(n: GNode): { effect: StoryEffect; label: string } | nu
 export function linkOptions(w: WorldPackage, a: GNode, b: GNode): LinkOption[] {
   if (a.key === b.key || b.key === START_KEY) return [];
   // ▶ 시작 → B (v0.145): B를 처음부터 열리게 — 열리는 조건을 비운다
+  // 장소에서 (v0.147): 그곳에서 일어나게 · 인물이 그곳에 있게 · 길로 잇기
+  const place: LinkOption[] = [];
+  if (a.kind === 'location' && entity(w, b)) {
+    if (['scene', 'gimmick', 'encounter', 'choice', 'card'].includes(b.kind)) place.push({ group: 'place', label: `「${b.name}」이(가) 「${a.name}」에서 일어나게`, note: '이 장소에 있을 때만 일어납니다 (장소 칸을 정한다).', apply: (w2) => edit(w2, b, (x) => { x.locationId = a.id; return x; }) });
+    if (b.kind === 'character') place.push({ group: 'place', label: `「${b.name}」이(가) 「${a.name}」에 있게`, note: '인물이 머무는 곳을 정합니다.', apply: (w2) => edit(w2, b, (x) => { x.locationId = a.id; return x; }) });
+    if (b.kind === 'location') place.push({ group: 'place', label: `「${a.name}」 ↔ 「${b.name}」 길로 잇기`, note: '두 장소를 오갈 수 있게 양쪽 모두 잇습니다.', apply: (w2) => ({ locations: setLink(w2.locations, a.id, b.id, true) }) });
+  }
   if (a.key === START_KEY) {
     const slot = OPEN_SLOT[b.kind];
     if (!slot || !entity(w, b)) return [];
@@ -180,6 +198,7 @@ export function linkOptions(w: WorldPackage, a: GNode, b: GNode): LinkOption[] {
     out.push({ group: 'cond', label: `「${a.name}」 ${way.label} → 「${b.name}」의 ${s.label}`,
       apply: (w2) => edit(w2, b, (x) => setSlot(x, s.key, andCond(getSlot(x, s.key), way.cond))) });
   }
+  out.unshift(...place);
   const fx = effectFor(b);
   if (fx) for (const s of effectSlots(w, a)) {
     out.push({ group: 'effect', label: `「${a.name}」 ${s.label} → 「${b.name}」 ${fx.label}`,
@@ -210,6 +229,8 @@ export function leafPoints(w: WorldPackage, leaf: Condition, a: GNode): boolean 
     case 'flag': return r.flag === a.id;
     case 'claim': return r.knows === a.id;
     case 'phase': return r.phase === a.id;
+    case 'location': return r.at === a.id;
+    case 'character': return [r.npcAlive, r.inParty, r.relationship, r.stage, r.npcAt].includes(a.id);
     default: return false;
   }
 }
@@ -221,6 +242,11 @@ export function leafPoints(w: WorldPackage, leaf: Condition, a: GNode): boolean 
 export function unlink(w: WorldPackage, e: GEdge, a: GNode, b: GNode): { patch?: Partial<WorldPackage>; note: string } {
   if (e.from === START_KEY) return { note: '「플레이 시작」 화살표는 조건이 없어서 생긴 것입니다 — 이 상자에 조건을 넣으면 사라집니다.' };
   if (e.kind === 'stage') return { note: '임무 단계의 고비(장면·전투)는 그 단계의 끝 조건에서 고치세요.' };
+  if (e.kind === 'place') {
+    // 장소 칸: 조우·인물은 장소가 꼭 있어야 한다
+    if (b.kind === 'encounter' || b.kind === 'character') return { note: `「${b.name}」은(는) 장소가 꼭 있어야 합니다 — 다른 장소로 끌어 옮기거나 상자를 눌러 고치세요.` };
+    return { patch: edit(w, b, (x) => { delete x.locationId; return x; }), note: `「${b.name}」의 장소를 뺐습니다 (어디서나 일어난다).` };
+  }
   if (e.kind === 'effect') {
     const fx = effectFor(b);
     if (!fx || !entity(w, a)) return { note: '이 효과는 전체 편집 탭에서 고치세요.' };
@@ -245,7 +271,8 @@ export function unlink(w: WorldPackage, e: GEdge, a: GNode, b: GNode): { patch?:
 function effectHits(ef: StoryEffect, b: GNode): boolean {
   const r = ef as Record<string, unknown>;
   return (b.kind === 'flag' && r.setFlag === b.id) || ((b.kind === 'scene' || b.kind === 'gimmick') && r.startScene === b.id) || (b.kind === 'encounter' && r.startEncounter === b.id)
-    || (b.kind === 'card' && r.openStorylet === b.id) || (b.kind === 'quest' && r.advanceQuest === b.id) || (b.kind === 'claim' && r.reveal === b.id);
+    || (b.kind === 'card' && r.openStorylet === b.id) || (b.kind === 'quest' && r.advanceQuest === b.id) || (b.kind === 'claim' && r.reveal === b.id)
+    || (b.kind === 'location' && r.moveTo === b.id) || (b.kind === 'character' && (r.relationship === b.id || r.killNpc === b.id || r.moveNpc === b.id));
 }
 
 // ---------------------------------------------------------------- 화살표 고치기 (v0.145)
