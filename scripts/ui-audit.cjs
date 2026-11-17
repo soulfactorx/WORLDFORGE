@@ -355,6 +355,15 @@ const SCREENS = [
     else { await p.locator('.flow-node.k-start .flow-box').click(); await p.click('.flow-actions button:has-text("처음부터 열리는 장면")'); }
     await p.waitForSelector('.flow-scene-form .scene-rows');
   }],
+  ['편집: 흐름도 · 만계서고에서 가져오기 (v0.158)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.locator('.flow-node.k-start .flow-box').click();
+    await p.click('.flow-actions button:has-text("만계서고에서 가져오기")');
+    await p.waitForSelector('.flow-library');
+    await p.locator('.flow-library label:has-text("종류") select').selectOption('character');
+    await p.waitForSelector('.flow-lib-item');
+    await p.locator('.flow-lib-item').first().click();
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();
