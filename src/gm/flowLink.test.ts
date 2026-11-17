@@ -168,4 +168,18 @@ describe('흐름도 배치 · 잇기 (v0.143)', () => {
     const w3 = { ...w2, ...linkOptions(w2, node(w2, 'choice:choice/c'), node(w2, 'ending:ending/new-1'))[0]!.apply(w2) };
     expect(w3.endings![0]!.condition).toEqual({ all: [{ questDone: 'quest/a' }, { choice: 'choice/c' }] });
   });
+
+  it('줄기·규칙 (v0.152): 「아직 정하지 않음」 장 조건은 처음 잇는 조건으로 바뀌고, 이어진 것 없는 규칙도 그린다', () => {
+    const w: WorldPackage = { ...base,
+      arcs: [{ id: 'arc/a', name: '큰 줄기', kind: 'main', start: { all: [] }, chapters: [{ name: '1장', goal: '', complete: { any: [] } }] }],
+      rules: [{ id: 'rule/r', name: '규칙', trigger: { kind: 'action', describe: '문을 두드리면' } }] };
+    const g = buildStoryGraph(w);
+    expect(g.nodes.some((n) => n.key === 'rule:rule/r')).toBe(true);
+    const opt = linkOptions(w, node(w, 'quest:quest/a'), node(w, 'arc:arc/a')).find((o) => o.label.includes('1장'))!;
+    const w2 = { ...w, ...opt.apply(w) };
+    expect(w2.arcs![0]!.chapters[0]!.complete).toEqual({ questDone: 'quest/a' });
+    // 규칙의 추가 조건 칸에도 잇는다
+    const r = linkOptions(w, node(w, 'quest:quest/a'), node(w, 'rule:rule/r')).find((o) => o.label.includes('추가 조건'))!;
+    expect(({ ...w, ...r.apply(w) }).rules![0]!.requires).toEqual({ questDone: 'quest/a' });
+  });
 });

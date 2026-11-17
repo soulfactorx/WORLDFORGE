@@ -2,7 +2,8 @@
  * 이야기 흐름도 (v0.142): 임무·분기·조건으로 열리는 것을 한 장의 그림으로. 누르면 옆(휴대폰은 아래)에서 자세히 보고 바로 고친다.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Character, Clock, Condition, CustomMonster, Ending, ItemDef, Location, Quest, StoryEffect, WorldEvent, WorldPackage } from '../engine/schema';
+import type { Arc, Character, Clock, Condition, CustomMonster, Ending, ItemDef, Location, Quest, StoryEffect, WorldEvent, WorldPackage, WorldRule } from '../engine/schema';
+import { UNSET_CONDITION } from '../engine/scenario';
 import { setLink } from '../engine/locationLinks';
 import { buildStoryGraph, type FlowDir, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
 import { edgeSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
@@ -451,7 +452,7 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
   };
   const cutBtn = (e: GEdge) => e.from !== START_KEY && e.kind !== 'stage' && <button type="button" className="small flow-cut" onClick={() => cut(e)} title="이 연결을 설정에서 뺍니다">✂ 끊기</button>;
   // 다음 것 만들기: 이것이 끝나면 열리는 임무 · 이것으로 끝나는 결말
-  const after: Condition | null = n.kind === 'quest' ? { questDone: n.id } : n.kind === 'scene' || n.kind === 'gimmick' ? { sceneEnd: n.id, outcome: 'success' } : n.kind === 'encounter' ? { cleared: n.id } : n.kind === 'card' ? { storylet: n.id } : n.kind === 'choice' ? { choice: n.id } : n.kind === 'flag' ? { flag: n.id } : n.kind === 'claim' ? { knows: n.id } : n.kind === 'location' ? { at: n.id } : n.kind === 'clock' ? { clock: n.id, gte: w.clocks?.find((c) => c.id === n.id)?.segments ?? 1 } : null;
+  const after: Condition | null = n.kind === 'quest' ? { questDone: n.id } : n.kind === 'scene' || n.kind === 'gimmick' ? { sceneEnd: n.id, outcome: 'success' } : n.kind === 'encounter' ? { cleared: n.id } : n.kind === 'card' ? { storylet: n.id } : n.kind === 'choice' ? { choice: n.id } : n.kind === 'flag' ? { flag: n.id } : n.kind === 'claim' ? { knows: n.id } : n.kind === 'location' ? { at: n.id } : n.kind === 'arc' ? { arcDone: n.id } : n.kind === 'clock' ? { clock: n.id, gte: w.clocks?.find((c) => c.id === n.id)?.segments ?? 1 } : null;
   const newId = (prefix: string, list: { id: string }[]) => { let i = list.length + 1; while (list.some((x) => x.id === `${prefix}${i}`)) i++; return `${prefix}${i}`; };
   return (
     <aside className="flow-panel" aria-label={`${n.name} 자세히`}>
@@ -503,6 +504,8 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
         }}>{n.kind === 'location' ? '＋ 이곳에 오면 열리는 임무' : '＋ 이것 다음에 열리는 임무'}</button>}
         {after && <button type="button" onClick={() => { const e = newEnding(w, `${n.name}의 끝`, after); set(e.patch); onPick(`ending:${e.id}`); }}>{n.kind === 'location' ? '＋ 이곳에 이르면 맞는 결말' : '＋ 이것으로 이르는 결말'}</button>}
         {after && <button type="button" onClick={() => { const e = newEvent(w, `${n.name} ${n.kind === 'clock' ? '— 시계가 찼다' : '뒤의 사건'}`, after); set({ events: [...(w.events ?? []), e] }); onPick(`event:${e.id}`); }}>{n.kind === 'clock' ? '＋ 시계가 차면 일어나는 사건' : n.kind === 'location' ? '＋ 이곳에 오면 일어나는 사건' : '＋ 이것 다음에 일어나는 사건'}</button>}
+        {after && n.kind !== 'location' && <button type="button" onClick={() => { const a = newArc(w, after); set({ arcs: [...(w.arcs ?? []), a] }); onPick(`arc:${a.id}`); }}>{n.kind === 'arc' ? '＋ 이 줄기가 끝나면 시작하는 줄기' : '＋ 이것 다음에 시작하는 줄기'}</button>}
+        {after && <button type="button" onClick={() => { const r = newRule(w, after); set({ rules: [...(w.rules ?? []), r] }); onPick(`rule:${r.id}`); }}>{n.kind === 'location' ? '＋ 이곳에서 발동하는 규칙' : '＋ 이것이 되면 발동하는 규칙'}</button>}
         {n.kind === 'ending' && <button type="button" onClick={() => { const e = newEnding(w, '다른 결말'); set(e.patch); onPick(`ending:${e.id}`); }} title="다른 길의 끝 — GM이 세우는 플래그로 시작하고, 상자를 끌어 조건을 이으세요">＋ 다른 결말</button>}
         {tab && <button type="button" className="small" onClick={() => onTab(tab)}>전체 편집 — 「{TAB_NAME[tab]}」 탭</button>}
       </div>
@@ -554,6 +557,14 @@ function newClock(w: WorldPackage): Clock {
   return { id: nextId('clock/new-', w.clocks ?? []), name: '다가오는 위협', segments: 6, tick: [{ every: 'beat', by: 1 }], at: [{ segment: 3, omen: '불길한 소문이 돈다.' }, { segment: 6, effects: [] }] };
 }
 
+/** 새 줄기·세계 규칙 (v0.152): 「이야기 흐름」「세계 규칙」 탭의 새 항목과 같은 꼴 — start: 줄기가 시작하는 조건 · 규칙이 발동하는 상태 */
+function newArc(w: WorldPackage, start?: Condition): Arc {
+  return { id: nextId('arc/new-', w.arcs ?? []), name: (w.arcs ?? []).length ? '새 줄기' : '큰 줄기', kind: 'main', start: start ?? { all: [] }, chapters: [{ name: '1장', goal: '', complete: UNSET_CONDITION }] };
+}
+function newRule(w: WorldPackage, when?: Condition): WorldRule {
+  return { id: nextId('rule/new-', w.rules ?? []), name: '새 규칙', trigger: when ? { kind: 'state', condition: when } : { kind: 'action', describe: '' }, outcome: '' };
+}
+
 /** 새 장면·함정·퍼즐 (v0.149): 「장면」「함정·퍼즐」 탭의 새 항목과 같은 꼴 — start: 열리는 조건, at: 장소 */
 function newScene(w: WorldPackage, o: { start?: Condition; at?: string } = {}): SceneDef {
   return { ...newSceneDef(nextId('scene/new-', w.scenes ?? [])), ...(o.start ? { start: o.start } : {}), ...(o.at ? { locationId: o.at } : {}) };
@@ -597,6 +608,8 @@ function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void):
       set(newQuest(w, id, (w.quests ?? []).length ? '새 임무' : '첫 임무', 'main', { all: [] })); onPick(`quest:${id}`);
     } },
     { label: '＋ 결말', run: () => { const e = newEnding(w, (w.endings ?? []).length ? '새 결말' : '첫 결말'); set(e.patch); onPick(`ending:${e.id}`); } },
+    { label: '＋ 줄기', run: () => { const a = newArc(w); set({ arcs: [...(w.arcs ?? []), a] }); onPick(`arc:${a.id}`); } },
+    { label: '＋ 세계 규칙', run: () => { const r = newRule(w); set({ rules: [...(w.rules ?? []), r] }); onPick(`rule:${r.id}`); } },
     { label: '＋ 연표 사건', run: () => { const e = newEvent(w, '새 사건'); set({ events: [...(w.events ?? []), e] }); onPick(`event:${e.id}`); } },
     { label: '＋ 진행 시계', run: () => { const c = newClock(w); set({ clocks: [...(w.clocks ?? []), c] }); onPick(`clock:${c.id}`); } },
     { label: '＋ 장소', run: () => { const l = newPlace(w); set({ locations: l.locations }); onPick(`location:${l.id}`); } },
@@ -914,6 +927,55 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
             <label>경험치<input type="number" min={0} value={m.xp} onChange={(e) => up({ xp: Math.max(0, Number(e.target.value) || 0) })} /></label>
           </div>
           <p className="small muted">능력치·공격·기술은 「조우」 탭의 「이 세계만의 적」에서 고칩니다.</p>
+        </>
+      );
+    }
+    case 'arc': {
+      const a = w.arcs?.find((x) => x.id === n.id); if (!a) return null;
+      const up = (p: Partial<Arc>) => set({ arcs: upd(w.arcs, p) });
+      const upCh = (i: number, p: Partial<Arc['chapters'][number]>) => up({ chapters: a.chapters.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+      return (
+        <>
+          <Text label="이름" value={a.name} onChange={(name) => up({ name })} />
+          <label>종류<select value={a.kind} onChange={(e) => up({ kind: e.target.value as Arc['kind'] })}><option value="main">큰 줄기</option><option value="faction">세력 줄기</option><option value="character">인물 줄기</option></select></label>
+          <ConditionField label="시작 조건" value={a.start} world={w} onChange={(start) => up({ start: start ?? { all: [] } })} />
+          {a.chapters.map((ch, i) => (
+            <fieldset key={i} className="flow-stage"><legend>{i + 1}장</legend>
+              <Text label="장 이름" value={ch.name} onChange={(name) => upCh(i, { name })} />
+              <Area label="GM에게: 이 장에서 일어나야 할 일" value={ch.goal} onChange={(goal) => upCh(i, { goal })} rows={2} />
+              <ConditionField label="끝나는 조건" value={ch.complete} world={w} completion onChange={(complete) => upCh(i, { complete: complete ?? UNSET_CONDITION })} />
+              <EffectsEditor label="이 장을 끝내면" value={ch.effects} w={w} onChange={(effects) => upCh(i, { effects })} />
+              {a.chapters.length > 1 && <button type="button" className="small" onClick={() => up({ chapters: a.chapters.filter((_, j) => j !== i) })}>🗑 이 장 지우기</button>}
+            </fieldset>
+          ))}
+          <button type="button" className="small" onClick={() => up({ chapters: [...a.chapters, { name: `${a.chapters.length + 1}장`, goal: '', complete: UNSET_CONDITION }] })}>＋ 장 더하기</button>
+        </>
+      );
+    }
+    case 'rule': {
+      const r = w.rules?.find((x) => x.id === n.id); if (!r) return null;
+      const up = (p: Partial<WorldRule>) => set({ rules: upd(w.rules, p) });
+      const t = r.trigger;
+      return (
+        <>
+          <Text label="이름" value={r.name} onChange={(name) => up({ name })} />
+          <label>언제 발동하나<select value={t.kind} onChange={(e) => up({ trigger: e.target.value === 'state' ? { kind: 'state', condition: { all: [] } } : { kind: 'action', describe: '' } })}>
+            <option value="action">플레이어가 어떤 행동을 하면</option><option value="state">어떤 상태가 되면</option>
+          </select></label>
+          {t.kind === 'action' ? <>
+            <Area label="어떤 행동인가 (GM이 알아듣게)" value={t.describe} onChange={(describe) => up({ trigger: { ...t, describe } })} rows={2} />
+            <Text label="걸리는 낱말 (쉼표로, 선택)" value={(t.keywords ?? []).join(', ')} onChange={(v) => { const keywords = v.split(',').map((x) => x.trim()).filter(Boolean); up({ trigger: { kind: 'action', describe: t.describe, ...(keywords.length ? { keywords } : {}) } }); }} />
+          </> : <ConditionField label="발동 조건" value={t.condition} world={w} onChange={(condition) => up({ trigger: { kind: 'state', condition: condition ?? { all: [] } } })} />}
+          <ConditionField label="추가 조건 (선택 — 이것도 참이어야 발동)" value={r.requires} world={w} optional onChange={(requires) => up({ requires })} />
+          <EffectsEditor label="엔진이 바로 적용하는 결과" value={r.effects} w={w} onChange={(effects) => up({ effects })} />
+          <Area label="서술에 주는 결과 (GM용)" value={r.outcome ?? ''} onChange={(outcome) => up({ outcome })} rows={2} />
+          <Text label="기록에 보이는 한 줄 (선택)" value={r.announce ?? ''} onChange={(announce) => up({ announce: announce || undefined })} />
+          <label>되풀이<select value={typeof r.repeat === 'number' ? 'n' : r.repeat ?? 'once'} onChange={(e) => up({ repeat: e.target.value === 'n' ? 3 : e.target.value as 'once' | 'always' })}>
+            <option value="once">한 번만</option><option value="always">매번</option><option value="n">몇 턴 쉬었다가 다시</option>
+          </select></label>
+          {typeof r.repeat === 'number' && <label>쉬는 턴<input type="number" min={1} value={r.repeat} onChange={(e) => up({ repeat: Math.max(1, Number(e.target.value) || 1) })} /></label>}
+          <label className="check"><input type="checkbox" checked={r.enabled !== false} onChange={(e) => up({ enabled: e.target.checked ? undefined : false })} /> 켜짐</label>
+          <p className="small muted">인물 반응은 「세계 규칙」 탭에서 고칩니다.</p>
         </>
       );
     }

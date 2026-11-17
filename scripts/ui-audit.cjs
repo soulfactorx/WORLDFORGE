@@ -296,6 +296,22 @@ const SCREENS = [
     await p.locator('.flow-empty button:text-is("＋ 연표 사건")').click();
     await p.waitForSelector('.flow-panel');
   }],
+  ['편집: 흐름도 · 줄기 상자 (v0.152)', async (p) => {
+    await home(p);
+    await p.click('.home-tabs button:has-text("세계관")');
+    await p.click('button:has-text("＋ 만들기")');
+    await p.click('button:has-text("흐름도에서 만들기")');
+    await p.locator('.flow-empty button:text-is("＋ 줄기")').click();
+    await p.waitForSelector('.flow-panel');
+  }],
+  ['편집: 흐름도 · 세계 규칙 상자 (v0.152)', async (p) => {
+    await home(p);
+    await p.click('.home-tabs button:has-text("세계관")');
+    await p.click('button:has-text("＋ 만들기")');
+    await p.click('button:has-text("흐름도에서 만들기")');
+    await p.locator('.flow-empty button:text-is("＋ 세계 규칙")').click();
+    await p.waitForSelector('.flow-panel');
+  }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');
     await p.locator('.flow-node.k-ending .flow-box').first().click();

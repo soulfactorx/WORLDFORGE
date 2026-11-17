@@ -113,7 +113,7 @@ export function condSlots(w: WorldPackage, n: GNode): Slot[] {
     case 'choice': return [{ key: 'when', label: '열리는 조건' }];
     case 'arc': return [{ key: 'start', label: '시작 조건' }, ...((x?.chapters ?? []) as Any[]).map((c, i) => ({ key: `chapter:${i}`, label: `${i + 1}장 「${c.name ?? ''}」 끝 조건` }))];
     case 'event': return [{ key: 'when.condition', label: '일어나는 조건' }, { key: 'unless', label: '막히는 조건' }];
-    case 'rule': return x?.trigger?.kind === 'state' ? [{ key: 'trigger', label: '발동 조건' }] : [];
+    case 'rule': return [...(x?.trigger?.kind === 'state' ? [{ key: 'trigger', label: '발동 조건' }] : []), { key: 'requires', label: '추가 조건 (이것도 참이어야 발동)' }];
     default: return [];
   }
 }
@@ -122,7 +122,7 @@ export const OPEN_SLOT: Partial<Record<GNode['kind'], string>> = { quest: 'start
 /** 비면 없애도 되는 칸 (필수 칸은 비면 「항상 참」이 된다) */
 const optional = (n: GNode, slot: string) =>
   (n.kind === 'quest' && slot === 'fail') || (n.kind === 'card' && slot === 'when') || ((n.kind === 'scene' || n.kind === 'gimmick') && slot === 'start')
-  || (n.kind === 'encounter' && (slot === 'when' || slot === 'force')) || (n.kind === 'event' && (slot === 'when.condition' || slot === 'unless'));
+  || (n.kind === 'encounter' && (slot === 'when' || slot === 'force')) || (n.kind === 'event' && (slot === 'when.condition' || slot === 'unless')) || (n.kind === 'rule' && slot === 'requires');
 
 function getSlot(x: Any, slot: string): Condition | undefined {
   const [a, b] = slot.split(':');
@@ -145,7 +145,8 @@ function setSlot(x: Any, slot: string, c: Condition | undefined): Any {
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 /** 조건에 「그리고」로 더한다 (이미 있으면 그대로) */
 export function andCond(c: Condition | undefined, add: Condition): Condition {
-  if (!c || ('all' in c && !c.all.length)) return add;
+  // 비었거나 「아직 정하지 않음」({ any: [] } — 늘 거짓)이면 그 자리에 넣는다
+  if (!c || ('all' in c && !c.all.length) || ('any' in c && !c.any.length)) return add;
   if (same(c, add)) return c;
   if ('all' in c) return c.all.some((x) => same(x, add)) ? c : { all: [...c.all, add] };
   return { all: [c, add] };

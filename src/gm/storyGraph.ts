@@ -171,10 +171,11 @@ export function buildStoryGraph(w: WorldPackage): StoryGraph {
   for (const r of w.rules ?? []) {
     const fx = effectRefs(r.effects, w);
     const conds = r.trigger.kind === 'state' ? refsOf(r.trigger.condition) : [];
-    if (!fx.length && !conds.length) continue;
+    // v0.151까지는 이어진 것이 없는 규칙을 그리지 않았다 — 흐름도에서 만든 규칙도 보이게 늘 그린다 (이어진 것이 없으면 「따로 있는 것」 줄)
     const me = key('rule', r.id);
     add({ key: me, kind: 'rule', id: r.id, name: r.name, sub: r.trigger.kind === 'action' ? '행동 규칙' : '상태 규칙' });
     if (r.trigger.kind === 'state') opens(r.trigger.condition, me, 'start', '→ 발동: ');
+    opens(r.requires, me, 'start', '→ 추가 조건: ');
     effects(r.effects, me);
   }
   // 이어진 플래그·지식·국면만 노드로
