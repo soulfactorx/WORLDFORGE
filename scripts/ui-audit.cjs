@@ -60,6 +60,8 @@ async function editorTab(page, tab) {
   await editor(page);
   await page.click(`.editor-groups button:has-text("${TAB_GROUP[tab]}")`);
   if (TAB_GROUP[tab] !== '흐름도') await page.click(`.editor-tabs button:text-is("${tab}")`); // 흐름도 묶음은 탭이 하나라 줄이 없다
+  // v0.164: 휴대폰은 흐름도 위 도구가 처음엔 접혀 있다 — 점검은 펼친 채로 (접힌 모습은 따로 「넓게 보기」 화면)
+  if (TAB_GROUP[tab] === '흐름도' && await page.locator('.flow-bar button:has-text("▾ 도구")').count()) await page.click('.flow-bar button:has-text("▾ 도구")');
 }
 const EDITOR_TABS = ['기본', '⚖ 세계 규칙', '주인공', '직업', '보드·지도·시뮬레이터', '장소', '인물', '관계·세력', '지식', '아이템·상점', '조우', '임무·플래그·결말', '이야기 흐름', '상태 시험대', '자동 플레이·전체 점검', '이미지', 'JSON 전체'];
 
@@ -369,7 +371,7 @@ const SCREENS = [
   }],
   ['편집: 흐름도 · 목록 (v0.159)', async (p) => {
     await editorTab(p, '🗺 흐름도');
-    if (!(await p.locator('.flow-outline').count())) await p.click('.flow-tools button:has-text("목록")');
+    if (!(await p.locator('.flow-outline').count())) await p.click('.flow-bar button:has-text("📋")');
     await p.waitForSelector('.flow-outline');
   }],
   ['편집: 흐름도 · 전투 편집 (v0.159)', async (p) => {
@@ -410,6 +412,13 @@ const SCREENS = [
     if (!(await p.locator('.flow-kinds button.on:has-text("인물")').count())) await p.click('.flow-kinds button:has-text("인물")');
     await p.locator('.flow-node.k-character .flow-box').first().click();
     await p.waitForSelector('.flow-panel fieldset:has(legend:has-text("다른 인물과의 관계"))');
+  }],
+  ['편집: 흐름도 · 넓게 보기·도구 접기 (v0.164)', async (p) => {
+    await editorTab(p, '🗺 흐름도');
+    await p.click('.flow-bar button:has-text("도구 접기")');
+    await p.click('.flow-bar button:has-text("넓게")');
+    await p.locator('.flow-node.k-quest .flow-box').first().click();
+    await p.waitForSelector('.story-flow.wide .flow-panel');
   }],
   ['편집: 흐름도 · 연결 고치기 (v0.145)', async (p) => {
     await editorTab(p, '🗺 흐름도');

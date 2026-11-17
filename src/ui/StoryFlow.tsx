@@ -52,7 +52,12 @@ export const BORROW_OF: Partial<Record<NodeKind, BorrowKind>> = {
 };
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab: (t: FlowTab) => void }) {
+export function StoryFlow({ w, set, onTab, onSave, dirty }: { w: WorldPackage; set: SetW; onTab: (t: FlowTab) => void; /** 넓게 보기에서 저장 (v0.164) */ onSave?: () => void; dirty?: boolean }) {
+  // 화면 넓게 쓰기 (v0.164): 위 도구를 접고(기억 — 휴대폰은 처음엔 접힘), 「⛶ 넓게」면 흐름도가 화면 전체를 쓴다
+  const narrow = () => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 900px)').matches;
+  const [tools, setToolsRaw] = useState<boolean>(() => { try { const v = localStorage.getItem('worldforge.flow.tools'); return v ? v === '1' : !narrow(); } catch { return true; } });
+  const setTools = (v: boolean) => { setToolsRaw(v); try { localStorage.setItem('worldforge.flow.tools', v ? '1' : '0'); } catch { /* 괜찮다 */ } };
+  const [wide, setWide] = useState(false);
   const graph = useMemo(() => buildStoryGraph(w), [w]);
   const counts = useMemo(() => { const m = new Map<NodeKind, number>(); for (const n of graph.nodes) m.set(n.kind, (m.get(n.kind) ?? 0) + 1); return m; }, [graph]);
   const [hidden, setHidden] = useState<globalThis.Set<NodeKind>>(() => new globalThis.Set<NodeKind>(graph.nodes.length > 40 ? ['claim', 'phase', 'location', 'character', 'faction', 'item', 'monster'] : ['claim', 'phase'])); // 큰 세계는 장소·인물을 처음엔 숨긴다
@@ -73,6 +78,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   const [outline, setOutlineRaw] = useState<boolean>(() => { try { const v = localStorage.getItem(OUTLINE_KEY); return v ? v === '1' : window.matchMedia?.('(min-width: 901px)').matches ?? true; } catch { return true; } });
   const setOutline = (v: boolean) => { setOutlineRaw(v); try { localStorage.setItem(OUTLINE_KEY, v ? '1' : '0'); } catch { /* 괜찮다 */ } };
   const scrollTo = useRef<string | null>(null);
+  const scrollHalf = useRef(false);
   /** 만계서고에서 가져오기 (v0.158): 이어 붙일 조건 */
   const [lib, setLib] = useState<{ after?: Condition; afterName?: string; kind?: BorrowKind } | null>(null);
   /** 화살표 고치기 (v0.145) */
@@ -118,8 +124,16 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
     const k = scrollTo.current, c = canvasRef.current, at = k ? pos.get(k) : undefined;
     if (!k || !c || !at || c.clientWidth === 0) return;
     scrollTo.current = null;
-    c.scrollLeft = Math.max(0, (at.x + NODE_W / 2) * zoom - c.clientWidth / 2);
-    c.scrollTop = Math.max(0, (at.y + NODE_H / 2) * zoom - c.clientHeight / 2);
+    let cx = c.clientWidth / 2, cy = c.clientHeight / 2; // 상자를 둘 자리 (그림판 안 좌표)
+    if (scrollHalf.current) {
+      // 창이 덮지 않는 부분의 가운데: 가로 화면은 왼쪽 절반, 세로 화면은 위쪽 절반
+      const r = c.getBoundingClientRect(), landscape = window.innerWidth > window.innerHeight;
+      if (landscape) cx = (Math.max(r.left, 0) + Math.min(r.right, window.innerWidth / 2)) / 2 - r.left;
+      else cy = (Math.max(r.top, 0) + Math.min(r.bottom, window.innerHeight / 2)) / 2 - r.top;
+      scrollHalf.current = false;
+    }
+    c.scrollLeft = Math.max(0, (at.x + NODE_W / 2) * zoom - cx);
+    c.scrollTop = Math.max(0, (at.y + NODE_H / 2) * zoom - cy);
   });
   const savePins = (next: Record<string, [number, number]> | undefined) => {
     const cur = { ...(w.flowLayout ?? {}) };
@@ -151,10 +165,10 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || pending || edgeSel) return; // 방법 고르기 · 화살표 창은 스스로 닫는다
       if (document.querySelector('.scene-tester, .lightbox')) return; // 장면 시험 창·그림 크게 보기가 먼저 닫힌다 (v0.156)
-      if (linking || drag) { setLinking(null); setDrag(null); } else setSel(null);
+      if (linking || drag) { setLinking(null); setDrag(null); } else if (sel) setSel(null); else setWide(false); // 고른 것이 없으면 넓게 보기를 끝낸다
     };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, [linking, drag, pending, edgeSel]);
+  }, [linking, drag, pending, edgeSel, sel]);
 
   const toSvg = (e: { clientX: number; clientY: number }) => { const r = svgRef.current!.getBoundingClientRect(); return { x: (e.clientX - r.left) / zoom, y: (e.clientY - r.top) / zoom }; };
   const nodeAt = (x: number, y: number) => lay.nodes.find((n) => x >= n.x && x <= n.x + NODE_W && y >= n.y && y <= n.y + NODE_H);
@@ -207,6 +221,8 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   const pick = (k: string) => {
     if (linking) { if (k !== linking) setPending({ from: linking, to: k }); setLinking(null); return; }
     setSel(k === sel ? null : k);
+    // 휴대폰 (v0.164): 창이 화면 절반(가로면 오른쪽, 세로면 아래)을 덮으므로 고른 상자를 남은 절반으로 굴린다
+    if (k !== sel && narrow()) { scrollTo.current = k; scrollHalf.current = true; }
   };
   const byKey = (k: string) => graph.nodes.find((n) => n.key === k);
   // 처음 열 때 · 방향을 바꿀 때: ▶ 시작이 보이게 굴린다
@@ -218,9 +234,24 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   }, [dir, startY === undefined]);
 
   return (
-    <div className="story-flow">
-      <p className="muted small">세계의 <b>임무·결말·갈래 카드·장면·함정·전투·결정적 선택·사건</b>이 어떤 조건으로 이어지는지 그린 지도입니다. <b>▶ 플레이 시작</b>에서 출발해 {down ? '아래로' : '오른쪽으로'} 흘러가 맨 끝의 <b>◆ 결말</b>에 이릅니다. 화살표 <b>A → B</b>는 "A가 끝나거나(고르거나 · 세우면) B가 열린다"는 뜻입니다. 상자를 누르면 자세히 보고 고치며, 상자의 <b>●</b> 손잡이를 다른 상자로 끌면 둘을 잇습니다. 상자를 끌면(휴대폰은 길게 누른 뒤 끌면) 자리를 옮기고, 옮긴 자리는 세계와 함께 저장됩니다.</p>
+    <div className={`story-flow${wide ? ' wide' : ''}${tools ? '' : ' tools-folded'}${selNode ? ' has-panel' : ''}`}>
+      <div className="row flow-bar">
+        <button type="button" className={`small${tools ? ' on' : ''}`} aria-expanded={tools} onClick={() => setTools(!tools)} title="설명·종류·찾기·범례를 펼치거나 접는다" aria-label={tools ? '도구 접기' : '도구 펼치기'}>{tools ? '▴' : '▾'}<span className="flow-bar-label">{tools ? ' 도구 접기' : ' 도구'}</span></button>
+        <button type="button" className={`small${outline ? ' on' : ''}`} aria-pressed={outline} onClick={() => setOutline(!outline)} title="종류별 목록으로 찾아 고르기">📋<span className="flow-bar-label"> 목록</span></button>
+        <button type="button" className={`small${sim ? ' on' : ''}`} aria-pressed={!!sim} onClick={() => { if (sim) { setSim(null); cancelExplore.current = true; } else { simGo([]); setLinking(null); } }} title="흐름도 위에서 이야기를 직접 진행해 보고, 자동으로 여러 번 끝까지 해 본다">{sim ? '■' : '🧪'}<span className="flow-bar-label">{sim ? ' 시뮬레이션 끝내기' : ' 시뮬레이션'}</span></button>
+        <span className="row flow-zoom">
+          <button type="button" className="small" aria-label="작게" onClick={() => setZoom((z) => Math.max(0.3, +(z - 0.15).toFixed(2)))}>−</button>
+          <button type="button" className="small zoom-pct" onClick={() => setZoom(1)} title="100%로">{Math.round(zoom * 100)}%</button>
+          <button type="button" className="small" aria-label="크게" onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.15).toFixed(2)))}>＋</button>
+          <button type="button" className="small" onClick={fit} title="화면 폭에 맞추기" aria-label="화면 폭에 맞추기">⤢</button>
+        </span>
+        <span className="spacer" />
+        {wide && onSave && <button type="button" className="small primary" onClick={onSave} title="세계 저장">{dirty ? '● ' : ''}저장</button>}
+        <button type="button" className={`small${wide ? ' on' : ''}`} aria-pressed={wide} onClick={() => setWide(!wide)} title={wide ? '원래 화면으로 (Esc)' : '흐름도가 화면 전체를 쓴다 — 머리말·탭을 가린다'} aria-label={wide ? '넓게 보기 끝' : '넓게 보기'}>{wide ? '✕' : '⛶'}<span className="flow-bar-label">{wide ? ' 넓게 끝' : ' 넓게'}</span></button>
+      </div>
+      {tools && <p className="muted small">세계의 <b>임무·결말·갈래 카드·장면·함정·전투·결정적 선택·사건</b>이 어떤 조건으로 이어지는지 그린 지도입니다. <b>▶ 플레이 시작</b>에서 출발해 {down ? '아래로' : '오른쪽으로'} 흘러가 맨 끝의 <b>◆ 결말</b>에 이릅니다. 화살표 <b>A → B</b>는 "A가 끝나거나(고르거나 · 세우면) B가 열린다"는 뜻입니다. 상자를 누르면 자세히 보고 고치며, 상자의 <b>●</b> 손잡이를 다른 상자로 끌면 둘을 잇습니다. 상자를 끌면(휴대폰은 길게 누른 뒤 끌면) 자리를 옮기고, 옮긴 자리는 세계와 함께 저장됩니다.</p>}
       <div className="flow-toolbar">
+        {tools && <>
         <div className="flow-kinds">
           {MAIN_KINDS.filter((k) => counts.get(k)).map((k) => {
             const on = !hidden.has(k);
@@ -231,20 +262,13 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
           <input type="search" placeholder="🔍 이름으로 찾기" value={q} onChange={(e) => setQ(e.target.value)} />
           <label className="check"><input type="checkbox" checked={focus} disabled={!sel} onChange={(e) => setFocus(e.target.checked)} /> 고른 것과 이어진 것만</label>
           <button type="button" className="small" onClick={() => setDir(down ? 'right' : 'down')} title="흐름 방향 바꾸기">{down ? '↓ 위에서 아래로' : '→ 왼쪽에서 오른쪽으로'}</button>
-          <span className="row flow-zoom">
-            <button type="button" className="small" aria-label="작게" onClick={() => setZoom((z) => Math.max(0.3, +(z - 0.15).toFixed(2)))}>−</button>
-            <button type="button" className="small" onClick={() => setZoom(1)} title="100%로">{Math.round(zoom * 100)}%</button>
-            <button type="button" className="small" aria-label="크게" onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.15).toFixed(2)))}>＋</button>
-            <button type="button" className="small" onClick={fit} title="화면 폭에 맞추기">⤢ 맞춤</button>
-          </span>
-          <button type="button" className={`small${outline ? ' on' : ''}`} aria-pressed={outline} onClick={() => setOutline(!outline)} title="종류별 목록으로 찾아 고르기">📋 목록</button>
-          <button type="button" className={`small${sim ? ' on' : ''}`} aria-pressed={!!sim} onClick={() => { if (sim) { setSim(null); cancelExplore.current = true; } else { simGo([]); setLinking(null); } }} title="흐름도 위에서 이야기를 직접 진행해 보고, 자동으로 여러 번 끝까지 해 본다">{sim ? '■ 시뮬레이션 끝내기' : '🧪 시뮬레이션'}</button>
           {pins && Object.keys(pins).length > 0 && <button type="button" className="small" onClick={() => { if (confirm(`옮긴 상자 ${Object.keys(pins).length}개를 자동 배치 자리로 되돌릴까요? (${down ? '세로' : '가로'} 방향만)`)) savePins(undefined); }} title="손으로 옮긴 자리를 지우고 자동으로 다시 놓는다">↺ 자동 배치로</button>}
         </div>
         <p className="small muted flow-legend">
           <span className="lg start">— 시작·열림</span> <span className="lg complete">— 끝·결말</span> <span className="lg fail">- - 실패·막힘</span> <span className="lg effect">··· 일으킴(플래그·장면·카드)</span>
           {warns > 0 && <span className="warn-text"> · ⚠ 살펴볼 곳 {warns}</span>}
         </p>
+        </>}
         {empty && (
           <div className="flow-empty" role="note">
             <b>🗺 흐름도에서 이야기 만들기</b>
@@ -843,7 +867,7 @@ function PreviewCard({ pv, tally, g, onPick }: { pv: ActPreview; tally?: Explore
           // 흐름도 상자는 그대로라도 성향·관계·수치 등은 바뀔 수 있다 — 그때는 엔진이 적용한 것을 펼쳐 보여 준다
           return pv.lines.length > 0 && <details open={!boxes}><summary className="small">{boxes ? `엔진이 적용한 것 ${pv.lines.length}` : `흐름도 상자는 그대로 — 바뀌는 것 ${pv.lines.length} (성향·관계·수치 등)`}</summary><pre className="small">{pv.lines.join('\n')}</pre></details>;
         })()}
-      </>}
+        </>}
       {tally && <span className="small flow-tally">🎲 자동 탐색: 이 길로 간 {tally.runs}판 → {tallyText(tally, g)}</span>}
       <button type="button" className={pv.forced ? 'small' : ''} onClick={onPick}>이걸로 고르기</button>
     </div>

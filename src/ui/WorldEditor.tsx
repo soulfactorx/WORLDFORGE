@@ -744,7 +744,7 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
 
       {tab === 'classes' && <ClassEditor world={w} onChange={(classes) => set({ classes })} />}
       {tab === 'player' && <ProfileEditor world={w} onChange={(playerProfile) => set({ playerProfile })} onTraits={(traits) => set({ traits })} />}
-      {tab === 'flow' && <StoryFlow w={w} set={set} onTab={(t) => setTab(t)} />}
+      {tab === 'flow' && <StoryFlow w={w} set={set} onTab={(t) => setTab(t)} onSave={() => void save()} dirty={dirty} />}
       {tab === 'gimmicks' && <GimmickForms w={w} set={set} settings={settings} onStatus={setStatus} />}
       {tab === 'scenes' && (
         <>

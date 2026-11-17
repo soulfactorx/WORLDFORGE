@@ -1535,4 +1535,26 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-rel { display: flex; flex-direction: column; gap: 4px; border-bottom: 1px dashed var(--border); padding-bottom: 6px; margin-bottom: 4px; }
 .flow-rel .flow-nums { align-items: flex-end; flex-wrap: nowrap; }
 .flow-rel .flow-nums > button { flex: none; }
+/* 흐름도: 화면 넓게 쓰기 (v0.164) */
+.flow-bar { flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (max-width: 600px), (max-height: 500px) { .flow-bar { gap: 4px; } .flow-bar .zoom-pct { display: none; } .flow-bar button { padding-left: 8px; padding-right: 8px; } }
+.flow-bar .flow-zoom { gap: 4px; }
+.story-flow.wide { position: fixed; inset: 0; z-index: 40; background: var(--bg); padding: 6px 8px; padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 6px; overflow: auto; }
+.story-flow.wide > .flow-wrap { flex: 1 1 auto; min-height: 220px; grid-template-rows: minmax(0, 1fr); }
+.story-flow.wide .flow-canvas-wrap { min-height: 0; }
+.story-flow.wide .flow-canvas, .story-flow.wide .flow-outline { height: 100%; min-height: 0; }
+.story-flow.wide .flow-panel { max-height: none; min-height: 0; }
+@media (max-width: 900px) {
+  .flow-bar-label { display: none; }
+  /* 세로: 상자 창은 아래 절반 */
+  .flow-panel { max-height: 50vh; max-height: 50dvh; }
+  .story-flow:not(.wide) .flow-canvas { height: 70vh; height: 70dvh; }
+  .story-flow.wide .flow-panel { max-height: 50vh; max-height: 50dvh; }
+}
+/* 가로 휴대폰: 상자 창은 오른쪽 절반 (흐름도는 왼쪽 절반에 보인다) */
+@media (max-width: 900px) and (orientation: landscape) {
+  /* 창이 열려 있으면 위 줄들(도구·시뮬레이션)도 왼쪽 절반에 — 창 밑에 가려지지 않게 */
+  .story-flow.has-panel > :not(.flow-wrap) { max-width: calc(50vw - 16px); }
+  .flow-panel, .story-flow.wide .flow-panel { left: auto; right: 0; top: 0; bottom: 0; width: 50vw; max-height: none; height: 100vh; height: 100dvh; border-radius: 14px 0 0 14px; box-shadow: -6px 0 20px color-mix(in srgb, var(--text) 18%, transparent); }
+}
 
