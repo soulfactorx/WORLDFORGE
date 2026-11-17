@@ -78,13 +78,16 @@ const TABS: [Tab, string][] = [
   ['encounters', '조우'], ['flow', '🗺 흐름도'], ['scenes', '장면'], ['gimmicks', '함정·퍼즐'], ['quests', '임무·플래그·결말'], ['story', '이야기 흐름'], ['images', '이미지'], ['json', 'JSON 전체'],
 ];
 /** 탭 묶음 (v0.82) */
+// v0.159: 흐름도가 메인 — 이야기·장소·인물·아이템 등은 흐름도에서 만들고 고치고, 세계 전체 설정은 「세계 설정」,
+// 예전처럼 종류별 목록으로 고치고 싶으면 「항목별 편집」
 const TAB_GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
-  { id: 'world', label: '🌍 세계', tabs: ['basic', 'rules', 'locations', 'knowledge', 'relations'] },
-  { id: 'people', label: '👥 인물', tabs: ['characters', 'player', 'classes'] },
-  { id: 'story', label: '📜 이야기', tabs: ['flow', 'quests', 'story', 'scenes', 'gimmicks', 'encounters', 'items'] },
+  { id: 'flow', label: '🗺 흐름도', tabs: ['flow'] },
+  { id: 'settings', label: '⚙ 세계 설정', tabs: ['basic', 'rules', 'player', 'classes', 'relations', 'knowledge'] },
+  { id: 'items', label: '📋 항목별 편집', tabs: ['quests', 'story', 'scenes', 'gimmicks', 'encounters', 'items', 'locations', 'characters'] },
   { id: 'test', label: '🧪 시험', tabs: ['lab', 'autoplay', 'tools'] },
   { id: 'data', label: '🗂 자료', tabs: ['images', 'json'] },
 ];
+const LAST_TAB = 'worldforge.editor.tab';
 const IMPROV = [['none', '지어내기 금지'], ['minor', '작은 세부사항만'], ['free', '자유']] as const;
 const STATES = [['rumor', '소문'], ['partial', '들은 이야기'], ['confirmed', '확인됨'], ['mistaken', '잘못 앎'], ['secret', '비밀']] as const;
 
@@ -177,7 +180,15 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
   // 시험실 (v0.84): 각 탭의 🧪 버튼이 이 항목을 상태 시험대에서 연다
   const [labFocus, setLabFocus] = useState<{ kind: string; id: string; n: number } | null>(null);
   const openLab = (kind: string, id: string) => { setLabFocus((f) => ({ kind, id, n: (f?.n ?? 0) + 1 })); setTab('lab'); };
-  const [tab, setTab] = useState<Tab>(initialCard ? 'characters' : initialTab ?? 'basic');
+  // 처음 탭 (v0.159): 카드로 만들기 → 인물, 정해 준 탭, 빈 새 세계 → 기본(이름부터), 그 밖에는 지난번 탭(없으면 흐름도)
+  const [tab, setTabRaw] = useState<Tab>(() => {
+    if (initialCard) return 'characters';
+    if (initialTab) return initialTab;
+    if (!initial) return 'basic';
+    try { const t = localStorage.getItem(LAST_TAB) as Tab | null; if (t && TABS.some(([x]) => x === t)) return t; } catch { /* 없어도 된다 */ }
+    return 'flow';
+  });
+  const setTab = (t: Tab) => { setTabRaw(t); try { localStorage.setItem(LAST_TAB, t); } catch { /* 저장 못 해도 된다 */ } };
   const [status, setStatus] = useState('');
   const [notes, setNotes] = useState<string[] | undefined>(draftNotes);
   const [approved, setApproved] = useState(!draftNotes || !!alreadySaved);
@@ -417,13 +428,13 @@ export function WorldEditor({ initial, onDone, settings: baseSettings, draftNote
                 </button>
               ); })}
             </div>
-            <div className="editor-tabs" role="tablist">
+            {group.tabs.length > 1 && <div className="editor-tabs" role="tablist">
               {group.tabs.map((id) => { const n = count([id]); return (
                 <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'primary' : ''} onClick={() => setTab(id)}>
                   {label(id)}{n ? <span className="tab-badge">{n}</span> : null}
                 </button>
               ); })}
-            </div>
+            </div>}
           </nav>
           </>
         );
