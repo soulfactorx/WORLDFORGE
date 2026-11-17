@@ -1356,7 +1356,7 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-edge.dim { opacity: .18; }
 .flow-arrow.start { fill: var(--accent); }
 .flow-arrow.complete { fill: var(--text); }
-.flow-arrow.fail, .flow-arrow.effect { fill: var(--muted); }
+.flow-arrow.fail, .flow-arrow.effect, .flow-arrow.place { fill: var(--muted); }
 .flow-label { font-size: 11px; fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
 .flow-panel { border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; max-height: calc(100dvh - 260px); min-height: 420px; overflow: auto; min-width: 0; }
 .flow-panel-head { align-items: center; gap: 6px; }
@@ -1366,6 +1366,7 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-links button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-edit { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
 .flow-edit > label, .flow-stage label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.flow-edit > label.check, .flow-stage label.check { flex-direction: row; align-items: center; gap: 8px; text-align: left; }
 .flow-actions { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border); padding-top: 6px; }
 @media (max-width: 900px) {
   .flow-wrap.with-panel { grid-template-columns: minmax(0, 1fr); }
@@ -1395,6 +1396,11 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-drag-line { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; pointer-events: none; }
 .flow-linking { margin: 0; padding: 6px 10px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--surface); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .flow-cut { margin-left: auto; }
+.flow-bg { fill: transparent; cursor: grab; }
+.flow-canvas:active .flow-bg { cursor: grabbing; }
+.flow-node.k-location rect { fill: color-mix(in srgb, var(--text) 4%, var(--surface)); stroke-dasharray: none; }
+.flow-node.k-character rect { fill: color-mix(in srgb, var(--accent) 6%, var(--bg)); }
+.flow-edge.place path { stroke: var(--muted); stroke-dasharray: 1 5; stroke-linecap: round; }
 .flow-empty { border: 1px dashed var(--accent); border-radius: 10px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
 .flow-empty ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 3px; }
 .flow-empty-actions { flex-wrap: wrap; gap: 6px; }

@@ -2,8 +2,9 @@
  * 이야기 흐름도 (v0.142): 임무·분기·조건으로 열리는 것을 한 장의 그림으로. 누르면 옆(휴대폰은 아래)에서 자세히 보고 바로 고친다.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Condition, Ending, Quest, StoryEffect, WorldPackage } from '../engine/schema';
-import { buildStoryGraph, type FlowDir, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
+import type { Character, Condition, Ending, Location, Quest, StoryEffect, WorldPackage } from '../engine/schema';
+import { setLink } from '../engine/locationLinks';
+import { buildStoryGraph, type FlowDir, isLane, openCondition, START_KEY, layoutGraph, neighbors, NODE_H, NODE_ICON, NODE_LABEL, NODE_W, type GEdge, type GNode, type NodeKind, type StoryGraph } from '../gm/storyGraph';
 import { edgeSlots, firstLeaf, getCond, getEffects, type LinkOption, linkOptions, replaceLeaf, setCond, setEffects, sourceWays, unlink } from '../gm/flowLink';
 import { type ExploreReport, nodeSim, type NodeSim, simActs, simExplore, simIcon, simMove, type SimPath, simReplay, simStart, wantedPlaces } from '../gm/flowSim';
 import { condTrace } from '../gm/lab';
@@ -15,19 +16,19 @@ import { EffectsEditor } from './WorldForms';
 
 type SetW = (patch: Partial<WorldPackage>) => void;
 /** 전체 편집 탭 */
-export type FlowTab = 'quests' | 'story' | 'scenes' | 'gimmicks' | 'encounters' | 'rules' | 'knowledge';
-const TAB_OF: Partial<Record<NodeKind, FlowTab>> = { quest: 'quests', ending: 'quests', flag: 'quests', card: 'story', choice: 'story', arc: 'story', event: 'story', clock: 'story', phase: 'story', scene: 'scenes', gimmick: 'gimmicks', encounter: 'encounters', rule: 'rules', claim: 'knowledge' };
-const TAB_NAME: Record<FlowTab, string> = { quests: '임무·플래그·결말', story: '이야기 흐름', scenes: '장면', gimmicks: '함정·퍼즐', encounters: '조우', rules: '세계 규칙', knowledge: '지식' };
-const MAIN_KINDS: NodeKind[] = ['quest', 'ending', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock', 'rule', 'flag', 'claim', 'phase'];
+export type FlowTab = 'quests' | 'story' | 'scenes' | 'gimmicks' | 'encounters' | 'rules' | 'knowledge' | 'locations' | 'characters';
+const TAB_OF: Partial<Record<NodeKind, FlowTab>> = { quest: 'quests', ending: 'quests', flag: 'quests', card: 'story', choice: 'story', arc: 'story', event: 'story', clock: 'story', phase: 'story', scene: 'scenes', gimmick: 'gimmicks', encounter: 'encounters', rule: 'rules', claim: 'knowledge', location: 'locations', character: 'characters' };
+const TAB_NAME: Record<FlowTab, string> = { quests: '임무·플래그·결말', story: '이야기 흐름', scenes: '장면', gimmicks: '함정·퍼즐', encounters: '조우', rules: '세계 규칙', knowledge: '지식', locations: '장소', characters: '인물' };
+const MAIN_KINDS: NodeKind[] = ['quest', 'ending', 'card', 'scene', 'gimmick', 'encounter', 'choice', 'arc', 'event', 'clock', 'rule', 'flag', 'claim', 'phase', 'location', 'character'];
 const DIR_KEY = 'worldforge.flow.dir';
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab: (t: FlowTab) => void }) {
   const graph = useMemo(() => buildStoryGraph(w), [w]);
   const counts = useMemo(() => { const m = new Map<NodeKind, number>(); for (const n of graph.nodes) m.set(n.kind, (m.get(n.kind) ?? 0) + 1); return m; }, [graph]);
-  const [hidden, setHidden] = useState<globalThis.Set<NodeKind>>(() => new globalThis.Set<NodeKind>(['claim', 'phase']));
+  const [hidden, setHidden] = useState<globalThis.Set<NodeKind>>(() => new globalThis.Set<NodeKind>(graph.nodes.length > 40 ? ['claim', 'phase', 'location', 'character'] : ['claim', 'phase'])); // 큰 세계는 장소·인물을 처음엔 숨긴다
   const [q, setQ] = useState('');
-  const empty = graph.nodes.every((n) => n.kind === 'start');
+  const empty = graph.nodes.every((n) => n.kind === 'start' || isLane(n.key)); // 장소·인물만 있으면 아직 이야기는 빈 것
   // 빈 세계: 시작 상자를 골라 둔다 — 옆 창에 「처음부터 열리는 …」 만들기가 바로 보인다
   const [sel, setSel] = useState<string | null>(() => (empty && typeof window !== 'undefined' && window.matchMedia?.('(min-width: 901px)').matches ? START_KEY : null)); // 휴대폰은 아래 창이 화면을 덮으므로 안내 카드만
   const [focus, setFocus] = useState(false);
@@ -114,6 +115,42 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   const nodeAt = (x: number, y: number) => lay.nodes.find((n) => x >= n.x && x <= n.x + NODE_W && y >= n.y && y <= n.y + NODE_H);
   const dropTarget = drag ? nodeAt(drag.x, drag.y) : undefined;
   const fit = () => { const c = canvasRef.current; if (c) setZoom(Math.max(0.3, Math.min(1, +((c.clientWidth - 4) / lay.width).toFixed(2)))); };
+  // 그림판 크기 (v0.147): 상자들보다 넉넉히 크고, 보이는 창보다 작지 않게 — 끌고 있는 상자를 따라 더 커진다
+  const [viewSz, setViewSz] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const c = canvasRef.current; if (!c || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setViewSz({ w: c.clientWidth, h: c.clientHeight }));
+    ro.observe(c); return () => ro.disconnect();
+  }, [hasSvg]);
+  const farX = Math.max(lay.width, moving ? moving.x + NODE_W + 40 : 0, drag ? drag.x + 40 : 0);
+  const farY = Math.max(lay.height, moving ? moving.y + NODE_H + 40 : 0, drag ? drag.y + 40 : 0);
+  const svgW = Math.round(Math.max(farX + 480, viewSz.w / zoom)), svgH = Math.round(Math.max(farY + 320, viewSz.h / zoom));
+  // 빈 곳을 끌면 화면을 옮긴다 (마우스 — 손가락은 원래 굴러간다)
+  const panRef = useRef<{ sx: number; sy: number; sl: number; st: number; moved: boolean } | null>(null);
+  // 끄는 동안 가장자리에 머물면 계속 굴린다 (가까울수록 빠르게)
+  const lastPt = useRef<{ clientX: number; clientY: number } | null>(null);
+  useEffect(() => {
+    if (!moving && !drag) return;
+    let raf = 0;
+    const tick = () => {
+      const c = canvasRef.current, pt = lastPt.current;
+      if (c && pt) {
+        const r = c.getBoundingClientRect(), edge = 56;
+        const sp = (d: number) => Math.ceil(Math.max(0, edge - d) / 3);
+        const dx = pt.clientX > r.right - edge ? sp(r.right - pt.clientX) : pt.clientX < r.left + edge ? -sp(pt.clientX - r.left) : 0;
+        const dy = pt.clientY > r.bottom - edge ? sp(r.bottom - pt.clientY) : pt.clientY < r.top + edge ? -sp(pt.clientY - r.top) : 0;
+        if (dx || dy) {
+          c.scrollLeft += dx; c.scrollTop += dy;
+          const p = toSvg(pt), m = moveRef.current;
+          if (m?.started) setMoving({ key: m.key, x: Math.max(0, p.x - m.ox), y: Math.max(0, p.y - m.oy) });
+          else setDrag((d) => (d ? { ...d, ...p } : d));
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [!!moving, !!drag, zoom]);
   const pick = (k: string) => {
     if (linking) { if (k !== linking) setPending({ from: linking, to: k }); setLinking(null); return; }
     setSel(k === sel ? null : k);
@@ -161,7 +198,8 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
               <li><b>▶ 플레이 시작</b>에서 처음 열릴 것을 만드세요 — 첫 임무·갈래 카드·결정적 선택.</li>
               <li>만든 상자를 고르고 <b>「＋ 이것 다음에 열리는 임무」</b>로 이야기를 이어 가고, 갈라지는 곳은 선택지·카드의 갈림길로 만드세요.</li>
               <li>끝에는 <b>「＋ 이것으로 이르는 결말」</b>. 상자의 ● 손잡이를 끌어 잇고, 화살표를 눌러 조건을 고칩니다.</li>
-              <li>다 되면 <b>🧪 시뮬레이션</b>으로 끝까지 가 보세요. 장소·인물은 「세계」「인물」 탭에서 채웁니다.</li>
+              <li><b>＋ 장소 · ＋ 인물</b>은 흐름 아래 띠에 놓입니다. 장소를 이야기 상자로 끌면 「여기 있으면 열림」 「여기서 일어남」이 됩니다.</li>
+              <li>다 되면 <b>🧪 시뮬레이션</b>으로 끝까지 가 보세요.</li>
             </ol>
             <div className="row flow-empty-actions">{startCreators(w, set, setSel).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}</div>
           </div>
@@ -204,8 +242,11 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
       {!shown.nodes.length ? <p className="muted">그릴 것이 없습니다. 임무·결말·갈래 카드 등을 만들면 여기에 이어진 모습이 나타납니다.</p> : (
         <div className={`flow-wrap${selNode ? ' with-panel' : ''}${linking ? ' linking' : ''}`}>
           <div ref={canvasRef} className={`flow-canvas${drag ? ' dragging' : ''}${linking ? ' linking' : ''}`} role="region" aria-label="이야기 흐름도">
-            <svg ref={svgRef} width={lay.width * zoom} height={lay.height * zoom} viewBox={`0 0 ${lay.width} ${lay.height}`} role="img" aria-label={`노드 ${shown.nodes.length}개, 화살표 ${shown.edges.length}개`}
+            <svg ref={svgRef} width={svgW * zoom} height={svgH * zoom} viewBox={`0 0 ${svgW} ${svgH}`} role="img" aria-label={`노드 ${shown.nodes.length}개, 화살표 ${shown.edges.length}개`}
               onPointerMove={(e) => {
+                lastPt.current = { clientX: e.clientX, clientY: e.clientY };
+                const pan = panRef.current, cv = canvasRef.current;
+                if (pan && cv) { const dx = e.clientX - pan.sx, dy = e.clientY - pan.sy; if (Math.abs(dx) + Math.abs(dy) > 3) pan.moved = true; cv.scrollLeft = pan.sl - dx; cv.scrollTop = pan.st - dy; return; }
                 const m = moveRef.current;
                 if (m) {
                   const dist = Math.hypot(e.clientX - m.sx, e.clientY - m.sy);
@@ -218,13 +259,11 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
                   setMoving({ key: m.key, x: Math.max(0, p.x - m.ox), y: Math.max(0, p.y - m.oy) });
                 } else if (!drag) return;
                 else setDrag({ ...drag, ...toSvg(e) });
-                // 가장자리로 끌면 그쪽으로 굴린다
-                const c = canvasRef.current; if (!c) return;
-                const r = c.getBoundingClientRect(), edge = 36;
-                if (e.clientX > r.right - edge) c.scrollLeft += 14; else if (e.clientX < r.left + edge) c.scrollLeft -= 14;
-                if (e.clientY > r.bottom - edge) c.scrollTop += 14; else if (e.clientY < r.top + edge) c.scrollTop -= 14;
+                // 가장자리 굴리기는 위의 반복(requestAnimationFrame)이 한다
               }}
               onPointerUp={(e) => {
+                lastPt.current = null;
+                if (panRef.current) { const moved = panRef.current.moved; panRef.current = null; if (!moved && !linking) setSel(null); return; }
                 const m = moveRef.current;
                 if (m) {
                   if (m.started) {
@@ -240,15 +279,18 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
                 if (t && t.key !== drag.from) setPending({ from: drag.from, to: t.key });
                 setDrag(null);
               }}
-              onPointerCancel={() => { setDrag(null); endMove(); }}
+              onPointerCancel={() => { setDrag(null); endMove(); panRef.current = null; lastPt.current = null; }}
               onContextMenu={(e) => { if (moveRef.current) e.preventDefault(); }}>
               <defs>
-                {(['start', 'complete', 'fail', 'effect'] as const).map((k) => (
+                {(['start', 'complete', 'fail', 'effect', 'place'] as const).map((k) => (
                   <marker key={k} id={`arrow-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" className={`flow-arrow ${k}`} /></marker>
                 ))}
               </defs>
+              <rect className="flow-bg" x={0} y={0} width={svgW} height={svgH}
+                onPointerDown={(e) => { const c = canvasRef.current; if (e.pointerType !== 'mouse' || e.button !== 0 || !c) return; (e.currentTarget as Element).setPointerCapture?.(e.pointerId); panRef.current = { sx: e.clientX, sy: e.clientY, sl: c.scrollLeft, st: c.scrollTop, moved: false }; }} />
+              {lay.nodes.some((n) => n.layer === -2) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -2).map((n) => n.y)) - 12} className="flow-lane">📍 장소 · 👤 인물 — 눌러서 고치고, 끌어서 이야기 상자와 이으면 「여기 있으면」 「여기서 일어나게」가 됩니다</text>}
               {lay.nodes.some((n) => n.layer === -1) && <text x={20} y={Math.min(...lay.nodes.filter((n) => n.layer === -1).map((n) => n.y)) - 12} className="flow-lane">따로 있는 것 (이어진 조건이 없다)</text>}
-              {shown.edges.map((e, i) => <Edge key={i} e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={(!!sel && (e.from === sel || e.to === sel)) || (edgeSel?.from === e.from && edgeSel.to === e.to)} dim={!!sel && !(e.from === sel || e.to === sel)} onPick={() => { if (!drag && !moveRef.current) setEdgeSel(e); }} />)}
+              {shown.edges.map((e, i) => ((isLane(e.from) || isLane(e.to)) && !(sel && (e.from === sel || e.to === sel)) && !(edgeSel?.from === e.from && edgeSel.to === e.to)) ? null : <Edge key={i} e={e} a={pos.get(e.from)} b={pos.get(e.to)} down={down} active={(!!sel && (e.from === sel || e.to === sel)) || (edgeSel?.from === e.from && edgeSel.to === e.to)} dim={!!sel && !(e.from === sel || e.to === sel)} onPick={() => { if (!drag && !moveRef.current) setEdgeSel(e); }} />)}
               {/* 겹치면 위에: 옮긴 것 < 고른 것 < 끄는 것 */}
               {[...lay.nodes].sort((x, y) => onTop(x.key) - onTop(y.key)).map((n0) => {
                 const at = pos.get(n0.key)!, n = { ...n0, x: at.x, y: at.y };
@@ -378,7 +420,7 @@ function Edge({ e, a, b, active, dim, down, onPick }: { e: GEdge; a?: { x: numbe
       : `M${x1},${y1} C${x1 + (x2 - x1) / 2},${y1} ${x1 + (x2 - x1) / 2},${y2} ${x2},${y2}`;
     lx = (x1 + x2) / 2; ly = bow ? top + 10 : (y1 + y2) / 2 - (backward ? 52 : 6);
   }
-  const cls = e.kind === 'fail' ? 'fail' : e.kind === 'effect' ? 'effect' : e.kind === 'start' ? 'start' : 'complete';
+  const cls = e.kind === 'place' ? 'place' : e.kind === 'fail' ? 'fail' : e.kind === 'effect' ? 'effect' : e.kind === 'start' ? 'start' : 'complete';
   return (
     <g className={`flow-edge ${cls}${active ? ' active' : ''}${dim ? ' dim' : ''}`}>
       <path d={d} markerEnd={`url(#arrow-${cls})`} />
@@ -403,7 +445,7 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
   };
   const cutBtn = (e: GEdge) => e.from !== START_KEY && e.kind !== 'stage' && <button type="button" className="small flow-cut" onClick={() => cut(e)} title="이 연결을 설정에서 뺍니다">✂ 끊기</button>;
   // 다음 것 만들기: 이것이 끝나면 열리는 임무 · 이것으로 끝나는 결말
-  const after: Condition | null = n.kind === 'quest' ? { questDone: n.id } : n.kind === 'scene' || n.kind === 'gimmick' ? { sceneEnd: n.id, outcome: 'success' } : n.kind === 'encounter' ? { cleared: n.id } : n.kind === 'card' ? { storylet: n.id } : n.kind === 'choice' ? { choice: n.id } : n.kind === 'flag' ? { flag: n.id } : n.kind === 'claim' ? { knows: n.id } : null;
+  const after: Condition | null = n.kind === 'quest' ? { questDone: n.id } : n.kind === 'scene' || n.kind === 'gimmick' ? { sceneEnd: n.id, outcome: 'success' } : n.kind === 'encounter' ? { cleared: n.id } : n.kind === 'card' ? { storylet: n.id } : n.kind === 'choice' ? { choice: n.id } : n.kind === 'flag' ? { flag: n.id } : n.kind === 'claim' ? { knows: n.id } : n.kind === 'location' ? { at: n.id } : null;
   const newId = (prefix: string, list: { id: string }[]) => { let i = list.length + 1; while (list.some((x) => x.id === `${prefix}${i}`)) i++; return `${prefix}${i}`; };
   return (
     <aside className="flow-panel" aria-label={`${n.name} 자세히`}>
@@ -426,12 +468,16 @@ function NodePanel({ w, set, g, n, onPick, onClose, onTab, onLink, onNote, onEdg
 
       <div className="flow-actions">
         <button type="button" onClick={onLink} title="상자의 ● 손잡이를 다른 상자로 끌어도 됩니다">🔗 {n.kind === 'start' ? '다른 상자를 처음부터 열리게' : '다른 상자와 잇기'}</button>
+        {n.kind === 'location' && <>
+          <button type="button" onClick={() => { const c = newPerson(w, n.id); set({ characters: [...w.characters, c] }); onPick(`character:${c.id}`); }}>＋ 이곳에 있는 인물</button>
+          <button type="button" onClick={() => { const l = newPlace(w, n.id); set({ locations: l.locations }); onPick(`location:${l.id}`); }}>＋ 이곳과 길로 이어진 장소</button>
+        </>}
         {n.kind === 'start' && startCreators(w, set, onPick).map((c) => <button key={c.label} type="button" onClick={c.run}>{c.label}</button>)}
         {after && <button type="button" onClick={() => {
           const id = newId('quest/next-', w.quests ?? []);
           set(newQuest(w, id, `${n.name} 다음`, 'side', after)); onPick(`quest:${id}`);
-        }}>＋ 이것 다음에 열리는 임무</button>}
-        {after && <button type="button" onClick={() => {
+        }}>{n.kind === 'location' ? '＋ 이곳에 오면 열리는 임무' : '＋ 이것 다음에 열리는 임무'}</button>}
+        {after && n.kind !== 'location' && <button type="button" onClick={() => {
           const id = newId('ending/', w.endings ?? []);
           const e: Ending = { id, name: `${n.name}의 끝`, condition: after, epilogue: '' };
           set({ endings: [...(w.endings ?? []), e] }); onPick(`ending:${id}`);
@@ -455,6 +501,18 @@ function newQuest(w: WorldPackage, id: string, name: string, kind: Quest['kind']
   };
 }
 
+/** 새 장소 (v0.147): 편집기의 「새 장소」와 같은 꼴 — near가 있으면 그곳과 길로 잇는다 (없으면 시작 장소와) */
+function newPlace(w: WorldPackage, near?: string): { id: string; locations: Location[] } {
+  const id = nextId('loc/new-', w.locations);
+  let locations: Location[] = [...w.locations, { id, name: '새 장소', description: '', connections: [] }];
+  const to = near ?? (w.locations.some((l) => l.id === w.start.locationId) ? w.start.locationId : undefined);
+  if (to) locations = setLink(locations, id, to, true);
+  return { id, locations };
+}
+function newPerson(w: WorldPackage, at: string): Character {
+  return { id: nextId('npc/new-', w.characters), name: '새 인물', appearance: '', personality: '', speech: '', locationId: at, improvisation: 'minor' };
+}
+
 /** ▶ 시작에서 새 흐름 만들기 (v0.145, v0.146: 빈 세계 안내에서도) */
 function nextId(prefix: string, list: { id: string }[]) { let i = list.length + 1; while (list.some((x) => x.id === `${prefix}${i}`)) i++; return `${prefix}${i}`; }
 function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void): { label: string; run: () => void }[] {
@@ -463,6 +521,8 @@ function startCreators(w: WorldPackage, set: SetW, onPick: (k: string) => void):
       const id = nextId('quest/new-', w.quests ?? []);
       set(newQuest(w, id, (w.quests ?? []).length ? '새 임무' : '첫 임무', 'main', { all: [] })); onPick(`quest:${id}`);
     } },
+    { label: '＋ 장소', run: () => { const l = newPlace(w); set({ locations: l.locations }); onPick(`location:${l.id}`); } },
+    { label: '＋ 인물', run: () => { const c = newPerson(w, w.start.locationId); set({ characters: [...w.characters, c] }); onPick(`character:${c.id}`); } },
     { label: '＋ 처음부터 펼쳐지는 갈래 카드', run: () => {
       const id = nextId('card/new-', w.storylets ?? []);
       set({ storylets: [...(w.storylets ?? []), { id, title: '새 갈래 카드', situation: '상황을 적어 주세요', tags: ['main'], options: [{ id: 'a', label: '첫째 길' }, { id: 'b', label: '둘째 길' }] }] }); onPick(`card:${id}`);
@@ -694,6 +754,36 @@ function NodeEditor({ w, set, n }: { w: WorldPackage; set: SetW; n: GNode }) {
       );
     }
     case 'start': return <p className="small muted">플레이어가 게임을 시작할 때의 자리입니다. 여기서 이어지는 상자는 다른 상자에 걸린 조건이 없어 처음부터 열려 있는 것들입니다(장소·관계·날짜 같은 조건만 있는 것 포함). 이 상자의 ● 손잡이를 다른 상자로 끌면 그 상자를 처음부터 열리게 하고(열리는 조건을 비운다), 아래 버튼으로 처음부터 열리는 새 임무·카드·선택을 만듭니다.</p>;
+    case 'location': {
+      const l = w.locations.find((x) => x.id === n.id); if (!l) return null;
+      const up = (p: Partial<Location>) => set({ locations: w.locations.map((x) => (x.id === l.id ? { ...x, ...p } : x)) });
+      return (
+        <>
+          <Text label="이름" value={l.name} onChange={(name) => up({ name })} />
+          <Area label="묘사 (플레이어가 여기 있을 때 느끼는 것)" value={l.description} onChange={(description) => up({ description })} rows={3} />
+          <fieldset className="flow-stage"><legend>길로 이어진 장소 (양쪽 모두)</legend>
+            {w.locations.filter((x) => x.id !== l.id).map((x) => (
+              <label key={x.id} className="check"><input type="checkbox" checked={l.connections.includes(x.id)} onChange={(e) => set({ locations: setLink(w.locations, l.id, x.id, e.target.checked) })} /> {x.name}</label>
+            ))}
+            {w.locations.length < 2 && <span className="small muted">다른 장소가 없습니다.</span>}
+          </fieldset>
+          <label className="check"><input type="checkbox" checked={w.start.locationId === l.id} disabled={w.start.locationId === l.id} onChange={() => set({ start: { ...w.start, locationId: l.id } })} /> 플레이 시작 장소</label>
+        </>
+      );
+    }
+    case 'character': {
+      const c = w.characters.find((x) => x.id === n.id); if (!c) return null;
+      const up = (p: Partial<Character>) => set({ characters: w.characters.map((x) => (x.id === c.id ? { ...x, ...p } : x)) });
+      return (
+        <>
+          <Text label="이름" value={c.name} onChange={(name) => up({ name })} />
+          <label>있는 곳<select value={c.locationId} onChange={(e) => up({ locationId: e.target.value })}>{w.locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+          <Area label="생김새" value={c.appearance} onChange={(appearance) => up({ appearance })} rows={2} />
+          <Area label="성격" value={c.personality} onChange={(personality) => up({ personality })} rows={2} />
+          <Area label="말투" value={c.speech} onChange={(speech) => up({ speech })} rows={2} />
+        </>
+      );
+    }
     case 'flag': return <p className="small muted">플래그는 효과(「세움」)로 세우고 조건(「섬」)으로 읽는 표시입니다. 위의 「여는 것 · 열리는 것」에서 세우는 곳과 읽는 곳을 보고, 그 상자를 눌러 고치세요.</p>;
     case 'claim': return <p className="small">{w.claims.find((c) => c.id === n.id)?.statement ?? n.id}</p>;
     default: return <p className="small muted">이 종류는 전체 편집 탭에서 고칩니다.</p>;
