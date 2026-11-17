@@ -159,6 +159,14 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   const farX = Math.max(lay.width, moving ? moving.x + NODE_W + 40 : 0, drag ? drag.x + 40 : 0);
   const farY = Math.max(lay.height, moving ? moving.y + NODE_H + 40 : 0, drag ? drag.y + 40 : 0);
   const svgW = Math.round(Math.max(farX + 480, viewSz.w / zoom)), svgH = Math.round(Math.max(farY + 320, viewSz.h / zoom));
+  // 미니맵 (v0.159): 보이는 자리
+  const [view, setView] = useState({ sl: 0, st: 0, cw: 0, ch: 0 });
+  const viewRaf = useRef(0);
+  const onCanvasScroll = () => {
+    cancelAnimationFrame(viewRaf.current);
+    viewRaf.current = requestAnimationFrame(() => { const c = canvasRef.current; if (c) setView({ sl: c.scrollLeft, st: c.scrollTop, cw: c.clientWidth, ch: c.clientHeight }); });
+  };
+  useEffect(() => { onCanvasScroll(); }, [viewSz.w, viewSz.h, zoom, lay.width, lay.height]);
   // 빈 곳을 끌면 화면을 옮긴다 (마우스 — 손가락은 원래 굴러간다)
   const panRef = useRef<{ sx: number; sy: number; sl: number; st: number; moved: boolean } | null>(null);
   // 끄는 동안 가장자리에 머물면 계속 굴린다 (가까울수록 빠르게)
@@ -285,7 +293,8 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
             if (!window.matchMedia?.('(min-width: 901px)').matches) setOutline(false);
             scrollTo.current = k; // 상자가 그려진 뒤(숨긴 종류면 고르면서 나타난다) 아래 효과가 그쪽으로 굴린다
           }} onNew={() => { setSel(START_KEY); }} />}
-          <div ref={canvasRef} className={`flow-canvas${drag ? ' dragging' : ''}${linking ? ' linking' : ''}`} role="region" aria-label="이야기 흐름도">
+          <div className="flow-canvas-wrap">
+          <div ref={canvasRef} className={`flow-canvas${drag ? ' dragging' : ''}${linking ? ' linking' : ''}`} role="region" aria-label="이야기 흐름도" onScroll={onCanvasScroll}>
             <svg ref={svgRef} width={svgW * zoom} height={svgH * zoom} viewBox={`0 0 ${svgW} ${svgH}`} role="img" aria-label={`노드 ${shown.nodes.length}개, 화살표 ${shown.edges.length}개`}
               onPointerMove={(e) => {
                 lastPt.current = { clientX: e.clientX, clientY: e.clientY };
@@ -381,6 +390,8 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
                 return <line x1={x1} y1={y1} x2={drag.x} y2={drag.y} className="flow-drag-line" markerEnd="url(#arrow-start)" />;
               })()}
             </svg>
+          </div>
+          <MiniMap nodes={lay.nodes} width={lay.width} height={lay.height} zoom={zoom} view={view} sel={sel} onGo={(x, y) => { const c = canvasRef.current; if (c) { c.scrollLeft = Math.max(0, x * zoom - c.clientWidth / 2); c.scrollTop = Math.max(0, y * zoom - c.clientHeight / 2); } }} />
           </div>
           {selNode && (sim ? <SimPanel w={w} set={set} n={selNode} state={sim.state} info={simMap?.get(selNode.key)} never={neverSet.has(selNode.key)} onClose={() => setSel(null)}
             onAct={(id, label) => {
@@ -1327,6 +1338,23 @@ function FlowOutline({ g, sel, q, simMap, onPick, onNew }: { g: StoryGraph; sel:
         );
       })}
     </nav>
+  );
+}
+
+// ---------------------------------------------------------------- 미니맵 (v0.159)
+
+/** 큰 흐름도의 전체 모습과 지금 보이는 자리 — 누르거나 끌면 그곳으로 */
+function MiniMap({ nodes, width, height, zoom, view, sel, onGo }: { nodes: { key: string; kind: NodeKind; x: number; y: number }[]; width: number; height: number; zoom: number; view: { sl: number; st: number; cw: number; ch: number }; sel: string | null; onGo: (x: number, y: number) => void }) {
+  const W = 180, H = 120;
+  const sc = Math.min(W / width, H / height);
+  if (!view.cw || (width * zoom <= view.cw + 4 && height * zoom <= view.ch + 4)) return null; // 다 보이면 필요 없다
+  const go = (e: React.PointerEvent<SVGSVGElement>) => { const r = e.currentTarget.getBoundingClientRect(); onGo((e.clientX - r.left) / sc, (e.clientY - r.top) / sc); };
+  return (
+    <svg className="flow-minimap" width={width * sc} height={height * sc} role="img" aria-label="흐름도 전체 — 누르면 그곳으로"
+      onPointerDown={(e) => { (e.currentTarget as Element).setPointerCapture?.(e.pointerId); go(e); }} onPointerMove={(e) => { if (e.buttons) go(e); }}>
+      {nodes.map((n) => <rect key={n.key} x={n.x * sc} y={n.y * sc} width={Math.max(2, NODE_W * sc)} height={Math.max(2, NODE_H * sc)} className={`mm-node k-${n.kind}${n.key === sel ? ' sel' : ''}`} />)}
+      <rect className="mm-view" x={(view.sl / zoom) * sc} y={(view.st / zoom) * sc} width={(view.cw / zoom) * sc} height={(view.ch / zoom) * sc} />
+    </svg>
   );
 }
 

@@ -1493,7 +1493,15 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-outline-item.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); font-weight: 600; }
 @media (max-width: 900px) {
   .flow-wrap.with-outline, .flow-wrap.with-outline.with-panel { grid-template-columns: minmax(0, 1fr); }
-  .flow-wrap.with-outline .flow-canvas { display: none; }
+  .flow-wrap.with-outline .flow-canvas-wrap { display: none; }
   .flow-outline { height: auto; max-height: none; min-height: 0; }
 }
+/* 미니맵 (v0.159) */
+.flow-canvas-wrap { position: relative; min-width: 0; }
+.flow-minimap { position: absolute; right: 10px; top: 10px; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; touch-action: none; box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 15%, transparent); }
+.flow-minimap .mm-node { fill: var(--muted); opacity: .55; }
+.flow-minimap .mm-node.k-start, .flow-minimap .mm-node.k-ending, .flow-minimap .mm-node.sel { fill: var(--accent); opacity: 1; }
+.flow-minimap .mm-node.k-quest { fill: var(--text); opacity: .6; }
+.flow-minimap .mm-view { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-width: 1.5; }
+@media (max-width: 600px) { .flow-minimap { display: none; } }
 
