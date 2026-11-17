@@ -57,6 +57,11 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
   const [linking, setLinking] = useState<string | null>(null);
   const [pending, setPending] = useState<{ from: string; to: string } | null>(null);
   const [note, setNote] = useState('');
+  /** 목록 (v0.159): PC는 왼쪽에 늘 · 휴대폰은 그림 대신 */
+  const OUTLINE_KEY = 'worldforge.flow.outline';
+  const [outline, setOutlineRaw] = useState<boolean>(() => { try { const v = localStorage.getItem(OUTLINE_KEY); return v ? v === '1' : window.matchMedia?.('(min-width: 901px)').matches ?? true; } catch { return true; } });
+  const setOutline = (v: boolean) => { setOutlineRaw(v); try { localStorage.setItem(OUTLINE_KEY, v ? '1' : '0'); } catch { /* 괜찮다 */ } };
+  const scrollTo = useRef<string | null>(null);
   /** 만계서고에서 가져오기 (v0.158): 이어 붙일 조건 */
   const [lib, setLib] = useState<{ after?: Condition; afterName?: string; kind?: BorrowKind } | null>(null);
   /** 화살표 고치기 (v0.145) */
@@ -97,6 +102,14 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
     if (moving) m.set(moving.key, { x: moving.x, y: moving.y });
     return m;
   }, [lay, moving]);
+  // 목록에서 고른 상자로 굴리기 (v0.159)
+  useEffect(() => {
+    const k = scrollTo.current, c = canvasRef.current, at = k ? pos.get(k) : undefined;
+    if (!k || !c || !at || c.clientWidth === 0) return;
+    scrollTo.current = null;
+    c.scrollLeft = Math.max(0, (at.x + NODE_W / 2) * zoom - c.clientWidth / 2);
+    c.scrollTop = Math.max(0, (at.y + NODE_H / 2) * zoom - c.clientHeight / 2);
+  });
   const savePins = (next: Record<string, [number, number]> | undefined) => {
     const cur = { ...(w.flowLayout ?? {}) };
     if (next && Object.keys(next).length) cur[dir] = next; else delete cur[dir];
@@ -205,6 +218,7 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
             <button type="button" className="small" aria-label="크게" onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.15).toFixed(2)))}>＋</button>
             <button type="button" className="small" onClick={fit} title="화면 폭에 맞추기">⤢ 맞춤</button>
           </span>
+          <button type="button" className={`small${outline ? ' on' : ''}`} aria-pressed={outline} onClick={() => setOutline(!outline)} title="종류별 목록으로 찾아 고르기">📋 목록</button>
           <button type="button" className={`small${sim ? ' on' : ''}`} aria-pressed={!!sim} onClick={() => { if (sim) { setSim(null); cancelExplore.current = true; } else { simGo([]); setLinking(null); } }} title="흐름도 위에서 이야기를 직접 진행해 보고, 자동으로 여러 번 끝까지 해 본다">{sim ? '■ 시뮬레이션 끝내기' : '🧪 시뮬레이션'}</button>
           {pins && Object.keys(pins).length > 0 && <button type="button" className="small" onClick={() => { if (confirm(`옮긴 상자 ${Object.keys(pins).length}개를 자동 배치 자리로 되돌릴까요? (${down ? '세로' : '가로'} 방향만)`)) savePins(undefined); }} title="손으로 옮긴 자리를 지우고 자동으로 다시 놓는다">↺ 자동 배치로</button>}
         </div>
@@ -264,7 +278,13 @@ export function StoryFlow({ w, set, onTab }: { w: WorldPackage; set: SetW; onTab
       </div>
 
       {!shown.nodes.length ? <p className="muted">그릴 것이 없습니다. 임무·결말·갈래 카드 등을 만들면 여기에 이어진 모습이 나타납니다.</p> : (
-        <div className={`flow-wrap${selNode ? ' with-panel' : ''}${linking ? ' linking' : ''}`}>
+        <div className={`flow-wrap${selNode ? ' with-panel' : ''}${linking ? ' linking' : ''}${outline ? ' with-outline' : ''}`}>
+          {outline && <FlowOutline g={graph} sel={sel} q={q} simMap={simMap} onPick={(k) => {
+            setSel(k);
+            // 휴대폰: 목록을 닫고 그림에서 보이게
+            if (!window.matchMedia?.('(min-width: 901px)').matches) setOutline(false);
+            scrollTo.current = k; // 상자가 그려진 뒤(숨긴 종류면 고르면서 나타난다) 아래 효과가 그쪽으로 굴린다
+          }} onNew={() => { setSel(START_KEY); }} />}
           <div ref={canvasRef} className={`flow-canvas${drag ? ' dragging' : ''}${linking ? ' linking' : ''}`} role="region" aria-label="이야기 흐름도">
             <svg ref={svgRef} width={svgW * zoom} height={svgH * zoom} viewBox={`0 0 ${svgW} ${svgH}`} role="img" aria-label={`노드 ${shown.nodes.length}개, 화살표 ${shown.edges.length}개`}
               onPointerMove={(e) => {
@@ -1280,6 +1300,33 @@ function FlowSceneForm({ w, set, d }: { w: WorldPackage; set: SetW; d: SceneDef 
       <SceneForm w={w} d={d} hideId up={(p) => save({ ...d, ...p })} onTest={() => setTesting(true)} />
       {testing && <SceneTester w={w} sceneId={d.id} onClose={() => setTesting(false)} onApply={(nd) => save(nd)} />}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- 목록 (v0.159)
+
+const OUTLINE_ORDER: NodeKind[] = ['quest', 'arc', 'card', 'choice', 'scene', 'gimmick', 'encounter', 'event', 'clock', 'rule', 'ending', 'flag', 'claim', 'location', 'character', 'item', 'monster', 'phase'];
+function FlowOutline({ g, sel, q, simMap, onPick, onNew }: { g: StoryGraph; sel: string | null; q: string; simMap: Map<string, NodeSim> | null; onPick: (k: string) => void; onNew: () => void }) {
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (n: GNode) => !words.length || words.every((t) => `${n.name} ${n.id} ${n.sub ?? ''}`.toLowerCase().includes(t));
+  return (
+    <nav className="flow-outline" aria-label="흐름도 목록">
+      <button type="button" className="small" onClick={onNew}>＋ 새로 만들기 (▶ 시작에서)</button>
+      {OUTLINE_ORDER.map((k) => {
+        const list = g.nodes.filter((n) => n.kind === k && hit(n));
+        if (!list.length) return null;
+        return (
+          <details key={k} open={k !== 'claim' && k !== 'phase'}>
+            <summary className="small"><b>{NODE_ICON[k]} {NODE_LABEL[k]}</b> <span className="muted">{list.length}</span></summary>
+            <ul>{list.map((n) => {
+              const st = simMap?.get(n.key);
+              return <li key={n.key}><button type="button" className={`flow-outline-item${n.key === sel ? ' on' : ''}`} aria-current={n.key === sel} onClick={() => onPick(n.key)} title={n.id}>
+                {st && st.st !== 'none' ? `${simIcon(st.st)} ` : ''}{n.name}{n.warn ? ' ⚠' : ''}</button></li>;
+            })}</ul>
+          </details>
+        );
+      })}
+    </nav>
   );
 }
 

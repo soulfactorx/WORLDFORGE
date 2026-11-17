@@ -1482,4 +1482,18 @@ button.tag-pill { min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .flow-lib-thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; flex: none; }
 .flow-lib-text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .flow-lib-deps { flex: 1 1 100%; }
+/* 흐름도 목록 (v0.159) */
+.flow-wrap.with-outline { grid-template-columns: 230px minmax(0, 1fr); }
+.flow-wrap.with-outline.with-panel { grid-template-columns: 230px minmax(0, 1fr) 380px; }
+.flow-outline { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 8px; overflow: auto; height: calc(100dvh - 260px); min-height: 420px; min-width: 0; }
+.flow-outline details { min-width: 0; }
+.flow-outline summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; gap: 6px; }
+.flow-outline ul { list-style: none; margin: 0 0 4px; padding: 0 0 0 4px; display: flex; flex-direction: column; gap: 2px; }
+.flow-outline-item { width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 36px; padding: 4px 8px; border-color: transparent; background: transparent; }
+.flow-outline-item.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); font-weight: 600; }
+@media (max-width: 900px) {
+  .flow-wrap.with-outline, .flow-wrap.with-outline.with-panel { grid-template-columns: minmax(0, 1fr); }
+  .flow-wrap.with-outline .flow-canvas { display: none; }
+  .flow-outline { height: auto; max-height: none; min-height: 0; }
+}
 
